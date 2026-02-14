@@ -17,7 +17,8 @@ type DiagnosticCode =
   | "MVP_COMMAND_EXECUTION_FAILED"
   | "MVP_INVALID_COMMAND_PAYLOAD"
   | "MVP_INVALID_NOTE_DURATION"
-  | "MVP_INVALID_NOTE_VOICE";
+  | "MVP_INVALID_NOTE_VOICE"
+  | "MVP_INVALID_NOTE_PITCH";
 
 type WarningCode =
   | "MEASURE_UNDERFULL";
@@ -26,6 +27,7 @@ type DispatchResult = {
   ok: boolean;
   dirtyChanged: boolean;
   changedNodeIds: NodeId[];
+  affectedMeasureNumbers: string[];
   diagnostics: Array<{ code: DiagnosticCode; message: string }>;
   warnings: Array<{ code: WarningCode; message: string }>;
 };
@@ -49,7 +51,8 @@ type SaveResult = {
 - MUST reject overfull measure with `MEASURE_OVERFULL`.
 - MUST leave DOM unchanged on reject.
 - MUST set `dirty=true` only when a content-changing command succeeds.
-- On success, SHOULD return changed/affected node IDs in `changedNodeIds`.
+- On success, MUST return changed/affected node IDs in `changedNodeIds`.
+- On success, SHOULD return affected measure numbers in `affectedMeasureNumbers`.
 - UI-only commands MUST NOT set dirty.
 
 2. `save()`:
@@ -58,6 +61,9 @@ type SaveResult = {
 - If current score state is overfull, save MUST be rejected with `ok=false` and diagnostic `MEASURE_OVERFULL`.
 - If any note has invalid or missing duration, save MUST be rejected with `MVP_INVALID_NOTE_DURATION`.
 - If any note has invalid or missing voice, save MUST be rejected with `MVP_INVALID_NOTE_VOICE`.
+- If any non-rest note has invalid or missing pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
+- If a rest note contains pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
+- If a chord note lacks pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
 - Pretty-printing MUST NOT be applied.
 
 3. Serialization:

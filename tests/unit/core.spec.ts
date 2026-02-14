@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { ScoreCore } from "../../core/ScoreCore";
 import { loadFixture } from "./fixtureLoader";
+import { expectXmlStructurallyEqual } from "./domAssertions";
 
 const BASE_XML = loadFixture("base.musicxml");
 const OVERFULL_XML = loadFixture("overfull.musicxml");
@@ -18,13 +19,16 @@ const XML_WITH_INHERITED_TIME = loadFixture("inherited_time_changed.musicxml");
 const XML_WITH_BACKUP_SAFE = loadFixture("with_backup_safe.musicxml");
 const XML_WITH_INVALID_NOTE_DURATION = loadFixture("invalid_note_duration.musicxml");
 const XML_WITH_INVALID_NOTE_VOICE = loadFixture("invalid_note_voice.musicxml");
+const XML_WITH_INVALID_NOTE_PITCH = loadFixture("invalid_note_pitch.musicxml");
+const XML_WITH_INVALID_REST_WITH_PITCH = loadFixture("invalid_rest_with_pitch.musicxml");
+const XML_WITH_INVALID_CHORD_WITHOUT_PITCH = loadFixture("invalid_chord_without_pitch.musicxml");
 
 describe("ScoreCore MVP", () => {
   const expectNoopStateUnchanged = (core: ScoreCore, beforeXml: string): void => {
     const after = core.save();
     expect(after.ok).toBe(true);
     expect(after.mode).toBe("original_noop");
-    expect(after.xml).toBe(beforeXml);
+    expectXmlStructurallyEqual(after.xml, beforeXml);
   };
 
   it("RT-0: no-op save returns original text", () => {
@@ -52,6 +56,7 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(true);
     expect(core.isDirty()).toBe(true);
     expect(result.changedNodeIds).toEqual([first]);
+    expect(result.affectedMeasureNumbers).toEqual(["1"]);
 
     const saved = core.save();
     expect(saved.ok).toBe(true);
@@ -72,6 +77,7 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(true);
     expect(result.dirtyChanged).toBe(false);
     expect(result.changedNodeIds).toEqual([]);
+    expect(result.affectedMeasureNumbers).toEqual([]);
     expect(core.isDirty()).toBe(false);
 
     const saved = core.save();
@@ -217,6 +223,7 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(true);
     expect(core.isDirty()).toBe(true);
     expect(result.changedNodeIds.length).toBe(2);
+    expect(result.affectedMeasureNumbers).toEqual(["1"]);
 
     const saved = core.save();
     expect(saved.ok).toBe(true);
@@ -397,6 +404,7 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(true);
     expect(core.isDirty()).toBe(true);
     expect(result.changedNodeIds).toEqual([last]);
+    expect(result.affectedMeasureNumbers).toEqual(["1"]);
   });
 
   it("ID-2: surviving node IDs stay stable after delete", () => {
@@ -499,6 +507,33 @@ describe("ScoreCore MVP", () => {
     const saved = core.save();
     expect(saved.ok).toBe(false);
     expect(saved.diagnostics[0]?.code).toBe("MVP_INVALID_NOTE_VOICE");
+  });
+
+  it("SV-5: save is rejected when a note has invalid pitch", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_INVALID_NOTE_PITCH);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(false);
+    expect(saved.diagnostics[0]?.code).toBe("MVP_INVALID_NOTE_PITCH");
+  });
+
+  it("SV-6: save is rejected when rest note contains pitch", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_INVALID_REST_WITH_PITCH);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(false);
+    expect(saved.diagnostics[0]?.code).toBe("MVP_INVALID_NOTE_PITCH");
+  });
+
+  it("SV-7: save is rejected when chord note lacks pitch", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_INVALID_CHORD_WITHOUT_PITCH);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(false);
+    expect(saved.diagnostics[0]?.code).toBe("MVP_INVALID_NOTE_PITCH");
   });
 
   it("PL-1: invalid duration payload is rejected before mutation", () => {

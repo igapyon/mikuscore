@@ -63,6 +63,12 @@ Single source of truth for diagnostics emitted by core.
 - Required behavior:
   - `save()` returns `ok=false`
 
+11. `MVP_INVALID_NOTE_PITCH`
+- Severity: error
+- Trigger: save-time validation finds invalid/missing `<pitch>` for non-rest notes, invalid rest+pitch, or chord without pitch.
+- Required behavior:
+  - `save()` returns `ok=false`
+
 ## Warning Diagnostics
 
 1. `MEASURE_UNDERFULL`

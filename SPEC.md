@@ -256,6 +256,17 @@ The following MUST be covered by automated tests:
 - BF-1: Non-editable voice rejected
 - NK-1: Unsupported note kind (`grace/cue/chord/rest`) rejected
 
+## 11.1 Property-based Invariant Testing
+
+In addition to deterministic unit tests, the core SHOULD include property-based tests to validate invariants under randomized command sequences.
+
+Property tests SHOULD continuously verify:
+
+- reject path leaves state unchanged
+- dirty transition rules remain valid
+- unknown / unsupported element preservation
+- backup/forward and beam preservation guarantees
+
 ---
 
 # End of MVP Core Specification

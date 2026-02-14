@@ -43,11 +43,15 @@ npm run build
 ```bash
 npm run typecheck
 npm run test:unit
+npm run test:property
+npm run test:all
 npm run clean
 ```
 
 - `typecheck`: strict TS check for development quality
 - `test:unit`: run unit tests with Vitest
+- `test:property`: run property-based invariant tests
+- `test:all`: run both unit and property tests
 - `clean`: remove generated JS and distribution HTML
 
 ## Toolchain Baseline

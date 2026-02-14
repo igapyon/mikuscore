@@ -14,6 +14,7 @@ It complements:
 ```ts
 type NodeId = string;
 type VoiceId = string;
+type MeasureNumber = string;
 
 type CoreCommand =
   | ChangePitchCommand
@@ -21,6 +22,15 @@ type CoreCommand =
   | InsertNoteAfterCommand
   | DeleteNoteCommand
   | UiNoopCommand;
+
+type DispatchResult = {
+  ok: boolean;
+  dirtyChanged: boolean;
+  changedNodeIds: NodeId[];
+  affectedMeasureNumbers: MeasureNumber[];
+  diagnostics: Array<{ code: DiagnosticCode; message: string }>;
+  warnings: Array<{ code: WarningCode; message: string }>;
+};
 ```
 
 ## Command Definitions

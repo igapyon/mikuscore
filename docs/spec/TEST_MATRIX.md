@@ -7,7 +7,8 @@ Executable test planning mapped from `SPEC.md` requirements.
 ## Test Runner Baseline
 
 - Unit test runner: `Vitest`
-- Scope: core behavior and invariants in `tests/unit/*`
+- Unit scope: deterministic behavior and contract checks in `tests/unit/*`
+- Property scope: randomized invariant checks in `tests/property/*`
 
 ## Required Automated Tests
 
@@ -192,7 +193,28 @@ Executable test planning mapped from `SPEC.md` requirements.
   - result `ok=false`
   - diagnostic `MVP_INVALID_NOTE_VOICE`
 
-27. `PL-1 Dispatch rejects invalid duration payload`
+27. `SV-5 Save rejects invalid pitch`
+- Given: loaded non-rest note includes invalid/missing pitch
+- When: `save()`
+- Then:
+  - result `ok=false`
+  - diagnostic `MVP_INVALID_NOTE_PITCH`
+
+28. `SV-6 Save rejects rest note with pitch`
+- Given: loaded rest note includes `<pitch>`
+- When: `save()`
+- Then:
+  - result `ok=false`
+  - diagnostic `MVP_INVALID_NOTE_PITCH`
+
+29. `SV-7 Save rejects chord note without pitch`
+- Given: loaded chord note has `<chord/>` but no valid `<pitch>`
+- When: `save()`
+- Then:
+  - result `ok=false`
+  - diagnostic `MVP_INVALID_NOTE_PITCH`
+
+30. `PL-1 Dispatch rejects invalid duration payload`
 - Given: command payload with non-positive or non-integer duration
 - When: `dispatch(change_duration|insert_note_after)`
 - Then:
@@ -200,7 +222,7 @@ Executable test planning mapped from `SPEC.md` requirements.
   - diagnostic `MVP_INVALID_COMMAND_PAYLOAD`
   - DOM unchanged
 
-28. `PL-2 Dispatch rejects invalid pitch payload`
+31. `PL-2 Dispatch rejects invalid pitch payload`
 - Given: command payload with invalid pitch fields
 - When: `dispatch(change_pitch|insert_note_after)`
 - Then:
