@@ -3,6 +3,7 @@
 ブラウザ上で完結する MusicXML スコアエディタのプロジェクトです。  
 このアプリの主眼は「多機能化」ではなく、**既存 MusicXML を壊さずに編集する信頼性**です。  
 MVP段階で機能を絞っているのは意図的で、まず「壊さない編集」を確実に成立させることを最優先にしています。
+ただし実運用で最低限必要な編集体験を満たすため、MVPでも `insert` / `delete` は対象に含めます。
 
 ## このアプリの特徴
 
@@ -30,17 +31,25 @@ mikuscore は、MVPとして機能を最小限に絞る代わりに、以下を�
 - `dirty === false` の保存は入力 XML 文字列をそのまま返す（`original_noop`）
 - 小節 overfull は `MEASURE_OVERFULL` で拒否
 - 非編集対象 voice は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否
+- 実用最低限として `change_pitch` / `change_duration` / `insert_note_after` / `delete_note` をMVPに含める
+- `grace` / `cue` / `chord` / `rest` はMVPでは編集対象外（`MVP_UNSUPPORTED_NOTE_KIND`）
 - underfull は許容可能（警告を出す場合あり）
 - pretty-print なしでシリアライズ
 
 詳細は `SPEC.md` と `docs/spec/` を参照してください。
+
+## 対応する MusicXML バージョン
+
+- 対象: **MusicXML 4.0**
+- 位置づけ: 2026-02-14 時点の最新安定版（Final Community Group Report は 2021-06-01 公開）
+- 方針: MVP実装とテストは 4.0 前提で設計する
 
 ## 配布と開発方針
 
 - 配布形態: **Single-file Web App**（単一 HTML）
 - 実行条件: オフライン動作、外部依存なし
 - 開発形態: 分割 TypeScript ソース
-- ビルド方針: `app-src.html` + `src/` から `app.html` を生成
+- ビルド方針: `mikuscore-src.html` + `src/` から `mikuscore.html` を生成
 
 ## ドキュメント
 
@@ -51,6 +60,7 @@ mikuscore は、MVPとして機能を最小限に絞る代わりに、以下を�
 - `docs/spec/DIAGNOSTICS.md`: 診断コード定義
 - `docs/spec/TEST_MATRIX.md`: 必須テスト観点
 - `docs/spec/BUILD_PROCESS.md`: 単一 HTML 配布向けビルド方針
+- `docs/spec/ARCHITECTURE.md`: Core/UI分離とバージョン前提を含むアーキテクチャ方針
 - `TODO.md`: 仕様・実装・テストのタスク管理
 
 ## 現在のステータス

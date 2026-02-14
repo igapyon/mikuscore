@@ -23,6 +23,14 @@ Single source of truth for diagnostics emitted by core.
   - DOM unchanged
   - dirty unchanged
 
+3. `MVP_UNSUPPORTED_NOTE_KIND`
+- Severity: error
+- Trigger: command targets unsupported note kinds in MVP (`grace`, `cue`, `chord`, `rest`).
+- Required behavior:
+  - command result `ok=false`
+  - DOM unchanged
+  - dirty unchanged
+
 ## Warning Diagnostics
 
 1. `MEASURE_UNDERFULL`

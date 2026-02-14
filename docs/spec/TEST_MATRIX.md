@@ -4,6 +4,11 @@
 
 Executable test planning mapped from `SPEC.md` requirements.
 
+## Test Runner Baseline
+
+- Unit test runner: `Vitest`
+- Scope: core behavior and invariants in `tests/unit/*`
+
 ## Required Automated Tests
 
 1. `RT-0 No-op save returns original text`
@@ -56,6 +61,14 @@ Executable test planning mapped from `SPEC.md` requirements.
 - Then:
   - result `ok=false`
   - diagnostic `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`
+  - DOM unchanged
+
+8. `NK-1 Unsupported note kind rejected`
+- Given: command targeting `grace`, `cue`, `chord`, or `rest`
+- When: `dispatch`
+- Then:
+  - result `ok=false`
+  - diagnostic `MVP_UNSUPPORTED_NOTE_KIND`
   - DOM unchanged
 
 ## Additional Recommended Tests
