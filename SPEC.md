@@ -105,8 +105,20 @@ This guarantees diff-zero when no edit occurs.
 - Input interpretation
 - Rendering
 - Displaying warnings/errors
+- Verovio-based confirmation rendering
+- Click-to-select mapping (`SVG id -> nodeId`) for edit target selection
 
 UI MUST NOT modify DOM directly.
+
+## 4.3 Rendering / Click-Edit Boundary (MVP)
+
+- Verovio SHALL be treated as the notation rendering ground truth in UI.
+- Click-edit flow MUST be:
+  - `SVG click -> resolve element id -> map to nodeId -> dispatch(core command)`
+- In MVP, click action selects one note only; edit execution is explicit via UI controls.
+- For clickable rendering, UI MAY assign session-scoped temporary IDs for rendering.
+- Temporary render IDs MUST NOT be persisted to saved MusicXML.
+- If mapping fails (`MVP_TARGET_NOT_FOUND`), UI MUST show diagnostics and MUST NOT mutate score state.
 
 ---
 

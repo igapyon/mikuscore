@@ -39,10 +39,11 @@ UI is an interaction layer only. Core remains the single source of truth for sco
 5. Preview Panel
 - Lightweight preview for fast edit feedback
 - Verovio confirmation preview for final visual check
+- Click selection on rendered notes for edit target picking
 
 6. Detail Panel (collapsible)
 - Detailed diagnostics
-- Manual Verovio debug render controls
+- Supplemental technical information
 
 ## UX Flow (Recommended)
 
@@ -68,6 +69,37 @@ Developer-only controls should be separated from primary flow using a collapsed 
 - Verovio runtime initialization MUST be guarded (runtime-ready check + timeout handling).
 - On render failure, UI MUST show explicit error text in preview metadata area.
 - Long-horizontal confirmation mode (no page breaks) MAY be provided as a fixed debug option.
+
+## Verovio Click-Edit Mapping Policy
+
+Goal: Enable direct editing from rendered notation:
+
+`click note on SVG -> resolve element id -> map to editable nodeId -> dispatch core command`
+
+Current scope (agreed):
+
+- First release targets `change_pitch` only.
+- Selection model is single-note only.
+- Click action is selection only; edit execution remains explicit via existing UI controls.
+- Mapping failure behavior is warning/diagnostics only (no mutation, no implicit fallback edit).
+
+- Verovio-rendered SVG MUST expose element identifiers (`id`) for note elements.
+- Editable MusicXML notes SHOULD have stable IDs (prefer `xml:id`) before rendering.
+- UI click handler SHOULD use DOM traversal (e.g. `closest('[id]')`) to capture target element id.
+- UI click handler SHOULD try multiple hit-testing paths:
+  - DOM traversal from click target (`closest('[id]')`)
+  - `elementsFromPoint(clientX, clientY)` fallback when target id is non-note/container
+- UI MUST convert SVG element id into core target (`nodeId`) through a deterministic mapping layer.
+- After mapping, UI MUST invoke core command APIs only (`dispatch(change_pitch, ...)`, etc.).
+- After successful dispatch, UI MUST re-render both quick preview and Verovio confirmation preview.
+
+Implementation notes:
+
+- If note-level stable IDs are missing, mapping may become unreliable across re-layout; assign stable IDs during load/normalize phase.
+- For MVP click-edit, note IDs SHOULD be session-scoped temporary IDs and SHOULD NOT be persisted to saved XML.
+- Verovio toolkit helper APIs (e.g. `getElementAttr`, `getPageWithElement`, `getTimeForElement`) MAY be used for fallback lookup/debugging.
+- Mapping failures MUST be surfaced in diagnostics (do not silently ignore).
+- Mapping failures SHOULD be visible in both UI diagnostics and browser console log for troubleshooting.
 
 ## Save/Download/Playback Policy
 

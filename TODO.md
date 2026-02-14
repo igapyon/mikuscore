@@ -1,37 +1,48 @@
 # TODO
 
-## Spec Work
+## 現在地（2026-02 時点）
 
-- [x] Confirm command catalog for MVP (exact command names and payloads, including insert/delete).
-- [x] Add explicit save rejection contract when current state is overfull.
-- [x] Decide nodeId stability policy (session-local only in MVP).
-- [x] Decide unsupported note kinds in MVP (`grace` / `cue` / `chord` / `rest` -> reject).
-- [ ] Define message text policy (i18n vs fixed English) for diagnostics.
-- [x] Add one canonical fixture MusicXML for each required test ID.
-- [x] Align file naming conventions for single-file build (`mikuscore-src.html` / `mikuscore.html`).
+### 完了済み
 
-## Core Implementation
+- [x] Core（`ScoreCore`）の load / dispatch / save と主要バリデーションを実装済み。
+- [x] 単体テスト + property test の基盤を整備済み。
+- [x] UI を日本語中心に整理し、編集・確認・保存の導線を再配置済み。
+- [x] Verovio レンダリングを正式採用（デバッグ用途から昇格）。
+- [x] Verovio クリック選択（ノート 1 つ選択）を実装済み。
+- [x] SVG 上クリック -> `nodeId` 解決の改善（`elementsFromPoint` フォールバック）を実装済み。
+- [x] `change_pitch` の先行導入（選択ノート対象）を実装済み。
+- [x] `midi-writer.js` を使った再生経路を導入済み。
+- [x] Clarinet in A 含む `transpose` 反映を修正済み。
+- [x] 仕様ドキュメント（`docs/spec/UI_SPEC.md`, `docs/spec/ARCHITECTURE.md`）に方針追記済み。
 
-- [x] Create `core/interfaces.ts`.
-- [x] Create `core/commands.ts`.
-- [x] Create `core/xmlUtils.ts` (parse/serialize, unknown node-safe helpers).
-- [x] Create `core/timeIndex.ts` (measure capacity / occupied time helpers).
-- [x] Create `core/validators.ts` (overfull, voice edit constraints).
-- [x] Create `core/ScoreCore.ts` (load/dispatch/save + dirty tracking).
-- [x] Create `core/index.ts` exports.
+### 既知事項（未解決ではないが把握が必要）
 
-## Tests
+- [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示される。現状は読み込み継続。
+- [ ] クリック選択は「音符そのもの」クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になる（想定動作）。
 
-- [x] Set up Vitest (`test:unit`) as the unit test runner baseline.
-- [x] Add `tests/unit/core.spec.ts`.
-- [x] Implement RT-0, RT-1, TI-1, TI-2, PT-1, BM-1, BF-1.
-- [x] Add DR-1, NK-1, BF-2/BF-3/BF-4, IN-2, SV-2, AT-1.
-- [x] Add fixtures for base/overfull/underfull/backup/voice-boundary/unknown/beam scenarios.
-- [x] Confirm no-op save returns exact original XML string.
-- [x] Add property tests (`tests/property/core.property.spec.ts`) for randomized invariant checks.
+## 次にやること（優先順）
 
-## Docs
+### P1: 編集体験の最小完成
 
-- [ ] Keep `SPEC.md` and `docs/spec/*` synchronized when rules change.
-- [ ] Update prompt template if file layout changes.
-- [x] Keep `docs/spec/BUILD_PROCESS.md` and package scripts consistent.
+- [ ] `change_pitch` UI を最小完成版にする（半音上下ボタン + 音名直接指定のどちらかを確定）。
+- [ ] 選択ノートの視覚ハイライトを強化（現在選択が一目で分かる状態）。
+- [ ] 失敗時メッセージを統一（UI表示と `console` ログの文面ポリシー確定）。
+
+### P2: 安定化
+
+- [ ] クリックマッピングの E2E テスト追加（最低 1 ケース）。
+- [ ] Verovio レンダリング更新時の選択維持ルールを明文化しテスト化。
+- [ ] 保存 XML と再レンダリング結果の整合チェック手順を `docs/spec` に追記。
+
+### P3: 仕様拡張の準備
+
+- [ ] 次コマンド候補を確定（`insert_note`, `delete_note` どちら先行か）。
+- [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
+
+## 次回の再開手順
+
+1. `npm run build`
+2. `mikuscore.html` をハードリロードして動作確認
+3. 譜面プレビューでノートクリック -> 選択状態更新を確認
+4. `change_pitch` 実行 -> 保存 -> 再レンダリングで反映確認
+5. 問題なければテスト追加（P2 の 1 行目）に着手
