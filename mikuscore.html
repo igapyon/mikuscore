@@ -55,6 +55,29 @@ body {
   color: var(--muted);
 }
 
+.ms-flow {
+  margin-top: 8px;
+}
+
+.ms-flow-step h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ms-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: #e7efff;
+  color: #0f397e;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .ms-section {
   border-top: 1px solid var(--border);
   padding-top: 12px;
@@ -186,6 +209,24 @@ button:disabled {
   min-height: 100px;
 }
 
+.ms-dev {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f9fbff;
+  padding: 8px 12px 12px;
+}
+
+.ms-dev > summary {
+  cursor: pointer;
+  color: #214a93;
+  font-weight: 700;
+}
+
+.ms-dev[open] > summary {
+  margin-bottom: 6px;
+}
+
 @media (max-width: 768px) {
   .ms-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -202,115 +243,121 @@ button:disabled {
         既存MusicXMLを壊さずに、安全に最小編集するためのMVPエディタです。
       </p>
       <ol class="ms-steps">
-        <li>「サンプルを読む」または MusicXML を読み込み</li>
-        <li>ノート(nodeId)を選択してコマンド実行</li>
-        <li>Save して Output XML / Download で結果確認</li>
+        <li>入力を選んで読み込み</li>
+        <li>ノートを編集</li>
+        <li>再生で確認して保存 / ダウンロード</li>
       </ol>
       <div class="ms-actions">
         <button id="loadSampleBtn" type="button">サンプルを読む（ソース入力）</button>
       </div>
 
-      <section class="ms-section">
-        <h2>MusicXML入力</h2>
-        <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
-          <label><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
-          <label><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
-        </div>
+      <div class="ms-flow">
+        <section class="ms-section ms-flow-step">
+          <h2><span class="ms-step-no">1</span>MusicXML入力</h2>
+          <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
+            <label><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
+            <label><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+          </div>
 
-        <div id="fileInputBlock" class="ms-block">
-          <button id="fileSelectBtn" type="button">ファイルを選択</button>
-          <span id="fileNameText">未選択</span>
-          <input id="fileInput" type="file" accept=".musicxml,.xml,text/xml,application/xml" hidden />
-        </div>
+          <div id="fileInputBlock" class="ms-block">
+            <button id="fileSelectBtn" type="button">ファイルを選択</button>
+            <span id="fileNameText">未選択</span>
+            <input id="fileInput" type="file" accept=".musicxml,.xml,text/xml,application/xml" hidden />
+          </div>
 
-        <div id="sourceInputBlock" class="ms-block ms-hidden">
-          <label for="xmlInput" class="ms-label">MusicXML</label>
-          <textarea id="xmlInput" rows="12" spellcheck="false"></textarea>
-        </div>
+          <div id="sourceInputBlock" class="ms-block ms-hidden">
+            <label for="xmlInput" class="ms-label">MusicXML</label>
+            <textarea id="xmlInput" rows="12" spellcheck="false"></textarea>
+          </div>
 
-        <div class="ms-actions">
-          <button id="loadBtn" type="button">Load</button>
-        </div>
-      </section>
+          <div class="ms-actions">
+            <button id="loadBtn" type="button">読み込み</button>
+          </div>
+        </section>
 
-      <section class="ms-section">
-        <h2>Editor</h2>
-        <p id="statusText">未ロード</p>
-        <label for="noteSelect" class="ms-label">ノート選択 (nodeId)</label>
-        <select id="noteSelect"></select>
+        <section class="ms-section ms-flow-step">
+          <h2><span class="ms-step-no">2</span>編集</h2>
+          <p id="statusText">未ロード</p>
+          <label for="noteSelect" class="ms-label">ノート選択 (nodeId)</label>
+          <select id="noteSelect"></select>
 
-        <div class="ms-grid">
-          <label>step
-            <select id="pitchStep">
-              <option value="C">C</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-              <option value="F">F</option>
-              <option value="G">G</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-            </select>
-          </label>
-          <label>alter
-            <select id="pitchAlter">
-              <option value="">none</option>
-              <option value="-2">-2</option>
-              <option value="-1">-1</option>
-              <option value="0">0</option>
-              <option value="1">1</option>
-              <option value="2">2</option>
-            </select>
-          </label>
-          <label>octave
-            <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" />
-          </label>
-          <label>duration
-            <input id="durationInput" type="number" min="1" step="1" value="1" />
-          </label>
-        </div>
+          <div class="ms-grid">
+            <label>音名(step)
+              <select id="pitchStep">
+                <option value="C">C</option>
+                <option value="D">D</option>
+                <option value="E">E</option>
+                <option value="F">F</option>
+                <option value="G">G</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+              </select>
+            </label>
+            <label>変化記号(alter)
+              <select id="pitchAlter">
+                <option value="">none</option>
+                <option value="-2">-2</option>
+                <option value="-1">-1</option>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+              </select>
+            </label>
+            <label>オクターブ(octave)
+              <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" />
+            </label>
+            <label>音価(duration)
+              <input id="durationInput" type="number" min="1" step="1" value="1" />
+            </label>
+          </div>
 
-        <div class="ms-actions">
-          <button id="changePitchBtn" type="button">change_pitch</button>
-          <button id="changeDurationBtn" type="button">change_duration</button>
-          <button id="insertAfterBtn" type="button">insert_note_after</button>
-          <button id="deleteBtn" type="button">delete_note</button>
-        </div>
-      </section>
+          <div class="ms-actions">
+            <button id="changePitchBtn" type="button">音高変更</button>
+            <button id="changeDurationBtn" type="button">音価変更</button>
+            <button id="insertAfterBtn" type="button">後ろに音符追加</button>
+            <button id="deleteBtn" type="button">音符削除</button>
+          </div>
+        </section>
 
-      <section class="ms-section">
-        <h2>Save / Output</h2>
-        <div class="ms-actions">
-          <button id="saveBtn" type="button">Save</button>
-          <button id="playBtn" type="button">デバッグ再生</button>
-          <button id="stopBtn" type="button" disabled>停止</button>
-          <button id="downloadBtn" type="button" disabled>Download XML</button>
-        </div>
-        <p id="playbackText">playback: idle</p>
-        <p>save mode: <span id="saveModeText">-</span></p>
-        <label for="outputXml" class="ms-label">Output XML</label>
-        <textarea id="outputXml" rows="12" readonly></textarea>
-      </section>
+        <section class="ms-section ms-flow-step">
+          <h2><span class="ms-step-no">3</span>検証 / 保存</h2>
+          <div class="ms-actions">
+            <button id="playBtn" type="button">再生</button>
+            <button id="stopBtn" type="button" disabled>停止</button>
+            <button id="saveBtn" type="button">保存</button>
+            <button id="downloadBtn" type="button" disabled>XMLダウンロード</button>
+          </div>
+          <p id="playbackText">再生: 停止中</p>
+          <p>保存モード: <span id="saveModeText">-</span></p>
+          <label for="outputXml" class="ms-label">出力XML</label>
+          <textarea id="outputXml" rows="12" readonly></textarea>
+        </section>
+      </div>
 
-      <section class="ms-section">
-        <h2>Diagnostics</h2>
-        <div id="diagArea" aria-live="polite"></div>
-      </section>
+      <details class="ms-dev">
+        <summary>詳細情報</summary>
 
-      <section class="ms-section">
-        <h2>譜面デバッグ（Verovio）</h2>
-        <p class="ms-label">Verovio本体レンダラーで、改ページ抑制ONの横長SVGを描画します。</p>
-        <div class="ms-actions">
-          <label class="ms-inline-check">
-            <input id="debugLongSvgMode" type="checkbox" checked disabled />
-            <span>改ページ抑制（ON固定）</span>
-          </label>
-          <button id="renderDebugScoreBtn" type="button">譜面デバッグ描画</button>
-        </div>
-        <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
-        <div id="debugScoreWrap" class="ms-debug-wrap">
-          <div id="debugScoreArea" class="ms-debug-score"></div>
-        </div>
-      </section>
+        <section class="ms-section">
+          <h2>診断</h2>
+          <div id="diagArea" aria-live="polite"></div>
+        </section>
+
+        <section class="ms-section">
+          <h2>譜面デバッグ（Verovio）</h2>
+          <p class="ms-label">Verovio本体レンダラーで、改ページ抑制ONの横長SVGを描画します。</p>
+          <div class="ms-actions">
+            <label class="ms-inline-check">
+              <input id="debugLongSvgMode" type="checkbox" checked disabled />
+              <span>改ページ抑制（ON固定）</span>
+            </label>
+            <button id="renderDebugScoreBtn" type="button">譜面デバッグ描画</button>
+          </div>
+          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+          <div id="debugScoreWrap" class="ms-debug-wrap">
+            <div id="debugScoreArea" class="ms-debug-score"></div>
+          </div>
+        </section>
+      </details>
     </section>
   </main>
 
@@ -474,8 +521,8 @@ const renderInputMode = () => {
 const renderStatus = () => {
     const dirty = core.isDirty();
     statusText.textContent = state.loaded
-        ? `ロード済み / dirty=${dirty} / notes=${state.noteNodeIds.length}`
-        : "未ロード（まず Load してください）";
+        ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
+        : "未ロード（まず読み込みしてください）";
 };
 const renderNotes = () => {
     noteSelect.innerHTML = "";
@@ -948,7 +995,7 @@ const buildPlaybackEventsFromXml = (xml) => {
 const stopPlayback = () => {
     synthEngine.stop();
     isPlaying = false;
-    playbackText.textContent = "playback: idle";
+    playbackText.textContent = "再生: 停止中";
     renderControlState();
 };
 const startPlayback = async () => {
@@ -968,13 +1015,13 @@ const startPlayback = async () => {
             }
         }
         renderAll();
-        playbackText.textContent = "playback: save failed";
+        playbackText.textContent = "再生: 保存失敗";
         return;
     }
     const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
     const events = parsedPlayback.events;
     if (events.length === 0) {
-        playbackText.textContent = "playback: no playable notes";
+        playbackText.textContent = "再生: 再生可能ノートなし";
         renderControlState();
         return;
     }
@@ -984,7 +1031,7 @@ const startPlayback = async () => {
     }
     catch (error) {
         playbackText.textContent =
-            "playback: midi build failed (" +
+            "再生: MIDI生成失敗 (" +
                 (error instanceof Error ? error.message : String(error)) +
                 ")";
         renderControlState();
@@ -1005,18 +1052,18 @@ const startPlayback = async () => {
     try {
         await synthEngine.playSchedule(schedule, FIXED_PLAYBACK_WAVEFORM, () => {
             isPlaying = false;
-            playbackText.textContent = "playback: idle";
+            playbackText.textContent = "再生: 停止中";
             renderControlState();
         });
     }
     catch (error) {
         playbackText.textContent =
-            "playback: synth failed (" + (error instanceof Error ? error.message : String(error)) + ")";
+            "再生: シンセ再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")";
         renderControlState();
         return;
     }
     isPlaying = true;
-    playbackText.textContent = `playback: playing (${events.length} notes, midi=${midiBytes.length} bytes, waveform=sine)`;
+    playbackText.textContent = `再生中: ノート${events.length}件 / MIDI ${midiBytes.length} bytes / 波形 sine`;
     renderControlState();
     renderAll();
 };
@@ -1072,7 +1119,7 @@ const loadFromText = (xml) => {
             diagnostics: [
                 {
                     code: "MVP_COMMAND_EXECUTION_FAILED",
-                    message: err instanceof Error ? err.message : "Load failed.",
+                    message: err instanceof Error ? err.message : "読み込みに失敗しました。",
                 },
             ],
             warnings: [],
