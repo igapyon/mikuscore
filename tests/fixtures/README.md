@@ -34,6 +34,12 @@ This directory contains MusicXML fixtures used by `tests/unit/core.spec.ts`.
   - SV-3
 - `invalid_note_voice.musicxml`
   - SV-4
+- `invalid_note_pitch.musicxml`
+  - SV-5
+- `invalid_rest_with_pitch.musicxml`
+  - SV-6
+- `invalid_chord_without_pitch.musicxml`
+  - SV-7
 
 ## Maintenance Rules
 

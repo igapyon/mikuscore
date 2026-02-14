@@ -11,6 +11,7 @@ import type {
 import { getMeasureTimingForVoice } from "./timeIndex";
 import {
   createNoteElement,
+  findAncestorMeasure,
   getDurationValue,
   getVoiceText,
   parseXml,
@@ -62,6 +63,7 @@ export class ScoreCore {
         ok: true,
         dirtyChanged: false,
         changedNodeIds: [],
+        affectedMeasureNumbers: [],
         diagnostics: [],
         warnings: [],
       };
@@ -96,6 +98,7 @@ export class ScoreCore {
     const warnings: Warning[] = [];
     let insertedNode: Element | null = null;
     let removedNodeId: NodeId | null = null;
+    const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
 
     try {
       if (command.type === "change_pitch") {
@@ -151,6 +154,7 @@ export class ScoreCore {
       ok: true,
       dirtyChanged: !dirtyBefore,
       changedNodeIds,
+      affectedMeasureNumbers,
       diagnostics: [],
       warnings,
     };
@@ -252,6 +256,8 @@ export class ScoreCore {
           message: "Note is missing a valid positive <duration> value.",
         };
       }
+      const pitchDiagnostic = this.validateNotePitch(note);
+      if (pitchDiagnostic) return pitchDiagnostic;
     }
     return null;
   }
@@ -265,9 +271,77 @@ export class ScoreCore {
       ok: false,
       dirtyChanged: false,
       changedNodeIds: [],
+      affectedMeasureNumbers: [],
       diagnostics: [diagnostic],
       warnings: [],
     };
+  }
+
+  private collectAffectedMeasureNumbers(note: Element): string[] {
+    const measure = findAncestorMeasure(note);
+    if (!measure) return [];
+    const number = measure.getAttribute("number") ?? "";
+    return number ? [number] : [];
+  }
+
+  private validateNotePitch(note: Element): Diagnostic | null {
+    const hasRest = Array.from(note.children).some((c) => c.tagName === "rest");
+    const hasChord = Array.from(note.children).some((c) => c.tagName === "chord");
+    const pitch = Array.from(note.children).find((c) => c.tagName === "pitch") ?? null;
+
+    if (hasRest && hasChord) {
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Note must not contain both <rest> and <chord>.",
+      };
+    }
+    if (hasRest && pitch) {
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Rest note must not contain <pitch>.",
+      };
+    }
+    if (hasChord && !pitch) {
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Chord note must contain a valid <pitch>.",
+      };
+    }
+
+    if (!pitch) {
+      if (hasRest) return null;
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Non-rest note is missing a valid <pitch>.",
+      };
+    }
+
+    const step = pitch.querySelector("step")?.textContent?.trim() ?? "";
+    if (!["A", "B", "C", "D", "E", "F", "G"].includes(step)) {
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Pitch step is invalid.",
+      };
+    }
+    const octaveText = pitch.querySelector("octave")?.textContent?.trim() ?? "";
+    const octave = Number(octaveText);
+    if (!Number.isInteger(octave)) {
+      return {
+        code: "MVP_INVALID_NOTE_PITCH",
+        message: "Pitch octave is invalid.",
+      };
+    }
+    const alterText = pitch.querySelector("alter")?.textContent?.trim();
+    if (alterText !== undefined) {
+      const alter = Number(alterText);
+      if (!Number.isInteger(alter) || alter < -2 || alter > 2) {
+        return {
+          code: "MVP_INVALID_NOTE_PITCH",
+          message: "Pitch alter is invalid.",
+        };
+      }
+    }
+    return null;
   }
 
   private buildChangedNodeIds(
