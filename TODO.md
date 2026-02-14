@@ -2,11 +2,13 @@
 
 ## Spec Work
 
-- [ ] Confirm command catalog for MVP (exact command names and payloads).
+- [x] Confirm command catalog for MVP (exact command names and payloads, including insert/delete).
 - [ ] Add explicit save rejection contract when current state is overfull.
+- [x] Decide nodeId stability policy (session-local only in MVP).
+- [x] Decide unsupported note kinds in MVP (`grace` / `cue` / `chord` / `rest` -> reject).
 - [ ] Define message text policy (i18n vs fixed English) for diagnostics.
 - [ ] Add one canonical fixture MusicXML for each required test ID.
-- [ ] Align file naming conventions for single-file build (`app-src.html` / `app.html` or alternatives).
+- [x] Align file naming conventions for single-file build (`mikuscore-src.html` / `mikuscore.html`).
 
 ## Core Implementation
 
@@ -20,6 +22,7 @@
 
 ## Tests
 
+- [ ] Set up Vitest (`test:unit`) as the unit test runner baseline.
 - [ ] Add `tests/unit/core.spec.ts`.
 - [ ] Implement RT-0, RT-1, TI-1, TI-2, PT-1, BM-1, BF-1.
 - [ ] Add fixtures for unknown elements and backup/forward boundaries.

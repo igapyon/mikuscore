@@ -117,6 +117,8 @@ UI MUST NOT modify DOM directly.
 - Internal `nodeId` MUST be assigned.
 - XML MUST NOT be modified to store nodeId.
 - Mapping SHALL use WeakMap<Node, NodeId>.
+- `nodeId` stability is required only within a loaded session.
+- Cross-reload `nodeId` identity is NOT guaranteed in MVP.
 
 ## 5.2 Minimal Patch Rule
 
@@ -213,6 +215,8 @@ MVP supports editing only editable voices (default: voice=1).
 - Editing non-editable voices MUST fail.
 - Editing that requires restructuring backup/forward MUST fail.
 - Diagnostic code: `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`
+- Editing `grace`, `cue`, `chord`, and `rest` notes MUST fail in MVP.
+- Diagnostic code: `MVP_UNSUPPORTED_NOTE_KIND`
 
 ---
 
@@ -250,6 +254,7 @@ The following MUST be covered by automated tests:
 - PT-1: Unknown elements preserved
 - BM-1: Existing beam unchanged
 - BF-1: Non-editable voice rejected
+- NK-1: Unsupported note kind (`grace/cue/chord/rest`) rejected
 
 ---
 

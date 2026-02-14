@@ -9,7 +9,8 @@ This document defines the minimum command interface contract for core implementa
 ```ts
 type DiagnosticCode =
   | "MEASURE_OVERFULL"
-  | "MVP_UNSUPPORTED_NON_EDITABLE_VOICE";
+  | "MVP_UNSUPPORTED_NON_EDITABLE_VOICE"
+  | "MVP_UNSUPPORTED_NOTE_KIND";
 
 type WarningCode =
   | "MEASURE_UNDERFULL";
@@ -35,6 +36,7 @@ type SaveResult = {
 
 1. `dispatch(command)`:
 - MUST reject commands targeting non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- MUST reject commands targeting unsupported note kinds (`grace`, `cue`, `chord`, `rest`) with `MVP_UNSUPPORTED_NOTE_KIND`.
 - MUST reject overfull measure with `MEASURE_OVERFULL`.
 - MUST leave DOM unchanged on reject.
 - MUST set `dirty=true` only when a content-changing command succeeds.
@@ -43,6 +45,7 @@ type SaveResult = {
 2. `save()`:
 - If `dirty === false`, MUST return original input XML text with `mode="original_noop"`.
 - If `dirty === true`, MUST return `XMLSerializer` output with `mode="serialized_dirty"`.
+- If current score state is overfull, save MUST be rejected with `ok=false` and diagnostic `MEASURE_OVERFULL`.
 - Pretty-printing MUST NOT be applied.
 
 3. Serialization:

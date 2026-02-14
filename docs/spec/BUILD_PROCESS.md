@@ -11,13 +11,13 @@ The build process is designed to preserve offline and zero-runtime-dependency be
 
 ## Target Artifact
 
-- Development template: `app-src.html` (editable source template)
-- Distribution artifact: `app.html` (generated file, do not edit directly)
+- Development template: `mikuscore-src.html` (editable source template)
+- Distribution artifact: `mikuscore.html` (generated file, do not edit directly)
 
 ## Suggested Project Layout (MVP)
 
-- `app-src.html`
-- `app.html` (generated)
+- `mikuscore-src.html`
+- `mikuscore.html` (generated)
 - `src/css/app.css`
 - `src/ts/main.ts`
 - `src/ts/**/*.ts` (core/ui split modules)
@@ -34,32 +34,46 @@ npm run build
 `build` SHOULD perform the following steps:
 
 1. Compile `src/ts/**/*.ts` to `src/js/**/*.js`
-2. Validate `app-src.html` tag order (CSS and JS include order)
+2. Validate `mikuscore-src.html` tag order (CSS and JS include order)
 3. Inline local CSS and JS into HTML
-4. Output `app.html` as single-file artifact
+4. Output `mikuscore.html` as single-file artifact
 
 ## Optional Commands
 
 ```bash
 npm run typecheck
+npm run test:unit
 npm run clean
 ```
 
 - `typecheck`: strict TS check for development quality
+- `test:unit`: run unit tests with Vitest
 - `clean`: remove generated JS and distribution HTML
+
+## Toolchain Baseline
+
+- TypeScript: `5.9.x` baseline (current verified: `5.9.3`)
+- JavaScript output target: `ES2018`
+- Recommendation: pin exact TypeScript patch version in lockfile for reproducible builds
+
+## Browser Support Baseline
+
+- Primary targets: latest Chrome, latest Edge, latest Safari
+- Compatibility strategy: keep emitted JS at `ES2018` to improve tolerance for older Android Chrome/WebView environments
+- Note: very old Android devices may still require additional runtime compatibility checks
 
 ## Runtime Constraints (MUST)
 
-- `app.html` MUST run offline (no network required)
-- `app.html` MUST NOT fetch external CDN/resources at runtime
+- `mikuscore.html` MUST run offline (no network required)
+- `mikuscore.html` MUST NOT fetch external CDN/resources at runtime
 - all required scripts/styles MUST be embedded or locally bundled
-- behavior of generated `app.html` MUST match development source behavior
+- behavior of generated `mikuscore.html` MUST match development source behavior
 
 ## Editing Rules
 
-- `app.html` is generated; do not edit directly
-- edit only `app-src.html` and files under `src/`
-- PRs SHOULD include regenerated `app.html` when behavior changes
+- `mikuscore.html` is generated; do not edit directly
+- edit only `mikuscore-src.html` and files under `src/`
+- PRs SHOULD include regenerated `mikuscore.html` when behavior changes
 
 ## Notes
 
