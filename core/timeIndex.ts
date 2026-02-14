@@ -20,18 +20,9 @@ export const getMeasureTimingForVoice = (
 };
 
 export const getMeasureCapacity = (measure: Element): number | null => {
-  // Simplified MVP rule: local measure attributes are used when present.
-  const beatsText = measure.querySelector("attributes > time > beats")?.textContent;
-  const beatTypeText = measure.querySelector(
-    "attributes > time > beat-type"
-  )?.textContent;
-  const divisionsText = measure.querySelector("attributes > divisions")?.textContent;
-
-  if (!beatsText || !beatTypeText || !divisionsText) return null;
-
-  const beats = Number(beatsText.trim());
-  const beatType = Number(beatTypeText.trim());
-  const divisions = Number(divisionsText.trim());
+  const context = resolveTimingContext(measure);
+  if (!context) return null;
+  const { beats, beatType, divisions } = context;
 
   if (
     !Number.isFinite(beats) ||
@@ -57,4 +48,52 @@ export const getOccupiedTime = (measure: Element, voice: string): number => {
     if (duration !== null) total += duration;
   }
   return total;
+};
+
+type TimingContext = {
+  beats: number;
+  beatType: number;
+  divisions: number;
+};
+
+const resolveTimingContext = (measure: Element): TimingContext | null => {
+  const part = measure.parentElement;
+  if (!part || part.tagName !== "part") return null;
+
+  let beats: number | null = null;
+  let beatType: number | null = null;
+  let divisions: number | null = null;
+
+  const measures = Array.from(part.children).filter(
+    (child) => child.tagName === "measure"
+  );
+  const measureIndex = measures.indexOf(measure);
+  if (measureIndex < 0) return null;
+
+  for (let i = measureIndex; i >= 0; i -= 1) {
+    const candidate = measures[i];
+    const attributes = candidate.querySelector("attributes");
+    if (!attributes) continue;
+
+    if (divisions === null) {
+      const divisionsText = attributes.querySelector("divisions")?.textContent?.trim();
+      if (divisionsText) divisions = Number(divisionsText);
+    }
+    if (beats === null) {
+      const beatsText = attributes.querySelector("time > beats")?.textContent?.trim();
+      if (beatsText) beats = Number(beatsText);
+    }
+    if (beatType === null) {
+      const beatTypeText = attributes
+        .querySelector("time > beat-type")
+        ?.textContent?.trim();
+      if (beatTypeText) beatType = Number(beatTypeText);
+    }
+
+    if (beats !== null && beatType !== null && divisions !== null) {
+      return { beats, beatType, divisions };
+    }
+  }
+
+  return null;
 };

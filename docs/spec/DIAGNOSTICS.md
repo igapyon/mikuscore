@@ -31,6 +31,38 @@ Single source of truth for diagnostics emitted by core.
   - DOM unchanged
   - dirty unchanged
 
+4. `MVP_SCORE_NOT_LOADED`
+- Severity: error
+- Trigger: command/save requested before a score is loaded.
+
+5. `MVP_COMMAND_TARGET_MISSING`
+- Severity: error
+- Trigger: command payload does not provide a target node identifier where required.
+
+6. `MVP_TARGET_NOT_FOUND`
+- Severity: error
+- Trigger: command target nodeId is not resolvable in current session.
+
+7. `MVP_COMMAND_EXECUTION_FAILED`
+- Severity: error
+- Trigger: unexpected runtime failure while applying a command.
+
+8. `MVP_INVALID_COMMAND_PAYLOAD`
+- Severity: error
+- Trigger: command payload has invalid values (e.g. non-positive duration, invalid pitch fields).
+
+9. `MVP_INVALID_NOTE_DURATION`
+- Severity: error
+- Trigger: save-time validation finds missing/non-positive/non-numeric `<duration>`.
+- Required behavior:
+  - `save()` returns `ok=false`
+
+10. `MVP_INVALID_NOTE_VOICE`
+- Severity: error
+- Trigger: save-time validation finds missing/invalid `<voice>`.
+- Required behavior:
+  - `save()` returns `ok=false`
+
 ## Warning Diagnostics
 
 1. `MEASURE_UNDERFULL`

@@ -10,7 +10,14 @@ This document defines the minimum command interface contract for core implementa
 type DiagnosticCode =
   | "MEASURE_OVERFULL"
   | "MVP_UNSUPPORTED_NON_EDITABLE_VOICE"
-  | "MVP_UNSUPPORTED_NOTE_KIND";
+  | "MVP_UNSUPPORTED_NOTE_KIND"
+  | "MVP_SCORE_NOT_LOADED"
+  | "MVP_COMMAND_TARGET_MISSING"
+  | "MVP_TARGET_NOT_FOUND"
+  | "MVP_COMMAND_EXECUTION_FAILED"
+  | "MVP_INVALID_COMMAND_PAYLOAD"
+  | "MVP_INVALID_NOTE_DURATION"
+  | "MVP_INVALID_NOTE_VOICE";
 
 type WarningCode =
   | "MEASURE_UNDERFULL";
@@ -18,6 +25,7 @@ type WarningCode =
 type DispatchResult = {
   ok: boolean;
   dirtyChanged: boolean;
+  changedNodeIds: NodeId[];
   diagnostics: Array<{ code: DiagnosticCode; message: string }>;
   warnings: Array<{ code: WarningCode; message: string }>;
 };
@@ -37,15 +45,19 @@ type SaveResult = {
 1. `dispatch(command)`:
 - MUST reject commands targeting non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 - MUST reject commands targeting unsupported note kinds (`grace`, `cue`, `chord`, `rest`) with `MVP_UNSUPPORTED_NOTE_KIND`.
+- MUST reject malformed command payloads with `MVP_INVALID_COMMAND_PAYLOAD`.
 - MUST reject overfull measure with `MEASURE_OVERFULL`.
 - MUST leave DOM unchanged on reject.
 - MUST set `dirty=true` only when a content-changing command succeeds.
+- On success, SHOULD return changed/affected node IDs in `changedNodeIds`.
 - UI-only commands MUST NOT set dirty.
 
 2. `save()`:
 - If `dirty === false`, MUST return original input XML text with `mode="original_noop"`.
 - If `dirty === true`, MUST return `XMLSerializer` output with `mode="serialized_dirty"`.
 - If current score state is overfull, save MUST be rejected with `ok=false` and diagnostic `MEASURE_OVERFULL`.
+- If any note has invalid or missing duration, save MUST be rejected with `MVP_INVALID_NOTE_DURATION`.
+- If any note has invalid or missing voice, save MUST be rejected with `MVP_INVALID_NOTE_VOICE`.
 - Pretty-printing MUST NOT be applied.
 
 3. Serialization:
