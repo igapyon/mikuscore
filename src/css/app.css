@@ -48,6 +48,29 @@ body {
   color: var(--muted);
 }
 
+.ms-flow {
+  margin-top: 8px;
+}
+
+.ms-flow-step h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ms-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: #e7efff;
+  color: #0f397e;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .ms-section {
   border-top: 1px solid var(--border);
   padding-top: 12px;
@@ -177,6 +200,24 @@ button:disabled {
 
 .ms-debug-score {
   min-height: 100px;
+}
+
+.ms-dev {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f9fbff;
+  padding: 8px 12px 12px;
+}
+
+.ms-dev > summary {
+  cursor: pointer;
+  color: #214a93;
+  font-weight: 700;
+}
+
+.ms-dev[open] > summary {
+  margin-bottom: 6px;
 }
 
 @media (max-width: 768px) {

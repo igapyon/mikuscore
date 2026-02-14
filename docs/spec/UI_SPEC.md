@@ -30,7 +30,49 @@ UI is an interaction layer only. Core remains the single source of truth for sco
 - Last dispatch diagnostics/warnings
 - Last save diagnostics
 
-4. Output Panel
+4. Verification / Output Panel
+- Playback controls
+- Save mode display (`original_noop` / `serialized_dirty`)
+- Output XML textarea (read-only in MVP)
+- Download button
+
+5. Preview Panel
+- Lightweight preview for fast edit feedback
+- Verovio confirmation preview for final visual check
+
+6. Detail Panel (collapsible)
+- Detailed diagnostics
+- Manual Verovio debug render controls
+
+## UX Flow (Recommended)
+
+UI should be organized in this order:
+
+1. Input
+2. Edit
+3. Verify / Save
+
+Developer-only controls should be separated from primary flow using a collapsed section (e.g. `details`).
+
+## Preview Policy (MVP)
+
+- UI SHOULD support two preview modes:
+  - `quick` (fast feedback while editing)
+  - `verovio_confirm` (ground-truth visual confirmation)
+- `quick` preview SHOULD update after dispatch-level edits.
+- `verovio_confirm` preview SHOULD update on successful save and MAY be manually refreshed.
+- Verovio preview data source MUST be current in-memory score XML (serialized from core), not stale source text.
+
+## Verovio Integration Policy
+
+- Verovio runtime initialization MUST be guarded (runtime-ready check + timeout handling).
+- On render failure, UI MUST show explicit error text in preview metadata area.
+- Long-horizontal confirmation mode (no page breaks) MAY be provided as a fixed debug option.
+
+## Save/Download/Playback Policy
+
+- Playback path SHOULD validate score via `save()` before playing.
+- Playback is a primary user feature (not developer-only debug functionality).
 - Save mode display (`original_noop` / `serialized_dirty`)
 - Output XML textarea (read-only in MVP)
 - Download button
@@ -142,7 +184,6 @@ type UiState = {
 
 ## Out of Scope (MVP UI)
 
-- Notation rendering
 - Advanced keyboard editing model
 - Undo/redo history
 - Multi-voice editing workflow

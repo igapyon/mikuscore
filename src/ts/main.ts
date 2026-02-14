@@ -227,8 +227,8 @@ const renderInputMode = (): void => {
 const renderStatus = (): void => {
   const dirty = core.isDirty();
   statusText.textContent = state.loaded
-    ? `ロード済み / dirty=${dirty} / notes=${state.noteNodeIds.length}`
-    : "未ロード（まず Load してください）";
+    ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
+    : "未ロード（まず読み込みしてください）";
 };
 
 const renderNotes = (): void => {
@@ -778,7 +778,7 @@ const buildPlaybackEventsFromXml = (xml: string): { tempo: number; events: Playb
 const stopPlayback = (): void => {
   synthEngine.stop();
   isPlaying = false;
-  playbackText.textContent = "playback: idle";
+  playbackText.textContent = "再生: 停止中";
   renderControlState();
 };
 
@@ -798,14 +798,14 @@ const startPlayback = async (): Promise<void> => {
       }
     }
     renderAll();
-    playbackText.textContent = "playback: save failed";
+    playbackText.textContent = "再生: 保存失敗";
     return;
   }
 
   const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
   const events = parsedPlayback.events;
   if (events.length === 0) {
-    playbackText.textContent = "playback: no playable notes";
+    playbackText.textContent = "再生: 再生可能ノートなし";
     renderControlState();
     return;
   }
@@ -814,7 +814,7 @@ const startPlayback = async (): Promise<void> => {
     midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
   } catch (error) {
     playbackText.textContent =
-      "playback: midi build failed (" +
+      "再生: MIDI生成失敗 (" +
       (error instanceof Error ? error.message : String(error)) +
       ")";
     renderControlState();
@@ -839,18 +839,18 @@ const startPlayback = async (): Promise<void> => {
   try {
     await synthEngine.playSchedule(schedule, FIXED_PLAYBACK_WAVEFORM, () => {
       isPlaying = false;
-      playbackText.textContent = "playback: idle";
+      playbackText.textContent = "再生: 停止中";
       renderControlState();
     });
   } catch (error) {
     playbackText.textContent =
-      "playback: synth failed (" + (error instanceof Error ? error.message : String(error)) + ")";
+      "再生: シンセ再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")";
     renderControlState();
     return;
   }
 
   isPlaying = true;
-  playbackText.textContent = `playback: playing (${events.length} notes, midi=${midiBytes.length} bytes, waveform=sine)`;
+  playbackText.textContent = `再生中: ノート${events.length}件 / MIDI ${midiBytes.length} bytes / 波形 sine`;
   renderControlState();
   renderAll();
 };
@@ -911,7 +911,7 @@ const loadFromText = (xml: string): void => {
       diagnostics: [
         {
           code: "MVP_COMMAND_EXECUTION_FAILED",
-          message: err instanceof Error ? err.message : "Load failed.",
+          message: err instanceof Error ? err.message : "読み込みに失敗しました。",
         },
       ],
       warnings: [],
