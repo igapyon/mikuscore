@@ -157,6 +157,35 @@ button:disabled {
   color: var(--muted);
 }
 
+.ms-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  color: var(--muted);
+}
+
+.ms-inline-check input {
+  width: auto;
+}
+
+.ms-debug-meta {
+  margin: 8px 0;
+  color: var(--muted);
+}
+
+.ms-debug-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  overflow-x: auto;
+  background: #fbfcff;
+}
+
+.ms-debug-score {
+  min-height: 100px;
+}
+
 @media (max-width: 768px) {
   .ms-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -266,9 +295,27 @@ button:disabled {
         <h2>Diagnostics</h2>
         <div id="diagArea" aria-live="polite"></div>
       </section>
+
+      <section class="ms-section">
+        <h2>譜面デバッグ（Verovio）</h2>
+        <p class="ms-label">Verovio本体レンダラーで、改ページ抑制ONの横長SVGを描画します。</p>
+        <div class="ms-actions">
+          <label class="ms-inline-check">
+            <input id="debugLongSvgMode" type="checkbox" checked disabled />
+            <span>改ページ抑制（ON固定）</span>
+          </label>
+          <button id="renderDebugScoreBtn" type="button">譜面デバッグ描画</button>
+        </div>
+        <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+        <div id="debugScoreWrap" class="ms-debug-wrap">
+          <div id="debugScoreArea" class="ms-debug-score"></div>
+        </div>
+      </section>
     </section>
   </main>
 
+  <script src="src/js/verovio.js"></script>
+  <script src="src/js/midi-writer.js"></script>
   <script>
 (function () {
 const modules = {
@@ -330,6 +377,10 @@ const saveModeText = q("#saveModeText");
 const playbackText = q("#playbackText");
 const outputXml = q("#outputXml");
 const diagArea = q("#diagArea");
+const renderDebugScoreBtn = q("#renderDebugScoreBtn");
+const debugLongSvgMode = q("#debugLongSvgMode");
+const debugScoreMeta = q("#debugScoreMeta");
+const debugScoreArea = q("#debugScoreArea");
 const core = new ScoreCore_1.ScoreCore({ editableVoice: EDITABLE_VOICE });
 const state = {
     loaded: false,
@@ -340,12 +391,10 @@ const state = {
     lastSuccessfulSaveXml: "",
 };
 xmlInput.value = sampleXml;
-let audioContext = null;
-let activeOscillators = [];
-let activeGains = [];
-let playbackTimer = null;
 let isPlaying = false;
 const DEBUG_LOG = true;
+let verovioToolkit = null;
+let verovioInitPromise = null;
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
         return;
@@ -507,6 +556,116 @@ const renderAll = () => {
     renderOutput();
     renderControlState();
 };
+const getVerovioRuntime = () => {
+    var _a;
+    return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
+};
+const ensureVerovioToolkit = async () => {
+    if (verovioToolkit) {
+        return verovioToolkit;
+    }
+    if (verovioInitPromise) {
+        return verovioInitPromise;
+    }
+    verovioInitPromise = (async () => {
+        const runtime = getVerovioRuntime();
+        if (!runtime || typeof runtime.toolkit !== "function") {
+            throw new Error("verovio.js が読み込まれていません。");
+        }
+        const moduleObj = runtime.module;
+        if (!moduleObj) {
+            throw new Error("verovio module が見つかりません。");
+        }
+        if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
+            await new Promise((resolve, reject) => {
+                let settled = false;
+                const timeoutId = window.setTimeout(() => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    reject(new Error("verovio 初期化待機がタイムアウトしました。"));
+                }, 8000);
+                const complete = () => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    resolve();
+                };
+                const previous = moduleObj.onRuntimeInitialized;
+                moduleObj.onRuntimeInitialized = () => {
+                    if (typeof previous === "function") {
+                        previous();
+                    }
+                    complete();
+                };
+                if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
+                    complete();
+                }
+            });
+        }
+        verovioToolkit = new runtime.toolkit();
+        return verovioToolkit;
+    })()
+        .catch((error) => {
+        verovioInitPromise = null;
+        throw error;
+    });
+    return verovioInitPromise;
+};
+const renderDebugScore = () => {
+    var _a, _b;
+    const xml = (_b = (_a = (state.loaded ? core.debugSerializeCurrentXml() : null)) !== null && _a !== void 0 ? _a : xmlInput.value.trim()) !== null && _b !== void 0 ? _b : "";
+    if (!xml) {
+        debugScoreMeta.textContent = "描画対象XMLがありません";
+        debugScoreArea.innerHTML = "";
+        return;
+    }
+    debugScoreMeta.textContent = "verovio 描画中...";
+    void ensureVerovioToolkit()
+        .then((toolkit) => {
+        if (!toolkit) {
+            throw new Error("verovio toolkit の初期化に失敗しました。");
+        }
+        const longHorizontalMode = debugLongSvgMode.checked;
+        const options = {
+            pageWidth: longHorizontalMode ? 20000 : 1800,
+            pageHeight: 3000,
+            scale: 40,
+            breaks: longHorizontalMode ? "none" : "auto",
+            adjustPageHeight: longHorizontalMode ? 1 : 0,
+            footer: "none",
+            header: "none",
+        };
+        toolkit.setOptions(options);
+        const loaded = toolkit.loadData(xml);
+        if (!loaded) {
+            throw new Error("verovio loadData が失敗しました。");
+        }
+        const pageCount = toolkit.getPageCount();
+        if (!Number.isFinite(pageCount) || pageCount < 1) {
+            throw new Error("verovio pageCount が不正です。");
+        }
+        const svg = toolkit.renderToSVG(1, {});
+        if (!svg) {
+            throw new Error("verovio SVG 生成に失敗しました。");
+        }
+        const doc = new DOMParser().parseFromString(xml, "application/xml");
+        const measures = doc.querySelectorAll("part > measure").length;
+        debugScoreMeta.textContent = [
+            "engine=verovio",
+            "measures=" + measures,
+            "mode=" + (longHorizontalMode ? "long-horizontal" : "normal"),
+            "pages=" + pageCount,
+        ].join(" ");
+        debugScoreArea.innerHTML = svg;
+    })
+        .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        debugScoreMeta.textContent = "描画失敗: " + message;
+        debugScoreArea.innerHTML = "";
+    });
+};
 const refreshNotesFromCore = () => {
     state.noteNodeIds = core.listNoteNodeIds();
     if (state.selectedNodeId && !state.noteNodeIds.includes(state.selectedNodeId)) {
@@ -537,92 +696,257 @@ const getFirstNumber = (el, selector) => {
     const n = Number(text);
     return Number.isFinite(n) ? n : null;
 };
+const PLAYBACK_TICKS_PER_QUARTER = 128;
+const FIXED_PLAYBACK_WAVEFORM = "sine";
+const clampTempo = (tempo) => {
+    if (!Number.isFinite(tempo))
+        return 120;
+    return Math.max(20, Math.min(300, Math.round(tempo)));
+};
+const normalizeWaveform = (value) => {
+    if (value === "square" || value === "triangle")
+        return value;
+    return "sine";
+};
+const createBasicWaveSynthEngine = (options) => {
+    const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
+        ? Math.max(1, Math.round(options.ticksPerQuarter))
+        : 128;
+    let audioContext = null;
+    let activeSynthNodes = [];
+    let synthStopTimer = null;
+    const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform) => {
+        if (!audioContext)
+            return startAt;
+        const attack = 0.005;
+        const release = 0.03;
+        const endAt = startAt + bodyDuration;
+        const oscillator = audioContext.createOscillator();
+        oscillator.type = waveform;
+        oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
+        const gainNode = audioContext.createGain();
+        const gainLevel = event.channel === 10 ? 0.06 : 0.1;
+        gainNode.gain.setValueAtTime(0.0001, startAt);
+        gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+        gainNode.gain.setValueAtTime(gainLevel, endAt);
+        gainNode.gain.linearRampToValueAtTime(0.0001, endAt + release);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.start(startAt);
+        oscillator.stop(endAt + release + 0.01);
+        oscillator.onended = () => {
+            try {
+                oscillator.disconnect();
+                gainNode.disconnect();
+            }
+            catch (_a) {
+                // ignore cleanup failure
+            }
+        };
+        activeSynthNodes.push({ oscillator, gainNode });
+        return endAt + release + 0.02;
+    };
+    const stop = () => {
+        if (synthStopTimer !== null) {
+            window.clearTimeout(synthStopTimer);
+            synthStopTimer = null;
+        }
+        for (const node of activeSynthNodes) {
+            try {
+                node.oscillator.stop();
+            }
+            catch (_a) {
+                // ignore already-stopped nodes
+            }
+            try {
+                node.oscillator.disconnect();
+                node.gainNode.disconnect();
+            }
+            catch (_b) {
+                // ignore disconnect error
+            }
+        }
+        activeSynthNodes = [];
+    };
+    const playSchedule = async (schedule, waveform, onEnded) => {
+        if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
+            throw new Error("先に変換してください。");
+        }
+        if (!audioContext) {
+            audioContext = new AudioContext();
+        }
+        stop();
+        await audioContext.resume();
+        const normalizedWaveform = normalizeWaveform(waveform);
+        const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
+        const baseTime = audioContext.currentTime + 0.04;
+        let latestEndTime = baseTime;
+        for (const event of schedule.events) {
+            const startAt = baseTime + event.start * secPerTick;
+            const bodyDuration = Math.max(0.04, event.ticks * secPerTick);
+            latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform));
+        }
+        const waitMs = Math.max(0, Math.ceil((latestEndTime - audioContext.currentTime) * 1000));
+        synthStopTimer = window.setTimeout(() => {
+            activeSynthNodes = [];
+            if (typeof onEnded === "function") {
+                onEnded();
+            }
+        }, waitMs);
+    };
+    return { playSchedule, stop };
+};
+const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
+const midiToPitchText = (midiNumber) => {
+    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+    const octave = Math.floor(n / 12) - 1;
+    return `${names[n % 12]}${octave}`;
+};
+const getMidiWriterRuntime = () => {
+    var _a;
+    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
+};
+const buildMidiBytesForPlayback = (events, tempo) => {
+    const midiWriter = getMidiWriterRuntime();
+    if (!midiWriter) {
+        throw new Error("midi-writer.js が読み込まれていません。");
+    }
+    const track = new midiWriter.Track();
+    track.setTempo(clampTempo(tempo));
+    const ordered = events
+        .slice()
+        .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+    let cursorTicks = 0;
+    for (const event of ordered) {
+        const waitTicks = Math.max(0, event.startTicks - cursorTicks);
+        const fields = {
+            pitch: [midiToPitchText(event.midiNumber)],
+            duration: `T${event.durTicks}`,
+            velocity: 80,
+            channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+        };
+        if (waitTicks > 0) {
+            fields.wait = `T${waitTicks}`;
+        }
+        track.addEvent(new midiWriter.NoteEvent(fields));
+        cursorTicks = Math.max(cursorTicks, event.startTicks + event.durTicks);
+    }
+    const writer = new midiWriter.Writer([track]);
+    const built = writer.buildFile();
+    return built instanceof Uint8Array ? built : Uint8Array.from(built);
+};
 const buildPlaybackEventsFromXml = (xml) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d;
     const doc = new DOMParser().parseFromString(xml, "application/xml");
     if (doc.querySelector("parsererror"))
-        return [];
-    const part = doc.querySelector("part");
-    if (!part)
-        return [];
-    let currentDivisions = 1;
-    const defaultTempo = 120;
-    const tempo = (_a = getFirstNumber(doc, "sound[tempo]")) !== null && _a !== void 0 ? _a : defaultTempo;
-    const secPerDivision = 60 / tempo / currentDivisions;
-    const events = [];
-    let cursorSec = 0;
-    let lastNoteStartSec = 0;
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-        const divisions = getFirstNumber(measure, "attributes > divisions");
-        if (divisions && divisions > 0) {
-            currentDivisions = divisions;
-        }
-        const measureSecPerDivision = 60 / tempo / currentDivisions;
-        for (const child of Array.from(measure.children)) {
-            if (child.tagName !== "note")
-                continue;
-            const voice = (_d = (_c = (_b = child.querySelector("voice")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "1";
-            if (voice !== EDITABLE_VOICE)
-                continue;
-            const durationValue = getFirstNumber(child, "duration");
-            if (!durationValue || durationValue <= 0)
-                continue;
-            const durationSec = durationValue * measureSecPerDivision;
-            const isRest = Boolean(child.querySelector("rest"));
-            const isChord = Boolean(child.querySelector("chord"));
-            if (isRest) {
-                cursorSec += durationSec;
-                continue;
-            }
-            const step = (_g = (_f = (_e = child.querySelector("pitch > step")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "";
-            const octave = getFirstNumber(child, "pitch > octave");
-            const alter = (_h = getFirstNumber(child, "pitch > alter")) !== null && _h !== void 0 ? _h : 0;
-            if (octave === null) {
-                cursorSec += durationSec;
-                continue;
-            }
-            const midi = pitchToMidi(step, alter, octave);
-            if (midi === null) {
-                if (!isChord) {
-                    cursorSec += durationSec;
-                }
-                continue;
-            }
-            const startSec = isChord ? lastNoteStartSec : cursorSec;
-            events.push({
-                freqHz: midiToHz(midi),
-                startSec,
-                durSec: Math.max(0.05, durationSec),
-            });
-            if (!isChord) {
-                lastNoteStartSec = cursorSec;
-                cursorSec += durationSec;
-            }
+        return { tempo: 120, events: [] };
+    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (partNodes.length === 0)
+        return { tempo: 120, events: [] };
+    const channelMap = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        if (!partId)
+            continue;
+        const midiChannelText = (_c = (_b = scorePart.querySelector("midi-instrument > midi-channel")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim();
+        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
+        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
+            channelMap.set(partId, midiChannel);
         }
     }
-    // Touch computed variable so TypeScript keeps intent explicit and avoids accidental drift.
-    void secPerDivision;
-    return events;
+    const defaultTempo = 120;
+    const tempo = clampTempo((_d = getFirstNumber(doc, "sound[tempo]")) !== null && _d !== void 0 ? _d : defaultTempo);
+    const events = [];
+    partNodes.forEach((part, partIndex) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        const fallbackChannel = ((partIndex % 16) + 1 === 10) ? 11 : ((partIndex % 16) + 1);
+        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
+        let currentDivisions = 1;
+        let currentBeats = 4;
+        let currentBeatType = 4;
+        let currentTransposeSemitones = 0;
+        let timelineDiv = 0;
+        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+            const divisions = getFirstNumber(measure, "attributes > divisions");
+            if (divisions && divisions > 0) {
+                currentDivisions = divisions;
+            }
+            const beats = getFirstNumber(measure, "attributes > time > beats");
+            const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+            if (beats && beats > 0 && beatType && beatType > 0) {
+                currentBeats = beats;
+                currentBeatType = beatType;
+            }
+            const hasTranspose = Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
+                Boolean(measure.querySelector("attributes > transpose > octave-change"));
+            if (hasTranspose) {
+                const chromatic = (_c = getFirstNumber(measure, "attributes > transpose > chromatic")) !== null && _c !== void 0 ? _c : 0;
+                const octaveChange = (_d = getFirstNumber(measure, "attributes > transpose > octave-change")) !== null && _d !== void 0 ? _d : 0;
+                currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
+            }
+            let cursorDiv = 0;
+            let measureMaxDiv = 0;
+            const lastStartByVoice = new Map();
+            for (const child of Array.from(measure.children)) {
+                if (child.tagName === "backup" || child.tagName === "forward") {
+                    const dur = getFirstNumber(child, "duration");
+                    if (!dur || dur <= 0)
+                        continue;
+                    if (child.tagName === "backup") {
+                        cursorDiv = Math.max(0, cursorDiv - dur);
+                    }
+                    else {
+                        cursorDiv += dur;
+                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+                    }
+                    continue;
+                }
+                if (child.tagName !== "note")
+                    continue;
+                const durationDiv = getFirstNumber(child, "duration");
+                if (!durationDiv || durationDiv <= 0)
+                    continue;
+                const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
+                const isChord = Boolean(child.querySelector("chord"));
+                const isRest = Boolean(child.querySelector("rest"));
+                const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
+                if (!isChord) {
+                    lastStartByVoice.set(voice, startDiv);
+                }
+                if (!isRest) {
+                    const step = (_l = (_k = (_j = child.querySelector("pitch > step")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+                    const octave = getFirstNumber(child, "pitch > octave");
+                    const alter = (_m = getFirstNumber(child, "pitch > alter")) !== null && _m !== void 0 ? _m : 0;
+                    if (octave !== null) {
+                        const midi = pitchToMidi(step, alter, octave);
+                        if (midi !== null) {
+                            const soundingMidi = midi + currentTransposeSemitones;
+                            if (soundingMidi < 0 || soundingMidi > 127) {
+                                continue;
+                            }
+                            const startTicks = Math.max(0, Math.round(((timelineDiv + startDiv) / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER));
+                            const durTicks = Math.max(1, Math.round((durationDiv / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER));
+                            events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
+                        }
+                    }
+                }
+                if (!isChord) {
+                    cursorDiv += durationDiv;
+                }
+                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+            }
+            if (measureMaxDiv <= 0) {
+                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
+            }
+            timelineDiv += measureMaxDiv;
+        }
+    });
+    return { tempo, events };
 };
 const stopPlayback = () => {
-    for (const osc of activeOscillators) {
-        try {
-            osc.stop();
-        }
-        catch (_a) {
-            // ignore stale node stop calls
-        }
-        osc.disconnect();
-    }
-    for (const gain of activeGains) {
-        gain.disconnect();
-    }
-    activeOscillators = [];
-    activeGains = [];
-    if (playbackTimer !== null) {
-        window.clearTimeout(playbackTimer);
-        playbackTimer = null;
-    }
+    synthEngine.stop();
     isPlaying = false;
     playbackText.textContent = "playback: idle";
     renderControlState();
@@ -647,40 +971,53 @@ const startPlayback = async () => {
         playbackText.textContent = "playback: save failed";
         return;
     }
-    const events = buildPlaybackEventsFromXml(saveResult.xml);
+    const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+    const events = parsedPlayback.events;
     if (events.length === 0) {
         playbackText.textContent = "playback: no playable notes";
         renderControlState();
         return;
     }
-    if (!audioContext) {
-        audioContext = new AudioContext();
+    let midiBytes;
+    try {
+        midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
     }
-    await audioContext.resume();
-    const now = audioContext.currentTime + 0.02;
-    let maxEnd = 0;
-    for (const event of events) {
-        const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(0.0001, now + event.startSec);
-        gain.gain.exponentialRampToValueAtTime(0.12, now + event.startSec + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + event.startSec + Math.max(0.02, event.durSec * 0.9));
-        gain.connect(audioContext.destination);
-        const osc = audioContext.createOscillator();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(event.freqHz, now + event.startSec);
-        osc.connect(gain);
-        osc.start(now + event.startSec);
-        osc.stop(now + event.startSec + event.durSec);
-        activeOscillators.push(osc);
-        activeGains.push(gain);
-        maxEnd = Math.max(maxEnd, event.startSec + event.durSec);
+    catch (error) {
+        playbackText.textContent =
+            "playback: midi build failed (" +
+                (error instanceof Error ? error.message : String(error)) +
+                ")";
+        renderControlState();
+        return;
+    }
+    const schedule = {
+        tempo: parsedPlayback.tempo,
+        events: events
+            .slice()
+            .sort((a, b) => a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks)
+            .map((event) => ({
+            midiNumber: event.midiNumber,
+            start: event.startTicks,
+            ticks: event.durTicks,
+            channel: event.channel,
+        })),
+    };
+    try {
+        await synthEngine.playSchedule(schedule, FIXED_PLAYBACK_WAVEFORM, () => {
+            isPlaying = false;
+            playbackText.textContent = "playback: idle";
+            renderControlState();
+        });
+    }
+    catch (error) {
+        playbackText.textContent =
+            "playback: synth failed (" + (error instanceof Error ? error.message : String(error)) + ")";
+        renderControlState();
+        return;
     }
     isPlaying = true;
-    playbackText.textContent = `playback: playing (${events.length} notes)`;
+    playbackText.textContent = `playback: playing (${events.length} notes, midi=${midiBytes.length} bytes, waveform=sine)`;
     renderControlState();
-    playbackTimer = window.setTimeout(() => {
-        stopPlayback();
-    }, Math.ceil(maxEnd * 1000) + 60);
     renderAll();
 };
 const readSelectedPitch = () => {
@@ -752,6 +1089,7 @@ const loadFromText = (xml) => {
     state.lastSuccessfulSaveXml = "";
     refreshNotesFromCore();
     renderAll();
+    renderDebugScore();
 };
 const onLoadClick = async () => {
     var _a;
@@ -897,6 +1235,7 @@ const onSave = () => {
         state.lastSuccessfulSaveXml = result.xml;
     }
     renderAll();
+    renderDebugScore();
 };
 const onDownload = () => {
     if (!state.lastSuccessfulSaveXml)
@@ -942,7 +1281,9 @@ playBtn.addEventListener("click", () => {
 });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
+renderDebugScoreBtn.addEventListener("click", renderDebugScore);
 renderAll();
+renderDebugScore();
 
   },
   "core/interfaces.js": function (require, module, exports) {
