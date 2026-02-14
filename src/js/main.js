@@ -76,6 +76,8 @@ let isPlaying = false;
 const DEBUG_LOG = true;
 let verovioToolkit = null;
 let verovioInitPromise = null;
+let verovioRenderSeq = 0;
+let currentSvgIdToNodeId = new Map();
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
         return;
@@ -237,6 +239,166 @@ const renderAll = () => {
     renderOutput();
     renderControlState();
 };
+const setUiMappingDiagnostic = (message) => {
+    if (DEBUG_LOG) {
+        console.warn(`[mikuscore][click-map][MVP_TARGET_NOT_FOUND] ${message}`);
+    }
+    state.lastDispatchResult = {
+        ok: false,
+        dirtyChanged: false,
+        changedNodeIds: [],
+        affectedMeasureNumbers: [],
+        diagnostics: [{ code: "MVP_TARGET_NOT_FOUND", message }],
+        warnings: [],
+    };
+    renderAll();
+};
+const buildRenderXmlForVerovio = (xml) => {
+    const map = new Map();
+    if (!state.loaded) {
+        return {
+            renderXml: xml,
+            svgIdToNodeId: map,
+            noteCount: 0,
+        };
+    }
+    const nodeIds = state.noteNodeIds.slice();
+    if (nodeIds.length === 0) {
+        return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
+    }
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror")) {
+        return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
+    }
+    const notes = Array.from(doc.querySelectorAll("note"));
+    const count = Math.min(notes.length, nodeIds.length);
+    for (let i = 0; i < count; i += 1) {
+        const nodeId = nodeIds[i];
+        const svgId = `mks-tmp-${nodeId}`;
+        notes[i].setAttribute("xml:id", svgId);
+        notes[i].setAttribute("id", svgId);
+        map.set(svgId, nodeId);
+    }
+    return {
+        renderXml: new XMLSerializer().serializeToString(doc),
+        svgIdToNodeId: map,
+        noteCount: count,
+    };
+};
+const deriveRenderedNoteIds = (root) => {
+    const direct = Array.from(root.querySelectorAll('[id^="mks-tmp-"], [id*="mks-tmp-"]')).map((el) => el.id);
+    if (direct.length > 0) {
+        return Array.from(new Set(direct));
+    }
+    const fallback = Array.from(root.querySelectorAll("[id]"))
+        .filter((el) => {
+        var _a;
+        const id = el.id || "";
+        const className = (_a = el.getAttribute("class")) !== null && _a !== void 0 ? _a : "";
+        return id.startsWith("note-") || /\bnote\b/.test(className);
+    })
+        .map((el) => el.id);
+    return Array.from(new Set(fallback));
+};
+const buildFallbackSvgIdMap = (sourceNodeIds, renderedNoteIds) => {
+    const map = new Map();
+    const count = Math.min(sourceNodeIds.length, renderedNoteIds.length);
+    for (let i = 0; i < count; i += 1) {
+        map.set(renderedNoteIds[i], sourceNodeIds[i]);
+    }
+    return map;
+};
+const resolveNodeIdFromCandidateIds = (candidateIds) => {
+    for (const entry of candidateIds) {
+        const exact = currentSvgIdToNodeId.get(entry);
+        if (exact)
+            return exact;
+    }
+    for (const entry of candidateIds) {
+        for (const [knownSvgId, nodeId] of currentSvgIdToNodeId.entries()) {
+            if (entry.startsWith(`${knownSvgId}-`) || knownSvgId.startsWith(`${entry}-`)) {
+                return nodeId;
+            }
+        }
+    }
+    return null;
+};
+const collectCandidateIdsFromElement = (base) => {
+    if (!base)
+        return [];
+    const candidateIds = [];
+    const pushId = (value) => {
+        if (!value)
+            return;
+        const id = value.startsWith("#") ? value.slice(1) : value;
+        if (!id)
+            return;
+        if (!candidateIds.includes(id))
+            candidateIds.push(id);
+    };
+    let cursor = base;
+    let depth = 0;
+    while (cursor && depth < 16) {
+        pushId(cursor.getAttribute("id"));
+        pushId(cursor.getAttribute("href"));
+        pushId(cursor.getAttribute("xlink:href"));
+        cursor = cursor.parentElement;
+        depth += 1;
+    }
+    return candidateIds;
+};
+const resolveNodeIdFromSvgTarget = (target, clickEvent) => {
+    if (!target || !(target instanceof Element))
+        return null;
+    const directCandidates = collectCandidateIdsFromElement(target);
+    const resolvedFromDirect = resolveNodeIdFromCandidateIds(directCandidates);
+    if (resolvedFromDirect)
+        return resolvedFromDirect;
+    if (clickEvent && typeof document.elementsFromPoint === "function") {
+        const hitElements = document.elementsFromPoint(clickEvent.clientX, clickEvent.clientY);
+        for (const hit of hitElements) {
+            if (!(hit instanceof Element))
+                continue;
+            const hitCandidates = collectCandidateIdsFromElement(hit);
+            const resolvedFromHit = resolveNodeIdFromCandidateIds(hitCandidates);
+            if (resolvedFromHit)
+                return resolvedFromHit;
+        }
+    }
+    if (DEBUG_LOG) {
+        console.warn("[mikuscore][click-map] unresolved candidates:", {
+            tag: target.tagName,
+            className: target.getAttribute("class"),
+            candidates: directCandidates,
+        });
+    }
+    return null;
+};
+const onVerovioScoreClick = (event) => {
+    var _a;
+    if (!state.loaded)
+        return;
+    const nodeId = resolveNodeIdFromSvgTarget(event.target, event);
+    if (DEBUG_LOG) {
+        const clicked = event.target instanceof Element ? event.target.closest("[id]") : null;
+        console.warn("[mikuscore][click-map] resolution:", {
+            clickedId: (_a = clicked === null || clicked === void 0 ? void 0 : clicked.getAttribute("id")) !== null && _a !== void 0 ? _a : null,
+            mappedNodeId: nodeId,
+            mapSize: currentSvgIdToNodeId.size,
+        });
+    }
+    if (!nodeId) {
+        setUiMappingDiagnostic("クリック位置からノートを特定できませんでした。");
+        return;
+    }
+    if (!state.noteNodeIds.includes(nodeId)) {
+        setUiMappingDiagnostic(`クリック要素に対応する nodeId が見つかりませんでした: ${nodeId}`);
+        return;
+    }
+    state.selectedNodeId = nodeId;
+    state.lastDispatchResult = null;
+    renderAll();
+};
 const getVerovioRuntime = () => {
     var _a;
     return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
@@ -296,15 +458,20 @@ const ensureVerovioToolkit = async () => {
 };
 const renderDebugScore = () => {
     var _a, _b;
+    const renderSeq = ++verovioRenderSeq;
     const xml = (_b = (_a = (state.loaded ? core.debugSerializeCurrentXml() : null)) !== null && _a !== void 0 ? _a : xmlInput.value.trim()) !== null && _b !== void 0 ? _b : "";
     if (!xml) {
         debugScoreMeta.textContent = "描画対象XMLがありません";
         debugScoreArea.innerHTML = "";
+        currentSvgIdToNodeId = new Map();
         return;
     }
+    const renderBundle = buildRenderXmlForVerovio(xml);
     debugScoreMeta.textContent = "verovio 描画中...";
     void ensureVerovioToolkit()
         .then((toolkit) => {
+        if (renderSeq !== verovioRenderSeq)
+            return;
         if (!toolkit) {
             throw new Error("verovio toolkit の初期化に失敗しました。");
         }
@@ -319,7 +486,7 @@ const renderDebugScore = () => {
             header: "none",
         };
         toolkit.setOptions(options);
-        const loaded = toolkit.loadData(xml);
+        const loaded = toolkit.loadData(renderBundle.renderXml);
         if (!loaded) {
             throw new Error("verovio loadData が失敗しました。");
         }
@@ -333,18 +500,39 @@ const renderDebugScore = () => {
         }
         const doc = new DOMParser().parseFromString(xml, "application/xml");
         const measures = doc.querySelectorAll("part > measure").length;
+        debugScoreArea.innerHTML = svg;
+        const renderedNoteIds = deriveRenderedNoteIds(debugScoreArea);
+        let mapMode = "direct";
+        if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-tmp-"))) {
+            currentSvgIdToNodeId = buildFallbackSvgIdMap(state.noteNodeIds, renderedNoteIds);
+            mapMode = "fallback-seq";
+        }
+        else {
+            currentSvgIdToNodeId = renderBundle.svgIdToNodeId;
+        }
+        if (DEBUG_LOG) {
+            console.warn("[mikuscore][click-map] render map prepared:", {
+                mapMode,
+                mappedNotes: currentSvgIdToNodeId.size,
+                renderedNoteIds: renderedNoteIds.slice(0, 20),
+            });
+        }
         debugScoreMeta.textContent = [
             "engine=verovio",
             "measures=" + measures,
             "mode=" + (longHorizontalMode ? "long-horizontal" : "normal"),
             "pages=" + pageCount,
+            "click-map-notes=" + renderBundle.noteCount,
+            "map-mode=" + mapMode,
         ].join(" ");
-        debugScoreArea.innerHTML = svg;
     })
         .catch((error) => {
+        if (renderSeq !== verovioRenderSeq)
+            return;
         const message = error instanceof Error ? error.message : String(error);
         debugScoreMeta.textContent = "描画失敗: " + message;
         debugScoreArea.innerHTML = "";
+        currentSvgIdToNodeId = new Map();
     });
 };
 const refreshNotesFromCore = () => {
@@ -735,6 +923,7 @@ const runCommand = (command) => {
         refreshNotesFromCore();
     }
     renderAll();
+    renderDebugScore();
 };
 const loadFromText = (xml) => {
     try {
@@ -963,6 +1152,7 @@ playBtn.addEventListener("click", () => {
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 renderDebugScoreBtn.addEventListener("click", renderDebugScore);
+debugScoreArea.addEventListener("click", onVerovioScoreClick);
 renderAll();
 renderDebugScore();
 

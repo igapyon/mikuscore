@@ -26,6 +26,29 @@ This document defines high-level architecture boundaries for mikuscore MVP.
 
 UI MUST NOT mutate XML DOM directly.
 
+## Rendering Boundary (Verovio)
+
+- `Verovio` is the ground-truth notation renderer in UI layer.
+- `Core` remains the only mutation authority for MusicXML (`load/dispatch/save`).
+- `UI` bridges Core and Verovio by:
+  - serializing current in-memory XML from Core
+  - rendering confirmation preview via Verovio
+  - routing click interactions to Core commands
+
+### Click-Edit Mapping Contract
+
+- Initial click-edit scope is `change_pitch` on a single selected note.
+- Click operation selects target note only; command execution is explicit via UI action.
+- For clickable note editing, MusicXML notes SHOULD expose stable identifiers (prefer `xml:id`).
+- For MVP, identifiers SHOULD be session-scoped temporary IDs and SHOULD NOT be written to final saved XML.
+- Verovio SVG element `id` MUST be mapped deterministically to Core `nodeId`.
+- Mapping resolution SHOULD use layered lookup:
+  - primary: clicked target / ancestor id traversal
+  - fallback: point-based hit test (`elementsFromPoint`) to recover note ids when container/root ids are clicked
+- Command execution path MUST be:
+  - `SVG click -> resolve id -> map to nodeId -> core.dispatch(...)`
+- Mapping failure MUST surface diagnostics in UI and MUST NOT mutate XML.
+
 ## Runtime and Build Model
 
 - Runtime distribution: single self-contained HTML (`mikuscore.html`)

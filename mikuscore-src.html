@@ -91,6 +91,22 @@
         </section>
 
         <section class="ms-section ms-flow-step">
+          <h2>譜面プレビュー（クリックで選択）</h2>
+          <p class="ms-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
+          <div class="ms-actions">
+            <label class="ms-inline-check">
+              <input id="debugLongSvgMode" type="checkbox" checked disabled />
+              <span>改ページ抑制（ON固定）</span>
+            </label>
+            <button id="renderDebugScoreBtn" type="button">譜面再描画</button>
+          </div>
+          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+          <div id="debugScoreWrap" class="ms-debug-wrap">
+            <div id="debugScoreArea" class="ms-debug-score"></div>
+          </div>
+        </section>
+
+        <section class="ms-section ms-flow-step">
           <h2><span class="ms-step-no">3</span>検証 / 保存</h2>
           <div class="ms-actions">
             <button id="playBtn" type="button">再生</button>
@@ -111,22 +127,6 @@
         <section class="ms-section">
           <h2>診断</h2>
           <div id="diagArea" aria-live="polite"></div>
-        </section>
-
-        <section class="ms-section">
-          <h2>譜面デバッグ（Verovio）</h2>
-          <p class="ms-label">Verovio本体レンダラーで、改ページ抑制ONの横長SVGを描画します。</p>
-          <div class="ms-actions">
-            <label class="ms-inline-check">
-              <input id="debugLongSvgMode" type="checkbox" checked disabled />
-              <span>改ページ抑制（ON固定）</span>
-            </label>
-            <button id="renderDebugScoreBtn" type="button">譜面デバッグ描画</button>
-          </div>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
-          <div id="debugScoreWrap" class="ms-debug-wrap">
-            <div id="debugScoreArea" class="ms-debug-score"></div>
-          </div>
         </section>
       </details>
     </section>
