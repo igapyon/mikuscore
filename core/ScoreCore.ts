@@ -205,6 +205,15 @@ export class ScoreCore {
     return Array.from(this.idToNode.keys());
   }
 
+  /**
+   * Debug-only helper for UI diagnostics.
+   * Returns current in-memory XML regardless of dirty/validation state.
+   */
+  public debugSerializeCurrentXml(): string | null {
+    if (!this.doc) return null;
+    return serializeXml(this.doc);
+  }
+
   private nextNodeId(): NodeId {
     this.nodeCounter += 1;
     return `n${this.nodeCounter}`;

@@ -7,5 +7,5 @@
     "noEmit": true,
     "lib": ["DOM", "DOM.Iterable", "ES2018"]
   },
-  "include": ["core/**/*.ts"]
+  "include": ["core/**/*.ts", "src/**/*.ts"]
 }
