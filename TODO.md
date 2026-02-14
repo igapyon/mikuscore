@@ -6,6 +6,7 @@
 - [ ] Add explicit save rejection contract when current state is overfull.
 - [ ] Define message text policy (i18n vs fixed English) for diagnostics.
 - [ ] Add one canonical fixture MusicXML for each required test ID.
+- [ ] Align file naming conventions for single-file build (`app-src.html` / `app.html` or alternatives).
 
 ## Core Implementation
 
@@ -28,3 +29,4 @@
 
 - [ ] Keep `SPEC.md` and `docs/spec/*` synchronized when rules change.
 - [ ] Update prompt template if file layout changes.
+- [ ] Keep `docs/spec/BUILD_PROCESS.md` and package scripts consistent.
