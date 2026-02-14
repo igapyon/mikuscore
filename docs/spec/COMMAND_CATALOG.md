@@ -44,6 +44,7 @@ Rules:
 
 - MUST only patch pitch-related children of the target note.
 - MUST NOT rewrite sibling notes or measure structure.
+- MUST validate pitch payload before mutation.
 - MUST reject when `voice` is non-editable (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
 - MUST reject targets that are `grace`, `cue`, `chord`, or `rest` (`MVP_UNSUPPORTED_NOTE_KIND`).
 - On success: `dirty=true`.
@@ -62,6 +63,7 @@ type ChangeDurationCommand = {
 Rules:
 
 - MUST modify only the target `<duration>` (minimal patch).
+- MUST validate duration payload before mutation.
 - MUST validate measure integrity after tentative change:
   - if overfull: reject with `MEASURE_OVERFULL`, no mutation
   - if underfull: MAY succeed, MAY emit `MEASURE_UNDERFULL`
@@ -90,9 +92,10 @@ type InsertNoteAfterCommand = {
 Rules:
 
 - MUST insert only one pitched note node near anchor (no full-measure regeneration).
+- MUST validate inserted note payload before mutation.
 - Existing `<backup>/<forward>` MUST remain untouched.
 - Existing unrelated `<beam>` MUST remain untouched.
-- If insertion implies unsupported backup/forward restructuring: reject with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- If insertion point directly crosses a backup/forward boundary: reject with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 - If result is overfull: reject with `MEASURE_OVERFULL`, no mutation.
 - If result is underfull: MAY succeed with warning.
 - On success: `dirty=true`.
@@ -113,6 +116,7 @@ Rules:
 - MUST NOT auto-fill rests, split notes, add ties, or modify divisions.
 - MUST reject non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 - MUST reject targets that are `grace`, `cue`, `chord`, or `rest` (`MVP_UNSUPPORTED_NOTE_KIND`).
+- MUST reject if target is directly adjacent to backup/forward boundary.
 - Underfull after deletion is allowed (warning optional).
 - On success: `dirty=true`.
 
@@ -138,7 +142,7 @@ For content-changing commands, core MUST evaluate in this order:
 1. Resolve `targetNodeId` / `anchorNodeId` to an existing note node.
 2. Verify target command voice equals editable voice (`voice=1` by default).
 3. Reject unsupported note kinds in MVP (`grace`, `cue`, `chord`, `rest`).
-4. Verify operation does not require backup/forward restructuring.
+4. Verify operation does not cross backup/forward boundary at edit point.
 5. Apply operation on a tentative basis and validate measure integrity.
 6. Commit patch atomically only if constraints pass.
 

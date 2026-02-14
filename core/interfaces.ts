@@ -5,7 +5,13 @@ export type DiagnosticCode =
   | "MEASURE_OVERFULL"
   | "MVP_UNSUPPORTED_NON_EDITABLE_VOICE"
   | "MVP_UNSUPPORTED_NOTE_KIND"
-  | "MVP_INVALID_TARGET";
+  | "MVP_SCORE_NOT_LOADED"
+  | "MVP_COMMAND_TARGET_MISSING"
+  | "MVP_TARGET_NOT_FOUND"
+  | "MVP_COMMAND_EXECUTION_FAILED"
+  | "MVP_INVALID_COMMAND_PAYLOAD"
+  | "MVP_INVALID_NOTE_DURATION"
+  | "MVP_INVALID_NOTE_VOICE";
 
 export type WarningCode = "MEASURE_UNDERFULL";
 
@@ -22,6 +28,7 @@ export type Warning = {
 export type DispatchResult = {
   ok: boolean;
   dirtyChanged: boolean;
+  changedNodeIds: NodeId[];
   diagnostics: Diagnostic[];
   warnings: Warning[];
 };

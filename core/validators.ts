@@ -2,8 +2,8 @@ import type { CoreCommand, Diagnostic, VoiceId, Warning } from "./interfaces";
 import { getMeasureTimingForVoice } from "./timeIndex";
 import {
   findAncestorMeasure,
+  getVoiceText,
   isUnsupportedNoteKind,
-  measureHasBackupOrForward,
 } from "./xmlUtils";
 
 export const validateVoice = (
@@ -18,12 +18,93 @@ export const validateVoice = (
   };
 };
 
+export const validateCommandPayload = (command: CoreCommand): Diagnostic | null => {
+  if (command.type === "ui_noop") return null;
+  if (command.type === "change_duration") {
+    if (!isPositiveInteger(command.duration)) {
+      return {
+        code: "MVP_INVALID_COMMAND_PAYLOAD",
+        message: "change_duration.duration must be a positive integer.",
+      };
+    }
+    return null;
+  }
+  if (command.type === "insert_note_after") {
+    if (!isPositiveInteger(command.note.duration)) {
+      return {
+        code: "MVP_INVALID_COMMAND_PAYLOAD",
+        message: "insert_note_after.note.duration must be a positive integer.",
+      };
+    }
+    if (!isValidPitch(command.note.pitch)) {
+      return {
+        code: "MVP_INVALID_COMMAND_PAYLOAD",
+        message: "insert_note_after.note.pitch is invalid.",
+      };
+    }
+    return null;
+  }
+  if (command.type === "change_pitch") {
+    if (!isValidPitch(command.pitch)) {
+      return {
+        code: "MVP_INVALID_COMMAND_PAYLOAD",
+        message: "change_pitch.pitch is invalid.",
+      };
+    }
+  }
+  return null;
+};
+
 export const validateSupportedNoteKind = (note: Element): Diagnostic | null => {
   if (!isUnsupportedNoteKind(note)) return null;
   return {
     code: "MVP_UNSUPPORTED_NOTE_KIND",
     message: "Editing grace/cue/chord/rest notes is not supported in MVP.",
   };
+};
+
+export const validateTargetVoiceMatch = (
+  command: CoreCommand,
+  targetNote: Element
+): Diagnostic | null => {
+  if (command.type === "ui_noop") return null;
+  const targetVoice = getVoiceText(targetNote);
+  if (targetVoice === command.voice) return null;
+  return {
+    code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+    message: `Target note voice (${targetVoice ?? "none"}) does not match command voice (${command.voice}).`,
+  };
+};
+
+export const validateInsertLaneBoundary = (
+  command: CoreCommand,
+  anchorNote: Element
+): Diagnostic | null => {
+  if (command.type !== "insert_note_after") return null;
+
+  const measure = findAncestorMeasure(anchorNote);
+  if (!measure) return null;
+
+  const children = Array.from(measure.children);
+  const anchorIndex = children.indexOf(anchorNote);
+  if (anchorIndex < 0) return null;
+
+  for (let i = anchorIndex + 1; i < children.length; i += 1) {
+    const node = children[i];
+    if (node.tagName !== "note") continue;
+
+    const nextVoice = getVoiceText(node);
+    if (nextVoice !== command.voice) {
+      return {
+        code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+        message:
+          "Insert is restricted to a continuous local voice lane in MVP.",
+      };
+    }
+    break;
+  }
+
+  return null;
 };
 
 export const validateBackupForwardBoundaryForStructuralEdit = (
@@ -33,14 +114,29 @@ export const validateBackupForwardBoundaryForStructuralEdit = (
   if (command.type !== "insert_note_after" && command.type !== "delete_note") {
     return null;
   }
-  const measure = findAncestorMeasure(anchorOrTarget);
-  if (!measure) return null;
-  if (!measureHasBackupOrForward(measure)) return null;
 
-  return {
-    code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
-    message: "Operation requires backup/forward restructuring in MVP.",
-  };
+  const prev = anchorOrTarget.previousElementSibling;
+  const next = anchorOrTarget.nextElementSibling;
+
+  if (command.type === "insert_note_after") {
+    if (next && isBackupOrForward(next)) {
+      return {
+        code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+        message: "Insert point crosses a backup/forward boundary in MVP.",
+      };
+    }
+    return null;
+  }
+
+  // delete_note
+  if ((prev && isBackupOrForward(prev)) || (next && isBackupOrForward(next))) {
+    return {
+      code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+      message: "Delete point crosses a backup/forward boundary in MVP.",
+    };
+  }
+
+  return null;
 };
 
 export const validateProjectedMeasureTiming = (
@@ -72,4 +168,25 @@ export const validateProjectedMeasureTiming = (
   }
 
   return { diagnostic: null, warning: null };
+};
+
+const isBackupOrForward = (node: Element): boolean =>
+  node.tagName === "backup" || node.tagName === "forward";
+
+const isPositiveInteger = (value: number): boolean =>
+  Number.isFinite(value) && Number.isInteger(value) && value > 0;
+
+const isValidPitch = (pitch: {
+  step: string;
+  alter?: number;
+  octave: number;
+}): boolean => {
+  const stepOk = ["A", "B", "C", "D", "E", "F", "G"].includes(pitch.step);
+  if (!stepOk) return false;
+  if (!Number.isFinite(pitch.octave) || !Number.isInteger(pitch.octave)) return false;
+  if (typeof pitch.alter === "number") {
+    if (!Number.isInteger(pitch.alter)) return false;
+    if (pitch.alter < -2 || pitch.alter > 2) return false;
+  }
+  return true;
 };

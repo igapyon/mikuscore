@@ -12,6 +12,7 @@ import { getMeasureTimingForVoice } from "./timeIndex";
 import {
   createNoteElement,
   getDurationValue,
+  getVoiceText,
   parseXml,
   reindexNodeIds,
   serializeXml,
@@ -20,8 +21,11 @@ import {
 } from "./xmlUtils";
 import {
   validateBackupForwardBoundaryForStructuralEdit,
+  validateCommandPayload,
+  validateInsertLaneBoundary,
   validateProjectedMeasureTiming,
   validateSupportedNoteKind,
+  validateTargetVoiceMatch,
   validateVoice,
 } from "./validators";
 
@@ -51,28 +55,47 @@ export class ScoreCore {
 
   public dispatch(command: CoreCommand): DispatchResult {
     if (!this.doc) {
-      return this.fail("MVP_INVALID_TARGET", "Score is not loaded.");
+      return this.fail("MVP_SCORE_NOT_LOADED", "Score is not loaded.");
     }
     if (isUiOnlyCommand(command)) {
-      return { ok: true, dirtyChanged: false, diagnostics: [], warnings: [] };
+      return {
+        ok: true,
+        dirtyChanged: false,
+        changedNodeIds: [],
+        diagnostics: [],
+        warnings: [],
+      };
     }
 
     const voiceDiagnostic = validateVoice(command, this.editableVoice);
     if (voiceDiagnostic) return this.failWith(voiceDiagnostic);
 
+    const payloadDiagnostic = validateCommandPayload(command);
+    if (payloadDiagnostic) return this.failWith(payloadDiagnostic);
+
     const targetId = getCommandNodeId(command);
-    if (!targetId) return this.fail("MVP_INVALID_TARGET", "Command target is missing.");
+    if (!targetId) {
+      return this.fail("MVP_COMMAND_TARGET_MISSING", "Command target is missing.");
+    }
     const target = this.idToNode.get(targetId);
-    if (!target) return this.fail("MVP_INVALID_TARGET", `Unknown nodeId: ${targetId}`);
+    if (!target) return this.fail("MVP_TARGET_NOT_FOUND", `Unknown nodeId: ${targetId}`);
 
     const noteKindDiagnostic = validateSupportedNoteKind(target);
     if (noteKindDiagnostic) return this.failWith(noteKindDiagnostic);
 
+    const targetVoiceDiagnostic = validateTargetVoiceMatch(command, target);
+    if (targetVoiceDiagnostic) return this.failWith(targetVoiceDiagnostic);
+
     const bfDiagnostic = validateBackupForwardBoundaryForStructuralEdit(command, target);
     if (bfDiagnostic) return this.failWith(bfDiagnostic);
 
+    const laneDiagnostic = validateInsertLaneBoundary(command, target);
+    if (laneDiagnostic) return this.failWith(laneDiagnostic);
+
     const snapshot = serializeXml(this.doc);
     const warnings: Warning[] = [];
+    let insertedNode: Element | null = null;
+    let removedNodeId: NodeId | null = null;
 
     try {
       if (command.type === "change_pitch") {
@@ -102,6 +125,7 @@ export class ScoreCore {
           command.note.pitch
         );
         target.after(note);
+        insertedNode = note;
       } else if (command.type === "delete_note") {
         const duration = getDurationValue(target) ?? 0;
         const timing = getMeasureTimingForVoice(target, command.voice);
@@ -111,19 +135,22 @@ export class ScoreCore {
           if (result.diagnostic) return this.failWith(result.diagnostic);
           if (result.warning) warnings.push(result.warning);
         }
+        removedNodeId = targetId;
         target.remove();
       }
     } catch {
       this.restoreFrom(snapshot);
-      return this.fail("MVP_INVALID_TARGET", "Command failed unexpectedly.");
+      return this.fail("MVP_COMMAND_EXECUTION_FAILED", "Command failed unexpectedly.");
     }
 
     this.reindex();
     const dirtyBefore = this.dirty;
     this.dirty = true;
+    const changedNodeIds = this.buildChangedNodeIds(command, targetId, insertedNode, removedNodeId);
     return {
       ok: true,
       dirtyChanged: !dirtyBefore,
+      changedNodeIds,
       diagnostics: [],
       warnings,
     };
@@ -135,8 +162,18 @@ export class ScoreCore {
         ok: false,
         mode: "original_noop",
         xml: "",
-        diagnostics: [{ code: "MVP_INVALID_TARGET", message: "Score is not loaded." }],
+        diagnostics: [{ code: "MVP_SCORE_NOT_LOADED", message: "Score is not loaded." }],
       };
+    }
+
+    const integrity = this.findInvalidNoteDiagnostic();
+    if (integrity) {
+      return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrity] };
+    }
+
+    const overfull = this.findOverfullDiagnostic();
+    if (overfull) {
+      return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
     }
 
     if (!this.dirty) {
@@ -146,11 +183,6 @@ export class ScoreCore {
         xml: this.originalXml,
         diagnostics: [],
       };
-    }
-
-    const overfull = this.findOverfullDiagnostic();
-    if (overfull) {
-      return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
     }
 
     return {
@@ -202,6 +234,28 @@ export class ScoreCore {
     return null;
   }
 
+  private findInvalidNoteDiagnostic(): Diagnostic | null {
+    if (!this.doc) return null;
+    const notes = this.doc.querySelectorAll("note");
+    for (const note of notes) {
+      const voice = getVoiceText(note);
+      if (!voice) {
+        return {
+          code: "MVP_INVALID_NOTE_VOICE",
+          message: "Note is missing a valid <voice> value.",
+        };
+      }
+      const duration = getDurationValue(note);
+      if (duration === null || duration <= 0) {
+        return {
+          code: "MVP_INVALID_NOTE_DURATION",
+          message: "Note is missing a valid positive <duration> value.",
+        };
+      }
+    }
+    return null;
+  }
+
   private fail(code: Diagnostic["code"], message: string): DispatchResult {
     return this.failWith({ code, message });
   }
@@ -210,8 +264,25 @@ export class ScoreCore {
     return {
       ok: false,
       dirtyChanged: false,
+      changedNodeIds: [],
       diagnostics: [diagnostic],
       warnings: [],
     };
+  }
+
+  private buildChangedNodeIds(
+    command: CoreCommand,
+    targetId: NodeId,
+    insertedNode: Element | null,
+    removedNodeId: NodeId | null
+  ): NodeId[] {
+    if (command.type === "insert_note_after") {
+      const insertedId = insertedNode ? this.nodeToId.get(insertedNode) ?? null : null;
+      return insertedId ? [targetId, insertedId] : [targetId];
+    }
+    if (command.type === "delete_note") {
+      return removedNodeId ? [removedNodeId] : [targetId];
+    }
+    return [targetId];
   }
 }
