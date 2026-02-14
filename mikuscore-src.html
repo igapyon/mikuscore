@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mikuscore</title>
+  <link rel="stylesheet" href="src/css/app.css" />
+</head>
+<body>
+  <main class="ms-shell">
+    <section class="ms-card">
+      <h1 class="ms-title">mikuscore (MVP)</h1>
+      <p class="ms-intro">
+        既存MusicXMLを壊さずに、安全に最小編集するためのMVPエディタです。
+      </p>
+      <ol class="ms-steps">
+        <li>「サンプルを読む」または MusicXML を読み込み</li>
+        <li>ノート(nodeId)を選択してコマンド実行</li>
+        <li>Save して Output XML / Download で結果確認</li>
+      </ol>
+      <div class="ms-actions">
+        <button id="loadSampleBtn" type="button">サンプルを読む（ソース入力）</button>
+      </div>
+
+      <section class="ms-section">
+        <h2>MusicXML入力</h2>
+        <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
+          <label><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
+          <label><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+        </div>
+
+        <div id="fileInputBlock" class="ms-block">
+          <button id="fileSelectBtn" type="button">ファイルを選択</button>
+          <span id="fileNameText">未選択</span>
+          <input id="fileInput" type="file" accept=".musicxml,.xml,text/xml,application/xml" hidden />
+        </div>
+
+        <div id="sourceInputBlock" class="ms-block ms-hidden">
+          <label for="xmlInput" class="ms-label">MusicXML</label>
+          <textarea id="xmlInput" rows="12" spellcheck="false"></textarea>
+        </div>
+
+        <div class="ms-actions">
+          <button id="loadBtn" type="button">Load</button>
+        </div>
+      </section>
+
+      <section class="ms-section">
+        <h2>Editor</h2>
+        <p id="statusText">未ロード</p>
+        <label for="noteSelect" class="ms-label">ノート選択 (nodeId)</label>
+        <select id="noteSelect"></select>
+
+        <div class="ms-grid">
+          <label>step
+            <select id="pitchStep">
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+              <option value="F">F</option>
+              <option value="G">G</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+            </select>
+          </label>
+          <label>alter
+            <select id="pitchAlter">
+              <option value="">none</option>
+              <option value="-2">-2</option>
+              <option value="-1">-1</option>
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </label>
+          <label>octave
+            <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" />
+          </label>
+          <label>duration
+            <input id="durationInput" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+
+        <div class="ms-actions">
+          <button id="changePitchBtn" type="button">change_pitch</button>
+          <button id="changeDurationBtn" type="button">change_duration</button>
+          <button id="insertAfterBtn" type="button">insert_note_after</button>
+          <button id="deleteBtn" type="button">delete_note</button>
+        </div>
+      </section>
+
+      <section class="ms-section">
+        <h2>Save / Output</h2>
+        <div class="ms-actions">
+          <button id="saveBtn" type="button">Save</button>
+          <button id="playBtn" type="button">デバッグ再生</button>
+          <button id="stopBtn" type="button" disabled>停止</button>
+          <button id="downloadBtn" type="button" disabled>Download XML</button>
+        </div>
+        <p id="playbackText">playback: idle</p>
+        <p>save mode: <span id="saveModeText">-</span></p>
+        <label for="outputXml" class="ms-label">Output XML</label>
+        <textarea id="outputXml" rows="12" readonly></textarea>
+      </section>
+
+      <section class="ms-section">
+        <h2>Diagnostics</h2>
+        <div id="diagArea" aria-live="polite"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="src/js/main.js"></script>
+</body>
+</html>

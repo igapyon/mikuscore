@@ -22,6 +22,7 @@ const XML_WITH_INVALID_NOTE_VOICE = loadFixture("invalid_note_voice.musicxml");
 const XML_WITH_INVALID_NOTE_PITCH = loadFixture("invalid_note_pitch.musicxml");
 const XML_WITH_INVALID_REST_WITH_PITCH = loadFixture("invalid_rest_with_pitch.musicxml");
 const XML_WITH_INVALID_CHORD_WITHOUT_PITCH = loadFixture("invalid_chord_without_pitch.musicxml");
+const XML_WITH_CHORD_TIMING = loadFixture("with_chord_timing.musicxml");
 
 describe("ScoreCore MVP", () => {
   const expectNoopStateUnchanged = (core: ScoreCore, beforeXml: string): void => {
@@ -175,6 +176,16 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]?.code).toBe("MEASURE_OVERFULL");
     expect(core.isDirty()).toBe(false);
+  });
+
+  it("TI-6: chord notes do not advance occupied time", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_CHORD_TIMING);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    expect(saved.mode).toBe("original_noop");
+    expect(saved.diagnostics).toEqual([]);
   });
 
   it("IN-2: insert that makes measure overfull is rejected", () => {

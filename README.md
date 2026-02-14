@@ -59,6 +59,15 @@ MVPが尖って見えるのは、機能を削ってでも round-trip の信頼�
 - 開発形態: 分割 TypeScript ソース
 - ビルド方針: `mikuscore-src.html` + `src/` から `mikuscore.html` を生成
 
+## 開発コマンド
+
+- `npm run build`: `mikuscore-src.html` と `src/` から `mikuscore.html`（配布物）を生成
+- `npm run clean`: 生成物（`mikuscore.html`, `src/js/main.js`）を削除
+- `npm run typecheck`: 型チェック
+- `npm run test:unit`: ユニットテスト
+- `npm run test:property`: propertyテスト
+- `npm run test:all`: 全テスト
+
 ## ドキュメント
 
 - `SPEC.md`: MVP コア仕様
