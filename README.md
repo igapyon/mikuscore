@@ -26,6 +26,14 @@ mikuscore は、MVPとして機能を最小限に絞る代わりに、以下を�
 - 自動 rest 挿入 / tie 追加 / divisions 変更
 - backup/forward の自動再計算
 
+## 他ツールとの位置づけ（MuseScoreとの違い）
+
+- MuseScore: 高機能な「作譜・編集」の統合環境
+- mikuscore: 既存 MusicXML に安全に手を入れるための外科ツール
+
+mikuscore は、高機能化よりも「壊さない保証」を優先します。  
+MVPが尖って見えるのは、機能を削ってでも round-trip の信頼性と最小変更を先に成立させる設計だからです。
+
 ## 主要な仕様ハイライト（MVP）
 
 - `dirty === false` の保存は入力 XML 文字列をそのまま返す（`original_noop`）
