@@ -22,6 +22,43 @@ type UiState = {
 
 const EDITABLE_VOICE = "1";
 
+type VerovioToolkitApi = {
+  setOptions: (options: Record<string, unknown>) => void;
+  loadData: (xml: string) => boolean;
+  getPageCount: () => number;
+  renderToSVG: (page: number, options: Record<string, unknown>) => string;
+};
+
+type VerovioRuntime = {
+  module?: {
+    calledRun?: boolean;
+    cwrap?: unknown;
+    onRuntimeInitialized?: (() => void) | null;
+  };
+  toolkit?: new () => VerovioToolkitApi;
+};
+
+type MidiWriterTrackApi = {
+  setTempo: (tempo: number) => void;
+  addEvent: (event: unknown) => void;
+};
+
+type MidiWriterNoteEventFields = {
+  pitch: string[];
+  duration: string;
+  wait?: string;
+  velocity?: number;
+  channel?: number;
+};
+
+type MidiWriterRuntime = {
+  Track: new () => MidiWriterTrackApi;
+  NoteEvent: new (fields: MidiWriterNoteEventFields) => unknown;
+  Writer: new (tracks: unknown[] | unknown) => {
+    buildFile: () => Uint8Array | number[];
+  };
+};
+
 const sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list>
@@ -75,6 +112,10 @@ const saveModeText = q<HTMLSpanElement>("#saveModeText");
 const playbackText = q<HTMLParagraphElement>("#playbackText");
 const outputXml = q<HTMLTextAreaElement>("#outputXml");
 const diagArea = q<HTMLDivElement>("#diagArea");
+const renderDebugScoreBtn = q<HTMLButtonElement>("#renderDebugScoreBtn");
+const debugLongSvgMode = q<HTMLInputElement>("#debugLongSvgMode");
+const debugScoreMeta = q<HTMLParagraphElement>("#debugScoreMeta");
+const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
 
 const core = new ScoreCore({ editableVoice: EDITABLE_VOICE });
 const state: UiState = {
@@ -87,12 +128,10 @@ const state: UiState = {
 };
 
 xmlInput.value = sampleXml;
-let audioContext: AudioContext | null = null;
-let activeOscillators: OscillatorNode[] = [];
-let activeGains: GainNode[] = [];
-let playbackTimer: number | null = null;
 let isPlaying = false;
 const DEBUG_LOG = true;
+let verovioToolkit: VerovioToolkitApi | null = null;
+let verovioInitPromise: Promise<VerovioToolkitApi | null> | null = null;
 
 const logDiagnostics = (
   phase: "load" | "dispatch" | "save" | "playback",
@@ -281,6 +320,127 @@ const renderAll = (): void => {
   renderControlState();
 };
 
+const getVerovioRuntime = (): VerovioRuntime | null => {
+  return (window as unknown as { verovio?: VerovioRuntime }).verovio ?? null;
+};
+
+const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
+  if (verovioToolkit) {
+    return verovioToolkit;
+  }
+  if (verovioInitPromise) {
+    return verovioInitPromise;
+  }
+
+  verovioInitPromise = (async () => {
+    const runtime = getVerovioRuntime();
+    if (!runtime || typeof runtime.toolkit !== "function") {
+      throw new Error("verovio.js が読み込まれていません。");
+    }
+    const moduleObj = runtime.module;
+    if (!moduleObj) {
+      throw new Error("verovio module が見つかりません。");
+    }
+
+    if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error("verovio 初期化待機がタイムアウトしました。"));
+        }, 8000);
+
+        const complete = () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          resolve();
+        };
+
+        const previous = moduleObj.onRuntimeInitialized;
+        moduleObj.onRuntimeInitialized = () => {
+          if (typeof previous === "function") {
+            previous();
+          }
+          complete();
+        };
+
+        if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
+          complete();
+        }
+      });
+    }
+
+    verovioToolkit = new runtime.toolkit();
+    return verovioToolkit;
+  })()
+    .catch((error) => {
+      verovioInitPromise = null;
+      throw error;
+    });
+
+  return verovioInitPromise;
+};
+
+const renderDebugScore = (): void => {
+  const xml =
+    (state.loaded ? core.debugSerializeCurrentXml() : null) ??
+    xmlInput.value.trim() ??
+    "";
+  if (!xml) {
+    debugScoreMeta.textContent = "描画対象XMLがありません";
+    debugScoreArea.innerHTML = "";
+    return;
+  }
+  debugScoreMeta.textContent = "verovio 描画中...";
+  void ensureVerovioToolkit()
+    .then((toolkit) => {
+      if (!toolkit) {
+        throw new Error("verovio toolkit の初期化に失敗しました。");
+      }
+
+      const longHorizontalMode = debugLongSvgMode.checked;
+      const options: Record<string, unknown> = {
+        pageWidth: longHorizontalMode ? 20000 : 1800,
+        pageHeight: 3000,
+        scale: 40,
+        breaks: longHorizontalMode ? "none" : "auto",
+        adjustPageHeight: longHorizontalMode ? 1 : 0,
+        footer: "none",
+        header: "none",
+      };
+      toolkit.setOptions(options);
+      const loaded = toolkit.loadData(xml);
+      if (!loaded) {
+        throw new Error("verovio loadData が失敗しました。");
+      }
+      const pageCount = toolkit.getPageCount();
+      if (!Number.isFinite(pageCount) || pageCount < 1) {
+        throw new Error("verovio pageCount が不正です。");
+      }
+      const svg = toolkit.renderToSVG(1, {});
+      if (!svg) {
+        throw new Error("verovio SVG 生成に失敗しました。");
+      }
+
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const measures = doc.querySelectorAll("part > measure").length;
+      debugScoreMeta.textContent = [
+        "engine=verovio",
+        "measures=" + measures,
+        "mode=" + (longHorizontalMode ? "long-horizontal" : "normal"),
+        "pages=" + pageCount,
+      ].join(" ");
+      debugScoreArea.innerHTML = svg;
+    })
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      debugScoreMeta.textContent = "描画失敗: " + message;
+      debugScoreArea.innerHTML = "";
+    });
+};
+
 const refreshNotesFromCore = (): void => {
   state.noteNodeIds = core.listNoteNodeIds();
   if (state.selectedNodeId && !state.noteNodeIds.includes(state.selectedNodeId)) {
@@ -289,9 +449,20 @@ const refreshNotesFromCore = (): void => {
 };
 
 type PlaybackEvent = {
-  freqHz: number;
-  startSec: number;
-  durSec: number;
+  midiNumber: number;
+  startTicks: number;
+  durTicks: number;
+  channel: number;
+};
+
+type SynthSchedule = {
+  tempo: number;
+  events: Array<{
+    midiNumber: number;
+    start: number;
+    ticks: number;
+    channel: number;
+  }>;
 };
 
 const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
@@ -318,97 +489,294 @@ const getFirstNumber = (el: ParentNode, selector: string): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const buildPlaybackEventsFromXml = (xml: string): PlaybackEvent[] => {
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) return [];
-  const part = doc.querySelector("part");
-  if (!part) return [];
+const PLAYBACK_TICKS_PER_QUARTER = 128;
+const FIXED_PLAYBACK_WAVEFORM: OscillatorType = "sine";
 
-  let currentDivisions = 1;
-  const defaultTempo = 120;
-  const tempo = getFirstNumber(doc, "sound[tempo]") ?? defaultTempo;
-  const secPerDivision = 60 / tempo / currentDivisions;
+const clampTempo = (tempo: number): number => {
+  if (!Number.isFinite(tempo)) return 120;
+  return Math.max(20, Math.min(300, Math.round(tempo)));
+};
 
-  const events: PlaybackEvent[] = [];
-  let cursorSec = 0;
-  let lastNoteStartSec = 0;
+const normalizeWaveform = (value: string): OscillatorType => {
+  if (value === "square" || value === "triangle") return value;
+  return "sine";
+};
 
-  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-    const divisions = getFirstNumber(measure, "attributes > divisions");
-    if (divisions && divisions > 0) {
-      currentDivisions = divisions;
+const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }) => {
+  const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
+    ? Math.max(1, Math.round(options.ticksPerQuarter))
+    : 128;
+  let audioContext: AudioContext | null = null;
+  let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
+  let synthStopTimer: number | null = null;
+
+  const scheduleBasicWaveNote = (
+    event: SynthSchedule["events"][number],
+    startAt: number,
+    bodyDuration: number,
+    waveform: OscillatorType
+  ): number => {
+    if (!audioContext) return startAt;
+    const attack = 0.005;
+    const release = 0.03;
+    const endAt = startAt + bodyDuration;
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = waveform;
+    oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
+
+    const gainNode = audioContext.createGain();
+    const gainLevel = event.channel === 10 ? 0.06 : 0.1;
+    gainNode.gain.setValueAtTime(0.0001, startAt);
+    gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    gainNode.gain.setValueAtTime(gainLevel, endAt);
+    gainNode.gain.linearRampToValueAtTime(0.0001, endAt + release);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.start(startAt);
+    oscillator.stop(endAt + release + 0.01);
+    oscillator.onended = () => {
+      try {
+        oscillator.disconnect();
+        gainNode.disconnect();
+      } catch {
+        // ignore cleanup failure
+      }
+    };
+    activeSynthNodes.push({ oscillator, gainNode });
+    return endAt + release + 0.02;
+  };
+
+  const stop = (): void => {
+    if (synthStopTimer !== null) {
+      window.clearTimeout(synthStopTimer);
+      synthStopTimer = null;
     }
-    const measureSecPerDivision = 60 / tempo / currentDivisions;
-
-    for (const child of Array.from(measure.children)) {
-      if (child.tagName !== "note") continue;
-
-      const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
-      if (voice !== EDITABLE_VOICE) continue;
-
-      const durationValue = getFirstNumber(child, "duration");
-      if (!durationValue || durationValue <= 0) continue;
-
-      const durationSec = durationValue * measureSecPerDivision;
-      const isRest = Boolean(child.querySelector("rest"));
-      const isChord = Boolean(child.querySelector("chord"));
-      if (isRest) {
-        cursorSec += durationSec;
-        continue;
+    for (const node of activeSynthNodes) {
+      try {
+        node.oscillator.stop();
+      } catch {
+        // ignore already-stopped nodes
       }
-
-      const step = child.querySelector("pitch > step")?.textContent?.trim() ?? "";
-      const octave = getFirstNumber(child, "pitch > octave");
-      const alter = getFirstNumber(child, "pitch > alter") ?? 0;
-      if (octave === null) {
-        cursorSec += durationSec;
-        continue;
+      try {
+        node.oscillator.disconnect();
+        node.gainNode.disconnect();
+      } catch {
+        // ignore disconnect error
       }
+    }
+    activeSynthNodes = [];
+  };
 
-      const midi = pitchToMidi(step, alter, octave);
-      if (midi === null) {
-        if (!isChord) {
-          cursorSec += durationSec;
-        }
-        continue;
-      }
+  const playSchedule = async (
+    schedule: SynthSchedule,
+    waveform: OscillatorType,
+    onEnded?: () => void
+  ): Promise<void> => {
+    if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
+      throw new Error("先に変換してください。");
+    }
 
-      const startSec = isChord ? lastNoteStartSec : cursorSec;
-      events.push({
-        freqHz: midiToHz(midi),
-        startSec,
-        durSec: Math.max(0.05, durationSec),
-      });
-      if (!isChord) {
-        lastNoteStartSec = cursorSec;
-        cursorSec += durationSec;
+    if (!audioContext) {
+      audioContext = new AudioContext();
+    }
+    stop();
+    await audioContext.resume();
+
+    const normalizedWaveform = normalizeWaveform(waveform);
+    const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
+    const baseTime = audioContext.currentTime + 0.04;
+    let latestEndTime = baseTime;
+
+    for (const event of schedule.events) {
+      const startAt = baseTime + event.start * secPerTick;
+      const bodyDuration = Math.max(0.04, event.ticks * secPerTick);
+      latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform));
+    }
+
+    const waitMs = Math.max(0, Math.ceil((latestEndTime - audioContext.currentTime) * 1000));
+    synthStopTimer = window.setTimeout(() => {
+      activeSynthNodes = [];
+      if (typeof onEnded === "function") {
+        onEnded();
       }
+    }, waitMs);
+  };
+
+  return { playSchedule, stop };
+};
+
+const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
+
+const midiToPitchText = (midiNumber: number): string => {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+  const octave = Math.floor(n / 12) - 1;
+  return `${names[n % 12]}${octave}`;
+};
+
+const getMidiWriterRuntime = (): MidiWriterRuntime | null => {
+  return (window as unknown as { MidiWriter?: MidiWriterRuntime }).MidiWriter ?? null;
+};
+
+const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number): Uint8Array => {
+  const midiWriter = getMidiWriterRuntime();
+  if (!midiWriter) {
+    throw new Error("midi-writer.js が読み込まれていません。");
+  }
+  const track = new midiWriter.Track();
+  track.setTempo(clampTempo(tempo));
+
+  const ordered = events
+    .slice()
+    .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+  let cursorTicks = 0;
+  for (const event of ordered) {
+    const waitTicks = Math.max(0, event.startTicks - cursorTicks);
+    const fields: MidiWriterNoteEventFields = {
+      pitch: [midiToPitchText(event.midiNumber)],
+      duration: `T${event.durTicks}`,
+      velocity: 80,
+      channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+    };
+    if (waitTicks > 0) {
+      fields.wait = `T${waitTicks}`;
+    }
+    track.addEvent(new midiWriter.NoteEvent(fields));
+    cursorTicks = Math.max(cursorTicks, event.startTicks + event.durTicks);
+  }
+
+  const writer = new midiWriter.Writer([track]);
+  const built = writer.buildFile();
+  return built instanceof Uint8Array ? built : Uint8Array.from(built);
+};
+
+const buildPlaybackEventsFromXml = (xml: string): { tempo: number; events: PlaybackEvent[] } => {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) return { tempo: 120, events: [] };
+  const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
+  if (partNodes.length === 0) return { tempo: 120, events: [] };
+
+  const channelMap = new Map<string, number>();
+  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+    const partId = scorePart.getAttribute("id") ?? "";
+    if (!partId) continue;
+    const midiChannelText = scorePart.querySelector("midi-instrument > midi-channel")?.textContent?.trim();
+    const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
+    if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
+      channelMap.set(partId, midiChannel);
     }
   }
 
-  // Touch computed variable so TypeScript keeps intent explicit and avoids accidental drift.
-  void secPerDivision;
-  return events;
+  const defaultTempo = 120;
+  const tempo = clampTempo(getFirstNumber(doc, "sound[tempo]") ?? defaultTempo);
+  const events: PlaybackEvent[] = [];
+
+  partNodes.forEach((part, partIndex) => {
+    const partId = part.getAttribute("id") ?? "";
+    const fallbackChannel = ((partIndex % 16) + 1 === 10) ? 11 : ((partIndex % 16) + 1);
+    const channel = channelMap.get(partId) ?? fallbackChannel;
+
+    let currentDivisions = 1;
+    let currentBeats = 4;
+    let currentBeatType = 4;
+    let currentTransposeSemitones = 0;
+    let timelineDiv = 0;
+
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+      const divisions = getFirstNumber(measure, "attributes > divisions");
+      if (divisions && divisions > 0) {
+        currentDivisions = divisions;
+      }
+      const beats = getFirstNumber(measure, "attributes > time > beats");
+      const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+      if (beats && beats > 0 && beatType && beatType > 0) {
+        currentBeats = beats;
+        currentBeatType = beatType;
+      }
+      const hasTranspose =
+        Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
+        Boolean(measure.querySelector("attributes > transpose > octave-change"));
+      if (hasTranspose) {
+        const chromatic = getFirstNumber(measure, "attributes > transpose > chromatic") ?? 0;
+        const octaveChange = getFirstNumber(measure, "attributes > transpose > octave-change") ?? 0;
+        currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
+      }
+
+      let cursorDiv = 0;
+      let measureMaxDiv = 0;
+      const lastStartByVoice = new Map<string, number>();
+
+      for (const child of Array.from(measure.children)) {
+        if (child.tagName === "backup" || child.tagName === "forward") {
+          const dur = getFirstNumber(child, "duration");
+          if (!dur || dur <= 0) continue;
+          if (child.tagName === "backup") {
+            cursorDiv = Math.max(0, cursorDiv - dur);
+          } else {
+            cursorDiv += dur;
+            measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+          }
+          continue;
+        }
+
+        if (child.tagName !== "note") continue;
+        const durationDiv = getFirstNumber(child, "duration");
+        if (!durationDiv || durationDiv <= 0) continue;
+
+        const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
+        const isChord = Boolean(child.querySelector("chord"));
+        const isRest = Boolean(child.querySelector("rest"));
+        const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
+        if (!isChord) {
+          lastStartByVoice.set(voice, startDiv);
+        }
+
+        if (!isRest) {
+          const step = child.querySelector("pitch > step")?.textContent?.trim() ?? "";
+          const octave = getFirstNumber(child, "pitch > octave");
+          const alter = getFirstNumber(child, "pitch > alter") ?? 0;
+          if (octave !== null) {
+            const midi = pitchToMidi(step, alter, octave);
+            if (midi !== null) {
+              const soundingMidi = midi + currentTransposeSemitones;
+              if (soundingMidi < 0 || soundingMidi > 127) {
+                continue;
+              }
+              const startTicks = Math.max(
+                0,
+                Math.round(((timelineDiv + startDiv) / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER)
+              );
+              const durTicks = Math.max(
+                1,
+                Math.round((durationDiv / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER)
+              );
+              events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
+            }
+          }
+        }
+
+        if (!isChord) {
+          cursorDiv += durationDiv;
+        }
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+      }
+
+      if (measureMaxDiv <= 0) {
+        measureMaxDiv = Math.max(
+          1,
+          Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType))
+        );
+      }
+      timelineDiv += measureMaxDiv;
+    }
+  });
+
+  return { tempo, events };
 };
 
 const stopPlayback = (): void => {
-  for (const osc of activeOscillators) {
-    try {
-      osc.stop();
-    } catch {
-      // ignore stale node stop calls
-    }
-    osc.disconnect();
-  }
-  for (const gain of activeGains) {
-    gain.disconnect();
-  }
-  activeOscillators = [];
-  activeGains = [];
-  if (playbackTimer !== null) {
-    window.clearTimeout(playbackTimer);
-    playbackTimer = null;
-  }
+  synthEngine.stop();
   isPlaying = false;
   playbackText.textContent = "playback: idle";
   renderControlState();
@@ -434,50 +802,56 @@ const startPlayback = async (): Promise<void> => {
     return;
   }
 
-  const events = buildPlaybackEventsFromXml(saveResult.xml);
+  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+  const events = parsedPlayback.events;
   if (events.length === 0) {
     playbackText.textContent = "playback: no playable notes";
     renderControlState();
     return;
   }
-
-  if (!audioContext) {
-    audioContext = new AudioContext();
+  let midiBytes: Uint8Array;
+  try {
+    midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
+  } catch (error) {
+    playbackText.textContent =
+      "playback: midi build failed (" +
+      (error instanceof Error ? error.message : String(error)) +
+      ")";
+    renderControlState();
+    return;
   }
-  await audioContext.resume();
 
-  const now = audioContext.currentTime + 0.02;
-  let maxEnd = 0;
+  const schedule: SynthSchedule = {
+    tempo: parsedPlayback.tempo,
+    events: events
+      .slice()
+      .sort((a, b) =>
+        a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks
+      )
+      .map((event) => ({
+        midiNumber: event.midiNumber,
+        start: event.startTicks,
+        ticks: event.durTicks,
+        channel: event.channel,
+      })),
+  };
 
-  for (const event of events) {
-    const gain = audioContext.createGain();
-    gain.gain.setValueAtTime(0.0001, now + event.startSec);
-    gain.gain.exponentialRampToValueAtTime(0.12, now + event.startSec + 0.01);
-    gain.gain.exponentialRampToValueAtTime(
-      0.0001,
-      now + event.startSec + Math.max(0.02, event.durSec * 0.9)
-    );
-    gain.connect(audioContext.destination);
-
-    const osc = audioContext.createOscillator();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(event.freqHz, now + event.startSec);
-    osc.connect(gain);
-    osc.start(now + event.startSec);
-    osc.stop(now + event.startSec + event.durSec);
-
-    activeOscillators.push(osc);
-    activeGains.push(gain);
-    maxEnd = Math.max(maxEnd, event.startSec + event.durSec);
+  try {
+    await synthEngine.playSchedule(schedule, FIXED_PLAYBACK_WAVEFORM, () => {
+      isPlaying = false;
+      playbackText.textContent = "playback: idle";
+      renderControlState();
+    });
+  } catch (error) {
+    playbackText.textContent =
+      "playback: synth failed (" + (error instanceof Error ? error.message : String(error)) + ")";
+    renderControlState();
+    return;
   }
 
   isPlaying = true;
-  playbackText.textContent = `playback: playing (${events.length} notes)`;
+  playbackText.textContent = `playback: playing (${events.length} notes, midi=${midiBytes.length} bytes, waveform=sine)`;
   renderControlState();
-
-  playbackTimer = window.setTimeout(() => {
-    stopPlayback();
-  }, Math.ceil(maxEnd * 1000) + 60);
   renderAll();
 };
 
@@ -555,6 +929,7 @@ const loadFromText = (xml: string): void => {
   state.lastSuccessfulSaveXml = "";
   refreshNotesFromCore();
   renderAll();
+  renderDebugScore();
 };
 
 const onLoadClick = async (): Promise<void> => {
@@ -703,6 +1078,7 @@ const onSave = (): void => {
     state.lastSuccessfulSaveXml = result.xml;
   }
   renderAll();
+  renderDebugScore();
 };
 
 const onDownload = (): void => {
@@ -748,5 +1124,7 @@ playBtn.addEventListener("click", () => {
 });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
+renderDebugScoreBtn.addEventListener("click", renderDebugScore);
 
 renderAll();
+renderDebugScore();

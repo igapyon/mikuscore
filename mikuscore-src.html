@@ -107,9 +107,27 @@
         <h2>Diagnostics</h2>
         <div id="diagArea" aria-live="polite"></div>
       </section>
+
+      <section class="ms-section">
+        <h2>譜面デバッグ（Verovio）</h2>
+        <p class="ms-label">Verovio本体レンダラーで、改ページ抑制ONの横長SVGを描画します。</p>
+        <div class="ms-actions">
+          <label class="ms-inline-check">
+            <input id="debugLongSvgMode" type="checkbox" checked disabled />
+            <span>改ページ抑制（ON固定）</span>
+          </label>
+          <button id="renderDebugScoreBtn" type="button">譜面デバッグ描画</button>
+        </div>
+        <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+        <div id="debugScoreWrap" class="ms-debug-wrap">
+          <div id="debugScoreArea" class="ms-debug-score"></div>
+        </div>
+      </section>
     </section>
   </main>
 
+  <script src="src/js/verovio.js"></script>
+  <script src="src/js/midi-writer.js"></script>
   <script src="src/js/main.js"></script>
 </body>
 </html>
