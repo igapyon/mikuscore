@@ -8,7 +8,7 @@ Single source of truth for diagnostics emitted by core.
 
 1. `MEASURE_OVERFULL`
 - Severity: error
-- Trigger: command would cause `occupiedTime > measureCapacity` in editable voice.
+- Trigger: command would cause `occupiedTime > measureCapacity` in the command voice lane.
 - Required behavior:
   - command result `ok=false`
   - DOM unchanged
@@ -17,7 +17,7 @@ Single source of truth for diagnostics emitted by core.
 
 2. `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`
 - Severity: error
-- Trigger: command targets non-editable voice, or would require backup/forward restructuring to realize edit.
+- Trigger: command voice mismatches target voice, or edit would require unsupported lane/boundary restructuring.
 - Required behavior:
   - command result `ok=false`
   - DOM unchanged

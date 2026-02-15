@@ -34,10 +34,8 @@ import {
   validateVoice,
 } from "./validators";
 
-const DEFAULT_EDITABLE_VOICE = "1";
-
 export class ScoreCore {
-  private readonly editableVoice: string;
+  private readonly editableVoice: string | null;
   private originalXml = "";
   private doc: XMLDocument | null = null;
   private dirty = false;
@@ -48,7 +46,8 @@ export class ScoreCore {
   private nodeCounter = 0;
 
   public constructor(options: ScoreCoreOptions = {}) {
-    this.editableVoice = options.editableVoice ?? DEFAULT_EDITABLE_VOICE;
+    const rawEditableVoice = String(options.editableVoice ?? "").trim();
+    this.editableVoice = rawEditableVoice || null;
   }
 
   public load(xml: string): void {
@@ -313,13 +312,24 @@ export class ScoreCore {
     for (const measure of measures) {
       const note = measure.querySelector("note");
       if (!note) continue;
-      const timing = getMeasureTimingForVoice(note, this.editableVoice);
-      if (!timing) continue;
-      if (timing.occupied > timing.capacity) {
-        return {
-          code: "MEASURE_OVERFULL",
-          message: `Occupied time ${timing.occupied} exceeds capacity ${timing.capacity}.`,
-        };
+      const voices = this.editableVoice
+        ? [this.editableVoice]
+        : Array.from(
+            new Set(
+              Array.from(measure.querySelectorAll("note"))
+                .map((measureNote) => getVoiceText(measureNote))
+                .filter((voice): voice is string => Boolean(voice))
+            )
+          );
+      for (const voice of voices) {
+        const timing = getMeasureTimingForVoice(note, voice);
+        if (!timing) continue;
+        if (timing.occupied > timing.capacity) {
+          return {
+            code: "MEASURE_OVERFULL",
+            message: `Occupied time ${timing.occupied} exceeds capacity ${timing.capacity}.`,
+          };
+        }
       }
     }
     return null;

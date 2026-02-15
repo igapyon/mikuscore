@@ -100,5 +100,5 @@ export type CoreCommand =
   | UiNoopCommand;
 
 export type ScoreCoreOptions = {
-  editableVoice?: VoiceId;
+  editableVoice?: VoiceId | null;
 };

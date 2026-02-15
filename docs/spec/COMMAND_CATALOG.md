@@ -50,7 +50,7 @@ Rules:
 
 - MUST patch only the target note pitch-related fields.
 - MUST validate payload before mutation.
-- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject command/target voice mismatch (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
 - MUST reject `grace` / `cue` / `chord` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
 - Rest target is allowed in MVP for rest-to-note conversion.
 
@@ -69,7 +69,7 @@ Rules:
 
 - MUST patch only the target `<duration>` and required notation hints.
 - MUST validate duration payload before mutation.
-- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject command/target voice mismatch (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
 - MUST reject `grace` / `cue` / `chord` / `rest` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
 - MUST reject overfull (`MEASURE_OVERFULL`).
 - If underfull, MAY succeed and MAY return `MEASURE_UNDERFULL` warning.
@@ -112,7 +112,7 @@ type DeleteNoteCommand = {
 Rules:
 
 - MUST delete only target note.
-- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject command/target voice mismatch (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
 - MUST reject `grace` / `cue` / `chord` / `rest` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
 - MUST reject structural delete at backup/forward boundary.
 - For non-chord delete, implementation MAY replace target note with same-duration rest.
