@@ -111,6 +111,61 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.ms-flow-collapsible {
+  overflow: hidden;
+}
+
+.ms-flow-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ms-flow-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-flow-summary .md-section-title {
+  margin-bottom: 0;
+}
+
+.ms-flow-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #7a6a99;
+}
+
+.ms-flow-state {
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid #d7cdee;
+  background: #f4effc;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ms-flow-caret {
+  font-size: 0.85rem;
+  transition: transform 150ms ease;
+}
+
+.ms-flow-collapsible[open] .ms-flow-caret {
+  transform: rotate(180deg);
+}
+
+.ms-flow-collapsible:not([open]) .ms-flow-state {
+  opacity: 1;
+}
+
+.ms-flow-body {
+  margin-top: 0.8rem;
+}
+
 .ms-step-no {
   display: inline-flex;
   align-items: center;
@@ -155,6 +210,22 @@ body {
 
 .ms-actions .md-button {
   width: auto;
+}
+
+.ms-preview-actions {
+  margin-bottom: 0.7rem;
+}
+
+.ms-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ms-btn-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
 }
 
 .ms-status {
@@ -287,8 +358,15 @@ body {
       </header>
 
       <div class="ms-flow">
-        <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</h2>
+        <details id="inputSectionDetails" class="md-section ms-flow-step ms-flow-collapsible" open>
+          <summary class="ms-flow-summary">
+            <span class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</span>
+            <span class="ms-flow-summary-meta">
+              <span class="ms-flow-state">折りたたみ中</span>
+              <span class="ms-flow-caret" aria-hidden="true">▾</span>
+            </span>
+          </summary>
+          <div class="ms-flow-body">
           <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
             <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
             <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
@@ -308,12 +386,39 @@ body {
           <div class="ms-actions">
             <button id="loadBtn" type="button" class="md-button md-button--primary">読み込み</button>
           </div>
-        </section>
+          </div>
+        </details>
 
         <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）</h2>
-          <p class="md-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="譜面プレビューの説明">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
+                音符をクリックすると、編集対象として選択します。
+              </span>
+            </span>
+          </h2>
+          <div class="ms-actions ms-preview-actions">
+            <button id="playBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>再生</span>
+            </button>
+            <button id="stopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
+              </svg>
+              <span>停止</span>
+            </button>
+          </div>
           <div id="debugScoreWrap" class="ms-debug-wrap">
             <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
@@ -364,25 +469,31 @@ body {
         </section>
 
         <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>検証 / 保存</h2>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>保存</h2>
           <div class="ms-actions">
-            <button id="playBtn" type="button" class="md-button md-button--primary">再生</button>
-            <button id="stopBtn" type="button" class="md-button md-button--surface" disabled>停止</button>
-            <button id="saveBtn" type="button" class="md-button md-button--tonal">保存</button>
-            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>XMLダウンロード</button>
+            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>MusicXML出力</button>
           </div>
-          <p id="playbackText" class="ms-status">再生: 停止中</p>
-          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
-          <label for="outputXml" class="md-label">出力XML</label>
-          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
         </section>
       </div>
 
       <details class="ms-dev">
         <summary>詳細情報</summary>
         <section class="md-section">
+          <h2 class="md-section-title">状態</h2>
+          <p id="playbackText" class="ms-status">再生: 停止中</p>
+          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
+        </section>
+        <section class="md-section">
           <h2 class="md-section-title">診断</h2>
           <div id="diagArea" aria-live="polite"></div>
+        </section>
+        <section class="md-section">
+          <h2 class="md-section-title">譜面プレビュー情報</h2>
+          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+        </section>
+        <section class="md-section">
+          <h2 class="md-section-title">出力XML</h2>
+          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
         </section>
       </details>
     </section>
@@ -408,6 +519,7 @@ const q = (selector) => {
 };
 const inputModeFile = q("#inputModeFile");
 const inputModeSource = q("#inputModeSource");
+const inputSectionDetails = q("#inputSectionDetails");
 const fileInputBlock = q("#fileInputBlock");
 const sourceInputBlock = q("#sourceInputBlock");
 const xmlInput = q("#xmlInput");
@@ -425,7 +537,6 @@ const changePitchBtn = q("#changePitchBtn");
 const changeDurationBtn = q("#changeDurationBtn");
 const insertAfterBtn = q("#insertAfterBtn");
 const deleteBtn = q("#deleteBtn");
-const saveBtn = q("#saveBtn");
 const playBtn = q("#playBtn");
 const stopBtn = q("#stopBtn");
 const downloadBtn = q("#downloadBtn");
@@ -600,7 +711,6 @@ const renderControlState = () => {
     changeDurationBtn.disabled = !state.loaded || !hasSelection;
     insertAfterBtn.disabled = !state.loaded || !hasSelection;
     deleteBtn.disabled = !state.loaded || !hasSelection;
-    saveBtn.disabled = !state.loaded;
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
 };
@@ -829,7 +939,7 @@ const ensureVerovioToolkit = async () => {
     });
     return verovioInitPromise;
 };
-const renderDebugScore = () => {
+const renderScorePreview = () => {
     var _a, _b;
     const renderSeq = ++verovioRenderSeq;
     const xml = (_b = (_a = (state.loaded ? core.debugSerializeCurrentXml() : null)) !== null && _a !== void 0 ? _a : xmlInput.value.trim()) !== null && _b !== void 0 ? _b : "";
@@ -1293,11 +1403,32 @@ const runCommand = (command) => {
     state.lastSaveResult = null;
     if (state.lastDispatchResult.ok) {
         refreshNotesFromCore();
+        autoSaveCurrentXml();
     }
     renderAll();
-    renderDebugScore();
+    renderScorePreview();
 };
-const loadFromText = (xml) => {
+const autoSaveCurrentXml = () => {
+    if (!state.loaded)
+        return;
+    const result = core.save();
+    state.lastSaveResult = result;
+    if (!result.ok) {
+        logDiagnostics("save", result.diagnostics);
+        if (result.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
+            const debugXml = core.debugSerializeCurrentXml();
+            if (debugXml) {
+                dumpOverfullContext(debugXml, EDITABLE_VOICE);
+            }
+            else if (DEBUG_LOG) {
+                console.warn("[mikuscore][debug] no in-memory XML to dump.");
+            }
+        }
+        return;
+    }
+    state.lastSuccessfulSaveXml = result.xml;
+};
+const loadFromText = (xml, collapseInputSection) => {
     try {
         core.load(xml);
     }
@@ -1330,8 +1461,12 @@ const loadFromText = (xml) => {
     state.lastSaveResult = null;
     state.lastSuccessfulSaveXml = "";
     refreshNotesFromCore();
+    autoSaveCurrentXml();
+    if (collapseInputSection) {
+        inputSectionDetails.open = false;
+    }
     renderAll();
-    renderDebugScore();
+    renderScorePreview();
 };
 const onLoadClick = async () => {
     var _a;
@@ -1352,7 +1487,7 @@ const onLoadClick = async () => {
         const text = await selected.text();
         xmlInput.value = text;
     }
-    loadFromText(xmlInput.value);
+    loadFromText(xmlInput.value, true);
 };
 const requireSelectedNode = () => {
     const nodeId = state.selectedNodeId;
@@ -1456,29 +1591,6 @@ const onDelete = () => {
     };
     runCommand(command);
 };
-const onSave = () => {
-    if (!state.loaded)
-        return;
-    const result = core.save();
-    state.lastSaveResult = result;
-    if (!result.ok) {
-        logDiagnostics("save", result.diagnostics);
-        if (result.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
-            const debugXml = core.debugSerializeCurrentXml();
-            if (debugXml) {
-                dumpOverfullContext(debugXml, EDITABLE_VOICE);
-            }
-            else if (DEBUG_LOG) {
-                console.warn("[mikuscore][debug] no in-memory XML to dump.");
-            }
-        }
-    }
-    if (result.ok) {
-        state.lastSuccessfulSaveXml = result.xml;
-    }
-    renderAll();
-    renderDebugScore();
-};
 const onDownload = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
@@ -1510,15 +1622,13 @@ changePitchBtn.addEventListener("click", onChangePitch);
 changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
-saveBtn.addEventListener("click", onSave);
 playBtn.addEventListener("click", () => {
     void startPlayback();
 });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
-renderAll();
-renderDebugScore();
+loadFromText(xmlInput.value, false);
 
   },
   "src/ts/sampleXml.js": function (require, module, exports) {

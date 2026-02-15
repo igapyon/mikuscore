@@ -69,6 +69,7 @@ const q = <T extends Element>(selector: string): T => {
 
 const inputModeFile = q<HTMLInputElement>("#inputModeFile");
 const inputModeSource = q<HTMLInputElement>("#inputModeSource");
+const inputSectionDetails = q<HTMLDetailsElement>("#inputSectionDetails");
 const fileInputBlock = q<HTMLDivElement>("#fileInputBlock");
 const sourceInputBlock = q<HTMLDivElement>("#sourceInputBlock");
 const xmlInput = q<HTMLTextAreaElement>("#xmlInput");
@@ -86,7 +87,6 @@ const changePitchBtn = q<HTMLButtonElement>("#changePitchBtn");
 const changeDurationBtn = q<HTMLButtonElement>("#changeDurationBtn");
 const insertAfterBtn = q<HTMLButtonElement>("#insertAfterBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
-const saveBtn = q<HTMLButtonElement>("#saveBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
@@ -288,7 +288,6 @@ const renderControlState = (): void => {
   changeDurationBtn.disabled = !state.loaded || !hasSelection;
   insertAfterBtn.disabled = !state.loaded || !hasSelection;
   deleteBtn.disabled = !state.loaded || !hasSelection;
-  saveBtn.disabled = !state.loaded;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
 };
@@ -535,7 +534,7 @@ const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
   return verovioInitPromise;
 };
 
-const renderDebugScore = (): void => {
+const renderScorePreview = (): void => {
   const renderSeq = ++verovioRenderSeq;
   const xml =
     (state.loaded ? core.debugSerializeCurrentXml() : null) ??
@@ -1067,12 +1066,32 @@ const runCommand = (command: CoreCommand): void => {
 
   if (state.lastDispatchResult.ok) {
     refreshNotesFromCore();
+    autoSaveCurrentXml();
   }
   renderAll();
-  renderDebugScore();
+  renderScorePreview();
 };
 
-const loadFromText = (xml: string): void => {
+const autoSaveCurrentXml = (): void => {
+  if (!state.loaded) return;
+  const result = core.save();
+  state.lastSaveResult = result;
+  if (!result.ok) {
+    logDiagnostics("save", result.diagnostics);
+    if (result.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
+      const debugXml = core.debugSerializeCurrentXml();
+      if (debugXml) {
+        dumpOverfullContext(debugXml, EDITABLE_VOICE);
+      } else if (DEBUG_LOG) {
+        console.warn("[mikuscore][debug] no in-memory XML to dump.");
+      }
+    }
+    return;
+  }
+  state.lastSuccessfulSaveXml = result.xml;
+};
+
+const loadFromText = (xml: string, collapseInputSection: boolean): void => {
   try {
     core.load(xml);
   } catch (err) {
@@ -1105,8 +1124,12 @@ const loadFromText = (xml: string): void => {
   state.lastSaveResult = null;
   state.lastSuccessfulSaveXml = "";
   refreshNotesFromCore();
+  autoSaveCurrentXml();
+  if (collapseInputSection) {
+    inputSectionDetails.open = false;
+  }
   renderAll();
-  renderDebugScore();
+  renderScorePreview();
 };
 
 const onLoadClick = async (): Promise<void> => {
@@ -1128,7 +1151,7 @@ const onLoadClick = async (): Promise<void> => {
     xmlInput.value = text;
   }
 
-  loadFromText(xmlInput.value);
+  loadFromText(xmlInput.value, true);
 };
 
 const requireSelectedNode = (): string | null => {
@@ -1236,28 +1259,6 @@ const onDelete = (): void => {
   runCommand(command);
 };
 
-const onSave = (): void => {
-  if (!state.loaded) return;
-  const result = core.save();
-  state.lastSaveResult = result;
-  if (!result.ok) {
-    logDiagnostics("save", result.diagnostics);
-    if (result.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
-      const debugXml = core.debugSerializeCurrentXml();
-      if (debugXml) {
-        dumpOverfullContext(debugXml, EDITABLE_VOICE);
-      } else if (DEBUG_LOG) {
-        console.warn("[mikuscore][debug] no in-memory XML to dump.");
-      }
-    }
-  }
-  if (result.ok) {
-    state.lastSuccessfulSaveXml = result.xml;
-  }
-  renderAll();
-  renderDebugScore();
-};
-
 const onDownload = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
   const blob = new Blob([state.lastSuccessfulSaveXml], { type: "application/xml;charset=utf-8" });
@@ -1288,7 +1289,6 @@ changePitchBtn.addEventListener("click", onChangePitch);
 changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
-saveBtn.addEventListener("click", onSave);
 playBtn.addEventListener("click", () => {
   void startPlayback();
 });
@@ -1296,5 +1296,4 @@ stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 
-renderAll();
-renderDebugScore();
+loadFromText(xmlInput.value, false);

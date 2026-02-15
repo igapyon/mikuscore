@@ -45,8 +45,15 @@
       </header>
 
       <div class="ms-flow">
-        <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</h2>
+        <details id="inputSectionDetails" class="md-section ms-flow-step ms-flow-collapsible" open>
+          <summary class="ms-flow-summary">
+            <span class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</span>
+            <span class="ms-flow-summary-meta">
+              <span class="ms-flow-state">折りたたみ中</span>
+              <span class="ms-flow-caret" aria-hidden="true">▾</span>
+            </span>
+          </summary>
+          <div class="ms-flow-body">
           <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
             <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
             <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
@@ -66,12 +73,39 @@
           <div class="ms-actions">
             <button id="loadBtn" type="button" class="md-button md-button--primary">読み込み</button>
           </div>
-        </section>
+          </div>
+        </details>
 
         <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）</h2>
-          <p class="md-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="譜面プレビューの説明">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
+                音符をクリックすると、編集対象として選択します。
+              </span>
+            </span>
+          </h2>
+          <div class="ms-actions ms-preview-actions">
+            <button id="playBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>再生</span>
+            </button>
+            <button id="stopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
+              </svg>
+              <span>停止</span>
+            </button>
+          </div>
           <div id="debugScoreWrap" class="ms-debug-wrap">
             <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
@@ -122,25 +156,31 @@
         </section>
 
         <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>検証 / 保存</h2>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>保存</h2>
           <div class="ms-actions">
-            <button id="playBtn" type="button" class="md-button md-button--primary">再生</button>
-            <button id="stopBtn" type="button" class="md-button md-button--surface" disabled>停止</button>
-            <button id="saveBtn" type="button" class="md-button md-button--tonal">保存</button>
-            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>XMLダウンロード</button>
+            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>MusicXML出力</button>
           </div>
-          <p id="playbackText" class="ms-status">再生: 停止中</p>
-          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
-          <label for="outputXml" class="md-label">出力XML</label>
-          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
         </section>
       </div>
 
       <details class="ms-dev">
         <summary>詳細情報</summary>
         <section class="md-section">
+          <h2 class="md-section-title">状態</h2>
+          <p id="playbackText" class="ms-status">再生: 停止中</p>
+          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
+        </section>
+        <section class="md-section">
           <h2 class="md-section-title">診断</h2>
           <div id="diagArea" aria-live="polite"></div>
+        </section>
+        <section class="md-section">
+          <h2 class="md-section-title">譜面プレビュー情報</h2>
+          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+        </section>
+        <section class="md-section">
+          <h2 class="md-section-title">出力XML</h2>
+          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
         </section>
       </details>
     </section>
