@@ -2,12 +2,7 @@
 
 ## Purpose
 
-This document fixes the API boundary for `dispatch(command)` in MVP.
-It complements:
-
-- `docs/spec/COMMANDS.md` (result contract / save contract)
-- `docs/spec/DIAGNOSTICS.md` (error and warning codes)
-- `docs/spec/TEST_MATRIX.md` (required test coverage)
+This document defines the `dispatch(command)` boundary for MVP.
 
 ## Command Envelope
 
@@ -21,6 +16,7 @@ type CoreCommand =
   | ChangeDurationCommand
   | InsertNoteAfterCommand
   | DeleteNoteCommand
+  | SplitNoteCommand
   | UiNoopCommand;
 
 type DispatchResult = {
@@ -40,8 +36,8 @@ type DispatchResult = {
 ```ts
 type ChangePitchCommand = {
   type: "change_to_pitch";
-  targetNodeId: NodeId; // note node
-  voice: VoiceId; // must match editable voice in MVP
+  targetNodeId: NodeId;
+  voice: VoiceId;
   pitch: {
     step: "A" | "B" | "C" | "D" | "E" | "F" | "G";
     alter?: -2 | -1 | 0 | 1 | 2;
@@ -52,41 +48,39 @@ type ChangePitchCommand = {
 
 Rules:
 
-- MUST only patch pitch-related children of the target note.
-- MUST NOT rewrite sibling notes or measure structure.
-- MUST validate pitch payload before mutation.
-- MUST reject when `voice` is non-editable (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
-- MUST reject targets that are `grace`, `cue`, `chord`, or `rest` (`MVP_UNSUPPORTED_NOTE_KIND`).
-- On success: `dirty=true`.
+- MUST patch only the target note pitch-related fields.
+- MUST validate payload before mutation.
+- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject `grace` / `cue` / `chord` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
+- Rest target is allowed in MVP for rest-to-note conversion.
 
 ### 2. `change_duration`
 
 ```ts
 type ChangeDurationCommand = {
   type: "change_duration";
-  targetNodeId: NodeId; // note node
+  targetNodeId: NodeId;
   voice: VoiceId;
-  duration: number; // MusicXML duration units
+  duration: number;
 };
 ```
 
 Rules:
 
-- MUST modify only the target `<duration>` (minimal patch).
+- MUST patch only the target `<duration>` and required notation hints.
 - MUST validate duration payload before mutation.
-- MUST validate measure integrity after tentative change:
-  - if overfull: reject with `MEASURE_OVERFULL`, no mutation
-  - if underfull: MAY succeed, MAY emit `MEASURE_UNDERFULL`
-- MUST reject non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
-- MUST reject targets that are `grace`, `cue`, `chord`, or `rest` (`MVP_UNSUPPORTED_NOTE_KIND`).
-- On success: `dirty=true`.
+- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject `grace` / `cue` / `chord` / `rest` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
+- MUST reject overfull (`MEASURE_OVERFULL`).
+- If underfull, MAY succeed and MAY return `MEASURE_UNDERFULL` warning.
+- Engine MAY consume nearby rests and/or fill underfull gap with rests to keep measure integrity.
 
 ### 3. `insert_note_after`
 
 ```ts
 type InsertNoteAfterCommand = {
   type: "insert_note_after";
-  anchorNodeId: NodeId; // insert after this note in same voice lane
+  anchorNodeId: NodeId;
   voice: VoiceId;
   note: {
     duration: number;
@@ -101,14 +95,9 @@ type InsertNoteAfterCommand = {
 
 Rules:
 
-- MUST insert only one pitched note node near anchor (no full-measure regeneration).
-- MUST validate inserted note payload before mutation.
-- Existing `<backup>/<forward>` MUST remain untouched.
-- Existing unrelated `<beam>` MUST remain untouched.
-- If insertion point directly crosses a backup/forward boundary: reject with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
-- If result is overfull: reject with `MEASURE_OVERFULL`, no mutation.
-- If result is underfull: MAY succeed with warning.
-- On success: `dirty=true`.
+- MUST insert one note after anchor in same local voice lane.
+- MUST reject cross-lane/cross-boundary insertion (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject overfull (`MEASURE_OVERFULL`).
 
 ### 4. `delete_note`
 
@@ -122,15 +111,29 @@ type DeleteNoteCommand = {
 
 Rules:
 
-- MUST delete only the target note node.
-- MUST NOT auto-fill rests, split notes, add ties, or modify divisions.
-- MUST reject non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
-- MUST reject targets that are `grace`, `cue`, `chord`, or `rest` (`MVP_UNSUPPORTED_NOTE_KIND`).
-- MUST reject if target is directly adjacent to backup/forward boundary.
-- Underfull after deletion is allowed (warning optional).
-- On success: `dirty=true`.
+- MUST delete only target note.
+- MUST reject non-editable voice (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+- MUST reject `grace` / `cue` / `chord` / `rest` targets (`MVP_UNSUPPORTED_NOTE_KIND`).
+- MUST reject structural delete at backup/forward boundary.
+- For non-chord delete, implementation MAY replace target note with same-duration rest.
 
-### 5. `ui_noop`
+### 5. `split_note`
+
+```ts
+type SplitNoteCommand = {
+  type: "split_note";
+  targetNodeId: NodeId;
+  voice: VoiceId;
+};
+```
+
+Rules:
+
+- MUST split one note into two adjacent notes.
+- Current implementation requires even, integer duration >= 2.
+- MUST reject boundary crossing (`MVP_UNSUPPORTED_NON_EDITABLE_VOICE`).
+
+### 6. `ui_noop`
 
 ```ts
 type UiNoopCommand = {
@@ -141,37 +144,20 @@ type UiNoopCommand = {
 
 Rules:
 
-- MUST produce `ok=true` without content mutation.
-- MUST NOT set `dirty=true`.
-- Useful for integration tests that verify dirty boundaries.
-
-## Common Precondition Checks
-
-For content-changing commands, core MUST evaluate in this order:
-
-1. Resolve `targetNodeId` / `anchorNodeId` to an existing note node.
-2. Verify target command voice equals editable voice (`voice=1` by default).
-3. Reject unsupported note kinds in MVP (`grace`, `cue`, `chord`, `rest`).
-4. Verify operation does not cross backup/forward boundary at edit point.
-5. Apply operation on a tentative basis and validate measure integrity.
-6. Commit patch atomically only if constraints pass.
+- MUST succeed without DOM mutation.
+- MUST NOT set dirty.
 
 ## Atomicity Contract
 
-If command fails:
+On command failure:
 
 - return `ok=false`
-- include diagnostic code(s)
-- DOM MUST be unchanged
-- dirty MUST be unchanged
-
-This applies to all rejection paths, including overfull and non-editable voice.
+- attach diagnostic(s)
+- DOM MUST remain unchanged
+- dirty MUST remain unchanged
 
 ## Save Boundary
 
-Catalog commands do not change save behavior:
-
-- `dirty===false` -> save mode `original_noop`, return original XML text
-- `dirty===true` -> save mode `serialized_dirty`, return serializer output
-
-No pretty-printing is allowed.
+- `dirty===false` -> `original_noop`
+- `dirty===true` -> `serialized_dirty`
+- pretty-printing is not applied

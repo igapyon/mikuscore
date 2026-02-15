@@ -2,27 +2,11 @@
 
 ## Purpose
 
-This document defines the minimum command interface contract for core implementation.
+This document defines the minimum command/save contract for core.
 
-## Suggested Core API (MVP)
+## Core API Shape
 
 ```ts
-type DiagnosticCode =
-  | "MEASURE_OVERFULL"
-  | "MVP_UNSUPPORTED_NON_EDITABLE_VOICE"
-  | "MVP_UNSUPPORTED_NOTE_KIND"
-  | "MVP_SCORE_NOT_LOADED"
-  | "MVP_COMMAND_TARGET_MISSING"
-  | "MVP_TARGET_NOT_FOUND"
-  | "MVP_COMMAND_EXECUTION_FAILED"
-  | "MVP_INVALID_COMMAND_PAYLOAD"
-  | "MVP_INVALID_NOTE_DURATION"
-  | "MVP_INVALID_NOTE_VOICE"
-  | "MVP_INVALID_NOTE_PITCH";
-
-type WarningCode =
-  | "MEASURE_UNDERFULL";
-
 type DispatchResult = {
   ok: boolean;
   dirtyChanged: boolean;
@@ -32,11 +16,9 @@ type DispatchResult = {
   warnings: Array<{ code: WarningCode; message: string }>;
 };
 
-type SaveMode = "original_noop" | "serialized_dirty";
-
 type SaveResult = {
   ok: boolean;
-  mode: SaveMode;
+  mode: "original_noop" | "serialized_dirty";
   xml: string;
   diagnostics: Array<{ code: DiagnosticCode; message: string }>;
 };
@@ -44,40 +26,31 @@ type SaveResult = {
 
 ## Required Behavior
 
-1. `dispatch(command)`:
-- MUST reject commands targeting non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
-- MUST reject commands targeting unsupported note kinds (`grace`, `cue`, `chord`, `rest`) with `MVP_UNSUPPORTED_NOTE_KIND`.
-- MUST reject malformed command payloads with `MVP_INVALID_COMMAND_PAYLOAD`.
-- MUST reject overfull measure with `MEASURE_OVERFULL`.
-- MUST leave DOM unchanged on reject.
-- MUST set `dirty=true` only when a content-changing command succeeds.
-- On success, MUST return changed/affected node IDs in `changedNodeIds`.
-- On success, SHOULD return affected measure numbers in `affectedMeasureNumbers`.
-- UI-only commands MUST NOT set dirty.
+1. `dispatch(command)`
+- MUST reject non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- MUST reject malformed payload with `MVP_INVALID_COMMAND_PAYLOAD`.
+- MUST reject overfull with `MEASURE_OVERFULL`.
+- MUST be atomic on failure (DOM unchanged, dirty unchanged).
+- MUST set `dirty=true` only when content-changing command succeeds.
 
-2. `save()`:
-- If `dirty === false`, MUST return original input XML text with `mode="original_noop"`.
-- If `dirty === true`, MUST return `XMLSerializer` output with `mode="serialized_dirty"`.
-- If current score state is overfull, save MUST be rejected with `ok=false` and diagnostic `MEASURE_OVERFULL`.
-- If any note has invalid or missing duration, save MUST be rejected with `MVP_INVALID_NOTE_DURATION`.
-- If any note has invalid or missing voice, save MUST be rejected with `MVP_INVALID_NOTE_VOICE`.
-- If any non-rest note has invalid or missing pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
-- If a rest note contains pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
-- If a chord note lacks pitch, save MUST be rejected with `MVP_INVALID_NOTE_PITCH`.
-- Pretty-printing MUST NOT be applied.
+2. Supported command family (MVP)
+- `change_to_pitch`
+- `change_duration`
+- `insert_note_after`
+- `delete_note`
+- `split_note`
+- `ui_noop`
 
-3. Serialization:
-- MUST preserve unknown/unsupported elements in DOM.
-- MUST NOT normalize `<backup>`, `<forward>`, existing `<beam>`.
+3. Note-kind rule
+- `grace` / `cue` / `chord` are unsupported for direct edit and SHOULD fail with `MVP_UNSUPPORTED_NOTE_KIND`.
+- `rest` is unsupported for most commands, but `change_to_pitch` MAY target rest for rest-to-note conversion.
 
-## Command Categories (MVP)
+4. `save()`
+- `dirty === false` -> MUST return original XML (`mode="original_noop"`).
+- `dirty === true` -> MUST return serialized current DOM (`mode="serialized_dirty"`).
+- MUST reject invalid score state (overfull / invalid duration / invalid voice / invalid pitch).
 
-- `Content-changing`: pitch edit, duration edit, note insertion/deletion (only if policy constraints pass).
-- `UI-only`: selection move, cursor move, viewport changes (tracked outside core or no-op in core).
-
-## Rejection Rule
-
-- On any constraint violation, command MUST fail atomically:
-  - no partial mutation
-  - no dirty transition
-  - diagnostic(s) attached
+5. Serialization policy
+- MUST preserve unknown/unsupported elements.
+- MUST NOT normalize unrelated `<backup>`, `<forward>`, existing `<beam>`.
+- pretty-printing MUST NOT be applied.

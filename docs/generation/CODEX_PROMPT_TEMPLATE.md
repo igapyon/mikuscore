@@ -10,7 +10,7 @@ I am building a browser-based MusicXML Score Editor.
 Generate implementation code according to the formal specifications below.
 
 ## Specifications
-- SPEC.md
+- docs/spec/SPEC.md
 - docs/spec/TERMS.md
 - docs/spec/COMMANDS.md
 - docs/spec/DIAGNOSTICS.md
