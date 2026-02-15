@@ -86,7 +86,7 @@ UI MUST NOT mutate XML DOM directly.
 
 ## References
 
-- `SPEC.md`
+- `docs/spec/SPEC.md`
 - `docs/spec/TERMS.md`
 - `docs/spec/COMMANDS.md`
 - `docs/spec/COMMAND_CATALOG.md`

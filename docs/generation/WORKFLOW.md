@@ -7,7 +7,7 @@ Generate consistent core code from the project specs without violating preservat
 ## Steps
 
 1. Confirm specs are up to date:
-- `SPEC.md`
+- `docs/spec/SPEC.md`
 - `docs/spec/TERMS.md`
 - `docs/spec/COMMANDS.md`
 - `docs/spec/DIAGNOSTICS.md`
