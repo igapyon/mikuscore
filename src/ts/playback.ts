@@ -3,11 +3,15 @@ export type PlaybackEvent = {
   startTicks: number;
   durTicks: number;
   channel: number;
+  trackId: string;
+  trackName: string;
 };
 
 type MidiWriterTrackApi = {
   setTempo: (tempo: number) => void;
   addEvent: (event: unknown) => void;
+  addTrackName: (text: string) => unknown;
+  addInstrumentName: (text: string) => unknown;
 };
 
 type MidiWriterNoteEventFields = {
@@ -100,39 +104,63 @@ export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number
   if (!midiWriter) {
     throw new Error("midi-writer.js が読み込まれていません。");
   }
-  const track = new midiWriter.Track();
-  track.setTempo(clampTempo(tempo));
-
-  const ordered = events
-    .slice()
-    .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
-
-  const channels = Array.from(
-    new Set(ordered.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
-  ).sort((a, b) => a - b);
-  for (const channel of channels) {
-    if (channel === 10) continue;
-    track.addEvent(
-      new midiWriter.ProgramChangeEvent({
-        channel,
-        instrument: 5, // GM: Electric Piano 2
-        delta: 0,
-      })
-    );
+  const tracksById = new Map<string, PlaybackEvent[]>();
+  for (const event of events) {
+    const key = event.trackId || "__default__";
+    const bucket = tracksById.get(key) ?? [];
+    bucket.push(event);
+    tracksById.set(key, bucket);
   }
 
-  for (const event of ordered) {
-    const fields: MidiWriterNoteEventFields = {
-      pitch: [midiToPitchText(event.midiNumber)],
-      duration: `T${event.durTicks}`,
-      startTick: Math.max(0, Math.round(event.startTicks)),
-      velocity: 80,
-      channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
-    };
-    track.addEvent(new midiWriter.NoteEvent(fields));
+  const midiTracks: unknown[] = [];
+  const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
+  sortedTrackIds.forEach((trackId, index) => {
+    const trackEvents = (tracksById.get(trackId) ?? [])
+      .slice()
+      .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+    if (!trackEvents.length) return;
+
+    const track = new midiWriter.Track();
+    track.setTempo(clampTempo(tempo));
+
+    const first = trackEvents[0];
+    const trackName = first.trackName?.trim() || trackId || `Track ${index + 1}`;
+    track.addTrackName(trackName);
+    track.addInstrumentName(trackName);
+
+    const channels = Array.from(
+      new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
+    ).sort((a, b) => a - b);
+    for (const channel of channels) {
+      if (channel === 10) continue;
+      track.addEvent(
+        new midiWriter.ProgramChangeEvent({
+          channel,
+          instrument: 5, // GM: Electric Piano 2
+          delta: 0,
+        })
+      );
+    }
+
+    for (const event of trackEvents) {
+      const fields: MidiWriterNoteEventFields = {
+        pitch: [midiToPitchText(event.midiNumber)],
+        duration: `T${event.durTicks}`,
+        startTick: Math.max(0, Math.round(event.startTicks)),
+        velocity: 80,
+        channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+      };
+      track.addEvent(new midiWriter.NoteEvent(fields));
+    }
+
+    midiTracks.push(track);
+  });
+
+  if (!midiTracks.length) {
+    throw new Error("MIDI化するノートがありません。");
   }
 
-  const writer = new midiWriter.Writer([track]);
+  const writer = new midiWriter.Writer(midiTracks);
   const built = writer.buildFile();
   return built instanceof Uint8Array ? built : Uint8Array.from(built);
 };
@@ -156,6 +184,13 @@ export const buildPlaybackEventsFromXml = (
     if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
       channelMap.set(partId, midiChannel);
     }
+  }
+  const partNameById = new Map<string, string>();
+  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+    const partId = scorePart.getAttribute("id") ?? "";
+    if (!partId) continue;
+    const rawName = scorePart.querySelector("part-name")?.textContent?.trim() ?? "";
+    partNameById.set(partId, rawName || partId);
   }
 
   const defaultTempo = 120;
@@ -264,7 +299,16 @@ export const buildPlaybackEventsFromXml = (
                 1,
                 Math.round((durationDiv / currentDivisions) * normalizedTicksPerQuarter)
               );
-              events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
+              events.push({
+                midiNumber: soundingMidi,
+                startTicks,
+                durTicks,
+                channel,
+                trackId: partId || `part-${partIndex + 1}`,
+                trackName:
+                  partNameById.get(partId) ??
+                  (partId || `part-${partIndex + 1}`),
+              });
             }
           }
         }
