@@ -2362,15 +2362,7 @@ const onConvertRestToNote = () => {
     const targetNodeId = requireSelectedNode();
     if (!targetNodeId)
         return;
-    const stepRaw = pitchStep.value.trim();
-    const step = isPitchStepValue(stepRaw) ? stepRaw : "C";
-    const octaveRaw = Number(pitchOctave.value);
-    const octave = Number.isInteger(octaveRaw) ? octaveRaw : 4;
-    const alterText = normalizeAlterValue(pitchAlter.value);
-    const alterNum = Number(alterText);
-    const pitch = alterText !== "none" && Number.isInteger(alterNum) && alterNum >= -2 && alterNum <= 2
-        ? { step, octave, alter: alterNum }
-        : { step, octave };
+    const pitch = { step: "C", octave: 4 };
     const command = {
         type: "change_to_pitch",
         targetNodeId,
@@ -17160,6 +17152,14 @@ const replaceMeasureInMainDocument = (mainDoc, partId, measureNumber, measureDoc
     const targetMeasure = findMeasureByNumber(targetPart, measureNumber);
     if (!targetMeasure)
         return null;
+    const replacementForMain = replacementMeasure.cloneNode(true);
+    const replacementAttrs = replacementForMain.querySelector(":scope > attributes");
+    const targetAttrs = targetMeasure.querySelector(":scope > attributes");
+    // Editing preview injects effective attributes for rendering.
+    // Do not introduce them into the main score when the original measure had none.
+    if (replacementAttrs && !targetAttrs) {
+        replacementAttrs.remove();
+    }
     const next = cloneXmlDocument(mainDoc);
     const nextPart = findPartById(next, partId);
     if (!nextPart)
@@ -17167,7 +17167,7 @@ const replaceMeasureInMainDocument = (mainDoc, partId, measureNumber, measureDoc
     const nextTargetMeasure = findMeasureByNumber(nextPart, measureNumber);
     if (!nextTargetMeasure)
         return null;
-    nextTargetMeasure.replaceWith(next.importNode(replacementMeasure, true));
+    nextTargetMeasure.replaceWith(next.importNode(replacementForMain, true));
     return next;
 };
 exports.replaceMeasureInMainDocument = replaceMeasureInMainDocument;
