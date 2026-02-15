@@ -10,6 +10,7 @@ const abcCommon = AbcCommon;
     const bodyEntries = [];
     const declaredVoiceIds = [];
     const voiceNameById = {};
+    const voiceClefById = {};
     let currentVoiceId = "1";
     let scoreDirective = "";
 
@@ -46,6 +47,9 @@ const abcCommon = AbcCommon;
           const parsedVoice = parseVoiceDirectiveTail(rest);
           if (parsedVoice.name) {
             voiceNameById[currentVoiceId] = parsedVoice.name;
+          }
+          if (parsedVoice.clef) {
+            voiceClefById[currentVoiceId] = parsedVoice.clef;
           }
           if (parsedVoice.bodyText) {
             bodyEntries.push({ text: parsedVoice.bodyText, lineNo, voiceId: currentVoiceId });
@@ -373,6 +377,7 @@ const abcCommon = AbcCommon;
       return {
         partId: "P" + String(index + 1),
         partName,
+        clef: voiceClefById[voiceId] || "",
         transpose: settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null,
         voiceId,
         measures: measuresByVoice[voiceId] || [[]]
@@ -434,19 +439,24 @@ const abcCommon = AbcCommon;
 
   function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-      return { name: "", bodyText: "" };
+      return { name: "", clef: "", bodyText: "" };
     }
     let bodyText = String(raw);
     let name = "";
+    let clef = "";
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
-      if (String(key).toLowerCase() === "name") {
+      const lowerKey = String(key).toLowerCase();
+      if (lowerKey === "name") {
         name = quotedInner || bareValue || "";
+      } else if (lowerKey === "clef") {
+        clef = String(quotedInner || bareValue || "").trim().toLowerCase();
       }
       return " ";
     });
     return {
       name: name.trim(),
+      clef: clef.trim(),
       bodyText: bodyText.trim()
     };
   }

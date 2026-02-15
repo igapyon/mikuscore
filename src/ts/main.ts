@@ -53,12 +53,13 @@ const q = <T extends Element>(selector: string): T => {
   return el as T;
 };
 
+const inputTypeXml = q<HTMLInputElement>("#inputTypeXml");
+const inputTypeAbc = q<HTMLInputElement>("#inputTypeAbc");
 const inputModeFile = q<HTMLInputElement>("#inputModeFile");
 const inputModeSource = q<HTMLInputElement>("#inputModeSource");
-const inputModeAbc = q<HTMLInputElement>("#inputModeAbc");
 const inputSectionDetails = q<HTMLDetailsElement>("#inputSectionDetails");
 const fileInputBlock = q<HTMLDivElement>("#fileInputBlock");
-const sourceInputBlock = q<HTMLDivElement>("#sourceInputBlock");
+const sourceXmlInputBlock = q<HTMLDivElement>("#sourceXmlInputBlock");
 const abcInputBlock = q<HTMLDivElement>("#abcInputBlock");
 const xmlInput = q<HTMLTextAreaElement>("#xmlInput");
 const abcInput = q<HTMLTextAreaElement>("#abcInput");
@@ -214,12 +215,15 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
 };
 
 const renderInputMode = (): void => {
+  const isAbcType = inputTypeAbc.checked;
   const fileMode = inputModeFile.checked;
-  const sourceMode = inputModeSource.checked;
-  const abcMode = inputModeAbc.checked;
   fileInputBlock.classList.toggle("md-hidden", !fileMode);
-  sourceInputBlock.classList.toggle("md-hidden", !sourceMode);
-  abcInputBlock.classList.toggle("md-hidden", !abcMode);
+  sourceXmlInputBlock.classList.toggle("md-hidden", fileMode || isAbcType);
+  abcInputBlock.classList.toggle("md-hidden", fileMode || !isAbcType);
+
+  fileInput.accept = isAbcType
+    ? ".abc,text/plain"
+    : ".musicxml,.xml,text/xml,application/xml";
 };
 
 const renderStatus = (): void => {
@@ -1720,6 +1724,7 @@ type AbcParsedNote = {
 type AbcParsedPart = {
   partId: string;
   partName: string;
+  clef?: string;
   measures: AbcParsedNote[][];
 };
 
@@ -1743,6 +1748,20 @@ const normalizeTypeForMusicXml = (t?: string): string => {
   if (raw === "16th" || raw === "32nd" || raw === "64th" || raw === "128th") return raw;
   if (raw === "whole" || raw === "half" || raw === "quarter" || raw === "eighth") return raw;
   return "quarter";
+};
+
+const clefXmlFromAbcClef = (rawClef?: string): string => {
+  const clef = String(rawClef || "").trim().toLowerCase();
+  if (clef === "bass" || clef === "f") {
+    return "<clef><sign>F</sign><line>4</line></clef>";
+  }
+  if (clef === "alto" || clef === "c3") {
+    return "<clef><sign>C</sign><line>3</line></clef>";
+  }
+  if (clef === "tenor" || clef === "c4") {
+    return "<clef><sign>C</sign><line>4</line></clef>";
+  }
+  return "<clef><sign>G</sign><line>2</line></clef>";
 };
 
 const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
@@ -1782,7 +1801,7 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                 "<divisions>960</divisions>",
                 `<key><fifths>${Math.round(fifths)}</fifths></key>`,
                 `<time><beats>${Math.round(beats)}</beats><beat-type>${Math.round(beatType)}</beat-type></time>`,
-                "<clef><sign>G</sign><line>2</line></clef>",
+                clefXmlFromAbcClef(part.clef),
                 "</attributes>",
               ].join("")
             : "";
@@ -1900,7 +1919,7 @@ const loadFromText = (xml: string, collapseInputSection: boolean): void => {
 
 const onLoadClick = async (): Promise<void> => {
   let sourceText = "";
-  let treatAsAbc = inputModeAbc.checked;
+  const treatAsAbc = inputTypeAbc.checked;
 
   if (inputModeFile.checked) {
     const selected = fileInput.files?.[0];
@@ -1917,20 +1936,15 @@ const onLoadClick = async (): Promise<void> => {
       return;
     }
     sourceText = await selected.text();
-    const name = selected.name.toLowerCase();
-    if (name.endsWith(".abc")) {
-      treatAsAbc = true;
-    }
     if (treatAsAbc) {
       abcInput.value = sourceText;
     } else {
       xmlInput.value = sourceText;
     }
-  } else if (inputModeSource.checked) {
+  } else if (!treatAsAbc) {
     sourceText = xmlInput.value;
   } else {
     sourceText = abcInput.value;
-    treatAsAbc = true;
   }
 
   if (treatAsAbc) {
@@ -2272,6 +2286,40 @@ const convertMusicXmlToAbc = (xml: string): string => {
   }
 
   const unitLength = { num: 1, den: 8 };
+  const abcClefFromMusicXmlPart = (part: Element): string => {
+    const firstClef = part.querySelector(":scope > measure > attributes > clef");
+    if (!firstClef) return "";
+    const sign = firstClef.querySelector(":scope > sign")?.textContent?.trim().toUpperCase() ?? "";
+    const line = Number(firstClef.querySelector(":scope > line")?.textContent?.trim() ?? "");
+    if (sign === "F" && line === 4) return "bass";
+    if (sign === "G" && line === 2) return "treble";
+    if (sign === "C" && line === 3) return "alto";
+    if (sign === "C" && line === 4) return "tenor";
+    return "";
+  };
+  const keySignatureAlterByStep = (fifthsValue: number): Record<string, number> => {
+    const map: Record<string, number> = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
+    const sharpOrder = ["F", "C", "G", "D", "A", "E", "B"] as const;
+    const flatOrder = ["B", "E", "A", "D", "G", "C", "F"] as const;
+    const safeFifths = Math.max(-7, Math.min(7, Math.round(fifthsValue)));
+    if (safeFifths > 0) {
+      for (let i = 0; i < safeFifths; i += 1) map[sharpOrder[i]] = 1;
+    } else if (safeFifths < 0) {
+      for (let i = 0; i < Math.abs(safeFifths); i += 1) map[flatOrder[i]] = -1;
+    }
+    return map;
+  };
+  const accidentalTextToAlter = (text: string): number | null => {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === "sharp") return 1;
+    if (normalized === "flat") return -1;
+    if (normalized === "natural") return 0;
+    if (normalized === "double-sharp") return 2;
+    if (normalized === "flat-flat") return -2;
+    return null;
+  };
+
   const headerLines = [
     "X:1",
     `T:${title}`,
@@ -2287,15 +2335,24 @@ const convertMusicXmlToAbc = (xml: string): string => {
     const partId = part.getAttribute("id") || `P${partIndex + 1}`;
     const voiceId = partId.replace(/[^A-Za-z0-9_.-]/g, "_");
     const voiceName = partNameById.get(partId) || partId;
-    headerLines.push(`V:${voiceId} name="${voiceName}"`);
+    const abcClef = abcClefFromMusicXmlPart(part);
+    const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
+    headerLines.push(`V:${voiceId} name="${voiceName}"${clefSuffix}`);
 
     let currentDivisions = 480;
+    let currentFifths = Number.isFinite(fifths) ? Math.round(fifths) : 0;
     const measureTexts: string[] = [];
     for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
       const parsedDiv = Number(measure.querySelector("attributes > divisions")?.textContent?.trim() || "");
       if (Number.isFinite(parsedDiv) && parsedDiv > 0) {
         currentDivisions = parsedDiv;
       }
+      const parsedFifths = Number(measure.querySelector("attributes > key > fifths")?.textContent?.trim() || "");
+      if (Number.isFinite(parsedFifths)) {
+        currentFifths = Math.round(parsedFifths);
+      }
+      const keyAlterMap = keySignatureAlterByStep(currentFifths);
+      const measureAccidentalByStepOctave = new Map<string, number>();
 
       let pending: { pitches: string[]; len: string; tie: boolean } | null = null;
       const tokens: string[] = [];
@@ -2324,9 +2381,32 @@ const convertMusicXmlToAbc = (xml: string): string => {
         if (!child.querySelector("rest")) {
           const step = child.querySelector("pitch > step")?.textContent?.trim() || "C";
           const octave = Number(child.querySelector("pitch > octave")?.textContent?.trim() || "4");
-          const alterRaw = child.querySelector("pitch > alter")?.textContent?.trim();
-          const alter = alterRaw !== undefined && alterRaw !== null && alterRaw !== "" ? Number(alterRaw) : null;
-          const accidental = alter === null || !Number.isFinite(alter) ? "" : AbcCommon.accidentalFromAlter(alter);
+          const upperStep = /^[A-G]$/.test(step.toUpperCase()) ? step.toUpperCase() : "C";
+          const safeOctave = Number.isFinite(octave) ? Math.max(0, Math.min(9, Math.round(octave))) : 4;
+          const stepOctaveKey = `${upperStep}${safeOctave}`;
+
+          const alterRaw = child.querySelector("pitch > alter")?.textContent?.trim() ?? "";
+          const explicitAlter = alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
+          const accidentalText = child.querySelector("accidental")?.textContent?.trim() ?? "";
+          const accidentalAlter = accidentalTextToAlter(accidentalText);
+
+          const keyAlter = keyAlterMap[upperStep] ?? 0;
+          const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
+            ? measureAccidentalByStepOctave.get(stepOctaveKey) ?? 0
+            : keyAlter;
+
+          let targetAlter = currentAlter;
+          if (explicitAlter !== null) {
+            targetAlter = explicitAlter;
+          } else if (accidentalAlter !== null) {
+            targetAlter = accidentalAlter;
+          }
+
+          const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
+          const accidental = shouldEmitAccidental
+            ? (targetAlter === 0 ? "=" : AbcCommon.accidentalFromAlter(targetAlter))
+            : "";
+          measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
           pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
         }
 
@@ -2394,9 +2474,10 @@ const onDownloadAbc = (): void => {
   URL.revokeObjectURL(url);
 };
 
+inputTypeXml.addEventListener("change", renderInputMode);
+inputTypeAbc.addEventListener("change", renderInputMode);
 inputModeFile.addEventListener("change", renderInputMode);
 inputModeSource.addEventListener("change", renderInputMode);
-inputModeAbc.addEventListener("change", renderInputMode);
 fileSelectBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const f = fileInput.files?.[0];
