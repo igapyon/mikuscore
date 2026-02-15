@@ -26,6 +26,21 @@ This document defines high-level architecture boundaries for mikuscore MVP.
 
 UI MUST NOT mutate XML DOM directly.
 
+## DOM-Centric Data Flow
+
+- Internal processing SHOULD be DOM-centric:
+  - parse once to `Document`
+  - pass `Document` between I/O / transform / render-prep modules
+  - serialize only at strict external boundaries
+- This reduces repeated parse/serialize cycles and keeps transformation intent explicit.
+
+### Exceptions (Text Boundaries)
+
+- The following boundaries are intentionally text-based in current architecture:
+  - `ScoreCore` public API boundary (`load(xmlText)`, `save().xml`, `debugSerializeCurrentXml()`)
+  - Verovio toolkit boundary (`toolkit.loadData(xmlText)`)
+- Outside these boundaries, modules SHOULD prefer `Document` interfaces.
+
 ## Rendering Boundary (Verovio)
 
 - `Verovio` is the ground-truth notation renderer in UI layer.

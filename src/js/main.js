@@ -112,8 +112,8 @@ const dumpOverfullContext = (xml, voice) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     if (!DEBUG_LOG)
         return;
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror")) {
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!doc) {
         console.error("[mikuscore][debug] XML parse failed while dumping overfull context.");
         return;
     }
@@ -466,8 +466,8 @@ const syncStepFromSelectedDraftNote = () => {
         renderAlterButtons();
         return;
     }
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror")) {
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!doc) {
         selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
@@ -738,12 +738,9 @@ const setUiMappingDiagnostic = (message) => {
     };
     renderAll();
 };
-const rebuildNodeLocationMap = (xml) => {
+const rebuildNodeLocationMap = (doc) => {
     var _a, _b;
     nodeIdToLocation = new Map();
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return;
     const notes = Array.from(doc.querySelectorAll("part > measure > note"));
     const count = Math.min(notes.length, state.noteNodeIds.length);
     for (let i = 0; i < count; i += 1) {
@@ -760,12 +757,9 @@ const rebuildNodeLocationMap = (xml) => {
         nodeIdToLocation.set(nodeId, { partId, measureNumber });
     }
 };
-const rebuildPartNameMap = (xml) => {
+const rebuildPartNameMap = (doc) => {
     var _a, _b, _c, _d, _e, _f;
     partIdToName = new Map();
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return;
     for (const scorePart of Array.from(doc.querySelectorAll("score-partwise > part-list > score-part"))) {
         const partId = (_b = (_a = scorePart.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
         if (!partId)
@@ -1136,8 +1130,15 @@ const refreshNotesFromCore = () => {
     state.noteNodeIds = core.listNoteNodeIds();
     const currentXml = core.debugSerializeCurrentXml();
     if (currentXml) {
-        rebuildNodeLocationMap(currentXml);
-        rebuildPartNameMap(currentXml);
+        const currentDoc = (0, musicxml_io_1.parseMusicXmlDocument)(currentXml);
+        if (currentDoc) {
+            rebuildNodeLocationMap(currentDoc);
+            rebuildPartNameMap(currentDoc);
+        }
+        else {
+            nodeIdToLocation = new Map();
+            partIdToName = new Map();
+        }
     }
     else {
         nodeIdToLocation = new Map();
@@ -2063,12 +2064,8 @@ const onDownload = () => {
     a.click();
     URL.revokeObjectURL(url);
 };
-const convertMusicXmlToAbc = (xml) => {
+const convertMusicXmlToAbc = (doc) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror")) {
-        throw new Error("MusicXMLの解析に失敗しました。");
-    }
     const title = ((_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) ||
         ((_d = (_c = doc.querySelector("movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) ||
         "mikuscore";
@@ -2272,9 +2269,12 @@ const onDownloadMidi = () => {
 const onDownloadAbc = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
+    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(state.lastSuccessfulSaveXml);
+    if (!musicXmlDoc)
+        return;
     let abcText = "";
     try {
-        abcText = convertMusicXmlToAbc(state.lastSuccessfulSaveXml);
+        abcText = convertMusicXmlToAbc(musicXmlDoc);
     }
     catch (_a) {
         return;
