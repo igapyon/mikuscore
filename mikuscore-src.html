@@ -57,17 +57,23 @@
           <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
             <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
             <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+            <label class="md-radio"><input id="inputModeAbc" type="radio" name="inputMode" value="abc" /> ABC入力</label>
           </div>
 
           <div id="fileInputBlock" class="ms-block">
             <button id="fileSelectBtn" type="button" class="md-button md-button--tonal">ファイルを選択</button>
             <span id="fileNameText" class="ms-file-name">未選択</span>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,text/xml,application/xml" hidden />
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
           </div>
 
           <div id="sourceInputBlock" class="ms-block md-hidden">
             <label for="xmlInput" class="md-label">MusicXML</label>
             <textarea id="xmlInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
+          </div>
+
+          <div id="abcInputBlock" class="ms-block md-hidden">
+            <label for="abcInput" class="md-label">ABC</label>
+            <textarea id="abcInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
           </div>
 
           <div class="ms-actions">
@@ -213,6 +219,7 @@
           <div class="ms-actions">
             <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>MusicXML出力</button>
             <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal" disabled>MIDI出力</button>
+            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal" disabled>ABC出力</button>
           </div>
         </section>
       </div>
