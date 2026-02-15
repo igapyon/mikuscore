@@ -5,6 +5,7 @@ const modules = {
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
+const playback_1 = require("./playback");
 const sampleXml_1 = require("./sampleXml");
 const EDITABLE_VOICE = "1";
 const q = (selector) => {
@@ -39,6 +40,7 @@ const deleteBtn = q("#deleteBtn");
 const playBtn = q("#playBtn");
 const stopBtn = q("#stopBtn");
 const downloadBtn = q("#downloadBtn");
+const downloadMidiBtn = q("#downloadMidiBtn");
 const saveModeText = q("#saveModeText");
 const playbackText = q("#playbackText");
 const outputXml = q("#outputXml");
@@ -592,10 +594,11 @@ const renderUiMessage = () => {
     uiMessage.classList.add("md-hidden");
 };
 const renderOutput = () => {
-    var _a, _b;
+    var _a, _b, _c;
     saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
     outputXml.value = ((_a = state.lastSaveResult) === null || _a === void 0 ? void 0 : _a.ok) ? state.lastSaveResult.xml : "";
     downloadBtn.disabled = !((_b = state.lastSaveResult) === null || _b === void 0 ? void 0 : _b.ok);
+    downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
 };
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
@@ -1232,36 +1235,8 @@ const refreshNotesFromCore = () => {
     }
 };
 const midiToHz = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
-const pitchToMidi = (step, alter, octave) => {
-    const semitoneMap = {
-        C: 0,
-        D: 2,
-        E: 4,
-        F: 5,
-        G: 7,
-        A: 9,
-        B: 11,
-    };
-    const base = semitoneMap[step];
-    if (base === undefined)
-        return null;
-    return (octave + 1) * 12 + base + alter;
-};
-const getFirstNumber = (el, selector) => {
-    var _a, _b;
-    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
-    if (!text)
-        return null;
-    const n = Number(text);
-    return Number.isFinite(n) ? n : null;
-};
 const PLAYBACK_TICKS_PER_QUARTER = 128;
 const FIXED_PLAYBACK_WAVEFORM = "sine";
-const clampTempo = (tempo) => {
-    if (!Number.isFinite(tempo))
-        return 120;
-    return Math.max(20, Math.min(300, Math.round(tempo)));
-};
 const normalizeWaveform = (value) => {
     if (value === "square" || value === "triangle")
         return value;
@@ -1356,154 +1331,6 @@ const createBasicWaveSynthEngine = (options) => {
     return { playSchedule, stop };
 };
 const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
-const midiToPitchText = (midiNumber) => {
-    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
-    const octave = Math.floor(n / 12) - 1;
-    return `${names[n % 12]}${octave}`;
-};
-const getMidiWriterRuntime = () => {
-    var _a;
-    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
-};
-const buildMidiBytesForPlayback = (events, tempo) => {
-    const midiWriter = getMidiWriterRuntime();
-    if (!midiWriter) {
-        throw new Error("midi-writer.js が読み込まれていません。");
-    }
-    const track = new midiWriter.Track();
-    track.setTempo(clampTempo(tempo));
-    const ordered = events
-        .slice()
-        .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
-    let cursorTicks = 0;
-    for (const event of ordered) {
-        const waitTicks = Math.max(0, event.startTicks - cursorTicks);
-        const fields = {
-            pitch: [midiToPitchText(event.midiNumber)],
-            duration: `T${event.durTicks}`,
-            velocity: 80,
-            channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
-        };
-        if (waitTicks > 0) {
-            fields.wait = `T${waitTicks}`;
-        }
-        track.addEvent(new midiWriter.NoteEvent(fields));
-        cursorTicks = Math.max(cursorTicks, event.startTicks + event.durTicks);
-    }
-    const writer = new midiWriter.Writer([track]);
-    const built = writer.buildFile();
-    return built instanceof Uint8Array ? built : Uint8Array.from(built);
-};
-const buildPlaybackEventsFromXml = (xml) => {
-    var _a, _b, _c, _d;
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return { tempo: 120, events: [] };
-    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
-    if (partNodes.length === 0)
-        return { tempo: 120, events: [] };
-    const channelMap = new Map();
-    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-        const partId = (_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
-        if (!partId)
-            continue;
-        const midiChannelText = (_c = (_b = scorePart.querySelector("midi-instrument > midi-channel")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim();
-        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
-        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
-            channelMap.set(partId, midiChannel);
-        }
-    }
-    const defaultTempo = 120;
-    const tempo = clampTempo((_d = getFirstNumber(doc, "sound[tempo]")) !== null && _d !== void 0 ? _d : defaultTempo);
-    const events = [];
-    partNodes.forEach((part, partIndex) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
-        const fallbackChannel = ((partIndex % 16) + 1 === 10) ? 11 : ((partIndex % 16) + 1);
-        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
-        let currentDivisions = 1;
-        let currentBeats = 4;
-        let currentBeatType = 4;
-        let currentTransposeSemitones = 0;
-        let timelineDiv = 0;
-        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-            const divisions = getFirstNumber(measure, "attributes > divisions");
-            if (divisions && divisions > 0) {
-                currentDivisions = divisions;
-            }
-            const beats = getFirstNumber(measure, "attributes > time > beats");
-            const beatType = getFirstNumber(measure, "attributes > time > beat-type");
-            if (beats && beats > 0 && beatType && beatType > 0) {
-                currentBeats = beats;
-                currentBeatType = beatType;
-            }
-            const hasTranspose = Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
-                Boolean(measure.querySelector("attributes > transpose > octave-change"));
-            if (hasTranspose) {
-                const chromatic = (_c = getFirstNumber(measure, "attributes > transpose > chromatic")) !== null && _c !== void 0 ? _c : 0;
-                const octaveChange = (_d = getFirstNumber(measure, "attributes > transpose > octave-change")) !== null && _d !== void 0 ? _d : 0;
-                currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
-            }
-            let cursorDiv = 0;
-            let measureMaxDiv = 0;
-            const lastStartByVoice = new Map();
-            for (const child of Array.from(measure.children)) {
-                if (child.tagName === "backup" || child.tagName === "forward") {
-                    const dur = getFirstNumber(child, "duration");
-                    if (!dur || dur <= 0)
-                        continue;
-                    if (child.tagName === "backup") {
-                        cursorDiv = Math.max(0, cursorDiv - dur);
-                    }
-                    else {
-                        cursorDiv += dur;
-                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
-                    }
-                    continue;
-                }
-                if (child.tagName !== "note")
-                    continue;
-                const durationDiv = getFirstNumber(child, "duration");
-                if (!durationDiv || durationDiv <= 0)
-                    continue;
-                const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
-                const isChord = Boolean(child.querySelector("chord"));
-                const isRest = Boolean(child.querySelector("rest"));
-                const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
-                if (!isChord) {
-                    lastStartByVoice.set(voice, startDiv);
-                }
-                if (!isRest) {
-                    const step = (_l = (_k = (_j = child.querySelector("pitch > step")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
-                    const octave = getFirstNumber(child, "pitch > octave");
-                    const alter = (_m = getFirstNumber(child, "pitch > alter")) !== null && _m !== void 0 ? _m : 0;
-                    if (octave !== null) {
-                        const midi = pitchToMidi(step, alter, octave);
-                        if (midi !== null) {
-                            const soundingMidi = midi + currentTransposeSemitones;
-                            if (soundingMidi < 0 || soundingMidi > 127) {
-                                continue;
-                            }
-                            const startTicks = Math.max(0, Math.round(((timelineDiv + startDiv) / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER));
-                            const durTicks = Math.max(1, Math.round((durationDiv / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER));
-                            events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
-                        }
-                    }
-                }
-                if (!isChord) {
-                    cursorDiv += durationDiv;
-                }
-                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
-            }
-            if (measureMaxDiv <= 0) {
-                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
-            }
-            timelineDiv += measureMaxDiv;
-        }
-    });
-    return { tempo, events };
-};
 const stopPlayback = () => {
     synthEngine.stop();
     isPlaying = false;
@@ -1530,7 +1357,7 @@ const startPlayback = async () => {
         playbackText.textContent = "再生: 保存失敗";
         return;
     }
-    const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
     const events = parsedPlayback.events;
     if (events.length === 0) {
         playbackText.textContent = "再生: 再生可能ノートなし";
@@ -1539,7 +1366,7 @@ const startPlayback = async () => {
     }
     let midiBytes;
     try {
-        midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
+        midiBytes = (0, playback_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo);
     }
     catch (error) {
         playbackText.textContent =
@@ -1597,7 +1424,7 @@ const startMeasurePlayback = async () => {
         renderAll();
         return;
     }
-    const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
     const events = parsedPlayback.events;
     if (events.length === 0) {
         playbackText.textContent = "再生: この小節に再生可能ノートなし";
@@ -2070,6 +1897,29 @@ const onDownload = () => {
     a.click();
     URL.revokeObjectURL(url);
 };
+const onDownloadMidi = () => {
+    if (!state.lastSuccessfulSaveXml)
+        return;
+    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(state.lastSuccessfulSaveXml, PLAYBACK_TICKS_PER_QUARTER);
+    if (parsedPlayback.events.length === 0)
+        return;
+    let midiBytes;
+    try {
+        midiBytes = (0, playback_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo);
+    }
+    catch (_a) {
+        return;
+    }
+    const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
+    new Uint8Array(midiArrayBuffer).set(midiBytes);
+    const blob = new Blob([midiArrayBuffer], { type: "audio/midi" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mikuscore.mid";
+    a.click();
+    URL.revokeObjectURL(url);
+};
 inputModeFile.addEventListener("change", renderInputMode);
 inputModeSource.addEventListener("change", renderInputMode);
 fileSelectBtn.addEventListener("click", () => fileInput.click());
@@ -2112,6 +1962,7 @@ playBtn.addEventListener("click", () => {
 });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
+downloadMidiBtn.addEventListener("click", onDownloadMidi);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
@@ -16429,6 +16280,256 @@ exports.sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
     </measure>
   </part>
 </score-partwise>`;
+
+  },
+  "src/ts/playback.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildPlaybackEventsFromXml = exports.buildMidiBytesForPlayback = void 0;
+const clampTempo = (tempo) => {
+    if (!Number.isFinite(tempo))
+        return 120;
+    return Math.max(20, Math.min(300, Math.round(tempo)));
+};
+const pitchToMidi = (step, alter, octave) => {
+    const semitoneMap = {
+        C: 0,
+        D: 2,
+        E: 4,
+        F: 5,
+        G: 7,
+        A: 9,
+        B: 11,
+    };
+    const base = semitoneMap[step];
+    if (base === undefined)
+        return null;
+    return (octave + 1) * 12 + base + alter;
+};
+const keySignatureAlterByStep = (fifths) => {
+    const map = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
+    const sharpOrder = ["F", "C", "G", "D", "A", "E", "B"];
+    const flatOrder = ["B", "E", "A", "D", "G", "C", "F"];
+    const safeFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+    if (safeFifths > 0) {
+        for (let i = 0; i < safeFifths; i += 1)
+            map[sharpOrder[i]] = 1;
+    }
+    else if (safeFifths < 0) {
+        for (let i = 0; i < Math.abs(safeFifths); i += 1)
+            map[flatOrder[i]] = -1;
+    }
+    return map;
+};
+const accidentalTextToAlter = (text) => {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized)
+        return null;
+    if (normalized === "sharp")
+        return 1;
+    if (normalized === "flat")
+        return -1;
+    if (normalized === "natural")
+        return 0;
+    if (normalized === "double-sharp")
+        return 2;
+    if (normalized === "flat-flat")
+        return -2;
+    return null;
+};
+const getFirstNumber = (el, selector) => {
+    var _a, _b;
+    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
+    if (!text)
+        return null;
+    const n = Number(text);
+    return Number.isFinite(n) ? n : null;
+};
+const midiToPitchText = (midiNumber) => {
+    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+    const octave = Math.floor(n / 12) - 1;
+    return `${names[n % 12]}${octave}`;
+};
+const getMidiWriterRuntime = () => {
+    var _a;
+    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
+};
+const normalizeTicksPerQuarter = (ticksPerQuarter) => {
+    if (!Number.isFinite(ticksPerQuarter))
+        return 128;
+    return Math.max(1, Math.round(ticksPerQuarter));
+};
+const buildMidiBytesForPlayback = (events, tempo) => {
+    const midiWriter = getMidiWriterRuntime();
+    if (!midiWriter) {
+        throw new Error("midi-writer.js が読み込まれていません。");
+    }
+    const track = new midiWriter.Track();
+    track.setTempo(clampTempo(tempo));
+    const ordered = events
+        .slice()
+        .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+    const channels = Array.from(new Set(ordered.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))).sort((a, b) => a - b);
+    for (const channel of channels) {
+        if (channel === 10)
+            continue;
+        track.addEvent(new midiWriter.ProgramChangeEvent({
+            channel,
+            instrument: 5, // GM: Electric Piano 2
+            delta: 0,
+        }));
+    }
+    for (const event of ordered) {
+        const fields = {
+            pitch: [midiToPitchText(event.midiNumber)],
+            duration: `T${event.durTicks}`,
+            startTick: Math.max(0, Math.round(event.startTicks)),
+            velocity: 80,
+            channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+        };
+        track.addEvent(new midiWriter.NoteEvent(fields));
+    }
+    const writer = new midiWriter.Writer([track]);
+    const built = writer.buildFile();
+    return built instanceof Uint8Array ? built : Uint8Array.from(built);
+};
+exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
+const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
+    var _a, _b, _c, _d;
+    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror"))
+        return { tempo: 120, events: [] };
+    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (partNodes.length === 0)
+        return { tempo: 120, events: [] };
+    const channelMap = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        if (!partId)
+            continue;
+        const midiChannelText = (_c = (_b = scorePart.querySelector("midi-instrument > midi-channel")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim();
+        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
+        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
+            channelMap.set(partId, midiChannel);
+        }
+    }
+    const defaultTempo = 120;
+    const tempo = clampTempo((_d = getFirstNumber(doc, "sound[tempo]")) !== null && _d !== void 0 ? _d : defaultTempo);
+    const events = [];
+    partNodes.forEach((part, partIndex) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        const fallbackChannel = (partIndex % 16) + 1 === 10 ? 11 : (partIndex % 16) + 1;
+        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
+        let currentDivisions = 1;
+        let currentBeats = 4;
+        let currentBeatType = 4;
+        let currentFifths = 0;
+        let currentTransposeSemitones = 0;
+        let timelineDiv = 0;
+        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+            const divisions = getFirstNumber(measure, "attributes > divisions");
+            if (divisions && divisions > 0) {
+                currentDivisions = divisions;
+            }
+            const beats = getFirstNumber(measure, "attributes > time > beats");
+            const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+            if (beats && beats > 0 && beatType && beatType > 0) {
+                currentBeats = beats;
+                currentBeatType = beatType;
+            }
+            const fifths = getFirstNumber(measure, "attributes > key > fifths");
+            if (fifths !== null) {
+                currentFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+            }
+            const hasTranspose = Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
+                Boolean(measure.querySelector("attributes > transpose > octave-change"));
+            if (hasTranspose) {
+                const chromatic = (_c = getFirstNumber(measure, "attributes > transpose > chromatic")) !== null && _c !== void 0 ? _c : 0;
+                const octaveChange = (_d = getFirstNumber(measure, "attributes > transpose > octave-change")) !== null && _d !== void 0 ? _d : 0;
+                currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
+            }
+            let cursorDiv = 0;
+            let measureMaxDiv = 0;
+            const lastStartByVoice = new Map();
+            const measureAccidentalByStepOctave = new Map();
+            const keyAlterMap = keySignatureAlterByStep(currentFifths);
+            for (const child of Array.from(measure.children)) {
+                if (child.tagName === "backup" || child.tagName === "forward") {
+                    const dur = getFirstNumber(child, "duration");
+                    if (!dur || dur <= 0)
+                        continue;
+                    if (child.tagName === "backup") {
+                        cursorDiv = Math.max(0, cursorDiv - dur);
+                    }
+                    else {
+                        cursorDiv += dur;
+                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+                    }
+                    continue;
+                }
+                if (child.tagName !== "note")
+                    continue;
+                const durationDiv = getFirstNumber(child, "duration");
+                if (!durationDiv || durationDiv <= 0)
+                    continue;
+                const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
+                const isChord = Boolean(child.querySelector("chord"));
+                const isRest = Boolean(child.querySelector("rest"));
+                const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
+                if (!isChord) {
+                    lastStartByVoice.set(voice, startDiv);
+                }
+                if (!isRest) {
+                    const step = (_l = (_k = (_j = child.querySelector("pitch > step")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+                    const octave = getFirstNumber(child, "pitch > octave");
+                    const explicitAlter = getFirstNumber(child, "pitch > alter");
+                    const accidentalAlter = accidentalTextToAlter((_p = (_o = (_m = child.querySelector("accidental")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "");
+                    if (octave !== null) {
+                        const stepOctaveKey = `${step}${octave}`;
+                        let effectiveAlter = 0;
+                        if (explicitAlter !== null) {
+                            effectiveAlter = Math.round(explicitAlter);
+                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
+                        }
+                        else if (accidentalAlter !== null) {
+                            effectiveAlter = accidentalAlter;
+                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
+                        }
+                        else if (measureAccidentalByStepOctave.has(stepOctaveKey)) {
+                            effectiveAlter = (_q = measureAccidentalByStepOctave.get(stepOctaveKey)) !== null && _q !== void 0 ? _q : 0;
+                        }
+                        else {
+                            effectiveAlter = (_r = keyAlterMap[step]) !== null && _r !== void 0 ? _r : 0;
+                        }
+                        const midi = pitchToMidi(step, effectiveAlter, octave);
+                        if (midi !== null) {
+                            const soundingMidi = midi + currentTransposeSemitones;
+                            if (soundingMidi < 0 || soundingMidi > 127) {
+                                continue;
+                            }
+                            const startTicks = Math.max(0, Math.round(((timelineDiv + startDiv) / currentDivisions) * normalizedTicksPerQuarter));
+                            const durTicks = Math.max(1, Math.round((durationDiv / currentDivisions) * normalizedTicksPerQuarter));
+                            events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
+                        }
+                    }
+                }
+                if (!isChord) {
+                    cursorDiv += durationDiv;
+                }
+                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+            }
+            if (measureMaxDiv <= 0) {
+                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
+            }
+            timelineDiv += measureMaxDiv;
+        }
+    });
+    return { tempo, events };
+};
+exports.buildPlaybackEventsFromXml = buildPlaybackEventsFromXml;
 
   },
   "core/interfaces.js": function (require, module, exports) {

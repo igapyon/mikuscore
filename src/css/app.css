@@ -219,6 +219,10 @@ body {
   flex: 0 0 auto;
 }
 
+.ms-btn-icon--wide {
+  width: 1.7rem;
+}
+
 .ms-status {
   margin: 0.35rem 0;
   color: var(--md-sys-color-on-surface-variant);

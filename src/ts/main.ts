@@ -10,6 +10,7 @@ import type {
   Pitch,
   SaveResult,
 } from "../../core/interfaces";
+import { buildMidiBytesForPlayback, buildPlaybackEventsFromXml } from "./playback";
 import { sampleXml } from "./sampleXml";
 
 type UiState = {
@@ -44,28 +45,6 @@ type VerovioRuntime = {
   toolkit?: new () => VerovioToolkitApi;
 };
 
-type MidiWriterTrackApi = {
-  setTempo: (tempo: number) => void;
-  addEvent: (event: unknown) => void;
-};
-
-type MidiWriterNoteEventFields = {
-  pitch: string[];
-  duration: string;
-  wait?: string;
-  velocity?: number;
-  channel?: number;
-};
-
-type MidiWriterRuntime = {
-  Track: new () => MidiWriterTrackApi;
-  NoteEvent: new (fields: MidiWriterNoteEventFields) => unknown;
-  Writer: new (tracks: unknown[] | unknown) => {
-    buildFile: () => Uint8Array | number[];
-  };
-};
-
-
 const q = <T extends Element>(selector: string): T => {
   const el = document.querySelector(selector);
   if (!el) throw new Error(`Missing element: ${selector}`);
@@ -98,6 +77,7 @@ const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
+const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const saveModeText = q<HTMLSpanElement>("#saveModeText");
 const playbackText = q<HTMLParagraphElement>("#playbackText");
 const outputXml = q<HTMLTextAreaElement>("#outputXml");
@@ -681,6 +661,7 @@ const renderOutput = (): void => {
   saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
   outputXml.value = state.lastSaveResult?.ok ? state.lastSaveResult.xml : "";
   downloadBtn.disabled = !state.lastSaveResult?.ok;
+  downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
 };
 
 const renderControlState = (): void => {
@@ -1339,13 +1320,6 @@ const refreshNotesFromCore = (): void => {
   }
 };
 
-type PlaybackEvent = {
-  midiNumber: number;
-  startTicks: number;
-  durTicks: number;
-  channel: number;
-};
-
 type SynthSchedule = {
   tempo: number;
   events: Array<{
@@ -1358,35 +1332,8 @@ type SynthSchedule = {
 
 const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
 
-const pitchToMidi = (step: string, alter: number, octave: number): number | null => {
-  const semitoneMap: Record<string, number> = {
-    C: 0,
-    D: 2,
-    E: 4,
-    F: 5,
-    G: 7,
-    A: 9,
-    B: 11,
-  };
-  const base = semitoneMap[step];
-  if (base === undefined) return null;
-  return (octave + 1) * 12 + base + alter;
-};
-
-const getFirstNumber = (el: ParentNode, selector: string): number | null => {
-  const text = el.querySelector(selector)?.textContent?.trim();
-  if (!text) return null;
-  const n = Number(text);
-  return Number.isFinite(n) ? n : null;
-};
-
 const PLAYBACK_TICKS_PER_QUARTER = 128;
 const FIXED_PLAYBACK_WAVEFORM: OscillatorType = "sine";
-
-const clampTempo = (tempo: number): number => {
-  if (!Number.isFinite(tempo)) return 120;
-  return Math.max(20, Math.min(300, Math.round(tempo)));
-};
 
 const normalizeWaveform = (value: string): OscillatorType => {
   if (value === "square" || value === "triangle") return value;
@@ -1499,173 +1446,6 @@ const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }) => {
 
 const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
 
-const midiToPitchText = (midiNumber: number): string => {
-  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
-  const octave = Math.floor(n / 12) - 1;
-  return `${names[n % 12]}${octave}`;
-};
-
-const getMidiWriterRuntime = (): MidiWriterRuntime | null => {
-  return (window as unknown as { MidiWriter?: MidiWriterRuntime }).MidiWriter ?? null;
-};
-
-const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number): Uint8Array => {
-  const midiWriter = getMidiWriterRuntime();
-  if (!midiWriter) {
-    throw new Error("midi-writer.js が読み込まれていません。");
-  }
-  const track = new midiWriter.Track();
-  track.setTempo(clampTempo(tempo));
-
-  const ordered = events
-    .slice()
-    .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
-  let cursorTicks = 0;
-  for (const event of ordered) {
-    const waitTicks = Math.max(0, event.startTicks - cursorTicks);
-    const fields: MidiWriterNoteEventFields = {
-      pitch: [midiToPitchText(event.midiNumber)],
-      duration: `T${event.durTicks}`,
-      velocity: 80,
-      channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
-    };
-    if (waitTicks > 0) {
-      fields.wait = `T${waitTicks}`;
-    }
-    track.addEvent(new midiWriter.NoteEvent(fields));
-    cursorTicks = Math.max(cursorTicks, event.startTicks + event.durTicks);
-  }
-
-  const writer = new midiWriter.Writer([track]);
-  const built = writer.buildFile();
-  return built instanceof Uint8Array ? built : Uint8Array.from(built);
-};
-
-const buildPlaybackEventsFromXml = (xml: string): { tempo: number; events: PlaybackEvent[] } => {
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) return { tempo: 120, events: [] };
-  const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
-  if (partNodes.length === 0) return { tempo: 120, events: [] };
-
-  const channelMap = new Map<string, number>();
-  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-    const partId = scorePart.getAttribute("id") ?? "";
-    if (!partId) continue;
-    const midiChannelText = scorePart.querySelector("midi-instrument > midi-channel")?.textContent?.trim();
-    const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
-    if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
-      channelMap.set(partId, midiChannel);
-    }
-  }
-
-  const defaultTempo = 120;
-  const tempo = clampTempo(getFirstNumber(doc, "sound[tempo]") ?? defaultTempo);
-  const events: PlaybackEvent[] = [];
-
-  partNodes.forEach((part, partIndex) => {
-    const partId = part.getAttribute("id") ?? "";
-    const fallbackChannel = ((partIndex % 16) + 1 === 10) ? 11 : ((partIndex % 16) + 1);
-    const channel = channelMap.get(partId) ?? fallbackChannel;
-
-    let currentDivisions = 1;
-    let currentBeats = 4;
-    let currentBeatType = 4;
-    let currentTransposeSemitones = 0;
-    let timelineDiv = 0;
-
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const divisions = getFirstNumber(measure, "attributes > divisions");
-      if (divisions && divisions > 0) {
-        currentDivisions = divisions;
-      }
-      const beats = getFirstNumber(measure, "attributes > time > beats");
-      const beatType = getFirstNumber(measure, "attributes > time > beat-type");
-      if (beats && beats > 0 && beatType && beatType > 0) {
-        currentBeats = beats;
-        currentBeatType = beatType;
-      }
-      const hasTranspose =
-        Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
-        Boolean(measure.querySelector("attributes > transpose > octave-change"));
-      if (hasTranspose) {
-        const chromatic = getFirstNumber(measure, "attributes > transpose > chromatic") ?? 0;
-        const octaveChange = getFirstNumber(measure, "attributes > transpose > octave-change") ?? 0;
-        currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
-      }
-
-      let cursorDiv = 0;
-      let measureMaxDiv = 0;
-      const lastStartByVoice = new Map<string, number>();
-
-      for (const child of Array.from(measure.children)) {
-        if (child.tagName === "backup" || child.tagName === "forward") {
-          const dur = getFirstNumber(child, "duration");
-          if (!dur || dur <= 0) continue;
-          if (child.tagName === "backup") {
-            cursorDiv = Math.max(0, cursorDiv - dur);
-          } else {
-            cursorDiv += dur;
-            measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
-          }
-          continue;
-        }
-
-        if (child.tagName !== "note") continue;
-        const durationDiv = getFirstNumber(child, "duration");
-        if (!durationDiv || durationDiv <= 0) continue;
-
-        const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
-        const isChord = Boolean(child.querySelector("chord"));
-        const isRest = Boolean(child.querySelector("rest"));
-        const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
-        if (!isChord) {
-          lastStartByVoice.set(voice, startDiv);
-        }
-
-        if (!isRest) {
-          const step = child.querySelector("pitch > step")?.textContent?.trim() ?? "";
-          const octave = getFirstNumber(child, "pitch > octave");
-          const alter = getFirstNumber(child, "pitch > alter") ?? 0;
-          if (octave !== null) {
-            const midi = pitchToMidi(step, alter, octave);
-            if (midi !== null) {
-              const soundingMidi = midi + currentTransposeSemitones;
-              if (soundingMidi < 0 || soundingMidi > 127) {
-                continue;
-              }
-              const startTicks = Math.max(
-                0,
-                Math.round(((timelineDiv + startDiv) / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER)
-              );
-              const durTicks = Math.max(
-                1,
-                Math.round((durationDiv / currentDivisions) * PLAYBACK_TICKS_PER_QUARTER)
-              );
-              events.push({ midiNumber: soundingMidi, startTicks, durTicks, channel });
-            }
-          }
-        }
-
-        if (!isChord) {
-          cursorDiv += durationDiv;
-        }
-        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
-      }
-
-      if (measureMaxDiv <= 0) {
-        measureMaxDiv = Math.max(
-          1,
-          Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType))
-        );
-      }
-      timelineDiv += measureMaxDiv;
-    }
-  });
-
-  return { tempo, events };
-};
-
 const stopPlayback = (): void => {
   synthEngine.stop();
   isPlaying = false;
@@ -1693,7 +1473,7 @@ const startPlayback = async (): Promise<void> => {
     return;
   }
 
-  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
   const events = parsedPlayback.events;
   if (events.length === 0) {
     playbackText.textContent = "再生: 再生可能ノートなし";
@@ -1765,7 +1545,7 @@ const startMeasurePlayback = async (): Promise<void> => {
     return;
   }
 
-  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
   const events = parsedPlayback.events;
   if (events.length === 0) {
     playbackText.textContent = "再生: この小節に再生可能ノートなし";
@@ -2256,6 +2036,30 @@ const onDownload = (): void => {
   URL.revokeObjectURL(url);
 };
 
+const onDownloadMidi = (): void => {
+  if (!state.lastSuccessfulSaveXml) return;
+  const parsedPlayback = buildPlaybackEventsFromXml(
+    state.lastSuccessfulSaveXml,
+    PLAYBACK_TICKS_PER_QUARTER
+  );
+  if (parsedPlayback.events.length === 0) return;
+  let midiBytes: Uint8Array;
+  try {
+    midiBytes = buildMidiBytesForPlayback(parsedPlayback.events, parsedPlayback.tempo);
+  } catch {
+    return;
+  }
+  const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
+  new Uint8Array(midiArrayBuffer).set(midiBytes);
+  const blob = new Blob([midiArrayBuffer], { type: "audio/midi" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "mikuscore.mid";
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 inputModeFile.addEventListener("change", renderInputMode);
 inputModeSource.addEventListener("change", renderInputMode);
 fileSelectBtn.addEventListener("click", () => fileInput.click());
@@ -2296,6 +2100,7 @@ playBtn.addEventListener("click", () => {
 });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
+downloadMidiBtn.addEventListener("click", onDownloadMidi);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
