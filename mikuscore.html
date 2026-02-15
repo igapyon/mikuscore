@@ -451,6 +451,7 @@ body {
               入力（ファイル/ソース）から譜面プレビュー、ノート編集、再生確認、保存/ダウンロードまでを一画面で行えます。
               操作手順: 1) 入力を選んで読み込み 2) 譜面プレビューで選択 3) ノートを編集 4) 再生で確認して保存 / ダウンロード。
               まず読み込み後に譜面をクリックして対象ノートを選び、音高・音価を調整してください。
+              複雑な作業は MuseScore など別のソフトで実施してください。mikuscore はスマホで利用可能なソフトを目指します。
             </span>
           </span>
         </h1>
@@ -480,7 +481,14 @@ body {
           </div>
 
           <div id="fileInputBlock" class="ms-block">
-            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal">ファイルを選択</button>
+            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
+                <path d="M12 10v6"></path>
+                <path d="M9 13l3 3 3-3"></path>
+              </svg>
+              <span>ファイルを選択</span>
+            </button>
             <span id="fileNameText" class="ms-file-name">未選択</span>
             <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
           </div>
@@ -496,7 +504,14 @@ body {
           </div>
 
           <div class="ms-actions">
-            <button id="loadBtn" type="button" class="md-button md-button--primary">読み込み</button>
+            <button id="loadBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7.5h6.2l2 2H21v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <path d="M12.2 13.4V9.8"></path>
+                <path d="M10 11.9l2.2 2.2 2.2-2.2"></path>
+              </svg>
+              <span>読み込み</span>
+            </button>
           </div>
           </div>
         </details>
@@ -549,14 +564,14 @@ body {
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 7L9 18l-5-5"></path>
               </svg>
-              <span>小節編集確定</span>
+              <span>編集確定</span>
             </button>
             <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 6L6 18"></path>
                 <path d="M6 6l12 12"></path>
               </svg>
-              <span>小節編集破棄</span>
+              <span>編集破棄</span>
             </button>
             <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
@@ -636,9 +651,37 @@ body {
         <section class="md-section ms-flow-step">
           <h2 class="md-section-title"><span class="ms-step-no">4</span>保存</h2>
           <div class="ms-actions">
-            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>MusicXML出力</button>
-            <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal" disabled>MIDI出力</button>
-            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal" disabled>ABC出力</button>
+            <button id="downloadBtn" type="button" class="md-button md-button--secondary ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12"></path>
+                <path d="M8 11l4 4 4-4"></path>
+                <path d="M4 19h16"></path>
+              </svg>
+              <span>MusicXML出力</span>
+            </button>
+            <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9a6 6 0 0 1 12 0v3a6 6 0 0 1-12 0z"></path>
+                <path d="M8.5 10.2h7"></path>
+                <circle cx="9.2" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="11.1" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12.9" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
+              </svg>
+              <span>MIDI出力</span>
+            </button>
+            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect>
+                <path d="M8 9l-1.4 5"></path>
+                <path d="M6.7 11.8h2.6"></path>
+                <path d="M12.2 9h2.3a1.7 1.7 0 0 1 0 3.4h-2.3z"></path>
+                <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
+                <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
+              </svg>
+              <span>ABC出力</span>
+            </button>
           </div>
         </section>
       </div>
@@ -761,6 +804,7 @@ let selectedMeasure = null;
 let draftCore = null;
 let draftNoteNodeIds = [];
 let draftSvgIdToNodeId = new Map();
+let selectedDraftVoice = EDITABLE_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue = null;
@@ -1034,7 +1078,8 @@ const renderAlterButtons = () => {
     }
 };
 const syncStepFromSelectedDraftNote = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+    selectedDraftVoice = EDITABLE_VOICE;
     selectedDraftNoteIsRest = false;
     pitchStep.disabled = false;
     pitchStep.title = "";
@@ -1044,6 +1089,7 @@ const syncStepFromSelectedDraftNote = () => {
         btn.title = "";
     }
     if (!draftCore || !state.selectedNodeId) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -1055,6 +1101,7 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const xml = draftCore.debugSerializeCurrentXml();
     if (!xml) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -1066,6 +1113,7 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const doc = new DOMParser().parseFromString(xml, "application/xml");
     if (doc.querySelector("parsererror")) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -1080,11 +1128,12 @@ const syncStepFromSelectedDraftNote = () => {
     for (let i = 0; i < count; i += 1) {
         if (draftNoteNodeIds[i] !== state.selectedNodeId)
             continue;
+        selectedDraftVoice = ((_b = (_a = notes[i].querySelector(":scope > voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || EDITABLE_VOICE;
         const measure = notes[i].closest("measure");
         const divisions = resolveEffectiveDivisionsForMeasure(doc, measure);
         rebuildDurationPresetOptions(divisions);
         applyDurationPresetAvailability(notes[i], divisions);
-        const durationText = (_c = (_b = (_a = notes[i].querySelector(":scope > duration")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const durationText = (_e = (_d = (_c = notes[i].querySelector(":scope > duration")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
         const durationNumber = Number(durationText);
         if (Number.isInteger(durationNumber) && durationNumber > 0) {
             selectedDraftDurationValue = durationNumber;
@@ -1094,8 +1143,8 @@ const syncStepFromSelectedDraftNote = () => {
             selectedDraftDurationValue = null;
             setDurationPresetFromValue(null);
         }
-        const alterText = (_f = (_e = (_d = notes[i].querySelector(":scope > pitch > alter")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
-        const accidentalText = (_j = (_h = (_g = notes[i].querySelector(":scope > accidental")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
+        const alterText = (_h = (_g = (_f = notes[i].querySelector(":scope > pitch > alter")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : "";
+        const accidentalText = (_l = (_k = (_j = notes[i].querySelector(":scope > accidental")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
         const alterNumber = Number(alterText);
         if (alterText === "") {
             if (accidentalText === "natural") {
@@ -1137,11 +1186,11 @@ const syncStepFromSelectedDraftNote = () => {
             renderAlterButtons();
             return;
         }
-        const stepText = (_m = (_l = (_k = notes[i].querySelector(":scope > pitch > step")) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "";
+        const stepText = (_p = (_o = (_m = notes[i].querySelector(":scope > pitch > step")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
         if (isPitchStepValue(stepText)) {
             pitchStep.value = stepText;
         }
-        const octaveText = (_q = (_p = (_o = notes[i].querySelector(":scope > pitch > octave")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
+        const octaveText = (_s = (_r = (_q = notes[i].querySelector(":scope > pitch > octave")) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : "";
         const octaveNumber = Number(octaveText);
         if (Number.isInteger(octaveNumber) && octaveNumber >= 0 && octaveNumber <= 9) {
             pitchOctave.value = String(octaveNumber);
@@ -1150,6 +1199,7 @@ const syncStepFromSelectedDraftNote = () => {
         renderAlterButtons();
         return;
     }
+    selectedDraftVoice = EDITABLE_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
     setDurationPresetFromValue(null);
@@ -1301,7 +1351,7 @@ const renderControlState = () => {
     }
     splitNoteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
-    deleteBtn.disabled = !hasDraft || !hasSelection;
+    deleteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     playMeasureBtn.disabled = !hasDraft || isPlaying;
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
@@ -2175,6 +2225,10 @@ const readDuration = () => {
         return null;
     return duration;
 };
+const commandVoiceForSelection = () => {
+    const voice = String(selectedDraftVoice || "").trim();
+    return voice || EDITABLE_VOICE;
+};
 const onDurationPresetChange = () => {
     if (suppressDurationPresetEvent)
         return;
@@ -2189,7 +2243,7 @@ const onDurationPresetChange = () => {
     const command = {
         type: "change_duration",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         duration: preset,
     };
     const result = runCommand(command);
@@ -2533,7 +2587,7 @@ const onChangePitch = () => {
     const command = {
         type: "change_to_pitch",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         pitch,
     };
     runCommand(command);
@@ -2671,7 +2725,7 @@ const onChangeDuration = () => {
     const command = {
         type: "change_duration",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         duration,
     };
     runCommand(command);
@@ -2697,7 +2751,7 @@ const onInsertAfter = () => {
     const command = {
         type: "insert_note_after",
         anchorNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         note: { duration, pitch },
     };
     runCommand(command);
@@ -2709,7 +2763,7 @@ const onDelete = () => {
     const command = {
         type: "delete_note",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
     };
     runCommand(command);
 };
@@ -2722,7 +2776,7 @@ const onSplitNote = () => {
     const command = {
         type: "split_note",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
     };
     runCommand(command);
 };
@@ -2744,7 +2798,7 @@ const onConvertRestToNote = () => {
     const command = {
         type: "change_to_pitch",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         pitch,
     };
     runCommand(command);
