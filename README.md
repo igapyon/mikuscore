@@ -1,64 +1,107 @@
 # mikuscore
 
-ブラウザ上で完結する MusicXML スコアエディタのプロジェクトです。  
-このアプリの主眼は「多機能化」ではなく、**既存 MusicXML を壊さずに編集する信頼性**です。  
-MVP段階で機能を絞っているのは意図的で、まず「壊さない編集」を確実に成立させることを最優先にしています。
+## English
+mikuscore is a browser-only MusicXML score editor.
 
-## このアプリの特徴
+Its primary goal is reliability, not feature volume: preserve existing MusicXML and apply only safe, minimal edits.
 
-- 既存 MusicXML の保全を最優先
-- 最小パッチ編集（必要なノードだけ変更）
-- ラウンドトリップ安全性（`load -> edit -> save` の意味的同一性）
-- unknown / unsupported 要素の保持
-- `<backup>` / `<forward>` / 既存 `<beam>` の保持
-- 失敗時は原子的にロールバック（DOM 不変）
-- 将来 UI を差し替え可能な Core / UI 分離設計
+### Core Principles
+- Preserve existing MusicXML as much as possible.
+- Apply minimal patches (change only required nodes).
+- Keep round-trip safety (`load -> edit -> save`).
+- Preserve unknown/unsupported elements.
+- Preserve `<backup>`, `<forward>`, and existing `<beam>` nodes.
+- Roll back atomically on failure.
+- Keep Core/UI separated so UI can be replaced later.
 
-## 主要な仕様ハイライト（MVP）
+### MVP Highlights
+- If `dirty === false`, save returns original XML text (`original_noop`).
+- Overfull measures are rejected with `MEASURE_OVERFULL`.
+- Non-editable voices are rejected with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- MVP commands: `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, `split_note`.
+- Rests are not a normal edit target, but rest-to-note via `change_to_pitch` is allowed.
+- Serialization is compact (no pretty-print).
 
-- `dirty === false` の保存は入力 XML 文字列をそのまま返す（`original_noop`）
-- 小節 overfull は `MEASURE_OVERFULL` で拒否
-- 非編集対象 voice は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否
-- `change_to_pitch` / `change_duration` / `insert_note_after` / `delete_note` / `split_note` をMVPコマンドとして扱う
-- 休符は通常の編集対象外だが、`change_to_pitch` による休符音符化は許可
-- pretty-print なしでシリアライズ
+### Supported MusicXML Version
+- **MusicXML 4.0**
 
-## 対応する MusicXML バージョン
+### Distribution and Development
+- Distribution: **single-file web app** (`mikuscore.html`).
+- Runtime: offline, no external network dependency.
+- Source: split TypeScript files.
+- Build: `mikuscore-src.html` + `src/` -> `mikuscore.html`.
 
-- 対象: **MusicXML 4.0**
+### Development Commands
+- `npm run build`
+- `npm run clean`
+- `npm run typecheck`
+- `npm run test:unit`
+- `npm run test:property`
+- `npm run test:all`
 
-## 配布と開発方針
+### Documents
+- `docs/spec/SPEC.md`
+- `docs/spec/TERMS.md`
+- `docs/spec/COMMANDS.md`
+- `docs/spec/COMMAND_CATALOG.md`
+- `docs/spec/DIAGNOSTICS.md`
+- `docs/spec/TEST_MATRIX.md`
+- `docs/spec/BUILD_PROCESS.md`
+- `docs/spec/ARCHITECTURE.md`
+- `docs/spec/UI_SPEC.md`
+- `docs/spec/SCREEN_SPEC.md`
+- `TODO.md`
 
-- 配布形態: **Single-file Web App**（単一 HTML）
-- 実行条件: オフライン動作、外部依存なし
-- 開発形態: 分割 TypeScript ソース
-- ビルド方針: `mikuscore-src.html` + `src/` から `mikuscore.html` を生成
+---
 
-## 開発コマンド
+## 日本語
+ブラウザ上で完結する MusicXML スコアエディタのプロジェクトです。
 
-- `npm run build`: `mikuscore-src.html` と `src/` から `mikuscore.html`（配布物）を生成
-- `npm run clean`: 生成物（`mikuscore.html`, `src/js/main.js`）を削除
-- `npm run typecheck`: 型チェック
-- `npm run test:unit`: ユニットテスト
-- `npm run test:property`: propertyテスト
-- `npm run test:all`: 全テスト
+このアプリの主眼は「多機能化」ではなく、既存 MusicXML を壊さずに編集する信頼性です。
 
-## ドキュメント
+### 基本方針
+- 既存 MusicXML の保全を最優先。
+- 最小パッチ編集（必要なノードだけ変更）。
+- ラウンドトリップ安全性（`load -> edit -> save`）。
+- unknown / unsupported 要素を保持。
+- `<backup>` / `<forward>` / 既存 `<beam>` を保持。
+- 失敗時は原子的にロールバック。
+- 将来の UI 置換を考慮した Core / UI 分離設計。
 
-- `docs/spec/SPEC.md`: MVP コア仕様
-- `docs/spec/TERMS.md`: 用語とスコープ
-- `docs/spec/COMMANDS.md`: dispatch/save 契約
-- `docs/spec/COMMAND_CATALOG.md`: コマンド境界（payload/失敗条件）
-- `docs/spec/DIAGNOSTICS.md`: 診断コード定義
-- `docs/spec/TEST_MATRIX.md`: 必須テスト観点
-- `docs/spec/BUILD_PROCESS.md`: 単一 HTML 配布向けビルド方針
-- `docs/spec/ARCHITECTURE.md`: Core/UI分離とバージョン前提を含むアーキテクチャ方針
-- `docs/spec/UI_SPEC.md`: UI動作仕様
-- `docs/spec/SCREEN_SPEC.md`: 画面仕様（レイアウト/文言/導線）
-- `TODO.md`: 仕様・実装・テストのタスク管理
+### MVP 仕様ハイライト
+- `dirty === false` の保存は入力 XML をそのまま返す（`original_noop`）。
+- 小節 overfull は `MEASURE_OVERFULL` で拒否。
+- 非編集対象 voice は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否。
+- `change_to_pitch` / `change_duration` / `insert_note_after` / `delete_note` / `split_note` をMVPコマンドとして扱う。
+- 休符は通常の編集対象外だが、`change_to_pitch` による休符音符化は許可。
+- pretty-print なしでシリアライズ。
 
-## 現在のステータス
+### 対応 MusicXML バージョン
+- **MusicXML 4.0**
 
-仕様策定フェーズは完了し、Core 実装（TypeScript）とテスト基盤は稼働中です。  
-UI 側では 4ステップ（入力/譜面/編集/出力）のタブ式フローを採用し、MusicXML入力/ABC入力/新規作成に対応しています。  
-譜面クリック選択、休符音符化、音符分割、3形式（MusicXML/ABC/MIDI）の出力まで実装済みです。
+### 配布と開発方針
+- 配布形態: 単一 HTML（`mikuscore.html`）。
+- 実行条件: オフライン動作、外部依存なし。
+- 開発形態: 分割 TypeScript ソース。
+- ビルド方針: `mikuscore-src.html` + `src/` から `mikuscore.html` を生成。
+
+### 開発コマンド
+- `npm run build`
+- `npm run clean`
+- `npm run typecheck`
+- `npm run test:unit`
+- `npm run test:property`
+- `npm run test:all`
+
+### ドキュメント
+- `docs/spec/SPEC.md`
+- `docs/spec/TERMS.md`
+- `docs/spec/COMMANDS.md`
+- `docs/spec/COMMAND_CATALOG.md`
+- `docs/spec/DIAGNOSTICS.md`
+- `docs/spec/TEST_MATRIX.md`
+- `docs/spec/BUILD_PROCESS.md`
+- `docs/spec/ARCHITECTURE.md`
+- `docs/spec/UI_SPEC.md`
+- `docs/spec/SCREEN_SPEC.md`
+- `TODO.md`

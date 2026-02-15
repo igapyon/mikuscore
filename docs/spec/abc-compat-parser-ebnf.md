@@ -1,12 +1,14 @@
 # ABC Compat Parser EBNF (draft)
 
-ABC 2.1 を土台にしつつ、`abcjs` / `abcm2ps` でよく見かける記法差のうち、現状実装で吸収している部分を含みます。
+## English
+This document defines the grammar baseline for the project ABC parser.
+
+It is based on ABC 2.1 and includes currently supported compatibility behavior observed in real-world `abcjs` / `abcm2ps` style inputs.
 
 ## Scope
-
-- ヘッダ: `X,T,C,M,L,K,V` と `%%score`
-- ボディ: 音符、休符(`z/x`)、臨時記号、長さ、タイ(`-`)、broken rhythm(`>` `<`)、小節線、和音、連符
-- 許容拡張: `M:C`, `M:C|`, インライン文字列(`"..."`)のスキップ、単独オクターブ記号(`,`/`'`)の許容
+- Header: `X,T,C,M,L,K,V` and `%%score`
+- Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets
+- Compatibility extensions: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
 
 ## EBNF
 
@@ -74,7 +76,35 @@ digit            = "0".."9" ;
 ```
 
 ## Compatibility Notes
+- Allow broken rhythm with spaces (`A > B`).
+- Skip inline chord symbols/annotations like `"D"A` for MusicXML generation (warn only).
+- Treat `x` rest as `z` rest.
+- Support chords (`[CEG]`, `[A,,CE]`).
+- Support tuplets (`(3abc`, `(5:4:5abcde`) with duration scaling.
+- Ignore `:` in barline variants (`:|`, `|:`, `||`) without parse failure.
+- Ignore standalone `,` / `'` for compatibility.
 
+## Growth Policy
+- Parsing robustness first (warning-first policy).
+- Add regression tests when extending duration/pitch semantics.
+- Update this document’s compatibility notes whenever absorbing new real-world variance.
+
+---
+
+## 日本語
+この文書は、プロジェクトの ABC パーサーにおける文法基準を定義する。
+
+ABC 2.1 を土台とし、`abcjs` / `abcm2ps` 系の実データ差を現行実装で吸収している範囲を含む。
+
+## Scope
+- ヘッダ: `X,T,C,M,L,K,V` と `%%score`
+- ボディ: 音符、休符(`z/x`)、臨時記号、長さ、タイ(`-`)、broken rhythm(`>` `<`)、小節線、和音、連符
+- 許容拡張: `M:C`, `M:C|`, インライン文字列(`"..."`)のスキップ、単独オクターブ記号(`,`/`'`)の許容
+
+## EBNF
+上記 English セクションの EBNF を正本とする。
+
+## Compatibility Notes
 - `A > B` のような空白入り broken rhythm を許容。
 - `"D"A` のような和音名/注釈は MusicXML 生成対象外としてスキップ（警告のみ）。
 - `x` 休符を `z` と同様に扱う。
@@ -84,7 +114,6 @@ digit            = "0".."9" ;
 - 単独の `,` / `'` は互換目的で無視して継続する。
 
 ## Growth Policy
-
-- まず parse を落とさない（warning first）
-- 音価・音高の意味解釈を追加する時は回帰テストを同時追加
-- 実データ差分を吸収したら、この文書の `Compatibility Notes` へ追記
+- まず parse を落とさない（warning first）。
+- 音価・音高の意味解釈を追加する時は回帰テストを同時追加。
+- 実データ差分を吸収したら `Compatibility Notes` を更新する。

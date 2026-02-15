@@ -27,7 +27,7 @@
           </span>
           <span>mikuscore</span>
           <span class="md-tooltip-group">
-            <span class="md-info-chip" aria-label="mikuscore の詳細説明">
+            <span class="md-info-chip" aria-label="About mikuscore">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
                 <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
                 <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
@@ -35,11 +35,11 @@
               </svg>
             </span>
             <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-              mikuscore は、MusicXML の既存構造をできるだけ保持しながら編集することを重視したローカル完結型エディタです。
-              入力（ファイル/ソース）から譜面プレビュー、ノート編集、再生確認、保存/ダウンロードまでを一画面で行えます。
-              操作手順: 1) 入力を選んで読み込み 2) 譜面プレビューで選択 3) ノートを編集 4) 再生で確認して保存 / ダウンロード。
-              まず読み込み後に譜面をクリックして対象ノートを選び、音高・音価を調整してください。
-              複雑な作業は MuseScore など別のソフトで実施してください。mikuscore はスマホで利用可能なソフトを目指します。
+              mikuscore is a local editor focused on preserving existing MusicXML structure while editing.
+              From input (file/source), score preview, note editing, playback, and export/download are handled in one screen.
+              Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
+              After loading, click notes in the score to select targets, then adjust pitch and duration.
+              Use tools like MuseScore for complex work. mikuscore aims to be practical on mobile devices.
             </span>
           </span>
           <a
@@ -47,7 +47,7 @@
             class="ms-hero-link"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="mikuscore の GitHub リポジトリを開く"
+            aria-label="Open mikuscore GitHub repository"
           >
             <svg aria-hidden="true" viewBox="0 0 16 16" class="ms-btn-icon" fill="currentColor">
               <use href="#md-icon-github" xlink:href="#md-icon-github"></use>
@@ -57,45 +57,45 @@
         </h1>
       </header>
 
-      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore セクション">
+      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore sections">
         <button type="button" class="ms-top-tab is-active" data-tab="input">
           <span class="ms-top-tab-no">1</span>
-          <span class="ms-top-tab-label">入力</span>
+          <span class="ms-top-tab-label">Input</span>
         </button>
         <button type="button" class="ms-top-tab" data-tab="score">
           <span class="ms-top-tab-no">2</span>
-          <span class="ms-top-tab-label">譜面</span>
+          <span class="ms-top-tab-label">Score</span>
         </button>
         <button type="button" class="ms-top-tab" data-tab="edit">
           <span class="ms-top-tab-no">3</span>
-          <span class="ms-top-tab-label">編集</span>
+          <span class="ms-top-tab-label">Edit</span>
         </button>
         <button type="button" class="ms-top-tab" data-tab="save">
           <span class="ms-top-tab-no">4</span>
-          <span class="ms-top-tab-label">出力</span>
+          <span class="ms-top-tab-label">Export</span>
         </button>
       </div>
 
       <div class="ms-flow">
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
-          <h2 class="md-section-title"><span class="ms-step-no">1</span>入力</h2>
-          <div class="ms-radio-group" role="radiogroup" aria-label="入力フォーマット">
-            <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML入力</label>
-            <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC入力</label>
-            <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> 新規作成</label>
+          <h2 class="md-section-title"><span class="ms-step-no">1</span>Input</h2>
+          <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
+            <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
+            <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
+            <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
           </div>
 
-          <div class="ms-radio-group" role="radiogroup" aria-label="取込方法">
-            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読み込み</label>
-            <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+          <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
+            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
+            <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
           </div>
 
           <div id="newInputBlock" class="ms-block md-hidden">
             <div class="ms-stack-sm">
-              <label class="ms-field">トラック数（パート数）
+              <label class="ms-field">Track count (parts)
                 <input id="newPartCount" type="number" min="1" max="16" step="1" value="1" class="md-input" />
               </label>
-              <label class="ms-field">拍子
+              <label class="ms-field">Time signature
                 <div class="ms-form-row">
                   <input id="newTimeBeats" type="number" min="1" max="16" step="1" value="4" class="md-input" style="max-width: 8rem;" />
                   <span>/</span>
@@ -107,7 +107,7 @@
                   </select>
                 </div>
               </label>
-              <label class="ms-field">調号
+              <label class="ms-field">Key signature
                 <select id="newKeyFifths" class="md-select">
                   <option value="1">♯1 (G)</option>
                   <option value="2">♯2 (D)</option>
@@ -116,7 +116,7 @@
                   <option value="5">♯5 (B)</option>
                   <option value="6">♯6 (F#)</option>
                   <option value="7">♯7 (C#)</option>
-                  <option value="0" selected>なし (C)</option>
+                  <option value="0" selected>None (C)</option>
                   <option value="-1">♭1 (F)</option>
                   <option value="-2">♭2 (Bb)</option>
                   <option value="-3">♭3 (Eb)</option>
@@ -137,9 +137,9 @@
                 <path d="M12 10v6"></path>
                 <path d="M9 13l3 3 3-3"></path>
               </svg>
-              <span>ファイルを選択</span>
+              <span>Choose file</span>
             </button>
-            <span id="fileNameText" class="ms-file-name">未選択</span>
+            <span id="fileNameText" class="ms-file-name">No file selected</span>
             <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
           </div>
 
@@ -160,16 +160,16 @@
                 <path d="M12.2 13.4V9.8"></path>
                 <path d="M10 11.9l2.2 2.2 2.2-2.2"></path>
               </svg>
-              <span>読み込み</span>
+              <span>Load</span>
             </button>
           </div>
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="score" hidden>
           <h2 class="md-section-title">
-            <span class="ms-step-no">2</span>譜面
+            <span class="ms-step-no">2</span>Score
             <span class="md-tooltip-group">
-              <span class="md-info-chip" aria-label="譜面プレビューの説明">
+              <span class="md-info-chip" aria-label="Score preview help">
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
                   <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
                   <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
@@ -177,7 +177,7 @@
                 </svg>
               </span>
               <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-                音符をクリックすると、編集対象として選択します。
+                Click a note to select it for editing.
               </span>
             </span>
           </h2>
@@ -186,13 +186,13 @@
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <path d="M8 6.5v11l9-5.5z"></path>
               </svg>
-              <span>再生</span>
+              <span>Play</span>
             </button>
             <button id="stopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
               </svg>
-              <span>停止</span>
+              <span>Stop</span>
             </button>
           </div>
           <div id="debugScoreWrap" class="ms-debug-wrap">
@@ -201,14 +201,14 @@
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
-          <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
+          <h2 class="md-section-title"><span class="ms-step-no">3</span>Edit</h2>
           <div id="measureEmptyState" class="ms-empty-state" role="status" aria-live="polite">
             <div class="ms-empty-state-inner">
-              <div class="ms-empty-state-title">小節が未選択です</div>
-              <div class="ms-empty-state-body">譜面から小節クリックして選択してください</div>
+              <div class="ms-empty-state-title">No measure selected</div>
+              <div class="ms-empty-state-body">Click a measure in the score to select it</div>
               <div class="ms-empty-state-actions">
                 <button id="measureSelectGuideBtn" type="button" class="md-button md-button--surface">
-                  譜面へ移動
+                  Go to Score
                 </button>
               </div>
             </div>
@@ -230,7 +230,7 @@
                 <circle cx="27.3" cy="15.9" r="2.2" fill="currentColor" stroke="none"></circle>
                 <path d="M29.3 15.9V7.1"></path>
               </svg>
-              <span>休符を音符化</span>
+              <span>Convert Rest to Note</span>
             </button>
             <button id="splitNoteBtn" type="button" class="md-button md-button--tonal ms-icon-button">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -240,7 +240,7 @@
                 <circle cx="16.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
                 <path d="M19 15.5V8"></path>
               </svg>
-              <span>音符分割</span>
+              <span>Split Note</span>
             </button>
             <button id="deleteBtn" type="button" class="md-button md-button--surface ms-icon-button">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -250,68 +250,68 @@
                 <path d="M10 10v7"></path>
                 <path d="M14 10v7"></path>
               </svg>
-              <span>音符削除</span>
+              <span>Delete Note</span>
             </button>
           </div>
 
           <div class="ms-grid">
             <label class="ms-field">
-              <span class="ms-field-label">音名(step)</span>
+              <span class="ms-field-label">Pitch step</span>
               <div class="ms-step-row">
                 <input id="pitchStep" type="hidden" value="" />
-                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">休符</span>
-                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を下げる">↓</button>
-                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を上げる">↑</button>
+                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">Rest</span>
+                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Lower pitch step">↓</button>
+                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Raise pitch step">↑</button>
               </div>
             </label>
             <label class="ms-field">
-              <span class="ms-field-label">変化記号(alter)</span>
-              <div class="ms-alter-row" role="group" aria-label="変化記号">
+              <span class="ms-field-label">Accidental</span>
+              <div class="ms-alter-row" role="group" aria-label="Accidental">
                 <input id="pitchAlter" type="hidden" value="none" />
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="変化記号なし">なし</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="ダブルフラット">♭♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="フラット">♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="ナチュラル">♮</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="シャープ">♯</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="ダブルシャープ">♯♯</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="No accidental">None</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="Double flat">♭♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="Flat">♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="Natural">♮</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="Sharp">♯</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="Double sharp">♯♯</button>
               </div>
             </label>
             <input id="pitchOctave" type="hidden" value="4" />
             <label class="ms-field">
-              <span class="ms-field-label">音価(duration)</span>
-              <select id="durationPreset" class="md-select" aria-label="音価プリセット">
-                <option value="">（音価を選択）</option>
+              <span class="ms-field-label">Duration</span>
+              <select id="durationPreset" class="md-select" aria-label="Duration preset">
+                <option value="">(Select duration)</option>
               </select>
               <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
             </label>
           </div>
 
-          <p id="measurePartNameText" class="ms-track-label md-hidden">トラック名: -</p>
+          <p id="measurePartNameText" class="ms-track-label md-hidden">Track: -</p>
           <div class="ms-actions">
             <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 7L9 18l-5-5"></path>
               </svg>
-              <span>確定</span>
+              <span>Apply</span>
             </button>
             <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 6L6 18"></path>
                 <path d="M6 6l12 12"></path>
               </svg>
-              <span>破棄</span>
+              <span>Discard</span>
             </button>
             <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <path d="M8 6.5v11l9-5.5z"></path>
               </svg>
-              <span>再生</span>
+              <span>Play</span>
             </button>
           </div>
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>出力</h2>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>Export</h2>
           <div class="ms-actions">
             <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -319,7 +319,7 @@
                 <path d="M8 11l4 4 4-4"></path>
                 <path d="M4 19h16"></path>
               </svg>
-              <span>MusicXML出力</span>
+              <span>Export MusicXML</span>
             </button>
             <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -330,7 +330,7 @@
                 <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
                 <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
               </svg>
-              <span>ABC出力</span>
+              <span>Export ABC</span>
             </button>
             <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -342,7 +342,7 @@
                 <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
                 <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
               </svg>
-              <span>MIDI出力</span>
+              <span>Export MIDI</span>
             </button>
           </div>
         </section>

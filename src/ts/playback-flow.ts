@@ -103,7 +103,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     onEnded?: () => void
   ): Promise<void> => {
     if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
-      throw new Error("先に変換してください。");
+      throw new Error("Please convert first.");
     }
 
     if (!audioContext) {
@@ -182,7 +182,7 @@ type SaveCapableCore = {
 export const stopPlayback = (options: PlaybackFlowOptions): void => {
   options.engine.stop();
   options.setIsPlaying(false);
-  options.setPlaybackText("再生: 停止中");
+  options.setPlaybackText("Playback: stopped");
   options.renderControlState();
 };
 
@@ -205,13 +205,13 @@ export const startPlayback = async (
       }
     }
     options.renderAll();
-    options.setPlaybackText("再生: 保存失敗");
+    options.setPlaybackText("Playback: save failed");
     return;
   }
 
   const playbackDoc = parseMusicXmlDocument(saveResult.xml);
   if (!playbackDoc) {
-    options.setPlaybackText("再生: MusicXML解析失敗");
+    options.setPlaybackText("Playback: invalid MusicXML");
     options.renderControlState();
     return;
   }
@@ -219,7 +219,7 @@ export const startPlayback = async (
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter);
   const events = parsedPlayback.events;
   if (events.length === 0) {
-    options.setPlaybackText("再生: 再生可能ノートなし");
+    options.setPlaybackText("Playback: no playable notes");
     options.renderControlState();
     return;
   }
@@ -229,7 +229,7 @@ export const startPlayback = async (
     midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
   } catch (error) {
     options.setPlaybackText(
-      "再生: MIDI生成失敗 (" + (error instanceof Error ? error.message : String(error)) + ")"
+      "Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")"
     );
     options.renderControlState();
     return;
@@ -241,20 +241,20 @@ export const startPlayback = async (
       FIXED_PLAYBACK_WAVEFORM,
       () => {
         options.setIsPlaying(false);
-        options.setPlaybackText("再生: 停止中");
+        options.setPlaybackText("Playback: stopped");
         options.renderControlState();
       }
     );
   } catch (error) {
     options.setPlaybackText(
-      "再生: シンセ再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")"
+      "Playback: synth playback failed (" + (error instanceof Error ? error.message : String(error)) + ")"
     );
     options.renderControlState();
     return;
   }
 
   options.setIsPlaying(true);
-  options.setPlaybackText(`再生中: ノート${events.length}件 / MIDI ${midiBytes.length} bytes / 波形 sine`);
+  options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform sine`);
   options.renderControlState();
   options.renderAll();
 };
@@ -269,14 +269,14 @@ export const startMeasurePlayback = async (
   if (!saveResult.ok) {
     options.onMeasureSaveDiagnostics(saveResult.diagnostics);
     options.logDiagnostics("playback", saveResult.diagnostics);
-    options.setPlaybackText("再生: 小節保存失敗");
+    options.setPlaybackText("Playback: measure save failed");
     options.renderAll();
     return;
   }
 
   const playbackDoc = parseMusicXmlDocument(saveResult.xml);
   if (!playbackDoc) {
-    options.setPlaybackText("再生: MusicXML解析失敗");
+    options.setPlaybackText("Playback: invalid MusicXML");
     options.renderControlState();
     return;
   }
@@ -284,7 +284,7 @@ export const startMeasurePlayback = async (
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter);
   const events = parsedPlayback.events;
   if (events.length === 0) {
-    options.setPlaybackText("再生: この小節に再生可能ノートなし");
+    options.setPlaybackText("Playback: no playable notes in this measure");
     options.renderControlState();
     return;
   }
@@ -295,19 +295,19 @@ export const startMeasurePlayback = async (
       FIXED_PLAYBACK_WAVEFORM,
       () => {
         options.setIsPlaying(false);
-        options.setPlaybackText("再生: 停止中");
+        options.setPlaybackText("Playback: stopped");
         options.renderControlState();
       }
     );
   } catch (error) {
     options.setPlaybackText(
-      "再生: 小節再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")"
+      "Playback: measure playback failed (" + (error instanceof Error ? error.message : String(error)) + ")"
     );
     options.renderControlState();
     return;
   }
 
   options.setIsPlaying(true);
-  options.setPlaybackText(`再生中: 選択小節 ノート${events.length}件 / 波形 sine`);
+  options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform sine`);
   options.renderControlState();
 };

@@ -64,7 +64,7 @@ const parseAbcLengthToken = (token: string, lineNo: number): Fraction => {
     const p = token.split("/");
     return reduceFraction(Number(p[0]), Number(p[1]), { num: 1, den: 1 });
   }
-  throw new Error(`line ${lineNo}: 長さ指定を解釈できません: ${token}`);
+  throw new Error(`line ${lineNo}: Could not parse length token: ${token}`);
 };
 
 const abcLengthTokenFromFraction = (ratio: Fraction): string => {
@@ -242,7 +242,7 @@ const abcCommon = AbcCommon;
     }
 
     if (bodyEntries.length === 0) {
-      throw new Error("本文が見つかりません。ABCのノート列を入力してください。 (line 1)");
+      throw new Error("Body not found. Please provide ABC note content. (line 1)");
     }
 
     const meter = parseMeter(headers.M || "4/4", warnings);
@@ -302,7 +302,7 @@ const abcCommon = AbcCommon;
 
         if (ch === ">" || ch === "<") {
           if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
-            warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ") の前にノートがないためスキップしました。");
+            warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ")  has no preceding note; skipped.");
             idx += 1;
             continue;
           }
@@ -325,12 +325,12 @@ const abcCommon = AbcCommon;
               tupletScale = { num: q, den: n };
               tupletRemaining = r;
             } else {
-              warnings.push("line " + entry.lineNo + ": 連符記法の解釈に失敗しました: " + tupletMatch[0]);
+              warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tupletMatch[0]);
             }
             idx += tupletMatch[0].length;
             continue;
           }
-          warnings.push("line " + entry.lineNo + ": 非対応の連符記法をスキップしました: (");
+          warnings.push("line " + entry.lineNo + ": Skipped unsupported tuplet notation: (");
           idx += 1;
           continue;
         }
@@ -340,7 +340,7 @@ const abcCommon = AbcCommon;
             lastNote.tieStart = true;
             pendingTieToNext = true;
           } else {
-            warnings.push("line " + entry.lineNo + ": tie(-) の前にノートがないためスキップしました。");
+            warnings.push("line " + entry.lineNo + ": tie(-)  has no preceding note; skipped.");
           }
           idx += 1;
           continue;
@@ -353,7 +353,7 @@ const abcCommon = AbcCommon;
           } else {
             idx = text.length;
           }
-          warnings.push("line " + entry.lineNo + ': インライン文字列("...")はスキップしました。');
+          warnings.push("line " + entry.lineNo + ': Skipped inline string ("...").');
           continue;
         }
 
@@ -364,14 +364,14 @@ const abcCommon = AbcCommon;
           } else {
             idx += 1;
           }
-          warnings.push("line " + entry.lineNo + ": 装飾記法をスキップしました: " + ch + "..." + ch);
+          warnings.push("line " + entry.lineNo + ": Skipped decoration: " + ch + "..." + ch);
           continue;
         }
 
         if (ch === "[") {
           const chordResult = parseChordAt(text, idx, entry.lineNo);
           if (!chordResult) {
-            warnings.push("line " + entry.lineNo + ": 和音記法の解釈に失敗したためスキップしました。");
+            warnings.push("line " + entry.lineNo + ": Failed to parse chord notation; skipped.");
             idx += 1;
             continue;
           }
@@ -405,7 +405,7 @@ const abcCommon = AbcCommon;
           }
           const dur = durationInDivisions(absoluteLength, 960);
           if (dur <= 0) {
-            throw new Error("line " + entry.lineNo + ": 長さが不正です");
+            throw new Error("line " + entry.lineNo + ": Invalid length");
           }
           const chordNotes = [];
           for (let chordIndex = 0; chordIndex < chordResult.notes.length; chordIndex += 1) {
@@ -440,7 +440,7 @@ const abcCommon = AbcCommon;
         }
 
         if (ch === "]" || ch === ")" || ch === "{" || ch === "}") {
-          warnings.push("line " + entry.lineNo + ": 非対応記法をスキップしました: " + ch);
+          warnings.push("line " + entry.lineNo + ": Skipped unsupported notation: " + ch);
           idx += 1;
           continue;
         }
@@ -462,7 +462,7 @@ const abcCommon = AbcCommon;
 
         const pitchChar = text[idx];
         if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-          throw new Error("line " + entry.lineNo + ": ノート/休符の解釈に失敗しました: " + text.slice(idx, idx + 12));
+          throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
         }
         idx += 1;
 
@@ -507,7 +507,7 @@ const abcCommon = AbcCommon;
 
         const dur = durationInDivisions(absoluteLength, 960);
         if (dur <= 0) {
-          throw new Error("line " + entry.lineNo + ": 長さが不正です");
+          throw new Error("line " + entry.lineNo + ": Invalid length");
         }
 
         const note = buildNoteData(
@@ -524,7 +524,7 @@ const abcCommon = AbcCommon;
           note.tieStop = true;
           pendingTieToNext = false;
         } else if (note.isRest && pendingTieToNext) {
-          warnings.push("line " + entry.lineNo + ": tie(-) の後ろが休符のため tie を解除しました。");
+          warnings.push("line " + entry.lineNo + ": tie(-) was followed by a rest; tie removed.");
           pendingTieToNext = false;
         }
         note.voice = entry.voiceId;
@@ -543,7 +543,7 @@ const abcCommon = AbcCommon;
     }
 
     if (noteCount === 0) {
-      throw new Error("ノートまたは休符が見つかりませんでした。 (line 1)");
+      throw new Error("No notes or rests were found. (line 1)");
     }
 
     const orderedVoiceIds = parseScoreVoiceOrder(scoreDirective, declaredVoiceIds);
@@ -699,7 +699,7 @@ const abcCommon = AbcCommon;
     }
     const m = normalized.match(/^(\d+)\/(\d+)$/);
     if (!m) {
-      warnings.push("拍子 M: の形式が不正なため 4/4 を使用しました: " + raw);
+      warnings.push("Invalid meter M: format; defaulted to 4/4: " + raw);
       return { beats: 4, beatType: 4 };
     }
     return { beats: Number(m[1]), beatType: Number(m[2]) };
@@ -708,12 +708,12 @@ const abcCommon = AbcCommon;
   function parseFraction(raw, fieldName, warnings) {
     const parsed = abcCommon.parseFractionText(raw, { num: 1, den: 8 });
     if (parsed.num === 1 && parsed.den === 8 && !/^\s*\d+\/\d+\s*$/.test(String(raw || ""))) {
-      warnings.push(fieldName + " の形式が不正なため 1/8 を使用しました: " + raw);
+      warnings.push(fieldName + " has invalid format; defaulted to 1/8: " + raw);
       return parsed;
     }
     const m = String(raw || "").match(/^\s*(\d+)\/(\d+)\s*$/);
     if (!m || !Number(m[1]) || !Number(m[2])) {
-      warnings.push(fieldName + " の値が不正なため 1/8 を使用しました: " + raw);
+      warnings.push(fieldName + " has invalid value; defaulted to 1/8: " + raw);
       return { num: 1, den: 8 };
     }
     return parsed;
@@ -726,7 +726,7 @@ const abcCommon = AbcCommon;
       return { fifths };
     }
 
-    warnings.push("K: 非対応キーのため C を使用しました: " + key);
+    warnings.push("K: unsupported key; defaulted to C: " + key);
     return { fifths: 0 };
   }
 
@@ -826,7 +826,7 @@ const abcCommon = AbcCommon;
     }
 
     if (octave < 0 || octave > 9) {
-      throw new Error("line " + lineNo + ": オクターブが範囲外です");
+      throw new Error("line " + lineNo + ": Octave out of range");
     }
 
     let alter = null;

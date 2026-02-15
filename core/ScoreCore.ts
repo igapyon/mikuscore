@@ -115,7 +115,7 @@ export class ScoreCore {
         ) {
           return this.fail(
             "MVP_INVALID_COMMAND_PAYLOAD",
-            "この小節/voice には3連コンテキストがないため、3連音価は適用できません。"
+            "Tuplet durations are not allowed because this measure/voice has no tuplet context."
           );
         }
         const oldDuration = getDurationValue(target) ?? 0;

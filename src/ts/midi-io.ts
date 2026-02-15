@@ -102,7 +102,7 @@ const normalizeTicksPerQuarter = (ticksPerQuarter: number): number => {
 export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number): Uint8Array => {
   const midiWriter = getMidiWriterRuntime();
   if (!midiWriter) {
-    throw new Error("midi-writer.js が読み込まれていません。");
+    throw new Error("midi-writer.js is not loaded.");
   }
   const tracksById = new Map<string, PlaybackEvent[]>();
   for (const event of events) {
@@ -157,7 +157,7 @@ export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number
   });
 
   if (!midiTracks.length) {
-    throw new Error("MIDI化するノートがありません。");
+    throw new Error("No notes available for MIDI conversion.");
   }
 
   const writer = new midiWriter.Writer(midiTracks);

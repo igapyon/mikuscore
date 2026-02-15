@@ -247,7 +247,7 @@ const renderInputMode = (): void => {
   inputModeSource.disabled = isNewType;
   const loadLabel = loadBtn.querySelector("span");
   if (loadLabel) {
-    loadLabel.textContent = isNewType ? "新規作成" : "読み込み";
+    loadLabel.textContent = isNewType ? "Create" : "Load";
   }
 
   fileInput.accept = isAbcType
@@ -300,16 +300,16 @@ const renderNewPartClefControls = (): void => {
 
     const label = document.createElement("label");
     label.className = "ms-field";
-    label.textContent = `パート${i + 1} 記号`;
+    label.textContent = `Part ${i + 1} clef`;
 
     const select = document.createElement("select");
     select.className = "md-select";
     select.setAttribute("data-part-clef", "true");
 
     const options: Array<{ value: string; label: string }> = [
-      { value: "treble", label: "ト音記号" },
-      { value: "alto", label: "ハ音記号" },
-      { value: "bass", label: "ヘ音記号" },
+      { value: "treble", label: "Treble clef" },
+      { value: "alto", label: "Alto clef" },
+      { value: "bass", label: "Bass clef" },
     ];
     for (const optionDef of options) {
       const option = document.createElement("option");
@@ -329,8 +329,8 @@ const renderStatus = (): void => {
   if (!statusText) return;
   const dirty = core.isDirty();
   statusText.textContent = state.loaded
-    ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
-    : "未ロード（まず読み込みしてください）";
+    ? `Loaded / dirty=${dirty}  / notes=${state.noteNodeIds.length}`
+    : "Not loaded (please load first)";
 };
 
 const renderNotes = (): void => {
@@ -344,7 +344,7 @@ const renderNotes = (): void => {
   noteSelect.innerHTML = "";
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = draftNoteNodeIds.length === 0 ? "(ノートなし)" : "(選択してください)";
+  placeholder.textContent = draftNoteNodeIds.length === 0 ? "(No notes)" : "(Select one)";
   noteSelect.appendChild(placeholder);
 
   for (const nodeId of draftNoteNodeIds) {
@@ -370,7 +370,7 @@ const renderPitchStepValue = (): void => {
   if (isPitchStepValue(step)) {
     pitchStepValue.textContent = step;
   } else {
-    pitchStepValue.textContent = "休符";
+    pitchStepValue.textContent = "Rest";
   }
 };
 
@@ -405,27 +405,27 @@ const resolveEffectiveDivisionsForMeasure = (
 const rebuildDurationPresetOptions = (divisions: number): void => {
   const safeDivisions = Number.isInteger(divisions) && divisions > 0 ? divisions : DEFAULT_DIVISIONS;
   const defs: Array<{ label: string; num: number; den: number }> = [
-    { label: "全音符", num: 4, den: 1 },
-    { label: "付点2分音符", num: 3, den: 1 },
-    { label: "2分音符", num: 2, den: 1 },
-    { label: "2分3連(1音)", num: 4, den: 3 },
-    { label: "付点4分音符", num: 3, den: 2 },
-    { label: "4分音符", num: 1, den: 1 },
-    { label: "4分3連(1音)", num: 2, den: 3 },
-    { label: "付点8分音符", num: 3, den: 4 },
-    { label: "8分音符", num: 1, den: 2 },
-    { label: "8分3連(1音)", num: 1, den: 3 },
-    { label: "付点16分音符", num: 3, den: 8 },
-    { label: "16分音符", num: 1, den: 4 },
-    { label: "16分3連(1音)", num: 1, den: 6 },
-    { label: "32分音符", num: 1, den: 8 },
-    { label: "64分音符", num: 1, den: 16 },
+    { label: "Whole note", num: 4, den: 1 },
+    { label: "Dotted half note", num: 3, den: 1 },
+    { label: "Half note", num: 2, den: 1 },
+    { label: "Half-note triplet (1 note)", num: 4, den: 3 },
+    { label: "Dotted quarter note", num: 3, den: 2 },
+    { label: "Quarter note", num: 1, den: 1 },
+    { label: "Quarter-note triplet (1 note)", num: 2, den: 3 },
+    { label: "Dotted eighth note", num: 3, den: 4 },
+    { label: "Eighth note", num: 1, den: 2 },
+    { label: "Eighth-note triplet (1 note)", num: 1, den: 3 },
+    { label: "Dotted sixteenth note", num: 3, den: 8 },
+    { label: "Sixteenth note", num: 1, den: 4 },
+    { label: "Sixteenth-note triplet (1 note)", num: 1, den: 6 },
+    { label: "3Half note", num: 1, den: 8 },
+    { label: "6Quarter note", num: 1, den: 16 },
   ];
 
   durationPreset.innerHTML = "";
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = "（音価を選択）";
+  placeholder.textContent = "(Select duration)";
   durationPreset.appendChild(placeholder);
 
   const used = new Set<number>();
@@ -460,7 +460,7 @@ const setDurationPresetFromValue = (duration: number | null): void => {
   }
   const custom = document.createElement("option");
   custom.value = String(duration);
-  custom.textContent = `カスタム(${duration})`;
+  custom.textContent = `Custom(${duration})`;
   custom.className = "ms-duration-custom";
   durationPreset.appendChild(custom);
   durationPreset.value = custom.value;
@@ -504,8 +504,8 @@ const applyDurationPresetAvailability = (selectedNote: Element, divisions: numbe
     const isTriplet = durationValueIsTriplet(value, divisions);
     const unavailable = isTriplet && !hasTupletContext;
     option.disabled = unavailable;
-    const baseLabel = option.textContent?.replace("（この小節では不可）", "").trim() ?? "";
-    option.textContent = unavailable ? `${baseLabel}（この小節では不可）` : baseLabel;
+    const baseLabel = option.textContent?.replace(" (not allowed in this measure)", "").trim() ?? "";
+    option.textContent = unavailable ? `${baseLabel} (not allowed in this measure)` : baseLabel;
   }
 };
 
@@ -525,7 +525,7 @@ const syncStepFromSelectedDraftNote = (): void => {
   selectedDraftNoteIsRest = false;
   pitchStep.disabled = false;
   pitchStep.title = "";
-  pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
+  pitchOctave.title = "Automatically adjusted with pitch step up/down.";
   for (const btn of pitchAlterBtns) {
     btn.disabled = false;
     btn.title = "";
@@ -614,12 +614,12 @@ const syncStepFromSelectedDraftNote = (): void => {
       selectedDraftNoteIsRest = true;
       pitchStep.value = "";
       pitchStep.disabled = true;
-      pitchStep.title = "休符は音高を持たないため、音高変更はできません。";
+      pitchStep.title = "Rests do not have pitch. Pitch changes are disabled.";
       for (const btn of pitchAlterBtns) {
         btn.disabled = true;
-        btn.title = "休符は音高を持たないため、音高変更はできません。";
+        btn.title = "Rests do not have pitch. Pitch changes are disabled.";
       }
-      pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
+      pitchOctave.title = "Automatically adjusted with pitch step up/down.";
       renderPitchStepValue();
       renderAlterButtons();
       return;
@@ -647,7 +647,7 @@ const syncStepFromSelectedDraftNote = (): void => {
 
 const renderMeasureEditorState = (): void => {
   if (!selectedMeasure || !draftCore) {
-    measurePartNameText.textContent = "トラック名: -";
+    measurePartNameText.textContent = "Track: -";
     measurePartNameText.classList.add("md-hidden");
     measureEmptyState.classList.remove("md-hidden");
     measureEditorWrap.classList.add("md-hidden");
@@ -658,7 +658,7 @@ const renderMeasureEditorState = (): void => {
 
   const partName = partIdToName.get(selectedMeasure.partId) ?? selectedMeasure.partId;
   measurePartNameText.textContent =
-    `トラック名: ${partName} / 選択中: トラック=${selectedMeasure.partId} / 小節=${selectedMeasure.measureNumber}`;
+    `Track: ${partName} / Selected: track=${selectedMeasure.partId}  / measure=${selectedMeasure.measureNumber}`;
   measurePartNameText.classList.remove("md-hidden");
   measureEmptyState.classList.add("md-hidden");
   measureEditorWrap.classList.remove("md-hidden");
@@ -716,7 +716,7 @@ const renderDiagnostics = (): void => {
   const save = state.lastSaveResult;
 
   if (!dispatch && !save) {
-    diagArea.textContent = "診断なし";
+    diagArea.textContent = "No diagnostics";
     return;
   }
 
@@ -745,7 +745,7 @@ const renderDiagnostics = (): void => {
   }
 
   if (!diagArea.firstChild) {
-    diagArea.textContent = "診断なし";
+    diagArea.textContent = "No diagnostics";
   }
 };
 
@@ -757,14 +757,14 @@ const renderUiMessage = (): void => {
   if (dispatch) {
     if (!dispatch.ok && dispatch.diagnostics.length > 0) {
       const d = dispatch.diagnostics[0];
-      uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+      uiMessage.textContent = `Error: ${d.message} (${d.code})`;
       uiMessage.classList.add("ms-ui-message--error");
       uiMessage.classList.remove("md-hidden");
       return;
     }
     if (dispatch.warnings.length > 0) {
       const w = dispatch.warnings[0];
-      uiMessage.textContent = `警告: ${w.message} (${w.code})`;
+      uiMessage.textContent = `Warning: ${w.message} (${w.code})`;
       uiMessage.classList.add("ms-ui-message--warning");
       uiMessage.classList.remove("md-hidden");
       return;
@@ -774,7 +774,7 @@ const renderUiMessage = (): void => {
   const save = state.lastSaveResult;
   if (save && !save.ok && save.diagnostics.length > 0) {
     const d = save.diagnostics[0];
-    uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+    uiMessage.textContent = `Error: ${d.message} (${d.code})`;
     uiMessage.classList.add("ms-ui-message--error");
     uiMessage.classList.remove("md-hidden");
     return;
@@ -1079,14 +1079,14 @@ const initializeMeasureEditor = (location: NoteLocation): void => {
   if (!xml) return;
   const extracted = extractMeasureEditorXml(xml, location.partId, location.measureNumber);
   if (!extracted) {
-    setUiMappingDiagnostic("選択小節の抽出に失敗しました。");
+    setUiMappingDiagnostic("Failed to extract selected measure.");
     return;
   }
   const nextDraft = new ScoreCore({ editableVoice: EDITABLE_VOICE });
   try {
     nextDraft.load(extracted);
   } catch (error) {
-    setUiMappingDiagnostic(`選択小節の読み込みに失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+    setUiMappingDiagnostic(`Failed to load the selected measure: ${error instanceof Error ? error.message : String(error)}`);
     return;
   }
 
@@ -1112,16 +1112,16 @@ const onVerovioScoreClick = (event: MouseEvent): void => {
     });
   }
   if (!nodeId) {
-    setUiMappingDiagnostic("クリック位置からノートを特定できませんでした。");
+    setUiMappingDiagnostic("Could not resolve a note from the clicked position.");
     return;
   }
   if (!state.noteNodeIds.includes(nodeId)) {
-    setUiMappingDiagnostic(`クリック要素に対応する nodeId が見つかりませんでした: ${nodeId}`);
+    setUiMappingDiagnostic(`No nodeId matched the clicked element: ${nodeId}`);
     return;
   }
   const location = nodeIdToLocation.get(nodeId);
   if (!location) {
-    setUiMappingDiagnostic(`nodeId からトラック/小節を特定できませんでした: ${nodeId}`);
+    setUiMappingDiagnostic(`Could not resolve track/measure from nodeId: ${nodeId}`);
     return;
   }
   initializeMeasureEditor(location);
@@ -1316,7 +1316,7 @@ const onDurationPresetChange = (): void => {
       diagnostics: [
         {
           code: first.code,
-          message: "この音価には変更できません。小節内の長さ上限を超えます。",
+          message: "This duration is not allowed. It exceeds the measure capacity.",
         },
       ],
     };
@@ -1382,7 +1382,7 @@ const loadFromText = (xml: string): void => {
       diagnostics: [
         {
           code: "MVP_COMMAND_EXECUTION_FAILED",
-          message: err instanceof Error ? err.message : "読み込みに失敗しました。",
+          message: err instanceof Error ? err.message : "Load failed.",
         },
       ],
       warnings: [],
@@ -1517,7 +1517,7 @@ const requireSelectedNode = (): string | null => {
       dirtyChanged: false,
       changedNodeIds: [],
       affectedMeasureNumbers: [],
-      diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "先に小節を選択してください。" }],
+      diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "Select a measure first." }],
       warnings: [],
     };
     renderAll();
@@ -1530,7 +1530,7 @@ const requireSelectedNode = (): string | null => {
     dirtyChanged: false,
     changedNodeIds: [],
     affectedMeasureNumbers: [],
-    diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "ノートを選択してください。" }],
+    diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "Select a note." }],
     warnings: [],
   };
   renderAll();
@@ -1547,7 +1547,7 @@ const onChangePitch = (): void => {
       dirtyChanged: false,
       changedNodeIds: [],
       affectedMeasureNumbers: [],
-      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "pitch 入力が不正です。" }],
+      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid pitch input." }],
       warnings: [],
     };
     renderAll();
@@ -1647,14 +1647,14 @@ const onMeasureApply = (): void => {
     draftSave.xml
   );
   if (!merged) {
-    setUiMappingDiagnostic("小節確定に失敗しました。");
+    setUiMappingDiagnostic("Failed to apply measure changes.");
     return;
   }
 
   try {
     core.load(merged);
   } catch (error) {
-    setUiMappingDiagnostic(`小節確定後の再読込に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+    setUiMappingDiagnostic(`Failed to reload after applying measure changes: ${error instanceof Error ? error.message : String(error)}`);
     return;
   }
 
@@ -1682,7 +1682,7 @@ const onChangeDuration = (): void => {
       dirtyChanged: false,
       changedNodeIds: [],
       affectedMeasureNumbers: [],
-      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "duration 入力が不正です。" }],
+      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid duration input." }],
       warnings: [],
     };
     renderAll();
@@ -1709,7 +1709,7 @@ const onInsertAfter = (): void => {
       dirtyChanged: false,
       changedNodeIds: [],
       affectedMeasureNumbers: [],
-      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "挿入ノート入力が不正です。" }],
+      diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid inserted note input." }],
       warnings: [],
     };
     renderAll();
@@ -1822,7 +1822,7 @@ newPartCountInput.addEventListener("input", renderNewPartClefControls);
 fileSelectBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
   const f = fileInput.files?.[0];
-  fileNameText.textContent = f ? f.name : "未選択";
+  fileNameText.textContent = f ? f.name : "No file selected";
 });
 loadBtn.addEventListener("click", () => {
   void onLoadClick();

@@ -19,7 +19,7 @@ export type RenderScorePreviewParams = {
 
 export const renderScorePreview = async (params: RenderScorePreviewParams): Promise<void> => {
   if (!params.xml) {
-    params.setMetaText("描画対象XMLがありません");
+    params.setMetaText("No XML to render.");
     params.setSvgHtml("");
     params.setSvgIdMap(new Map<string, string>());
     return;
@@ -28,13 +28,13 @@ export const renderScorePreview = async (params: RenderScorePreviewParams): Prom
   const renderBundle = params.buildRenderXmlForVerovio(params.xml);
   const renderDoc = renderBundle.renderDoc;
   if (!renderDoc) {
-    params.setMetaText("描画失敗: MusicXML解析失敗");
+    params.setMetaText("Render failed: invalid MusicXML.");
     params.setSvgHtml("");
     params.setSvgIdMap(new Map<string, string>());
     return;
   }
 
-  params.setMetaText("verovio 描画中...");
+  params.setMetaText("Rendering with verovio...");
   try {
     const { svg, pageCount } = await renderMusicXmlDomToSvg(renderDoc, {
       pageWidth: 20000,
@@ -81,7 +81,7 @@ export const renderScorePreview = async (params: RenderScorePreviewParams): Prom
   } catch (error: unknown) {
     if (!params.isRenderSeqCurrent(params.renderSeq)) return;
     const message = error instanceof Error ? error.message : String(error);
-    params.setMetaText("描画失敗: " + message);
+    params.setMetaText("Render failed: " + message);
     params.setSvgHtml("");
     params.setSvgIdMap(new Map<string, string>());
   }
@@ -112,7 +112,7 @@ export const renderMeasureEditorPreview = async (
 
   const sourceDoc = params.parseMusicXmlDocument(params.xml);
   if (!sourceDoc) {
-    params.setHtml("描画失敗: MusicXML解析失敗");
+    params.setHtml("Render failed: invalid MusicXML.");
     params.setSvgIdMap(new Map<string, string>());
     return;
   }
@@ -124,12 +124,12 @@ export const renderMeasureEditorPreview = async (
   );
   const renderDoc = renderBundle.renderDoc;
   if (!renderDoc) {
-    params.setHtml("描画失敗: MusicXML解析失敗");
+    params.setHtml("Render failed: invalid MusicXML.");
     params.setSvgIdMap(new Map<string, string>());
     return;
   }
 
-  params.setHtml("描画中...");
+  params.setHtml("Rendering...");
   try {
     const { svg } = await renderMusicXmlDomToSvg(renderDoc, {
       pageWidth: 6000,
@@ -150,7 +150,7 @@ export const renderMeasureEditorPreview = async (
     params.setSvgIdMap(map);
     params.onRendered();
   } catch (error: unknown) {
-    params.setHtml(`描画失敗: ${error instanceof Error ? error.message : String(error)}`);
+    params.setHtml(`Render failed: ${error instanceof Error ? error.message : String(error)}`);
     params.setSvgIdMap(new Map<string, string>());
   }
 };

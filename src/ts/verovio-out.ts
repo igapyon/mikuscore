@@ -102,11 +102,11 @@ const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
   verovioInitPromise = (async () => {
     const runtime = getVerovioRuntime();
     if (!runtime || typeof runtime.toolkit !== "function") {
-      throw new Error("verovio.js が読み込まれていません。");
+      throw new Error("verovio.js is not loaded.");
     }
     const moduleObj = runtime.module;
     if (!moduleObj) {
-      throw new Error("verovio module が見つかりません。");
+      throw new Error("verovio module was not found.");
     }
 
     if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
@@ -115,7 +115,7 @@ const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
         const timeoutId = window.setTimeout(() => {
           if (settled) return;
           settled = true;
-          reject(new Error("verovio 初期化待機がタイムアウトしました。"));
+          reject(new Error("Timed out while waiting for verovio initialization."));
         }, 8000);
 
         const complete = () => {
@@ -156,7 +156,7 @@ export const renderMusicXmlDomToSvg = async (
 ): Promise<VerovioRenderResult> => {
   const toolkit = await ensureVerovioToolkit();
   if (!toolkit) {
-    throw new Error("verovio toolkit の初期化に失敗しました。");
+    throw new Error("Failed to initialize verovio toolkit.");
   }
   // Keep source DOM intact and only sanitize slur mismatch on render copy.
   const renderDoc = cloneXmlDocument(doc);
@@ -165,15 +165,15 @@ export const renderMusicXmlDomToSvg = async (
   toolkit.setOptions(options);
   const loaded = toolkit.loadData(xml);
   if (!loaded) {
-    throw new Error("verovio loadData が失敗しました。");
+    throw new Error("verovio loadData failed.");
   }
   const pageCount = toolkit.getPageCount();
   if (!Number.isFinite(pageCount) || pageCount < 1) {
-    throw new Error("verovio pageCount が不正です。");
+    throw new Error("verovio returned an invalid pageCount.");
   }
   const svg = toolkit.renderToSVG(1, {});
   if (!svg) {
-    throw new Error("verovio SVG 生成に失敗しました。");
+    throw new Error("Failed to generate SVG with verovio.");
   }
   return { svg, pageCount };
 };
