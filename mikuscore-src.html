@@ -113,9 +113,15 @@
 
         <section class="md-section ms-flow-step">
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
-          <p id="statusText" class="ms-status">未ロード</p>
-          <label for="noteSelect" class="md-label">ノート選択 (nodeId)</label>
-          <select id="noteSelect" class="md-select"></select>
+          <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
+          <p id="measureSelectionText" class="ms-status">小節未選択（譜面プレビューをクリックしてください）</p>
+          <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
+            <div id="measureEditorArea" class="ms-debug-score"></div>
+          </div>
+          <div class="ms-actions">
+            <button id="measureApplyBtn" type="button" class="md-button md-button--primary" disabled>確定</button>
+            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface" disabled>破棄</button>
+          </div>
 
           <div class="ms-grid">
             <label class="ms-field">音名(step)
@@ -167,8 +173,14 @@
         <summary>詳細情報</summary>
         <section class="md-section">
           <h2 class="md-section-title">状態</h2>
+          <p id="statusText" class="ms-status">未ロード</p>
           <p id="playbackText" class="ms-status">再生: 停止中</p>
           <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
+        </section>
+        <section class="md-section">
+          <h2 class="md-section-title">ノート選択</h2>
+          <label for="noteSelect" class="md-label">ノート選択 (nodeId)</label>
+          <select id="noteSelect" class="md-select"></select>
         </section>
         <section class="md-section">
           <h2 class="md-section-title">診断</h2>
