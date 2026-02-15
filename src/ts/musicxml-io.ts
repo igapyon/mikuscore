@@ -184,12 +184,20 @@ export const replaceMeasureInMainDocument = (
   const targetMeasure = findMeasureByNumber(targetPart, measureNumber);
   if (!targetMeasure) return null;
 
+  const replacementForMain = replacementMeasure.cloneNode(true) as Element;
+  const replacementAttrs = replacementForMain.querySelector(":scope > attributes");
+  const targetAttrs = targetMeasure.querySelector(":scope > attributes");
+  // Editing preview injects effective attributes for rendering.
+  // Do not introduce them into the main score when the original measure had none.
+  if (replacementAttrs && !targetAttrs) {
+    replacementAttrs.remove();
+  }
+
   const next = cloneXmlDocument(mainDoc);
   const nextPart = findPartById(next, partId);
   if (!nextPart) return null;
   const nextTargetMeasure = findMeasureByNumber(nextPart, measureNumber);
   if (!nextTargetMeasure) return null;
-  nextTargetMeasure.replaceWith(next.importNode(replacementMeasure, true));
+  nextTargetMeasure.replaceWith(next.importNode(replacementForMain, true));
   return next;
 };
-

@@ -1711,17 +1711,7 @@ const onConvertRestToNote = (): void => {
   if (!selectedDraftNoteIsRest) return;
   const targetNodeId = requireSelectedNode();
   if (!targetNodeId) return;
-
-  const stepRaw = pitchStep.value.trim();
-  const step: Pitch["step"] = isPitchStepValue(stepRaw) ? stepRaw : "C";
-  const octaveRaw = Number(pitchOctave.value);
-  const octave = Number.isInteger(octaveRaw) ? octaveRaw : 4;
-  const alterText = normalizeAlterValue(pitchAlter.value);
-  const alterNum = Number(alterText);
-  const pitch: Pitch =
-    alterText !== "none" && Number.isInteger(alterNum) && alterNum >= -2 && alterNum <= 2
-      ? { step, octave, alter: alterNum as -2 | -1 | 0 | 1 | 2 }
-      : { step, octave };
+  const pitch: Pitch = { step: "C", octave: 4 };
 
   const command: ChangePitchCommand = {
     type: "change_to_pitch",
