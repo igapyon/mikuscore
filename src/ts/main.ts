@@ -10,8 +10,7 @@ import type {
   Pitch,
   SaveResult,
 } from "../../core/interfaces";
-import { AbcCompatParser, exportMusicXmlDomToAbc } from "./abc-io";
-import { buildMidiBytesForPlayback, buildPlaybackEventsFromMusicXmlDoc } from "./midi-io";
+import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
@@ -26,8 +25,19 @@ import {
   triggerFileDownload,
 } from "./download-flow";
 import { resolveLoadFlow } from "./load-flow";
+import {
+  createBasicWaveSynthEngine,
+  PLAYBACK_TICKS_PER_QUARTER,
+  startMeasurePlayback as startMeasurePlaybackFlow,
+  startPlayback as startPlaybackFlow,
+  stopPlayback as stopPlaybackFlow,
+  type PlaybackFlowOptions,
+} from "./playback-flow";
+import {
+  renderMeasureEditorPreview as renderMeasureEditorPreviewFlow,
+  renderScorePreview as renderScorePreviewFlow,
+} from "./preview-flow";
 import { sampleXml } from "./sampleXml";
-import { renderMusicXmlDomToSvg } from "./verovio-out";
 
 type UiState = {
   loaded: boolean;
@@ -1098,122 +1108,51 @@ const renderScorePreview = (): void => {
     (state.loaded ? core.debugSerializeCurrentXml() : null) ??
     xmlInput.value.trim() ??
     "";
-  if (!xml) {
-    debugScoreMeta.textContent = "描画対象XMLがありません";
-    debugScoreArea.innerHTML = "";
-    currentSvgIdToNodeId = new Map();
-    return;
-  }
-  const renderBundle = buildRenderXmlForVerovio(xml);
-  const renderDoc = renderBundle.renderDoc;
-  if (!renderDoc) {
-    debugScoreMeta.textContent = "描画失敗: MusicXML解析失敗";
-    debugScoreArea.innerHTML = "";
-    currentSvgIdToNodeId = new Map();
-    return;
-  }
-  debugScoreMeta.textContent = "verovio 描画中...";
-  void renderMusicXmlDomToSvg(renderDoc, {
-    pageWidth: 20000,
-    pageHeight: 3000,
-    scale: 40,
-    breaks: "none",
-    mnumInterval: 1,
-    adjustPageHeight: 1,
-    footer: "none",
-    header: "none",
-  })
-    .then(({ svg, pageCount }) => {
-      if (renderSeq !== verovioRenderSeq) return;
-
-      const measures = renderDoc.querySelectorAll("part > measure").length;
-      debugScoreArea.innerHTML = svg;
-
-      const renderedNoteIds = deriveRenderedNoteIds(debugScoreArea);
-      let mapMode = "direct";
-      if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-        currentSvgIdToNodeId = buildFallbackSvgIdMap(state.noteNodeIds, renderedNoteIds);
-        mapMode = "fallback-seq";
-      } else {
-        currentSvgIdToNodeId = renderBundle.svgIdToNodeId;
-      }
-      if (DEBUG_LOG) {
-        console.warn("[mikuscore][click-map] render map prepared:", {
-          mapMode,
-          mappedNotes: currentSvgIdToNodeId.size,
-          renderedNoteIds: renderedNoteIds.slice(0, 20),
-        });
-      }
+  void renderScorePreviewFlow({
+    renderSeq,
+    isRenderSeqCurrent: (seq) => seq === verovioRenderSeq,
+    xml,
+    noteNodeIds: state.noteNodeIds,
+    setMetaText: (text) => {
+      debugScoreMeta.textContent = text;
+    },
+    setSvgHtml: (svgHtml) => {
+      debugScoreArea.innerHTML = svgHtml;
+    },
+    setSvgIdMap: (map) => {
+      currentSvgIdToNodeId = map;
+    },
+    buildRenderXmlForVerovio,
+    deriveRenderedNoteIds,
+    buildFallbackSvgIdMap,
+    onRendered: () => {
       highlightSelectedMeasureInMainPreview();
-
-      debugScoreMeta.textContent = [
-        "engine=verovio",
-        "measures=" + measures,
-        "mode=long-horizontal",
-        "pages=" + pageCount,
-        "click-map-notes=" + renderBundle.noteCount,
-        "map-mode=" + mapMode,
-      ].join(" ");
-    })
-    .catch((error: unknown) => {
-      if (renderSeq !== verovioRenderSeq) return;
-      const message = error instanceof Error ? error.message : String(error);
-      debugScoreMeta.textContent = "描画失敗: " + message;
-      debugScoreArea.innerHTML = "";
-      currentSvgIdToNodeId = new Map();
-    });
+    },
+    debugLog: DEBUG_LOG,
+    renderedRoot: debugScoreArea,
+  });
 };
 
 const renderMeasureEditorPreview = (): void => {
-  if (!draftCore || !selectedMeasure) {
-    measureEditorArea.innerHTML = "";
-    draftSvgIdToNodeId = new Map<string, string>();
-    return;
-  }
-  const xml = draftCore.debugSerializeCurrentXml();
-  if (!xml) {
-    measureEditorArea.innerHTML = "";
-    draftSvgIdToNodeId = new Map<string, string>();
-    return;
-  }
-  const sourceDoc = parseMusicXmlDocument(xml);
-  if (!sourceDoc) {
-    measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
-    draftSvgIdToNodeId = new Map<string, string>();
-    return;
-  }
-  const renderBundle = buildRenderDocWithNodeIds(sourceDoc, draftNoteNodeIds.slice(), "mks-draft");
-  const renderDoc = renderBundle.renderDoc;
-  if (!renderDoc) {
-    measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
-    draftSvgIdToNodeId = new Map<string, string>();
-    return;
-  }
-  measureEditorArea.innerHTML = "描画中...";
-  void renderMusicXmlDomToSvg(renderDoc, {
-    pageWidth: 6000,
-    pageHeight: 2200,
-    scale: 58,
-    breaks: "none",
-    adjustPageHeight: 1,
-    footer: "none",
-    header: "none",
-  })
-    .then(({ svg }) => {
-      measureEditorArea.innerHTML = svg;
-
-      const renderedNoteIds = deriveRenderedNoteIds(measureEditorArea);
-      if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-        draftSvgIdToNodeId = buildFallbackSvgIdMap(draftNoteNodeIds, renderedNoteIds);
-      } else {
-        draftSvgIdToNodeId = renderBundle.svgIdToNodeId;
-      }
+  void renderMeasureEditorPreviewFlow({
+    hasDraft: Boolean(draftCore && selectedMeasure),
+    xml: draftCore?.debugSerializeCurrentXml() ?? "",
+    draftNoteNodeIds,
+    setHtml: (html) => {
+      measureEditorArea.innerHTML = html;
+    },
+    setSvgIdMap: (map) => {
+      draftSvgIdToNodeId = map;
+    },
+    buildRenderDocWithNodeIds,
+    parseMusicXmlDocument,
+    deriveRenderedNoteIds,
+    buildFallbackSvgIdMap,
+    onRendered: () => {
       highlightSelectedDraftNoteInEditor();
-    })
-    .catch((error: unknown) => {
-      measureEditorArea.innerHTML = `描画失敗: ${error instanceof Error ? error.message : String(error)}`;
-      draftSvgIdToNodeId = new Map<string, string>();
-    });
+    },
+    renderedRoot: measureEditorArea,
+  });
 };
 
 const refreshNotesFromCore = (): void => {
@@ -1234,284 +1173,50 @@ const refreshNotesFromCore = (): void => {
   }
 };
 
-type SynthSchedule = {
-  tempo: number;
-  events: Array<{
-    midiNumber: number;
-    start: number;
-    ticks: number;
-    channel: number;
-  }>;
-};
-
-const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
-
-const PLAYBACK_TICKS_PER_QUARTER = 128;
-const FIXED_PLAYBACK_WAVEFORM: OscillatorType = "sine";
-
-const normalizeWaveform = (value: string): OscillatorType => {
-  if (value === "square" || value === "triangle") return value;
-  return "sine";
-};
-
-const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }) => {
-  const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
-    ? Math.max(1, Math.round(options.ticksPerQuarter))
-    : 128;
-  let audioContext: AudioContext | null = null;
-  let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
-  let synthStopTimer: number | null = null;
-
-  const scheduleBasicWaveNote = (
-    event: SynthSchedule["events"][number],
-    startAt: number,
-    bodyDuration: number,
-    waveform: OscillatorType
-  ): number => {
-    if (!audioContext) return startAt;
-    const attack = 0.005;
-    const release = 0.03;
-    const endAt = startAt + bodyDuration;
-    const oscillator = audioContext.createOscillator();
-    oscillator.type = waveform;
-    oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
-
-    const gainNode = audioContext.createGain();
-    const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
-    gainNode.gain.setValueAtTime(gainLevel, endAt);
-    gainNode.gain.linearRampToValueAtTime(0.0001, endAt + release);
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    oscillator.start(startAt);
-    oscillator.stop(endAt + release + 0.01);
-    oscillator.onended = () => {
-      try {
-        oscillator.disconnect();
-        gainNode.disconnect();
-      } catch {
-        // ignore cleanup failure
-      }
-    };
-    activeSynthNodes.push({ oscillator, gainNode });
-    return endAt + release + 0.02;
-  };
-
-  const stop = (): void => {
-    if (synthStopTimer !== null) {
-      window.clearTimeout(synthStopTimer);
-      synthStopTimer = null;
-    }
-    for (const node of activeSynthNodes) {
-      try {
-        node.oscillator.stop();
-      } catch {
-        // ignore already-stopped nodes
-      }
-      try {
-        node.oscillator.disconnect();
-        node.gainNode.disconnect();
-      } catch {
-        // ignore disconnect error
-      }
-    }
-    activeSynthNodes = [];
-  };
-
-  const playSchedule = async (
-    schedule: SynthSchedule,
-    waveform: OscillatorType,
-    onEnded?: () => void
-  ): Promise<void> => {
-    if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
-      throw new Error("先に変換してください。");
-    }
-
-    if (!audioContext) {
-      audioContext = new AudioContext();
-    }
-    stop();
-    await audioContext.resume();
-
-    const normalizedWaveform = normalizeWaveform(waveform);
-    const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
-    const baseTime = audioContext.currentTime + 0.04;
-    let latestEndTime = baseTime;
-
-    for (const event of schedule.events) {
-      const startAt = baseTime + event.start * secPerTick;
-      const bodyDuration = Math.max(0.04, event.ticks * secPerTick);
-      latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform));
-    }
-
-    const waitMs = Math.max(0, Math.ceil((latestEndTime - audioContext.currentTime) * 1000));
-    synthStopTimer = window.setTimeout(() => {
-      activeSynthNodes = [];
-      if (typeof onEnded === "function") {
-        onEnded();
-      }
-    }, waitMs);
-  };
-
-  return { playSchedule, stop };
-};
-
 const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
-
-const stopPlayback = (): void => {
-  synthEngine.stop();
-  isPlaying = false;
-  playbackText.textContent = "再生: 停止中";
-  renderControlState();
-};
-
-const startPlayback = async (): Promise<void> => {
-  if (!state.loaded || isPlaying) return;
-
-  const saveResult = core.save();
-  state.lastSaveResult = saveResult;
-  if (!saveResult.ok) {
-    logDiagnostics("playback", saveResult.diagnostics);
-    if (saveResult.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
-      const debugXml = core.debugSerializeCurrentXml();
-      if (debugXml) {
-        dumpOverfullContext(debugXml, EDITABLE_VOICE);
-      } else if (DEBUG_LOG) {
-        console.warn("[mikuscore][debug] no in-memory XML to dump.");
-      }
-    }
-    renderAll();
-    playbackText.textContent = "再生: 保存失敗";
-    return;
-  }
-
-  const playbackDoc = parseMusicXmlDocument(saveResult.xml);
-  if (!playbackDoc) {
-    playbackText.textContent = "再生: MusicXML解析失敗";
-    renderControlState();
-    return;
-  }
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
-  const events = parsedPlayback.events;
-  if (events.length === 0) {
-    playbackText.textContent = "再生: 再生可能ノートなし";
-    renderControlState();
-    return;
-  }
-  let midiBytes: Uint8Array;
-  try {
-    midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
-  } catch (error) {
-    playbackText.textContent =
-      "再生: MIDI生成失敗 (" +
-      (error instanceof Error ? error.message : String(error)) +
-      ")";
-    renderControlState();
-    return;
-  }
-
-  const schedule: SynthSchedule = {
-    tempo: parsedPlayback.tempo,
-    events: events
-      .slice()
-      .sort((a, b) =>
-        a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks
-      )
-      .map((event) => ({
-        midiNumber: event.midiNumber,
-        start: event.startTicks,
-        ticks: event.durTicks,
-        channel: event.channel,
-      })),
-  };
-
-  try {
-    await synthEngine.playSchedule(schedule, FIXED_PLAYBACK_WAVEFORM, () => {
-      isPlaying = false;
-      playbackText.textContent = "再生: 停止中";
-      renderControlState();
-    });
-  } catch (error) {
-    playbackText.textContent =
-      "再生: シンセ再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")";
-    renderControlState();
-    return;
-  }
-
-  isPlaying = true;
-  playbackText.textContent = `再生中: ノート${events.length}件 / MIDI ${midiBytes.length} bytes / 波形 sine`;
-  renderControlState();
-  renderAll();
-};
-
-const startMeasurePlayback = async (): Promise<void> => {
-  if (!draftCore || isPlaying) return;
-
-  const saveResult = draftCore.save();
-  if (!saveResult.ok) {
+const playbackFlowOptions: PlaybackFlowOptions = {
+  engine: synthEngine,
+  ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER,
+  editableVoice: EDITABLE_VOICE,
+  debugLog: DEBUG_LOG,
+  getIsPlaying: () => isPlaying,
+  setIsPlaying: (playing) => {
+    isPlaying = playing;
+  },
+  setPlaybackText: (text) => {
+    playbackText.textContent = text;
+  },
+  renderControlState,
+  renderAll,
+  logDiagnostics: (scope, diagnostics) => {
+    logDiagnostics(scope, diagnostics);
+  },
+  dumpOverfullContext,
+  onFullSaveResult: (saveResult) => {
+    state.lastSaveResult = saveResult;
+  },
+  onMeasureSaveDiagnostics: (diagnostics) => {
     state.lastDispatchResult = {
       ok: false,
       dirtyChanged: false,
       changedNodeIds: [],
       affectedMeasureNumbers: [],
-      diagnostics: saveResult.diagnostics,
+      diagnostics,
       warnings: [],
     };
-    logDiagnostics("playback", saveResult.diagnostics);
-    playbackText.textContent = "再生: 小節保存失敗";
-    renderAll();
-    return;
-  }
+  },
+};
 
-  const playbackDoc = parseMusicXmlDocument(saveResult.xml);
-  if (!playbackDoc) {
-    playbackText.textContent = "再生: MusicXML解析失敗";
-    renderControlState();
-    return;
-  }
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
-  const events = parsedPlayback.events;
-  if (events.length === 0) {
-    playbackText.textContent = "再生: この小節に再生可能ノートなし";
-    renderControlState();
-    return;
-  }
+const stopPlayback = (): void => {
+  stopPlaybackFlow(playbackFlowOptions);
+};
 
-  try {
-    await synthEngine.playSchedule(
-      {
-        tempo: parsedPlayback.tempo,
-        events: events
-          .slice()
-          .sort((a, b) =>
-            a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks
-          )
-          .map((event) => ({
-            midiNumber: event.midiNumber,
-            start: event.startTicks,
-            ticks: event.durTicks,
-            channel: event.channel,
-          })),
-      },
-      FIXED_PLAYBACK_WAVEFORM,
-      () => {
-        isPlaying = false;
-        playbackText.textContent = "再生: 停止中";
-        renderControlState();
-      }
-    );
-  } catch (error) {
-    playbackText.textContent =
-      "再生: 小節再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")";
-    renderControlState();
-    return;
-  }
+const startPlayback = async (): Promise<void> => {
+  await startPlaybackFlow(playbackFlowOptions, { isLoaded: state.loaded, core });
+};
 
-  isPlaying = true;
-  playbackText.textContent = `再生中: 選択小節 ノート${events.length}件 / 波形 sine`;
-  renderControlState();
+const startMeasurePlayback = async (): Promise<void> => {
+  await startMeasurePlaybackFlow(playbackFlowOptions, { draftCore });
 };
 
 const readSelectedPitch = (): Pitch | null => {
@@ -1615,182 +1320,6 @@ const autoSaveCurrentXml = (): void => {
     return;
   }
   state.lastSuccessfulSaveXml = result.xml;
-};
-
-type AbcParsedMeta = {
-  title: string;
-  composer: string;
-  meter: { beats: number; beatType: number };
-  keyInfo: { fifths: number };
-};
-
-type AbcParsedNote = {
-  isRest: boolean;
-  duration: number;
-  type?: string;
-  step?: string;
-  octave?: number;
-  alter?: number | null;
-  accidentalText?: string | null;
-  tieStart?: boolean;
-  tieStop?: boolean;
-  chord?: boolean;
-  voice?: string;
-};
-
-type AbcParsedPart = {
-  partId: string;
-  partName: string;
-  clef?: string;
-  transpose?: { chromatic: number } | null;
-  measures: AbcParsedNote[][];
-};
-
-type AbcParsedResult = {
-  meta: AbcParsedMeta;
-  parts: AbcParsedPart[];
-  warnings?: string[];
-};
-
-const xmlEscape = (text: string): string =>
-  text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-
-const normalizeTypeForMusicXml = (t?: string): string => {
-  const raw = String(t || "").trim();
-  if (!raw) return "quarter";
-  if (raw === "16th" || raw === "32nd" || raw === "64th" || raw === "128th") return raw;
-  if (raw === "whole" || raw === "half" || raw === "quarter" || raw === "eighth") return raw;
-  return "quarter";
-};
-
-const clefXmlFromAbcClef = (rawClef?: string): string => {
-  const clef = String(rawClef || "").trim().toLowerCase();
-  if (clef === "bass" || clef === "f") {
-    return "<clef><sign>F</sign><line>4</line></clef>";
-  }
-  if (clef === "alto" || clef === "c3") {
-    return "<clef><sign>C</sign><line>3</line></clef>";
-  }
-  if (clef === "tenor" || clef === "c4") {
-    return "<clef><sign>C</sign><line>4</line></clef>";
-  }
-  return "<clef><sign>G</sign><line>2</line></clef>";
-};
-
-const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
-  const parts = parsed.parts && parsed.parts.length > 0 ? parsed.parts : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
-  const measureCount = parts.reduce((max, part) => Math.max(max, part.measures.length), 1);
-  const title = parsed.meta?.title || "mikuscore";
-  const composer = parsed.meta?.composer || "Unknown";
-  const beats = parsed.meta?.meter?.beats || 4;
-  const beatType = parsed.meta?.meter?.beatType || 4;
-  const fifths = Number.isFinite(parsed.meta?.keyInfo?.fifths) ? parsed.meta.keyInfo.fifths : 0;
-
-  const partListXml = parts
-    .map((part, index) => {
-      const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
-      return [
-        `<score-part id="${xmlEscape(part.partId)}">`,
-        `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
-        `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
-        `<midi-channel>${midiChannel}</midi-channel>`,
-        `<midi-program>6</midi-program>`,
-        "</midi-instrument>",
-        "</score-part>",
-      ].join("");
-    })
-    .join("");
-
-  const partBodyXml = parts
-    .map((part) => {
-      const measuresXml: string[] = [];
-      for (let i = 0; i < measureCount; i += 1) {
-        const measureNo = i + 1;
-        const notes = part.measures[i] ?? [];
-        const header =
-          i === 0
-            ? [
-                "<attributes>",
-                "<divisions>960</divisions>",
-                `<key><fifths>${Math.round(fifths)}</fifths></key>`,
-                `<time><beats>${Math.round(beats)}</beats><beat-type>${Math.round(beatType)}</beat-type></time>`,
-                part.transpose && Number.isFinite(part.transpose.chromatic)
-                  ? `<transpose><chromatic>${Math.round(part.transpose.chromatic)}</chromatic></transpose>`
-                  : "",
-                clefXmlFromAbcClef(part.clef),
-                "</attributes>",
-              ].join("")
-            : "";
-
-        const notesXml =
-          notes.length > 0
-            ? notes
-                .map((note) => {
-                  const chunks: string[] = ["<note>"];
-                  if (note.chord) chunks.push("<chord/>");
-                  if (note.isRest) {
-                    chunks.push("<rest/>");
-                  } else {
-                    const step = /^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C";
-                    const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(note.octave as number))) : 4;
-                    chunks.push("<pitch>");
-                    chunks.push(`<step>${step}</step>`);
-                    if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
-                      chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
-                    }
-                    chunks.push(`<octave>${octave}</octave>`);
-                    chunks.push("</pitch>");
-                  }
-                  const duration = Math.max(1, Math.round(Number(note.duration) || 1));
-                  chunks.push(`<duration>${duration}</duration>`);
-                  chunks.push(`<voice>${xmlEscape(String(note.voice || "1"))}</voice>`);
-                  chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
-                  if (note.accidentalText) {
-                    chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);
-                  }
-                  if (note.tieStart) chunks.push('<tie type="start"/>');
-                  if (note.tieStop) chunks.push('<tie type="stop"/>');
-                  if (note.tieStart || note.tieStop) {
-                    chunks.push("<notations>");
-                    if (note.tieStart) chunks.push('<tied type="start"/>');
-                    if (note.tieStop) chunks.push('<tied type="stop"/>');
-                    chunks.push("</notations>");
-                  }
-                  chunks.push("</note>");
-                  return chunks.join("");
-                })
-                .join("")
-            : '<note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>';
-
-        measuresXml.push(`<measure number="${measureNo}">${header}${notesXml}</measure>`);
-      }
-      return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
-    })
-    .join("");
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<score-partwise version="4.0">',
-    `<work><work-title>${xmlEscape(title)}</work-title></work>`,
-    `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`,
-    `<part-list>${partListXml}</part-list>`,
-    partBodyXml,
-    "</score-partwise>",
-  ].join("");
-};
-
-const convertAbcToMusicXml = (abcSource: string): string => {
-  const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
-    defaultTitle: "mikuscore",
-    defaultComposer: "Unknown",
-    inferTransposeFromPartName: true,
-  }) as AbcParsedResult;
-  return buildMusicXmlFromAbcParsed(parsed);
 };
 
 const loadFromText = (xml: string, collapseInputSection: boolean): void => {
