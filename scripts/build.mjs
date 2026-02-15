@@ -7,6 +7,8 @@ const ENTRY_TS = "src/ts/main.ts";
 const ENTRY_JS = ENTRY_TS.replace(/\.ts$/, ".js");
 const TEMPLATE = "mikuscore-src.html";
 const DIST = "mikuscore.html";
+const TOKEN_CSS_PATH = "src/css/md3/token-spec.css";
+const CORE_CSS_PATH = "src/css/md3/core-spec.css";
 const CSS_PATH = "src/css/app.css";
 const JS_OUT = "src/js/main.js";
 const TMP_DIR = ".mikuscore-build";
@@ -94,8 +96,16 @@ const bundle = (tsModules) => {
 
 const inlineTemplate = (jsBundle) => {
   const template = readText(TEMPLATE);
+  const tokenCss = readText(TOKEN_CSS_PATH);
+  const coreCss = readText(CORE_CSS_PATH);
   const css = readText(CSS_PATH);
 
+  if (!template.includes("href=\"src/css/md3/token-spec.css\"")) {
+    throw new Error("Template must include src/css/md3/token-spec.css link tag.");
+  }
+  if (!template.includes("href=\"src/css/md3/core-spec.css\"")) {
+    throw new Error("Template must include src/css/md3/core-spec.css link tag.");
+  }
   if (!template.includes("href=\"src/css/app.css\"")) {
     throw new Error("Template must include src/css/app.css link tag.");
   }
@@ -103,8 +113,18 @@ const inlineTemplate = (jsBundle) => {
     throw new Error("Template must include src/js/main.js script tag.");
   }
 
-  const withCss = template.replace(
-    /<link\s+rel="stylesheet"\s+href="src\/css\/app\.css"\s*\/>/,
+  const withTokenCss = template.replace(
+    /<link[^>]*href="src\/css\/md3\/token-spec\.css"[^>]*>/,
+    `<style>\n${tokenCss}\n</style>`
+  );
+
+  const withCoreCss = withTokenCss.replace(
+    /<link[^>]*href="src\/css\/md3\/core-spec\.css"[^>]*>/,
+    `<style>\n${coreCss}\n</style>`
+  );
+
+  const withCss = withCoreCss.replace(
+    /<link[^>]*href="src\/css\/app\.css"[^>]*>/,
     `<style>\n${css}\n</style>`
   );
 

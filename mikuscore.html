@@ -4,8 +4,828 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mikuscore</title>
-  <link rel="stylesheet" href="src/css/md3/token-spec.css" />
-  <link rel="stylesheet" href="src/css/md3/core-spec.css" />
+  <style>
+/* local-html-tools MD3 Token Spec v1.0.0 (2026-02-08) */
+:root {
+  --md-danger: #b3261e;
+  --md-state-layer: rgba(98, 0, 238, 0.12);
+  --md-sys-color-background: #f6f4f8;
+  --md-sys-color-focus-ring: rgba(98, 0, 238, 0.35);
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-on-secondary: #00332c;
+  --md-sys-color-on-surface: #1c1b1f;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-on-tertiary: #FFFFFF;
+  --md-sys-color-on-tertiary-container: #3d2e5a;
+  --md-sys-color-outline: #c8c5d0;
+  --md-sys-color-primary: #6200ee;
+  --md-sys-color-secondary: #03dac6;
+  --md-sys-color-shadow: rgba(0, 0, 0, 0.2);
+  --md-sys-color-state-layer: rgba(98, 0, 238, 0.08);
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-variant: #f4f1f7;
+  --md-sys-color-tertiary: #7D5260;
+  --md-sys-color-tertiary-container: #f3e8fd;
+  --md-typography-body-medium: 1rem;
+  --md-typography-body-small: 0.875rem;
+  --md-typography-headline-large: 1.85rem;
+  --md-typography-title-medium: 1.1rem;
+  --md-typography-title-small: 1.05rem;
+  --status-later: #ff9800;
+  --status-ok: #4caf50;
+  --status-todo: #00bcd4;
+}
+
+</style>
+  <style>
+/* local-html-tools MD3 Core Spec v1.0.2 (2026-02-08) */
+.md-page {
+  background: var(--md-sys-color-background); color: var(--md-sys-color-on-surface); padding: 24px; min-height: 100vh;
+}
+
+.md-shell {
+  max-width: 980px; margin: 0 auto;
+}
+
+.md-card {
+  background: var(--md-sys-color-surface);
+  border-radius: 18px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 30px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e9e3f0;
+  padding: 28px;
+}
+
+.md-headline {
+  font-size: 1.8rem; font-weight: 700; margin-bottom: 0.75rem;
+}
+
+.md-subtitle {
+  color: var(--md-sys-color-on-surface-variant); font-size: 0.95rem;
+}
+
+.md-section {
+  margin-top: 28px;
+}
+
+.md-section-title {
+  font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem;
+}
+
+.md-title-info-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.md-title-info-row .md-section-title {
+  margin: 0;
+}
+
+.md-title-info-row .md-info-chip {
+  margin-left: 0;
+}
+
+.md-grid {
+  display: grid; gap: 16px;
+}
+
+.md-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+  margin-bottom: 0.35rem;
+}
+
+.md-required {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.54rem;
+  font-weight: 600;
+  background: #ECEAF1;
+  color: #49454F;
+}
+
+.md-input, .md-textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.md-textarea {
+  min-height: 6.5rem;
+}
+
+.md-input:focus, .md-textarea:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-field-block {
+  margin-bottom: 1rem;
+}
+
+.md-button {
+  border-radius: 999px;
+  padding: 0.6rem 1.2rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.md-button--primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: 0 3px 8px rgba(98, 0, 238, 0.28);
+}
+
+.md-button--primary:hover {
+  background: #4f00c9;
+}
+
+.md-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0edf5;
+  color: #3f3b46;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.md-tooltip-group {
+  position: relative; display: inline-flex; align-items: center;
+}
+
+.md-tooltip-content {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
+  z-index: 50;
+  width: 20rem;
+  max-width: 90vw;
+}
+
+.md-tooltip-group:hover .md-tooltip-content {
+  opacity: 1;
+}
+
+.md-tooltip {
+  background: #2b2831;
+  color: #f7f4fb;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.35;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.md-info-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  background: transparent;
+  color: #4a4458;
+  margin-left: 0.2rem;
+}
+
+.md-info-icon {
+  width: 18px; height: 18px;
+}
+
+.md-code-block {
+  position: relative; margin-top: 0.5rem;
+}
+
+.md-code {
+  display: block;
+  padding: 0.75rem;
+  padding-right: 2.5rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--md-sys-color-surface-variant);
+  border: 1px solid #e5e0ec;
+  color: #1f1b2d;
+  min-height: 2.5rem;
+}
+
+.md-copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: #f7f2fa;
+  border: none;
+  cursor: pointer;
+}
+
+.md-snackbar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2b2831;
+  color: #f7f4fb;
+  padding: 0.6rem 1rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  font-size: 0.85rem;
+}
+
+.md-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(98, 0, 238, 0.12);
+  color: var(--md-sys-color-primary);
+  margin-left: 6px;
+}
+
+.md-section-wrap {
+  display: grid; gap: 1.75rem;
+}
+
+.md-section-card {
+  padding: 1.25rem 1.25rem 1.5rem;
+  border-radius: 24px;
+  background: var(--md-sys-color-surface);
+  border: 1px solid #ece7f3;
+  box-shadow: 0 2px 10px rgba(41, 35, 58, 0.06);
+}
+
+.md-section-subtitle {
+  font-size: var(--md-typography-body-small);
+  color: #6a6675;
+  margin-bottom: 1rem;
+}
+
+.md-section-title--spaced {
+  margin-top: 1rem;
+}
+
+.md-grid-3 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.md-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+}
+
+.md-card-title {
+  font-size: var(--md-typography-title-small); font-weight: 600; color: #2f2a35;
+}
+
+.md-card-arrow {
+  color: #8f8a98; font-size: 1.2rem;
+}
+
+.md-card-desc {
+  margin-top: 0.5rem;
+  font-size: var(--md-typography-body-small);
+  color: #5f5a6b;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.md-info-chip:focus-visible {
+  box-shadow: 0 0 0 3px var(--md-sys-color-focus-ring);
+}
+
+.md-tooltip--wide {
+  width: min(32rem, 90vw);
+}
+
+.md-tooltip--rich {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.md-menu-button {
+  position: absolute; top: 16px; right: 16px;
+}
+
+.md-menu-panel {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  background: var(--md-sys-color-surface);
+  border: 1px solid #e6e1ee;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  min-width: 160px;
+  z-index: 20;
+}
+
+.md-menu-link {
+  display: block; padding: 8px 16px; color: var(--md-sys-color-on-surface);
+}
+
+.md-menu-link:hover {
+  background: #f2edf8;
+}
+
+.md-headline__icon {
+  margin-right: 0.5rem;
+}
+
+.md-section-title--lg {
+  font-size: 1.1rem;
+}
+
+.md-input, .md-select, .md-textarea {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
+}
+
+.md-input:focus, .md-select:focus, .md-textarea:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-icon-btn:hover {
+  background: #e6e1ee;
+}
+
+.md-icon-btn--small {
+  width: 32px; height: 32px; border-radius: 16px;
+}
+
+.md-icon-btn--surface {
+  background: #f7f2fa;
+}
+
+.md-snackbar.md-visible {
+  opacity: 1; pointer-events: auto;
+}
+
+.md-hidden {
+  display: none;
+}
+
+    .md-sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
+    }
+    .md-preview .md-sr-only { display: none !important; }
+
+.md-stack-sm > * + * {
+  margin-top: 0.75rem;
+}
+
+.md-radio-row { display: flex; align-items: flex-start; gap: 0.5rem; }
+.md-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: #3f3b46;
+}
+
+.md-radio input {
+  accent-color: var(--md-sys-color-primary);
+}
+
+.md-switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.md-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: #f0ebf7;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 150ms ease, box-shadow 150ms ease;
+  box-shadow: inset 0 0 0 1px #cfc7dc;
+}
+
+.md-switch::after {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: #ffffff;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.md-switch-input {
+  position: absolute; opacity: 0; pointer-events: none;
+}
+
+.md-switch-input:checked + .md-switch {
+  background: rgba(98, 0, 238, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(98, 0, 238, 0.6);
+}
+
+.md-switch-input:checked + .md-switch::after {
+  transform: translateX(20px);
+  background: #ffffff;
+}
+
+.md-tab-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid #e6e1ee;
+  margin-bottom: 1rem;
+}
+
+.md-tab-button {
+  border: 1px solid #e6e1ee;
+  border-bottom: none;
+  background: #f3f1f7;
+  padding: 0.4rem 0.9rem;
+  margin-bottom: -1px;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #3f3b46;
+}
+
+.md-tab-button[aria-selected="true"] {
+  background: #ffffff;
+  border-color: #c8c5d0;
+  color: #1c1b1f;
+}
+
+.md-tab-panel {
+  border: 1px solid #e6e1ee;
+  border-top: none;
+  padding: 1rem;
+  background: #ffffff;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.md-label--row {
+  margin-bottom: 0.5rem;
+}
+
+.md-input, .md-select {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
+}
+
+.md-input:focus, .md-select:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-form-grid {
+  display: grid; gap: 0.75rem;
+}
+
+.md-button--tonal {
+  background: #f0edf5;
+  color: #3f3b46;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.md-button--tonal:hover {
+  background: #e6e1ee;
+}
+
+.md-chip-row {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;
+}
+
+.md-tooltip--narrow {
+  width: 18rem;
+}
+
+.md-surface-card {
+  max-width: 48rem; margin: 0 auto; padding: 24px; position: relative;
+}
+
+.md-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.25rem 0;
+}
+
+.md-input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  font-size: 1rem;
+  color: var(--md-sys-color-on-surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.md-input:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-button:hover {
+  box-shadow: 0 4px 10px rgba(98, 0, 238, 0.35);
+}
+
+.md-button:active {
+  opacity: 0.7;
+}
+
+.md-button--surface {
+  background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface); border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button--secondary {
+  background: var(--md-sys-color-secondary); color: var(--md-sys-color-on-secondary); margin-bottom: 10px;
+}
+
+.md-button-row {
+  display: flex; gap: 15px; height: clamp(120px, 20vh, 220px); margin-bottom: 10px;
+}
+
+.md-button--hero {
+  font-size: clamp(1.2rem, 4vw, 1.6rem);
+}
+
+.md-field {
+  position: relative; min-width: 200px;
+}
+
+.md-field__label {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  padding: 0 6px;
+  background: var(--md-sys-color-surface);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+  letter-spacing: 0.02em;
+}
+
+.md-field .md-select {
+  appearance: none;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  padding: 0.8rem 2.2rem 0.8rem 0.9rem;
+  font-size: 0.9rem;
+  color: var(--md-sys-color-on-surface);
+  min-width: 200px;
+  line-height: 1.2;
+  background-image: linear-gradient(45deg, transparent 50%, #6c6775 50%), linear-gradient(135deg, #6c6775 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.md-field .md-select:focus {
+  outline: none; border-color: var(--md-sys-color-primary); box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-stack-md > * + * {
+  margin-top: 0.75rem;
+}
+
+.md-grid-2 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.md-form-row {
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+}
+
+.md-form-row--nowrap {
+  flex-wrap: nowrap;
+}
+
+.md-label--muted {
+  color: #3f3b46;
+}
+
+.md-label--block {
+  margin-bottom: 0.5rem;
+}
+
+.md-snackbar-host {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  padding: 0.5rem 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.md-snackbar-host.md-visible {
+  opacity: 1; pointer-events: auto;
+}
+
+.md-button:disabled {
+  background: #e6e1ee;
+  color: #9a94a7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.md-textarea:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-input-block {
+  margin-bottom: 1rem;
+}
+
+.md-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.md-output-wrap {
+  position: relative;
+}
+
+.md-output {
+  background: var(--md-sys-color-surface-variant);
+}
+
+.md-stack-lg > * + * {
+  margin-top: 1.5rem;
+}
+
+.md-form-row--start {
+  align-items: flex-start;
+}
+
+.md-input:disabled, .md-select:disabled {
+  background: #f3f0f7;
+}
+
+.md-choice-card {
+  border: 1px solid #e2dcec;
+  border-radius: 16px;
+  padding: 1rem;
+  background: #ffffff;
+}
+
+.md-choice-card--muted {
+  background: #f7f3fb;
+}
+
+.md-choice-row {
+  display: flex; align-items: center; gap: 0.75rem;
+}
+
+.md-choice-row input {
+  margin: 0;
+}
+
+.md-choice-sub {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #6a6675;
+}
+
+.md-choice-sub small {
+  font-size: 0.75rem; color: #7b7784;
+}
+
+.md-chip--primary {
+  background: #e2d9f7;
+  color: #4a1e9e;
+}
+
+.md-chip--warn {
+  background: #f7ece1;
+  color: #8a4b0f;
+}
+
+.md-field-stack {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;
+}
+
+.md-label--full {
+  width: 100%;
+}
+
+.md-switch-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; color: var(--md-sys-color-on-surface); font-size: 0.95rem;
+}
+
+.md-input-wrap {
+  position: relative;
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+
+.md-input-wrap .md-input {
+  padding-right: 3rem;
+}
+
+.md-input-action {
+  position: absolute;
+  top: 50%;
+  right: -0.5rem;
+  transform: translateY(-50%);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+}
+
+.md-field-stack .md-input, .md-field-stack .md-select {
+  flex: 0 0 auto;
+}
+
+.md-field--dropdown {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23635b75' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem 1rem;
+  padding-right: 2.25rem;
+}
+
+.md-select--inline {
+  flex: 1 1 18rem; min-width: 14rem;
+}
+
+.md-input.md-disabled, .md-select.md-disabled {
+  background: #f3f0f7;
+}
+
+.md-choice-inline {
+  display: flex; flex-wrap: wrap; gap: 1.25rem; row-gap: 0.5rem;
+}
+
+.md-choice-text {
+  font-size: 0.9rem; color: #4a4458;
+}
+
+</style>
   <style>
 * {
   box-sizing: border-box;
@@ -31,11 +851,8 @@ body {
   margin: -6px -6px 14px;
   padding: 12px 14px 10px;
   border-radius: 16px;
-  border: 1px solid #dacdf2;
-  background:
-    radial-gradient(circle at 8% 10%, rgba(98, 0, 238, 0.26), transparent 46%),
-    radial-gradient(circle at 92% 18%, rgba(3, 218, 198, 0.14), transparent 40%),
-    linear-gradient(135deg, #f8f3ff 0%, #efe8fb 100%);
+  border: 1px solid #a8e3e0;
+  background: #cbf3f0;
   box-shadow: 0 8px 20px rgba(86, 58, 132, 0.12);
 }
 
@@ -44,6 +861,26 @@ body {
   align-items: center;
   gap: 0.6rem;
   margin: 0;
+}
+
+.ms-hero-link {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-decoration: none;
+  color: #1c1b1f;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ms-hero-link:hover {
+  text-decoration: underline;
 }
 
 .ms-hero-subtitle {
@@ -79,12 +916,12 @@ body {
 }
 
 .ms-flow {
-  margin-top: 0.5rem;
+  margin-top: 0.05rem;
   display: grid;
-  gap: 1.2rem;
+  gap: 0.15rem;
 }
 
-.ms-top-tabs {
+  .ms-top-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
@@ -172,8 +1009,7 @@ body {
 }
 
 .ms-flow-step {
-  border-top: 1px solid #ece7f3;
-  padding-top: 0.8rem;
+  padding-top: 0.1rem;
   min-width: 0;
 }
 
@@ -181,7 +1017,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.8rem;
+  margin-top: 0;
+  margin-bottom: 0.55rem;
 }
 
 .ms-step-no {
@@ -298,9 +1135,10 @@ body {
 
 .ms-step-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: auto auto auto;
   gap: 0.4rem;
   align-items: center;
+  justify-content: start;
 }
 
 .ms-step-value {
@@ -426,6 +1264,14 @@ body {
   .ms-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .ms-hero-link span {
+    display: none;
+  }
+
+  .ms-hero-link {
+    padding: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -491,6 +1337,13 @@ body {
 </style>
 </head>
 <body class="md-page">
+  <svg aria-hidden="true" class="md-icon-sprite" width="0" height="0" viewBox="0 0 0 0" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="md-icon-github" viewBox="0 0 16 16">
+        <path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.6c.4.08.55-.17.55-.38v-1.33c-2.25.49-2.72-1.08-2.72-1.08-.36-.94-.9-1.2-.9-1.2-.74-.5.06-.49.06-.49.81.06 1.25.84 1.25.84.72 1.23 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.8-.21-3.69-.9-3.69-3.98 0-.88.32-1.6.83-2.16-.08-.2-.36-1.02.08-2.12 0 0 .68-.22 2.2.82A7.7 7.7 0 0 1 8 3.9c.68 0 1.37.1 2 .3 1.52-1.03 2.2-.82 2.2-.82.44 1.1.16 1.93.08 2.12.52.56.83 1.28.83 2.16 0 3.1-1.89 3.77-3.7 3.97.29.25.55.74.55 1.49v2.2c0 .21.14.46.55.38A8 8 0 0 0 8 0z"/>
+      </symbol>
+    </defs>
+  </svg>
   <main class="md-shell">
     <section class="md-card ms-app">
       <header class="ms-hero">
@@ -517,6 +1370,18 @@ body {
               複雑な作業は MuseScore など別のソフトで実施してください。mikuscore はスマホで利用可能なソフトを目指します。
             </span>
           </span>
+          <a
+            href="https://github.com/igapyon/mikuscore"
+            class="ms-hero-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="mikuscore の GitHub リポジトリを開く"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16" class="ms-btn-icon" fill="currentColor">
+              <use href="#md-icon-github" xlink:href="#md-icon-github"></use>
+            </svg>
+            <span>GitHub</span>
+          </a>
         </h1>
       </header>
 
@@ -671,27 +1536,6 @@ body {
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
           </div>
-          <div class="ms-actions">
-            <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 7L9 18l-5-5"></path>
-              </svg>
-              <span>確定</span>
-            </button>
-            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6L6 18"></path>
-                <path d="M6 6l12 12"></path>
-              </svg>
-              <span>破棄</span>
-            </button>
-            <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
-                <path d="M8 6.5v11l9-5.5z"></path>
-              </svg>
-              <span>再生</span>
-            </button>
-          </div>
 
           <div class="ms-grid">
             <label class="ms-field">音名(step)
@@ -756,6 +1600,27 @@ body {
                 <path d="M14 10v7"></path>
               </svg>
               <span>音符削除</span>
+            </button>
+          </div>
+          <div class="ms-actions">
+            <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 7L9 18l-5-5"></path>
+              </svg>
+              <span>確定</span>
+            </button>
+            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6L6 18"></path>
+                <path d="M6 6l12 12"></path>
+              </svg>
+              <span>破棄</span>
+            </button>
+            <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>再生</span>
             </button>
           </div>
         </section>
@@ -16996,6 +17861,72 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMusicXmlDomToSvg = void 0;
 let verovioToolkit = null;
 let verovioInitPromise = null;
+const cloneXmlDocument = (doc) => {
+    const cloned = document.implementation.createDocument("", "", null);
+    const root = cloned.importNode(doc.documentElement, true);
+    cloned.appendChild(root);
+    return cloned;
+};
+const pruneEmptyNotations = (notations) => {
+    if (!notations || notations.tagName !== "notations")
+        return;
+    if (notations.children.length > 0)
+        return;
+    notations.remove();
+};
+const sanitizeSlursForRender = (doc) => {
+    var _a, _b, _c;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+    for (const part of parts) {
+        const openSlurs = new Map();
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        for (const measure of measures) {
+            const notes = Array.from(measure.querySelectorAll(":scope > note"));
+            for (const note of notes) {
+                const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
+                for (const slur of slurs) {
+                    const number = ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : "1").trim() || "1";
+                    const type = ((_b = slur.getAttribute("type")) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
+                    const stack = (_c = openSlurs.get(number)) !== null && _c !== void 0 ? _c : [];
+                    if (type === "start") {
+                        stack.push(slur);
+                        openSlurs.set(number, stack);
+                        continue;
+                    }
+                    if (type === "stop") {
+                        if (stack.length > 0) {
+                            stack.pop();
+                        }
+                        else {
+                            const notations = slur.parentElement;
+                            slur.remove();
+                            pruneEmptyNotations(notations);
+                        }
+                        continue;
+                    }
+                    if (type === "continue") {
+                        if (stack.length === 0) {
+                            const notations = slur.parentElement;
+                            slur.remove();
+                            pruneEmptyNotations(notations);
+                            continue;
+                        }
+                        stack.pop();
+                        stack.push(slur);
+                        openSlurs.set(number, stack);
+                    }
+                }
+            }
+        }
+        for (const danglingStarts of openSlurs.values()) {
+            for (const startSlur of danglingStarts) {
+                const notations = startSlur.parentElement;
+                startSlur.remove();
+                pruneEmptyNotations(notations);
+            }
+        }
+    }
+};
 const getVerovioRuntime = () => {
     var _a;
     return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
@@ -17058,7 +17989,10 @@ const renderMusicXmlDomToSvg = async (doc, options) => {
     if (!toolkit) {
         throw new Error("verovio toolkit の初期化に失敗しました。");
     }
-    const xml = new XMLSerializer().serializeToString(doc);
+    // Keep source DOM intact and only sanitize slur mismatch on render copy.
+    const renderDoc = cloneXmlDocument(doc);
+    sanitizeSlursForRender(renderDoc);
+    const xml = new XMLSerializer().serializeToString(renderDoc);
     toolkit.setOptions(options);
     const loaded = toolkit.loadData(xml);
     if (!loaded) {
@@ -17894,6 +18828,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
+const pad2 = (value) => String(value).padStart(2, "0");
+const buildFileTimestamp = () => {
+    const now = new Date();
+    return [
+        now.getFullYear(),
+        pad2(now.getMonth() + 1),
+        pad2(now.getDate()),
+        pad2(now.getHours()),
+        pad2(now.getMinutes()),
+    ].join("");
+};
 const triggerFileDownload = (payload) => {
     const url = URL.createObjectURL(payload.blob);
     const a = document.createElement("a");
@@ -17904,8 +18849,9 @@ const triggerFileDownload = (payload) => {
 };
 exports.triggerFileDownload = triggerFileDownload;
 const createMusicXmlDownloadPayload = (xmlText) => {
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.musicxml",
+        fileName: `mikuscore-${ts}.musicxml`,
         blob: new Blob([xmlText], { type: "application/xml;charset=utf-8" }),
     };
 };
@@ -17926,8 +18872,9 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter) => {
     }
     const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
     new Uint8Array(midiArrayBuffer).set(midiBytes);
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.mid",
+        fileName: `mikuscore-${ts}.mid`,
         blob: new Blob([midiArrayBuffer], { type: "audio/midi" }),
     };
 };
@@ -17943,8 +18890,9 @@ const createAbcDownloadPayload = (xmlText, convertMusicXmlToAbc) => {
     catch (_a) {
         return null;
     }
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.abc",
+        fileName: `mikuscore-${ts}.abc`,
         blob: new Blob([abcText], { type: "text/plain;charset=utf-8" }),
     };
 };

@@ -16190,6 +16190,72 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMusicXmlDomToSvg = void 0;
 let verovioToolkit = null;
 let verovioInitPromise = null;
+const cloneXmlDocument = (doc) => {
+    const cloned = document.implementation.createDocument("", "", null);
+    const root = cloned.importNode(doc.documentElement, true);
+    cloned.appendChild(root);
+    return cloned;
+};
+const pruneEmptyNotations = (notations) => {
+    if (!notations || notations.tagName !== "notations")
+        return;
+    if (notations.children.length > 0)
+        return;
+    notations.remove();
+};
+const sanitizeSlursForRender = (doc) => {
+    var _a, _b, _c;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+    for (const part of parts) {
+        const openSlurs = new Map();
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        for (const measure of measures) {
+            const notes = Array.from(measure.querySelectorAll(":scope > note"));
+            for (const note of notes) {
+                const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
+                for (const slur of slurs) {
+                    const number = ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : "1").trim() || "1";
+                    const type = ((_b = slur.getAttribute("type")) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
+                    const stack = (_c = openSlurs.get(number)) !== null && _c !== void 0 ? _c : [];
+                    if (type === "start") {
+                        stack.push(slur);
+                        openSlurs.set(number, stack);
+                        continue;
+                    }
+                    if (type === "stop") {
+                        if (stack.length > 0) {
+                            stack.pop();
+                        }
+                        else {
+                            const notations = slur.parentElement;
+                            slur.remove();
+                            pruneEmptyNotations(notations);
+                        }
+                        continue;
+                    }
+                    if (type === "continue") {
+                        if (stack.length === 0) {
+                            const notations = slur.parentElement;
+                            slur.remove();
+                            pruneEmptyNotations(notations);
+                            continue;
+                        }
+                        stack.pop();
+                        stack.push(slur);
+                        openSlurs.set(number, stack);
+                    }
+                }
+            }
+        }
+        for (const danglingStarts of openSlurs.values()) {
+            for (const startSlur of danglingStarts) {
+                const notations = startSlur.parentElement;
+                startSlur.remove();
+                pruneEmptyNotations(notations);
+            }
+        }
+    }
+};
 const getVerovioRuntime = () => {
     var _a;
     return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
@@ -16252,7 +16318,10 @@ const renderMusicXmlDomToSvg = async (doc, options) => {
     if (!toolkit) {
         throw new Error("verovio toolkit の初期化に失敗しました。");
     }
-    const xml = new XMLSerializer().serializeToString(doc);
+    // Keep source DOM intact and only sanitize slur mismatch on render copy.
+    const renderDoc = cloneXmlDocument(doc);
+    sanitizeSlursForRender(renderDoc);
+    const xml = new XMLSerializer().serializeToString(renderDoc);
     toolkit.setOptions(options);
     const loaded = toolkit.loadData(xml);
     if (!loaded) {
@@ -17088,6 +17157,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
+const pad2 = (value) => String(value).padStart(2, "0");
+const buildFileTimestamp = () => {
+    const now = new Date();
+    return [
+        now.getFullYear(),
+        pad2(now.getMonth() + 1),
+        pad2(now.getDate()),
+        pad2(now.getHours()),
+        pad2(now.getMinutes()),
+    ].join("");
+};
 const triggerFileDownload = (payload) => {
     const url = URL.createObjectURL(payload.blob);
     const a = document.createElement("a");
@@ -17098,8 +17178,9 @@ const triggerFileDownload = (payload) => {
 };
 exports.triggerFileDownload = triggerFileDownload;
 const createMusicXmlDownloadPayload = (xmlText) => {
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.musicxml",
+        fileName: `mikuscore-${ts}.musicxml`,
         blob: new Blob([xmlText], { type: "application/xml;charset=utf-8" }),
     };
 };
@@ -17120,8 +17201,9 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter) => {
     }
     const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
     new Uint8Array(midiArrayBuffer).set(midiBytes);
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.mid",
+        fileName: `mikuscore-${ts}.mid`,
         blob: new Blob([midiArrayBuffer], { type: "audio/midi" }),
     };
 };
@@ -17137,8 +17219,9 @@ const createAbcDownloadPayload = (xmlText, convertMusicXmlToAbc) => {
     catch (_a) {
         return null;
     }
+    const ts = buildFileTimestamp();
     return {
-        fileName: "mikuscore.abc",
+        fileName: `mikuscore-${ts}.abc`,
         blob: new Blob([abcText], { type: "text/plain;charset=utf-8" }),
     };
 };
