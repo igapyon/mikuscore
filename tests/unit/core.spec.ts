@@ -104,7 +104,7 @@ describe("ScoreCore MVP", () => {
     expect(core.isDirty()).toBe(false);
   });
 
-  it("TI-2: underfull is allowed with warning", () => {
+  it("TI-2: delete_note replaces target with same-duration rest", () => {
     const core = new ScoreCore();
     core.load(BASE_XML);
     const [first] = core.listNoteNodeIds();
@@ -116,12 +116,18 @@ describe("ScoreCore MVP", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.warnings.map((x) => x.code)).toContain("MEASURE_UNDERFULL");
+    expect(result.warnings).toEqual([]);
     expect(core.isDirty()).toBe(true);
 
     const saved = core.save();
     expect(saved.ok).toBe(true);
     expect(saved.mode).toBe("serialized_dirty");
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const firstNote = doc.querySelector("measure > note");
+    expect(firstNote?.querySelector("rest")).not.toBeNull();
+    expect(firstNote?.querySelector("duration")?.textContent?.trim()).toBe("1");
+    expect(firstNote?.querySelector("voice")?.textContent?.trim()).toBe("1");
+    expect(firstNote?.querySelector("pitch")).toBeNull();
   });
 
   it("TI-3: overfull validation uses inherited attributes from previous measure", () => {
@@ -186,6 +192,35 @@ describe("ScoreCore MVP", () => {
     expect(saved.ok).toBe(true);
     expect(saved.mode).toBe("original_noop");
     expect(saved.diagnostics).toEqual([]);
+  });
+
+  it("TI-8: deleting chord head promotes next chord tone instead of inserting rest", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_CHORD_TIMING);
+    const ids = core.listNoteNodeIds();
+    const first = ids[0];
+
+    const result = core.dispatch({
+      type: "delete_note",
+      targetNodeId: first,
+      voice: "1",
+    });
+
+    expect(result.ok).toBe(true);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+    expect(notes).toHaveLength(3);
+
+    // First note should be the former chord tone (E4) promoted to chord head.
+    const firstAfter = notes[0];
+    expect(firstAfter.querySelector(":scope > chord")).toBeNull();
+    expect(firstAfter.querySelector(":scope > rest")).toBeNull();
+    expect(firstAfter.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
+    expect(firstAfter.querySelector(":scope > pitch > octave")?.textContent?.trim()).toBe("4");
+    expect(firstAfter.querySelector(":scope > duration")?.textContent?.trim()).toBe("8");
   });
 
   it("IN-2: insert that makes measure overfull is rejected", () => {
@@ -418,7 +453,7 @@ describe("ScoreCore MVP", () => {
     expect(result.affectedMeasureNumbers).toEqual(["1"]);
   });
 
-  it("ID-2: surviving node IDs stay stable after delete", () => {
+  it("ID-2: node IDs stay stable after delete-to-rest replacement", () => {
     const core = new ScoreCore();
     core.load(BASE_XML);
     const beforeIds = core.listNoteNodeIds();
@@ -432,10 +467,10 @@ describe("ScoreCore MVP", () => {
     expect(result.ok).toBe(true);
 
     const afterIds = core.listNoteNodeIds();
-    expect(afterIds).not.toContain(second);
-    for (const id of beforeIds.filter((x) => x !== second)) {
+    for (const id of beforeIds) {
       expect(afterIds).toContain(id);
     }
+    expect(afterIds).toHaveLength(beforeIds.length);
   });
 
   it("NK-1: unsupported note kind is rejected", () => {
@@ -625,7 +660,7 @@ describe("ScoreCore MVP", () => {
     expect(secondDuration).toBe("1");
   });
 
-  it("MP-2: delete keeps surviving notes stable except removed target", () => {
+  it("MP-2: delete replaces only target note with rest and keeps others stable", () => {
     const core = new ScoreCore();
     core.load(BASE_XML);
     const ids = core.listNoteNodeIds();
@@ -646,9 +681,89 @@ describe("ScoreCore MVP", () => {
     const afterAttributes = afterDoc.querySelector("measure > attributes")?.outerHTML;
     expect(afterAttributes).toBe(beforeAttributes);
 
-    const noteSig = (n: Element): string =>
-      `${n.querySelector("voice")?.textContent?.trim()}:${n.querySelector("step")?.textContent?.trim()}:${n.querySelector("octave")?.textContent?.trim()}:${n.querySelector("duration")?.textContent?.trim()}`;
-    const afterNotes = Array.from(afterDoc.querySelectorAll("measure > note")).map(noteSig);
-    expect(afterNotes).toEqual(["1:C:4:1", "1:E:4:1", "1:F:4:1"]);
+    const notes = Array.from(afterDoc.querySelectorAll("measure > note"));
+    expect(notes).toHaveLength(4);
+
+    const noteSig = (n: Element): string => {
+      if (n.querySelector("rest")) {
+        return `rest:${n.querySelector("voice")?.textContent?.trim()}:${n.querySelector("duration")?.textContent?.trim()}`;
+      }
+      return `${n.querySelector("voice")?.textContent?.trim()}:${n.querySelector("step")?.textContent?.trim()}:${n.querySelector("octave")?.textContent?.trim()}:${n.querySelector("duration")?.textContent?.trim()}`;
+    };
+    const afterNotes = notes.map(noteSig);
+    expect(afterNotes).toEqual(["1:C:4:1", "rest:1:1", "1:E:4:1", "1:F:4:1"]);
+  });
+
+  it("MP-3: delete replaces target with rest at same position and same duration", () => {
+    const core = new ScoreCore();
+    core.load(UNDERFULL_XML);
+    const ids = core.listNoteNodeIds();
+    const second = ids[1];
+
+    const before = core.save();
+    expect(before.ok).toBe(true);
+    const beforeDoc = new DOMParser().parseFromString(before.xml, "application/xml");
+    const beforeNotes = Array.from(beforeDoc.querySelectorAll("measure > note"));
+    const targetBefore = beforeNotes[1];
+    expect(targetBefore).toBeTruthy();
+    const targetBeforeDuration = targetBefore?.querySelector("duration")?.textContent?.trim() ?? "";
+    expect(targetBeforeDuration).not.toBe("");
+    expect(targetBefore?.querySelector("rest")).toBeNull();
+
+    const result = core.dispatch({
+      type: "delete_note",
+      targetNodeId: second,
+      voice: "1",
+    });
+    expect(result.ok).toBe(true);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const afterDoc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const afterNotes = Array.from(afterDoc.querySelectorAll("measure > note"));
+    expect(afterNotes).toHaveLength(beforeNotes.length);
+
+    const targetAfter = afterNotes[1];
+    expect(targetAfter?.querySelector("rest")).not.toBeNull();
+    expect(targetAfter?.querySelector("duration")?.textContent?.trim()).toBe(targetBeforeDuration);
+    expect(targetAfter?.querySelector("pitch")).toBeNull();
+  });
+
+  it("TI-7: delete_note keeps total duration unchanged in target measure/voice", () => {
+    const core = new ScoreCore();
+    core.load(BASE_XML);
+    const ids = core.listNoteNodeIds();
+    const second = ids[1];
+
+    const sumDurationForVoice = (xml: string, measureNumber: string, voice: string): number => {
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const measure = Array.from(doc.querySelectorAll("part > measure")).find(
+        (m) => (m.getAttribute("number") ?? "") === measureNumber
+      );
+      if (!measure) return 0;
+      return Array.from(measure.querySelectorAll(":scope > note"))
+        .filter((n) => (n.querySelector(":scope > voice")?.textContent?.trim() ?? "") === voice)
+        .reduce((sum, n) => {
+          const d = Number(n.querySelector(":scope > duration")?.textContent?.trim() ?? "");
+          return sum + (Number.isFinite(d) ? d : 0);
+        }, 0);
+    };
+
+    const beforeSave = core.save();
+    expect(beforeSave.ok).toBe(true);
+    const beforeTotal = sumDurationForVoice(beforeSave.xml, "1", "1");
+
+    const result = core.dispatch({
+      type: "delete_note",
+      targetNodeId: second,
+      voice: "1",
+    });
+    expect(result.ok).toBe(true);
+
+    const afterSave = core.save();
+    expect(afterSave.ok).toBe(true);
+    const afterTotal = sumDurationForVoice(afterSave.xml, "1", "1");
+
+    expect(afterTotal).toBe(beforeTotal);
   });
 });
