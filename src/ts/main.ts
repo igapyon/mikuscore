@@ -10,10 +10,18 @@ import type {
   Pitch,
   SaveResult,
 } from "../../core/interfaces";
-import { AbcCommon } from "./abc-common";
-import { AbcCompatParser } from "./abc-compat-parser";
-import { buildMidiBytesForPlayback, buildPlaybackEventsFromXml } from "./playback";
+import { AbcCommon } from "./abc-io";
+import { AbcCompatParser } from "./abc-io";
+import { buildMidiBytesForPlayback, buildPlaybackEventsFromMusicXmlDoc } from "./midi-io";
+import {
+  buildRenderDocWithNodeIds,
+  extractMeasureEditorDocument,
+  parseMusicXmlDocument,
+  replaceMeasureInMainDocument,
+  serializeMusicXmlDocument,
+} from "./musicxml-io";
 import { sampleXml } from "./sampleXml";
+import { renderMusicXmlDomToSvg } from "./verovio-out";
 
 type UiState = {
   loaded: boolean;
@@ -30,22 +38,6 @@ type NoteLocation = {
 };
 
 const EDITABLE_VOICE = "1";
-
-type VerovioToolkitApi = {
-  setOptions: (options: Record<string, unknown>) => void;
-  loadData: (xml: string) => boolean;
-  getPageCount: () => number;
-  renderToSVG: (page: number, options: Record<string, unknown>) => string;
-};
-
-type VerovioRuntime = {
-  module?: {
-    calledRun?: boolean;
-    cwrap?: unknown;
-    onRuntimeInitialized?: (() => void) | null;
-  };
-  toolkit?: new () => VerovioToolkitApi;
-};
 
 const q = <T extends Element>(selector: string): T => {
   const el = document.querySelector(selector);
@@ -120,8 +112,6 @@ const state: UiState = {
 xmlInput.value = sampleXml;
 let isPlaying = false;
 const DEBUG_LOG = true;
-let verovioToolkit: VerovioToolkitApi | null = null;
-let verovioInitPromise: Promise<VerovioToolkitApi | null> | null = null;
 let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map<string, string>();
 let nodeIdToLocation = new Map<string, NoteLocation>();
@@ -854,48 +844,25 @@ const rebuildPartNameMap = (xml: string): void => {
   }
 };
 
-const buildRenderXmlWithNodeIds = (
-  xml: string,
-  nodeIds: string[],
-  idPrefix: string
-): { renderXml: string; svgIdToNodeId: Map<string, string>; noteCount: number } => {
-  const map = new Map<string, string>();
-  if (nodeIds.length === 0) {
-    return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
-  }
-
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) {
-    return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
-  }
-
-  const notes = Array.from(doc.querySelectorAll("note"));
-  const count = Math.min(notes.length, nodeIds.length);
-  for (let i = 0; i < count; i += 1) {
-    const nodeId = nodeIds[i];
-    const svgId = `${idPrefix}-${nodeId}`;
-    notes[i].setAttribute("xml:id", svgId);
-    notes[i].setAttribute("id", svgId);
-    map.set(svgId, nodeId);
-  }
-  return {
-    renderXml: new XMLSerializer().serializeToString(doc),
-    svgIdToNodeId: map,
-    noteCount: count,
-  };
-};
-
 const buildRenderXmlForVerovio = (
   xml: string
-): { renderXml: string; svgIdToNodeId: Map<string, string>; noteCount: number } => {
-  if (!state.loaded) {
+): { renderDoc: Document | null; svgIdToNodeId: Map<string, string>; noteCount: number } => {
+  const sourceDoc = parseMusicXmlDocument(xml);
+  if (!sourceDoc) {
     return {
-      renderXml: xml,
+      renderDoc: null,
       svgIdToNodeId: new Map<string, string>(),
       noteCount: 0,
     };
   }
-  return buildRenderXmlWithNodeIds(xml, state.noteNodeIds.slice(), "mks-main");
+  if (!state.loaded) {
+    return {
+      renderDoc: sourceDoc,
+      svgIdToNodeId: new Map<string, string>(),
+      noteCount: 0,
+    };
+  }
+  return buildRenderDocWithNodeIds(sourceDoc, state.noteNodeIds.slice(), "mks-main");
 };
 
 const deriveRenderedNoteIds = (root: Element): string[] => {
@@ -1056,108 +1023,11 @@ const resolveDraftNodeIdFromNearestPoint = (clickEvent: MouseEvent): string | nu
 };
 
 const extractMeasureEditorXml = (xml: string, partId: string, measureNumber: string): string | null => {
-  const source = new DOMParser().parseFromString(xml, "application/xml");
-  if (source.querySelector("parsererror")) return null;
-
-  const srcRoot = source.querySelector("score-partwise");
-  const srcPart = source.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`);
-  if (!srcRoot || !srcPart) return null;
-  const srcMeasure = Array.from(srcPart.querySelectorAll(":scope > measure")).find(
-    (m) => (m.getAttribute("number") ?? "") === measureNumber
-  );
-  if (!srcMeasure) return null;
-
-  const collectEffectiveAttributes = (part: Element, targetMeasure: Element): Element | null => {
-    let divisions: Element | null = null;
-    let key: Element | null = null;
-    let time: Element | null = null;
-    let staves: Element | null = null;
-    const clefByNo = new Map<string, Element>();
-
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const attrs = measure.querySelector(":scope > attributes");
-      if (attrs) {
-        const nextDivisions = attrs.querySelector(":scope > divisions");
-        if (nextDivisions) divisions = nextDivisions.cloneNode(true) as Element;
-        const nextKey = attrs.querySelector(":scope > key");
-        if (nextKey) key = nextKey.cloneNode(true) as Element;
-        const nextTime = attrs.querySelector(":scope > time");
-        if (nextTime) time = nextTime.cloneNode(true) as Element;
-        const nextStaves = attrs.querySelector(":scope > staves");
-        if (nextStaves) staves = nextStaves.cloneNode(true) as Element;
-        for (const clef of Array.from(attrs.querySelectorAll(":scope > clef"))) {
-          const no = clef.getAttribute("number") ?? "1";
-          clefByNo.set(no, clef.cloneNode(true) as Element);
-        }
-      }
-      if (measure === targetMeasure) break;
-    }
-
-    const doc = targetMeasure.ownerDocument;
-    const effective = doc.createElement("attributes");
-    if (divisions) effective.appendChild(divisions);
-    if (key) effective.appendChild(key);
-    if (time) effective.appendChild(time);
-    if (staves) effective.appendChild(staves);
-    for (const no of Array.from(clefByNo.keys()).sort()) {
-      const clef = clefByNo.get(no);
-      if (clef) effective.appendChild(clef);
-    }
-    return effective.childElementCount > 0 ? effective : null;
-  };
-
-  const patchedMeasure = srcMeasure.cloneNode(true) as Element;
-  const effectiveAttrs = collectEffectiveAttributes(srcPart, srcMeasure);
-  if (effectiveAttrs) {
-    const existing = patchedMeasure.querySelector(":scope > attributes");
-    if (!existing) {
-      patchedMeasure.insertBefore(effectiveAttrs, patchedMeasure.firstChild);
-    } else {
-      const ensureSingle = (selector: string): void => {
-        if (existing.querySelector(`:scope > ${selector}`)) return;
-        const src = effectiveAttrs.querySelector(`:scope > ${selector}`);
-        if (src) existing.appendChild(src.cloneNode(true));
-      };
-      ensureSingle("divisions");
-      ensureSingle("key");
-      ensureSingle("time");
-      ensureSingle("staves");
-
-      const existingClefNos = new Set(
-        Array.from(existing.querySelectorAll(":scope > clef")).map((c) => c.getAttribute("number") ?? "1")
-      );
-      for (const clef of Array.from(effectiveAttrs.querySelectorAll(":scope > clef"))) {
-        const no = clef.getAttribute("number") ?? "1";
-        if (existingClefNos.has(no)) continue;
-        existing.appendChild(clef.cloneNode(true));
-      }
-    }
-  }
-
-  const dst = document.implementation.createDocument("", "score-partwise", null);
-  const dstRoot = dst.documentElement;
-  if (!dstRoot) return null;
-  const version = srcRoot.getAttribute("version");
-  if (version) dstRoot.setAttribute("version", version);
-
-  const srcPartList = source.querySelector("score-partwise > part-list");
-  const srcScorePart = source.querySelector(`score-partwise > part-list > score-part[id="${CSS.escape(partId)}"]`);
-  if (srcPartList && srcScorePart) {
-    const dstPartList = dst.importNode(srcPartList, false);
-    const dstScorePart = dst.importNode(srcScorePart, true) as Element;
-    const dstPartName = dstScorePart.querySelector(":scope > part-name");
-    if (dstPartName) dstPartName.textContent = "";
-    const dstPartAbbreviation = dstScorePart.querySelector(":scope > part-abbreviation");
-    if (dstPartAbbreviation) dstPartAbbreviation.textContent = "";
-    dstPartList.appendChild(dstScorePart);
-    dstRoot.appendChild(dstPartList);
-  }
-
-  const dstPart = dst.importNode(srcPart, false) as Element;
-  dstPart.appendChild(dst.importNode(patchedMeasure, true));
-  dstRoot.appendChild(dstPart);
-
-  return new XMLSerializer().serializeToString(dst);
+  const sourceDoc = parseMusicXmlDocument(xml);
+  if (!sourceDoc) return null;
+  const extractedDoc = extractMeasureEditorDocument(sourceDoc, partId, measureNumber);
+  if (!extractedDoc) return null;
+  return serializeMusicXmlDocument(extractedDoc);
 };
 
 const initializeMeasureEditor = (location: NoteLocation): void => {
@@ -1222,69 +1092,6 @@ const onMeasureEditorClick = (event: MouseEvent): void => {
   renderAll();
 };
 
-const getVerovioRuntime = (): VerovioRuntime | null => {
-  return (window as unknown as { verovio?: VerovioRuntime }).verovio ?? null;
-};
-
-const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
-  if (verovioToolkit) {
-    return verovioToolkit;
-  }
-  if (verovioInitPromise) {
-    return verovioInitPromise;
-  }
-
-  verovioInitPromise = (async () => {
-    const runtime = getVerovioRuntime();
-    if (!runtime || typeof runtime.toolkit !== "function") {
-      throw new Error("verovio.js が読み込まれていません。");
-    }
-    const moduleObj = runtime.module;
-    if (!moduleObj) {
-      throw new Error("verovio module が見つかりません。");
-    }
-
-    if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
-      await new Promise<void>((resolve, reject) => {
-        let settled = false;
-        const timeoutId = window.setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          reject(new Error("verovio 初期化待機がタイムアウトしました。"));
-        }, 8000);
-
-        const complete = () => {
-          if (settled) return;
-          settled = true;
-          window.clearTimeout(timeoutId);
-          resolve();
-        };
-
-        const previous = moduleObj.onRuntimeInitialized;
-        moduleObj.onRuntimeInitialized = () => {
-          if (typeof previous === "function") {
-            previous();
-          }
-          complete();
-        };
-
-        if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
-          complete();
-        }
-      });
-    }
-
-    verovioToolkit = new runtime.toolkit();
-    return verovioToolkit;
-  })()
-    .catch((error) => {
-      verovioInitPromise = null;
-      throw error;
-    });
-
-  return verovioInitPromise;
-};
-
 const renderScorePreview = (): void => {
   const renderSeq = ++verovioRenderSeq;
   const xml =
@@ -1298,40 +1105,28 @@ const renderScorePreview = (): void => {
     return;
   }
   const renderBundle = buildRenderXmlForVerovio(xml);
+  const renderDoc = renderBundle.renderDoc;
+  if (!renderDoc) {
+    debugScoreMeta.textContent = "描画失敗: MusicXML解析失敗";
+    debugScoreArea.innerHTML = "";
+    currentSvgIdToNodeId = new Map();
+    return;
+  }
   debugScoreMeta.textContent = "verovio 描画中...";
-  void ensureVerovioToolkit()
-    .then((toolkit) => {
+  void renderMusicXmlDomToSvg(renderDoc, {
+    pageWidth: 20000,
+    pageHeight: 3000,
+    scale: 40,
+    breaks: "none",
+    mnumInterval: 1,
+    adjustPageHeight: 1,
+    footer: "none",
+    header: "none",
+  })
+    .then(({ svg, pageCount }) => {
       if (renderSeq !== verovioRenderSeq) return;
-      if (!toolkit) {
-        throw new Error("verovio toolkit の初期化に失敗しました。");
-      }
 
-      const options: Record<string, unknown> = {
-        pageWidth: 20000,
-        pageHeight: 3000,
-        scale: 40,
-        breaks: "none",
-        mnumInterval: 1,
-        adjustPageHeight: 1,
-        footer: "none",
-        header: "none",
-      };
-      toolkit.setOptions(options);
-      const loaded = toolkit.loadData(renderBundle.renderXml);
-      if (!loaded) {
-        throw new Error("verovio loadData が失敗しました。");
-      }
-      const pageCount = toolkit.getPageCount();
-      if (!Number.isFinite(pageCount) || pageCount < 1) {
-        throw new Error("verovio pageCount が不正です。");
-      }
-      const svg = toolkit.renderToSVG(1, {});
-      if (!svg) {
-        throw new Error("verovio SVG 生成に失敗しました。");
-      }
-
-      const doc = new DOMParser().parseFromString(xml, "application/xml");
-      const measures = doc.querySelectorAll("part > measure").length;
+      const measures = renderDoc.querySelectorAll("part > measure").length;
       debugScoreArea.innerHTML = svg;
 
       const renderedNoteIds = deriveRenderedNoteIds(debugScoreArea);
@@ -1381,25 +1176,30 @@ const renderMeasureEditorPreview = (): void => {
     draftSvgIdToNodeId = new Map<string, string>();
     return;
   }
-  const renderBundle = buildRenderXmlWithNodeIds(xml, draftNoteNodeIds.slice(), "mks-draft");
+  const sourceDoc = parseMusicXmlDocument(xml);
+  if (!sourceDoc) {
+    measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
+    draftSvgIdToNodeId = new Map<string, string>();
+    return;
+  }
+  const renderBundle = buildRenderDocWithNodeIds(sourceDoc, draftNoteNodeIds.slice(), "mks-draft");
+  const renderDoc = renderBundle.renderDoc;
+  if (!renderDoc) {
+    measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
+    draftSvgIdToNodeId = new Map<string, string>();
+    return;
+  }
   measureEditorArea.innerHTML = "描画中...";
-  void ensureVerovioToolkit()
-    .then((toolkit) => {
-      if (!toolkit) throw new Error("verovio toolkit の初期化に失敗しました。");
-      toolkit.setOptions({
-        pageWidth: 6000,
-        pageHeight: 2200,
-        scale: 58,
-        breaks: "none",
-        adjustPageHeight: 1,
-        footer: "none",
-        header: "none",
-      });
-      if (!toolkit.loadData(renderBundle.renderXml)) {
-        throw new Error("verovio loadData が失敗しました。");
-      }
-      const svg = toolkit.renderToSVG(1, {});
-      if (!svg) throw new Error("verovio SVG 生成に失敗しました。");
+  void renderMusicXmlDomToSvg(renderDoc, {
+    pageWidth: 6000,
+    pageHeight: 2200,
+    scale: 58,
+    breaks: "none",
+    adjustPageHeight: 1,
+    footer: "none",
+    header: "none",
+  })
+    .then(({ svg }) => {
       measureEditorArea.innerHTML = svg;
 
       const renderedNoteIds = deriveRenderedNoteIds(measureEditorArea);
@@ -1581,7 +1381,13 @@ const startPlayback = async (): Promise<void> => {
     return;
   }
 
-  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
+  const playbackDoc = parseMusicXmlDocument(saveResult.xml);
+  if (!playbackDoc) {
+    playbackText.textContent = "再生: MusicXML解析失敗";
+    renderControlState();
+    return;
+  }
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
   const events = parsedPlayback.events;
   if (events.length === 0) {
     playbackText.textContent = "再生: 再生可能ノートなし";
@@ -1653,7 +1459,13 @@ const startMeasurePlayback = async (): Promise<void> => {
     return;
   }
 
-  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
+  const playbackDoc = parseMusicXmlDocument(saveResult.xml);
+  if (!playbackDoc) {
+    playbackText.textContent = "再生: MusicXML解析失敗";
+    renderControlState();
+    return;
+  }
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
   const events = parsedPlayback.events;
   if (events.length === 0) {
     playbackText.textContent = "再生: この小節に再生可能ノートなし";
@@ -2256,21 +2068,12 @@ const shiftPitchStep = (delta: 1 | -1): void => {
 };
 
 const replaceMeasureInMainXml = (sourceXml: string, partId: string, measureNumber: string, measureXml: string): string | null => {
-  const mainDoc = new DOMParser().parseFromString(sourceXml, "application/xml");
-  const measureDoc = new DOMParser().parseFromString(measureXml, "application/xml");
-  if (mainDoc.querySelector("parsererror") || measureDoc.querySelector("parsererror")) return null;
-
-  const replacementMeasure = measureDoc.querySelector("part > measure");
-  if (!replacementMeasure) return null;
-  const targetPart = mainDoc.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`);
-  if (!targetPart) return null;
-  const targetMeasure = Array.from(targetPart.querySelectorAll(":scope > measure")).find(
-    (m) => (m.getAttribute("number") ?? "") === measureNumber
-  );
-  if (!targetMeasure) return null;
-
-  targetMeasure.replaceWith(mainDoc.importNode(replacementMeasure, true));
-  return new XMLSerializer().serializeToString(mainDoc);
+  const mainDoc = parseMusicXmlDocument(sourceXml);
+  const measureDoc = parseMusicXmlDocument(measureXml);
+  if (!mainDoc || !measureDoc) return null;
+  const mergedDoc = replaceMeasureInMainDocument(mainDoc, partId, measureNumber, measureDoc);
+  if (!mergedDoc) return null;
+  return serializeMusicXmlDocument(mergedDoc);
 };
 
 const onMeasureApply = (): void => {
@@ -2613,10 +2416,9 @@ const convertMusicXmlToAbc = (xml: string): string => {
 
 const onDownloadMidi = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
-  const parsedPlayback = buildPlaybackEventsFromXml(
-    state.lastSuccessfulSaveXml,
-    PLAYBACK_TICKS_PER_QUARTER
-  );
+  const playbackDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
+  if (!playbackDoc) return;
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
   if (parsedPlayback.events.length === 0) return;
   let midiBytes: Uint8Array;
   try {
