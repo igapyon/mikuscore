@@ -58,11 +58,52 @@
           <div class="ms-radio-group" role="radiogroup" aria-label="入力フォーマット">
             <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML入力</label>
             <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC入力</label>
+            <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> 新規作成</label>
           </div>
 
           <div class="ms-radio-group" role="radiogroup" aria-label="取込方法">
             <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読み込み</label>
             <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+          </div>
+
+          <div id="newInputBlock" class="ms-block md-hidden">
+            <div class="ms-stack-sm">
+              <label class="ms-field">トラック数（パート数）
+                <input id="newPartCount" type="number" min="1" max="16" step="1" value="1" class="md-input" />
+              </label>
+              <label class="ms-field">拍子
+                <div class="ms-form-row">
+                  <input id="newTimeBeats" type="number" min="1" max="16" step="1" value="4" class="md-input" style="max-width: 8rem;" />
+                  <span>/</span>
+                  <select id="newTimeBeatType" class="md-select" style="max-width: 8rem;">
+                    <option value="2">2</option>
+                    <option value="4" selected>4</option>
+                    <option value="8">8</option>
+                    <option value="16">16</option>
+                  </select>
+                </div>
+              </label>
+              <label class="ms-field">調号
+                <select id="newKeyFifths" class="md-select">
+                  <option value="-7">♭7 (Cb)</option>
+                  <option value="-6">♭6 (Gb)</option>
+                  <option value="-5">♭5 (Db)</option>
+                  <option value="-4">♭4 (Ab)</option>
+                  <option value="-3">♭3 (Eb)</option>
+                  <option value="-2">♭2 (Bb)</option>
+                  <option value="-1">♭1 (F)</option>
+                  <option value="0" selected>なし (C)</option>
+                  <option value="1">♯1 (G)</option>
+                  <option value="2">♯2 (D)</option>
+                  <option value="3">♯3 (A)</option>
+                  <option value="4">♯4 (E)</option>
+                  <option value="5">♯5 (B)</option>
+                  <option value="6">♯6 (F#)</option>
+                  <option value="7">♯7 (C#)</option>
+                </select>
+              </label>
+            </div>
+            <div id="newPartClefList" class="ms-stack-sm" aria-live="polite"></div>
           </div>
 
           <div id="fileInputBlock" class="ms-block">

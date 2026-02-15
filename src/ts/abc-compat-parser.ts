@@ -11,6 +11,7 @@ const abcCommon = AbcCommon;
     const declaredVoiceIds = [];
     const voiceNameById = {};
     const voiceClefById = {};
+    const voiceTransposeById = {};
     let currentVoiceId = "1";
     let scoreDirective = "";
 
@@ -50,6 +51,9 @@ const abcCommon = AbcCommon;
           }
           if (parsedVoice.clef) {
             voiceClefById[currentVoiceId] = parsedVoice.clef;
+          }
+          if (parsedVoice.transpose) {
+            voiceTransposeById[currentVoiceId] = parsedVoice.transpose;
           }
           if (parsedVoice.bodyText) {
             bodyEntries.push({ text: parsedVoice.bodyText, lineNo, voiceId: currentVoiceId });
@@ -374,11 +378,14 @@ const abcCommon = AbcCommon;
     const orderedVoiceIds = parseScoreVoiceOrder(scoreDirective, declaredVoiceIds);
     const parts = orderedVoiceIds.map((voiceId, index) => {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
+      const transpose =
+        voiceTransposeById[voiceId] ||
+        (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
       return {
         partId: "P" + String(index + 1),
         partName,
         clef: voiceClefById[voiceId] || "",
-        transpose: settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null,
+        transpose,
         voiceId,
         measures: measuresByVoice[voiceId] || [[]]
       };
@@ -439,11 +446,12 @@ const abcCommon = AbcCommon;
 
   function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-      return { name: "", clef: "", bodyText: "" };
+      return { name: "", clef: "", transpose: null, bodyText: "" };
     }
     let bodyText = String(raw);
     let name = "";
     let clef = "";
+    let transpose = null;
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
       const lowerKey = String(key).toLowerCase();
@@ -451,12 +459,18 @@ const abcCommon = AbcCommon;
         name = quotedInner || bareValue || "";
       } else if (lowerKey === "clef") {
         clef = String(quotedInner || bareValue || "").trim().toLowerCase();
+      } else if (lowerKey === "transpose") {
+        const parsed = Number.parseInt(String(quotedInner || bareValue || "").trim(), 10);
+        if (Number.isFinite(parsed) && parsed >= -24 && parsed <= 24) {
+          transpose = { chromatic: parsed };
+        }
       }
       return " ";
     });
     return {
       name: name.trim(),
       clef: clef.trim(),
+      transpose,
       bodyText: bodyText.trim()
     };
   }
