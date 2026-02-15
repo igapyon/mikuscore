@@ -10,8 +10,7 @@ import type {
   Pitch,
   SaveResult,
 } from "../../core/interfaces";
-import { AbcCommon } from "./abc-io";
-import { AbcCompatParser } from "./abc-io";
+import { AbcCompatParser, exportMusicXmlDomToAbc } from "./abc-io";
 import { buildMidiBytesForPlayback, buildPlaybackEventsFromMusicXmlDoc } from "./midi-io";
 import {
   buildRenderDocWithNodeIds,
@@ -20,6 +19,13 @@ import {
   replaceMeasureInMainDocument,
   serializeMusicXmlDocument,
 } from "./musicxml-io";
+import {
+  createAbcDownloadPayload,
+  createMidiDownloadPayload,
+  createMusicXmlDownloadPayload,
+  triggerFileDownload,
+} from "./download-flow";
+import { resolveLoadFlow } from "./load-flow";
 import { sampleXml } from "./sampleXml";
 import { renderMusicXmlDomToSvg } from "./verovio-out";
 
@@ -1833,67 +1839,37 @@ const loadFromText = (xml: string, collapseInputSection: boolean): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
-  if (inputTypeNew.checked) {
-    const sourceText = createNewMusicXml();
-    xmlInput.value = sourceText;
-    loadFromText(sourceText, true);
+  const result = await resolveLoadFlow({
+    isNewType: inputTypeNew.checked,
+    isAbcType: inputTypeAbc.checked,
+    isFileMode: inputModeFile.checked,
+    selectedFile: fileInput.files?.[0] ?? null,
+    xmlSourceText: xmlInput.value,
+    abcSourceText: abcInput.value,
+    createNewMusicXml,
+    convertAbcToMusicXml,
+  });
+
+  if (!result.ok) {
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
+      warnings: [],
+    };
+    renderAll();
     return;
   }
 
-  let sourceText = "";
-  const treatAsAbc = inputTypeAbc.checked;
-
-  if (inputModeFile.checked) {
-    const selected = fileInput.files?.[0];
-    if (!selected) {
-      state.lastDispatchResult = {
-        ok: false,
-        dirtyChanged: false,
-        changedNodeIds: [],
-        affectedMeasureNumbers: [],
-        diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "ファイルを選択してください。" }],
-        warnings: [],
-      };
-      renderAll();
-      return;
-    }
-    sourceText = await selected.text();
-    if (treatAsAbc) {
-      abcInput.value = sourceText;
-    } else {
-      xmlInput.value = sourceText;
-    }
-  } else if (!treatAsAbc) {
-    sourceText = xmlInput.value;
-  } else {
-    sourceText = abcInput.value;
+  if (result.nextAbcInputText !== undefined) {
+    abcInput.value = result.nextAbcInputText;
   }
-
-  if (treatAsAbc) {
-    try {
-      const convertedXml = convertAbcToMusicXml(sourceText);
-      xmlInput.value = convertedXml;
-      loadFromText(convertedXml, true);
-    } catch (error) {
-      state.lastDispatchResult = {
-        ok: false,
-        dirtyChanged: false,
-        changedNodeIds: [],
-        affectedMeasureNumbers: [],
-        diagnostics: [
-          {
-            code: "MVP_INVALID_COMMAND_PAYLOAD",
-            message: `ABCの解析に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ],
-        warnings: [],
-      };
-      renderAll();
-    }
-    return;
+  if (result.nextXmlInputText !== undefined) {
+    xmlInput.value = result.nextXmlInputText;
   }
-
-  loadFromText(sourceText, true);
+  loadFromText(result.xmlToLoad, result.collapseInputSection);
 };
 
 const createNewMusicXml = (): string => {
@@ -2229,226 +2205,21 @@ const onConvertRestToNote = (): void => {
 
 const onDownload = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
-  const blob = new Blob([state.lastSuccessfulSaveXml], { type: "application/xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mikuscore.musicxml";
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-const convertMusicXmlToAbc = (doc: Document): string => {
-  const title =
-    doc.querySelector("work > work-title")?.textContent?.trim() ||
-    doc.querySelector("movement-title")?.textContent?.trim() ||
-    "mikuscore";
-  const composer =
-    doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim() || "";
-
-  const firstMeasure = doc.querySelector("score-partwise > part > measure");
-  const meterBeats = firstMeasure?.querySelector("attributes > time > beats")?.textContent?.trim() || "4";
-  const meterBeatType = firstMeasure?.querySelector("attributes > time > beat-type")?.textContent?.trim() || "4";
-  const fifths = Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() || "0");
-  const mode = firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() || "major";
-  const key = AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
-
-  const partNameById = new Map<string, string>();
-  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-    const id = scorePart.getAttribute("id") ?? "";
-    if (!id) continue;
-    const name = scorePart.querySelector("part-name")?.textContent?.trim() || id;
-    partNameById.set(id, name);
-  }
-
-  const unitLength = { num: 1, den: 8 };
-  const abcClefFromMusicXmlPart = (part: Element): string => {
-    const firstClef = part.querySelector(":scope > measure > attributes > clef");
-    if (!firstClef) return "";
-    const sign = firstClef.querySelector(":scope > sign")?.textContent?.trim().toUpperCase() ?? "";
-    const line = Number(firstClef.querySelector(":scope > line")?.textContent?.trim() ?? "");
-    if (sign === "F" && line === 4) return "bass";
-    if (sign === "G" && line === 2) return "treble";
-    if (sign === "C" && line === 3) return "alto";
-    if (sign === "C" && line === 4) return "tenor";
-    return "";
-  };
-  const keySignatureAlterByStep = (fifthsValue: number): Record<string, number> => {
-    const map: Record<string, number> = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
-    const sharpOrder = ["F", "C", "G", "D", "A", "E", "B"] as const;
-    const flatOrder = ["B", "E", "A", "D", "G", "C", "F"] as const;
-    const safeFifths = Math.max(-7, Math.min(7, Math.round(fifthsValue)));
-    if (safeFifths > 0) {
-      for (let i = 0; i < safeFifths; i += 1) map[sharpOrder[i]] = 1;
-    } else if (safeFifths < 0) {
-      for (let i = 0; i < Math.abs(safeFifths); i += 1) map[flatOrder[i]] = -1;
-    }
-    return map;
-  };
-  const accidentalTextToAlter = (text: string): number | null => {
-    const normalized = text.trim().toLowerCase();
-    if (!normalized) return null;
-    if (normalized === "sharp") return 1;
-    if (normalized === "flat") return -1;
-    if (normalized === "natural") return 0;
-    if (normalized === "double-sharp") return 2;
-    if (normalized === "flat-flat") return -2;
-    return null;
-  };
-
-  const headerLines = [
-    "X:1",
-    `T:${title}`,
-    composer ? `C:${composer}` : "",
-    `M:${meterBeats}/${meterBeatType}`,
-    "L:1/8",
-    `K:${key}`,
-  ].filter(Boolean);
-
-  const bodyLines: string[] = [];
-  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
-  parts.forEach((part, partIndex) => {
-    const partId = part.getAttribute("id") || `P${partIndex + 1}`;
-    const voiceId = partId.replace(/[^A-Za-z0-9_.-]/g, "_");
-    const voiceName = partNameById.get(partId) || partId;
-    const abcClef = abcClefFromMusicXmlPart(part);
-    const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
-    headerLines.push(`V:${voiceId} name="${voiceName}"${clefSuffix}`);
-
-    let currentDivisions = 480;
-    let currentFifths = Number.isFinite(fifths) ? Math.round(fifths) : 0;
-    const measureTexts: string[] = [];
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const parsedDiv = Number(measure.querySelector("attributes > divisions")?.textContent?.trim() || "");
-      if (Number.isFinite(parsedDiv) && parsedDiv > 0) {
-        currentDivisions = parsedDiv;
-      }
-      const parsedFifths = Number(measure.querySelector("attributes > key > fifths")?.textContent?.trim() || "");
-      if (Number.isFinite(parsedFifths)) {
-        currentFifths = Math.round(parsedFifths);
-      }
-      const keyAlterMap = keySignatureAlterByStep(currentFifths);
-      const measureAccidentalByStepOctave = new Map<string, number>();
-
-      let pending: { pitches: string[]; len: string; tie: boolean } | null = null;
-      const tokens: string[] = [];
-      const flush = (): void => {
-        if (!pending) return;
-        if (pending.pitches.length === 1) {
-          tokens.push(`${pending.pitches[0]}${pending.len}${pending.tie ? "-" : ""}`);
-        } else {
-          tokens.push(`[${pending.pitches.join("")}]${pending.len}${pending.tie ? "-" : ""}`);
-        }
-        pending = null;
-      };
-
-      for (const child of Array.from(measure.children)) {
-        if (child.tagName !== "note") continue;
-        const isChord = Boolean(child.querySelector("chord"));
-        const duration = Number(child.querySelector("duration")?.textContent?.trim() || "0");
-        if (!Number.isFinite(duration) || duration <= 0) continue;
-
-        const wholeFraction = AbcCommon.reduceFraction(duration, currentDivisions * 4, { num: 1, den: 4 });
-        const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
-        const len = AbcCommon.abcLengthTokenFromFraction(lenRatio);
-        const hasTieStart = Boolean(child.querySelector('tie[type="start"]'));
-
-        let pitchToken = "z";
-        if (!child.querySelector("rest")) {
-          const step = child.querySelector("pitch > step")?.textContent?.trim() || "C";
-          const octave = Number(child.querySelector("pitch > octave")?.textContent?.trim() || "4");
-          const upperStep = /^[A-G]$/.test(step.toUpperCase()) ? step.toUpperCase() : "C";
-          const safeOctave = Number.isFinite(octave) ? Math.max(0, Math.min(9, Math.round(octave))) : 4;
-          const stepOctaveKey = `${upperStep}${safeOctave}`;
-
-          const alterRaw = child.querySelector("pitch > alter")?.textContent?.trim() ?? "";
-          const explicitAlter = alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
-          const accidentalText = child.querySelector("accidental")?.textContent?.trim() ?? "";
-          const accidentalAlter = accidentalTextToAlter(accidentalText);
-
-          const keyAlter = keyAlterMap[upperStep] ?? 0;
-          const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
-            ? measureAccidentalByStepOctave.get(stepOctaveKey) ?? 0
-            : keyAlter;
-
-          let targetAlter = currentAlter;
-          if (explicitAlter !== null) {
-            targetAlter = explicitAlter;
-          } else if (accidentalAlter !== null) {
-            targetAlter = accidentalAlter;
-          }
-
-          const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
-          const accidental = shouldEmitAccidental
-            ? (targetAlter === 0 ? "=" : AbcCommon.accidentalFromAlter(targetAlter))
-            : "";
-          measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
-          pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
-        }
-
-        if (!isChord) {
-          flush();
-          pending = { pitches: [pitchToken], len, tie: hasTieStart };
-        } else {
-          if (!pending) {
-            pending = { pitches: [pitchToken], len, tie: hasTieStart };
-          } else {
-            pending.pitches.push(pitchToken);
-            pending.tie = pending.tie || hasTieStart;
-          }
-        }
-      }
-      flush();
-      measureTexts.push(tokens.join(" "));
-    }
-
-    bodyLines.push(`V:${voiceId}`);
-    bodyLines.push(`${measureTexts.join(" | ")} |`);
-  });
-
-  return `${headerLines.join("\n")}\n\n${bodyLines.join("\n")}\n`;
+  triggerFileDownload(createMusicXmlDownloadPayload(state.lastSuccessfulSaveXml));
 };
 
 const onDownloadMidi = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
-  const playbackDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
-  if (!playbackDoc) return;
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
-  if (parsedPlayback.events.length === 0) return;
-  let midiBytes: Uint8Array;
-  try {
-    midiBytes = buildMidiBytesForPlayback(parsedPlayback.events, parsedPlayback.tempo);
-  } catch {
-    return;
-  }
-  const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
-  new Uint8Array(midiArrayBuffer).set(midiBytes);
-  const blob = new Blob([midiArrayBuffer], { type: "audio/midi" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mikuscore.mid";
-  a.click();
-  URL.revokeObjectURL(url);
+  const payload = createMidiDownloadPayload(state.lastSuccessfulSaveXml, PLAYBACK_TICKS_PER_QUARTER);
+  if (!payload) return;
+  triggerFileDownload(payload);
 };
 
 const onDownloadAbc = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
-  const musicXmlDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
-  if (!musicXmlDoc) return;
-  let abcText = "";
-  try {
-    abcText = convertMusicXmlToAbc(musicXmlDoc);
-  } catch {
-    return;
-  }
-  const blob = new Blob([abcText], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "mikuscore.abc";
-  a.click();
-  URL.revokeObjectURL(url);
+  const payload = createAbcDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToAbc);
+  if (!payload) return;
+  triggerFileDownload(payload);
 };
 
 inputTypeXml.addEventListener("change", renderInputMode);
