@@ -35,11 +35,11 @@ type DispatchResult = {
 
 ## Command Definitions
 
-### 1. `change_pitch`
+### 1. `change_to_pitch`
 
 ```ts
 type ChangePitchCommand = {
-  type: "change_pitch";
+  type: "change_to_pitch";
   targetNodeId: NodeId; // note node
   voice: VoiceId; // must match editable voice in MVP
   pitch: {

@@ -44,18 +44,32 @@ export const validateCommandPayload = (command: CoreCommand): Diagnostic | null 
     }
     return null;
   }
-  if (command.type === "change_pitch") {
+  if (command.type === "change_to_pitch") {
     if (!isValidPitch(command.pitch)) {
       return {
         code: "MVP_INVALID_COMMAND_PAYLOAD",
-        message: "change_pitch.pitch is invalid.",
+        message: "change_to_pitch.pitch is invalid.",
       };
     }
   }
   return null;
 };
 
-export const validateSupportedNoteKind = (note: Element): Diagnostic | null => {
+export const validateSupportedNoteKind = (
+  command: CoreCommand,
+  note: Element
+): Diagnostic | null => {
+  // Allow rest -> pitched note conversion via change_to_pitch.
+  if (command.type === "change_to_pitch") {
+    const hasUnsupportedExceptRest =
+      note.querySelector(":scope > grace") !== null ||
+      note.querySelector(":scope > cue") !== null ||
+      note.querySelector(":scope > chord") !== null;
+    if (!hasUnsupportedExceptRest) return null;
+  } else if (!isUnsupportedNoteKind(note)) {
+    return null;
+  }
+
   if (!isUnsupportedNoteKind(note)) return null;
   return {
     code: "MVP_UNSUPPORTED_NOTE_KIND",
@@ -111,7 +125,11 @@ export const validateBackupForwardBoundaryForStructuralEdit = (
   command: CoreCommand,
   anchorOrTarget: Element
 ): Diagnostic | null => {
-  if (command.type !== "insert_note_after" && command.type !== "delete_note") {
+  if (
+    command.type !== "insert_note_after" &&
+    command.type !== "delete_note" &&
+    command.type !== "split_note"
+  ) {
     return null;
   }
 
@@ -123,6 +141,16 @@ export const validateBackupForwardBoundaryForStructuralEdit = (
       return {
         code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
         message: "Insert point crosses a backup/forward boundary in MVP.",
+      };
+    }
+    return null;
+  }
+
+  if (command.type === "split_note") {
+    if (next && isBackupOrForward(next)) {
+      return {
+        code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+        message: "Split point crosses a backup/forward boundary in MVP.",
       };
     }
     return null;

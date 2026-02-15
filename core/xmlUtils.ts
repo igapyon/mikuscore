@@ -71,6 +71,9 @@ export const getDurationNotationHint = (
 };
 
 export const setPitch = (note: Element, pitch: Pitch): void => {
+  const restNode = getDirectChild(note, "rest");
+  if (restNode) restNode.remove();
+
   let pitchNode = getDirectChild(note, "pitch");
   if (!pitchNode) {
     pitchNode = note.ownerDocument.createElement("pitch");

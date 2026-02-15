@@ -39,7 +39,7 @@ MVPが尖って見えるのは、機能を削ってでも round-trip の信頼�
 - `dirty === false` の保存は入力 XML 文字列をそのまま返す（`original_noop`）
 - 小節 overfull は `MEASURE_OVERFULL` で拒否
 - 非編集対象 voice は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否
-- 実用最低限として `change_pitch` / `change_duration` / `insert_note_after` / `delete_note` をMVPに含める
+- 実用最低限として `change_to_pitch` / `change_duration` / `insert_note_after` / `delete_note` をMVPに含める
 - `grace` / `cue` / `chord` / `rest` はMVPでは編集対象外（`MVP_UNSUPPORTED_NOTE_KIND`）
 - underfull は許容可能（警告を出す場合あり）
 - pretty-print なしでシリアライズ
@@ -83,6 +83,6 @@ MVPが尖って見えるのは、機能を削ってでも round-trip の信頼�
 ## 現在のステータス
 
 仕様策定フェーズは完了し、Core 実装（TypeScript）とテスト基盤は稼働中です。  
-UI 側では Verovio レンダリングを正式採用し、譜面クリックによる単音選択（`change_pitch` 先行）まで実装済みです。  
+UI 側では Verovio レンダリングを正式採用し、譜面クリックによる単音選択（`change_to_pitch` 先行）まで実装済みです。  
 再生系は `midi-writer.js` 経由の内蔵再生を組み込み、移調楽器（例: Clarinet in A）の `transpose` 反映も対応済みです。  
 テストは `tests/unit`（仕様契約）と `tests/property`（ランダム不変条件）の2系統で運用しています。

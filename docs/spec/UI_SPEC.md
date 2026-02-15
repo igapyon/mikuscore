@@ -78,7 +78,7 @@ Goal: Enable direct editing from rendered notation:
 
 Current scope (agreed):
 
-- First release targets `change_pitch` only.
+- First release targets `change_to_pitch` only.
 - Selection model is single-note only.
 - Click action is selection only; edit execution remains explicit via existing UI controls.
 - Mapping failure behavior is warning/diagnostics only (no mutation, no implicit fallback edit).
@@ -90,7 +90,7 @@ Current scope (agreed):
   - DOM traversal from click target (`closest('[id]')`)
   - `elementsFromPoint(clientX, clientY)` fallback when target id is non-note/container
 - UI MUST convert SVG element id into core target (`nodeId`) through a deterministic mapping layer.
-- After mapping, UI MUST invoke core command APIs only (`dispatch(change_pitch, ...)`, etc.).
+- After mapping, UI MUST invoke core command APIs only (`dispatch(change_to_pitch, ...)`, etc.).
 - After successful dispatch, UI MUST re-render both quick preview and Verovio confirmation preview.
 
 Implementation notes:

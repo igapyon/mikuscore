@@ -37,7 +37,7 @@ UI MUST NOT mutate XML DOM directly.
 
 ### Click-Edit Mapping Contract
 
-- Initial click-edit scope is `change_pitch` on a single selected note.
+- Initial click-edit scope is `change_to_pitch` on a single selected note.
 - Click operation selects target note only; command execution is explicit via UI action.
 - For clickable note editing, MusicXML notes SHOULD expose stable identifiers (prefer `xml:id`).
 - For MVP, identifiers SHOULD be session-scoped temporary IDs and SHOULD NOT be written to final saved XML.

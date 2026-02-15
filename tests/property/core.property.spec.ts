@@ -46,9 +46,9 @@ const makeCommand = (rng: Lcg, nodeIds: string[]): CoreCommand => {
   }
 
   const target = rng.pick(nodeIds);
-  const type = rng.pick(["change_pitch", "change_duration", "insert_note_after", "delete_note"]);
+  const type = rng.pick(["change_to_pitch", "change_duration", "insert_note_after", "delete_note"]);
 
-  if (type === "change_pitch") {
+  if (type === "change_to_pitch") {
     return {
       type,
       targetNodeId: target,
@@ -90,8 +90,8 @@ const makeNonStructuralCommand = (rng: Lcg, nodeIds: string[]): CoreCommand => {
     return { type: "ui_noop", reason: "cursor_move" };
   }
   const target = rng.pick(nodeIds);
-  const type = rng.pick(["change_pitch", "change_duration"]);
-  if (type === "change_pitch") {
+  const type = rng.pick(["change_to_pitch", "change_duration"]);
+  if (type === "change_to_pitch") {
     return {
       type,
       targetNodeId: target,

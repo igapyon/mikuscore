@@ -86,7 +86,7 @@ export class ScoreCore {
     const target = this.idToNode.get(targetId);
     if (!target) return this.fail("MVP_TARGET_NOT_FOUND", `Unknown nodeId: ${targetId}`);
 
-    const noteKindDiagnostic = validateSupportedNoteKind(target);
+    const noteKindDiagnostic = validateSupportedNoteKind(command, target);
     if (noteKindDiagnostic) return this.failWith(noteKindDiagnostic);
 
     const targetVoiceDiagnostic = validateTargetVoiceMatch(command, target);
@@ -105,7 +105,7 @@ export class ScoreCore {
     const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
 
     try {
-      if (command.type === "change_pitch") {
+      if (command.type === "change_to_pitch") {
         setPitch(target, command.pitch);
       } else if (command.type === "change_duration") {
         const durationNotation = getDurationNotationHint(target, command.duration);
@@ -165,6 +165,27 @@ export class ScoreCore {
         } else if (projectedWarning) {
           warnings.push(projectedWarning);
         }
+      } else if (command.type === "split_note") {
+        const currentDuration = getDurationValue(target);
+        if (!Number.isInteger(currentDuration) || (currentDuration ?? 0) <= 1) {
+          return this.fail(
+            "MVP_INVALID_COMMAND_PAYLOAD",
+            "split_note requires duration >= 2."
+          );
+        }
+        if ((currentDuration as number) % 2 !== 0) {
+          return this.fail(
+            "MVP_INVALID_COMMAND_PAYLOAD",
+            "split_note requires an even duration value."
+          );
+        }
+        const half = (currentDuration as number) / 2;
+        const duplicated = target.cloneNode(true) as Element;
+        // Attach clone first so duration->notation sync can resolve measure divisions.
+        target.after(duplicated);
+        setDurationValue(target, half);
+        setDurationValue(duplicated, half);
+        insertedNode = duplicated;
       } else if (command.type === "insert_note_after") {
         const timing = getMeasureTimingForVoice(target, command.voice);
         if (timing) {
@@ -422,6 +443,10 @@ export class ScoreCore {
     }
     if (command.type === "delete_note") {
       return removedNodeId ? [removedNodeId] : [targetId];
+    }
+    if (command.type === "split_note") {
+      const insertedId = insertedNode ? this.nodeToId.get(insertedNode) ?? null : null;
+      return insertedId ? [targetId, insertedId] : [targetId];
     }
     return [targetId];
   }

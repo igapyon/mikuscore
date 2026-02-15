@@ -51,7 +51,7 @@ describe("ScoreCore MVP", () => {
     const [first] = core.listNoteNodeIds();
 
     const result = core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: first,
       voice: "1",
       pitch: { step: "G", octave: 5 },
@@ -67,6 +67,28 @@ describe("ScoreCore MVP", () => {
     expect(saved.mode).toBe("serialized_dirty");
     expect(saved.xml).toContain("<step>G</step>");
     expect(saved.xml).toContain("<octave>5</octave>");
+  });
+
+  it("RT-1a: pitch change converts rest note into pitched note", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_REST);
+    const [first] = core.listNoteNodeIds();
+
+    const result = core.dispatch({
+      type: "change_to_pitch",
+      targetNodeId: first,
+      voice: "1",
+      pitch: { step: "C", octave: 4 },
+    });
+
+    expect(result.ok).toBe(true);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const firstNote = doc.querySelector("measure > note");
+    expect(firstNote?.querySelector(":scope > rest")).toBeNull();
+    expect(firstNote?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(firstNote?.querySelector(":scope > pitch > octave")?.textContent?.trim()).toBe("4");
   });
 
   it("RT-1b: duration change updates note type for simple values", () => {
@@ -139,6 +161,45 @@ describe("ScoreCore MVP", () => {
       targetNodeId: first,
       voice: "1",
       duration: 2, // quarter triplet when divisions=3
+    });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe("MVP_INVALID_COMMAND_PAYLOAD");
+  });
+
+  it("RT-1e: split_note divides selected note into two equal durations", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_FULL_WITH_HALF);
+    const first = core.listNoteNodeIds()[0];
+
+    const result = core.dispatch({
+      type: "split_note",
+      targetNodeId: first,
+      voice: "1",
+    });
+    expect(result.ok).toBe(true);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+    expect(notes).toHaveLength(4);
+    expect(notes[0]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(notes[0]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("1");
+    expect(notes[0]?.querySelector(":scope > type")?.textContent?.trim()).toBe("quarter");
+    expect(notes[1]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(notes[1]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("1");
+    expect(notes[1]?.querySelector(":scope > type")?.textContent?.trim()).toBe("quarter");
+  });
+
+  it("RT-1f: split_note rejects odd duration values", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_FULL_WITH_HALF);
+    const second = core.listNoteNodeIds()[1]; // duration=1
+
+    const result = core.dispatch({
+      type: "split_note",
+      targetNodeId: second,
+      voice: "1",
     });
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]?.code).toBe("MVP_INVALID_COMMAND_PAYLOAD");
@@ -471,7 +532,7 @@ describe("ScoreCore MVP", () => {
     expect(before.ok).toBe(true);
 
     const result = core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: first,
       voice: "2",
       pitch: { step: "A", octave: 4 },
@@ -636,7 +697,7 @@ describe("ScoreCore MVP", () => {
     core.load(XML_WITH_UNKNOWN);
     const [first] = core.listNoteNodeIds();
     core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: first,
       voice: "1",
       pitch: { step: "B", octave: 4 },
@@ -654,7 +715,7 @@ describe("ScoreCore MVP", () => {
     const third = ids[2];
 
     const result = core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: third,
       voice: "1",
       pitch: { step: "B", octave: 5 },
@@ -747,7 +808,7 @@ describe("ScoreCore MVP", () => {
     const before = core.save();
 
     const result = core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: first,
       voice: "1",
       pitch: { step: "H" as unknown as "A", octave: 4 },
@@ -767,7 +828,7 @@ describe("ScoreCore MVP", () => {
     const second = ids[1];
 
     const ok1 = core.dispatch({
-      type: "change_pitch",
+      type: "change_to_pitch",
       targetNodeId: first,
       voice: "1",
       pitch: { step: "G", octave: 5 },
