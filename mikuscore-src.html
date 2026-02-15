@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mikuscore</title>
+  <link rel="stylesheet" href="src/css/md3/token-spec.css" />
+  <link rel="stylesheet" href="src/css/md3/core-spec.css" />
+  <link rel="stylesheet" href="src/css/app.css" />
+</head>
+<body class="md-page">
+  <svg aria-hidden="true" class="md-icon-sprite" width="0" height="0" viewBox="0 0 0 0" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="position:absolute;width:0;height:0;overflow:hidden">
+    <defs>
+      <symbol id="md-icon-github" viewBox="0 0 16 16">
+        <path fill="currentColor" d="M8 0a8 8 0 0 0-2.53 15.6c.4.08.55-.17.55-.38v-1.33c-2.25.49-2.72-1.08-2.72-1.08-.36-.94-.9-1.2-.9-1.2-.74-.5.06-.49.06-.49.81.06 1.25.84 1.25.84.72 1.23 1.88.87 2.34.66.07-.52.28-.87.5-1.07-1.8-.21-3.69-.9-3.69-3.98 0-.88.32-1.6.83-2.16-.08-.2-.36-1.02.08-2.12 0 0 .68-.22 2.2.82A7.7 7.7 0 0 1 8 3.9c.68 0 1.37.1 2 .3 1.52-1.03 2.2-.82 2.2-.82.44 1.1.16 1.93.08 2.12.52.56.83 1.28.83 2.16 0 3.1-1.89 3.77-3.7 3.97.29.25.55.74.55 1.49v2.2c0 .21.14.46.55.38A8 8 0 0 0 8 0z"/>
+      </symbol>
+    </defs>
+  </svg>
+  <main class="md-shell">
+    <section class="md-card ms-app">
+      <header class="ms-hero">
+        <h1 class="md-headline ms-hero-title">
+          <span class="ms-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M9 3v12.4a3.6 3.6 0 1 1-1.2-2.7V6.2l9-2.2v9.6a3.6 3.6 0 1 1-1.2-2.7V5.6L9 7.1Z" />
+            </svg>
+          </span>
+          <span>mikuscore</span>
+          <span class="md-tooltip-group">
+            <span class="md-info-chip" aria-label="About mikuscore">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+              </svg>
+            </span>
+            <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
+              mikuscore is a local editor focused on preserving existing MusicXML structure while editing.
+              From input (file/source), score preview, note editing, playback, and export/download are handled in one screen.
+              Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
+              After loading, click notes in the score to select targets, then adjust pitch and duration.
+              Use tools like MuseScore for complex work. mikuscore aims to be practical on mobile devices.
+            </span>
+          </span>
+          <a
+            href="https://github.com/igapyon/mikuscore"
+            class="ms-hero-link"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Open mikuscore GitHub repository"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16" class="ms-btn-icon" fill="currentColor">
+              <use href="#md-icon-github" xlink:href="#md-icon-github"></use>
+            </svg>
+            <span>GitHub</span>
+          </a>
+        </h1>
+      </header>
+
+      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore sections">
+        <button type="button" class="ms-top-tab is-active" data-tab="input">
+          <span class="ms-top-tab-no">1</span>
+          <span class="ms-top-tab-label">Input</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="score">
+          <span class="ms-top-tab-no">2</span>
+          <span class="ms-top-tab-label">Score</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="edit">
+          <span class="ms-top-tab-no">3</span>
+          <span class="ms-top-tab-label">Edit</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="save">
+          <span class="ms-top-tab-no">4</span>
+          <span class="ms-top-tab-label">Export</span>
+        </button>
+      </div>
+
+      <div class="ms-flow">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
+          <h2 class="md-section-title"><span class="ms-step-no">1</span>Input</h2>
+
+          <div class="ms-radio-group-wrap">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
+              <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
+              <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
+              <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
+            </div>
+          </div>
+
+          <div class="ms-radio-group-wrap">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
+              <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
+              <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
+            </div>
+          </div>
+
+          <div id="newInputBlock" class="ms-block md-hidden">
+            <div class="ms-stack-sm">
+              <label class="ms-field">Track count (parts)
+                <input id="newPartCount" type="number" min="1" max="16" step="1" value="1" class="md-input" />
+              </label>
+              <label class="ms-field">Time signature
+                <div class="ms-form-row">
+                  <input id="newTimeBeats" type="number" min="1" max="16" step="1" value="4" class="md-input" style="max-width: 8rem;" />
+                  <span>/</span>
+                  <select id="newTimeBeatType" class="md-select" style="max-width: 8rem;">
+                    <option value="2">2</option>
+                    <option value="4" selected>4</option>
+                    <option value="8">8</option>
+                    <option value="16">16</option>
+                  </select>
+                </div>
+              </label>
+              <label class="ms-field">Key signature
+                <select id="newKeyFifths" class="md-select">
+                  <option value="1">♯1 (G)</option>
+                  <option value="2">♯2 (D)</option>
+                  <option value="3">♯3 (A)</option>
+                  <option value="4">♯4 (E)</option>
+                  <option value="5">♯5 (B)</option>
+                  <option value="6">♯6 (F#)</option>
+                  <option value="7">♯7 (C#)</option>
+                  <option value="0" selected>None (C)</option>
+                  <option value="-1">♭1 (F)</option>
+                  <option value="-2">♭2 (Bb)</option>
+                  <option value="-3">♭3 (Eb)</option>
+                  <option value="-4">♭4 (Ab)</option>
+                  <option value="-5">♭5 (Db)</option>
+                  <option value="-6">♭6 (Gb)</option>
+                  <option value="-7">♭7 (Cb)</option>
+                </select>
+              </label>
+            </div>
+            <div id="newPartClefList" class="ms-stack-sm" aria-live="polite"></div>
+          </div>
+
+          <div id="fileInputBlock" class="ms-block">
+            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal ms-icon-button ms-file-select-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
+                <path d="M12 10v6"></path>
+                <path d="M9 13l3 3 3-3"></path>
+              </svg>
+              <span>Choose file</span>
+            </button>
+            <span id="fileNameText" class="ms-file-name">No file selected</span>
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
+          </div>
+
+          <div id="sourceXmlInputBlock" class="ms-block md-hidden">
+            <label for="xmlInput" class="md-label">MusicXML</label>
+            <textarea id="xmlInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
+          </div>
+
+          <div id="abcInputBlock" class="ms-block md-hidden">
+            <label for="abcInput" class="md-label">ABC</label>
+            <textarea id="abcInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
+          </div>
+
+          <div class="ms-actions">
+            <button id="loadBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7.5h6.2l2 2H21v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <path d="M12.2 13.4V9.8"></path>
+                <path d="M10 11.9l2.2 2.2 2.2-2.2"></path>
+              </svg>
+              <span>Load</span>
+            </button>
+            <button id="loadSampleBtn" type="button" class="md-button md-button--tonal">Load sample</button>
+          </div>
+          <div id="localDraftNotice" class="ms-local-draft md-hidden" role="status" aria-live="polite">
+            <div id="localDraftText" class="ms-local-draft-text"></div>
+          </div>
+        </section>
+
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="score" hidden>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">2</span>Score
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="Score preview help">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
+                Click a note to select it for editing.
+              </span>
+            </span>
+          </h2>
+          <div class="ms-actions ms-preview-actions">
+            <button id="playBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>Play</span>
+            </button>
+            <button id="stopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
+              </svg>
+              <span>Stop</span>
+            </button>
+          </div>
+          <div id="debugScoreWrap" class="ms-debug-wrap">
+            <div id="debugScoreArea" class="ms-debug-score"></div>
+          </div>
+        </section>
+
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
+          <h2 class="md-section-title"><span class="ms-step-no">3</span>Edit</h2>
+          <div id="measureEmptyState" class="ms-empty-state" role="status" aria-live="polite">
+            <div class="ms-empty-state-inner">
+              <div class="ms-empty-state-title">No measure selected</div>
+              <div class="ms-empty-state-body">Click a measure in the score to select it</div>
+              <div class="ms-empty-state-actions">
+                <button id="measureSelectGuideBtn" type="button" class="md-button md-button--surface">
+                  Go to Score
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
+            <div id="measureEditorArea" class="ms-debug-score"></div>
+          </div>
+          <div class="ms-actions">
+            <button id="convertRestBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 34 24" class="ms-btn-icon ms-btn-icon--wide" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <!-- quarter rest (wide, readable silhouette) -->
+                <path d="M6.5 3.6c4 1.7 5.4 4.2 2.9 7.3-1.2 1.4-1.2 2.7.6 4.1 1.5 1.2 3.6 2 5.2 3.5"></path>
+                <path d="M9.2 7.6c2.2 1.2 3.4 2.8 2 4.6"></path>
+                <path d="M11.8 15.3c1.6.8 2.8 1.5 4 2.6"></path>
+                <!-- convert arrow -->
+                <path d="M16.8 12h5.2"></path>
+                <path d="M20.2 9.5l2.6 2.5-2.6 2.5"></path>
+                <!-- quarter note -->
+                <circle cx="27.3" cy="15.9" r="2.2" fill="currentColor" stroke="none"></circle>
+                <path d="M29.3 15.9V7.1"></path>
+              </svg>
+              <span>Convert Rest to Note</span>
+            </button>
+            <button id="splitNoteBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
+                <path d="M10 15.5V8"></path>
+                <path d="M12 6v12"></path>
+                <circle cx="16.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
+                <path d="M19 15.5V8"></path>
+              </svg>
+              <span>Split Note</span>
+            </button>
+            <button id="deleteBtn" type="button" class="md-button md-button--surface ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16"></path>
+                <path d="M9 7V5h6v2"></path>
+                <rect x="6.5" y="7" width="11" height="13" rx="1.5"></rect>
+                <path d="M10 10v7"></path>
+                <path d="M14 10v7"></path>
+              </svg>
+              <span>Delete Note</span>
+            </button>
+            <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>Play</span>
+            </button>
+          </div>
+
+          <div class="ms-grid">
+            <label class="ms-field">
+              <span class="ms-field-label">Pitch step</span>
+              <div class="ms-step-row">
+                <input id="pitchStep" type="hidden" value="" />
+                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">Rest</span>
+                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Lower pitch step">↓</button>
+                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Raise pitch step">↑</button>
+              </div>
+            </label>
+            <label class="ms-field">
+              <span class="ms-field-label">Accidental</span>
+              <div class="ms-alter-row" role="group" aria-label="Accidental">
+                <input id="pitchAlter" type="hidden" value="none" />
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="No accidental">None</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="Double flat">♭♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="Flat">♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="Natural">♮</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="Sharp">♯</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="Double sharp">♯♯</button>
+              </div>
+            </label>
+            <input id="pitchOctave" type="hidden" value="4" />
+            <label class="ms-field">
+              <span class="ms-field-label">Duration</span>
+              <select id="durationPreset" class="md-select" aria-label="Duration preset">
+                <option value="">(Select duration)</option>
+              </select>
+              <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
+            </label>
+          </div>
+
+          <p id="measurePartNameText" class="ms-track-label md-hidden">Track: -</p>
+          <div class="ms-actions">
+            <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 7L9 18l-5-5"></path>
+              </svg>
+              <span>Apply</span>
+            </button>
+            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6L6 18"></path>
+                <path d="M6 6l12 12"></path>
+              </svg>
+              <span>Discard</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>Export</h2>
+          <div class="ms-actions">
+            <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12"></path>
+                <path d="M8 11l4 4 4-4"></path>
+                <path d="M4 19h16"></path>
+              </svg>
+              <span>Export MusicXML</span>
+            </button>
+            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect>
+                <path d="M8 9l-1.4 5"></path>
+                <path d="M6.7 11.8h2.6"></path>
+                <path d="M12.2 9h2.3a1.7 1.7 0 0 1 0 3.4h-2.3z"></path>
+                <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
+                <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
+              </svg>
+              <span>Export ABC</span>
+            </button>
+            <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9a6 6 0 0 1 12 0v3a6 6 0 0 1-12 0z"></path>
+                <path d="M8.5 10.2h7"></path>
+                <circle cx="9.2" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="11.1" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12.9" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
+              </svg>
+              <span>Export MIDI</span>
+            </button>
+          </div>
+          <div class="ms-actions">
+            <button id="discardDraftExportBtn" type="button" class="md-button md-button--surface ms-icon-button md-hidden">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16"></path>
+                <path d="M9 7V5h6v2"></path>
+                <rect x="6.5" y="7" width="11" height="13" rx="1.5"></rect>
+                <path d="M10 10v7"></path>
+                <path d="M14 10v7"></path>
+              </svg>
+              <span>Discard Draft</span>
+            </button>
+          </div>
+        </section>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="src/js/verovio.js"></script>
+  <script src="src/js/midi-writer.js"></script>
+  <script src="src/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "lib": ["DOM", "DOM.Iterable", "ES2018"]
+  },
+  "include": ["core/**/*.ts", "src/**/*.ts"]
+}

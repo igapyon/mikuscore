@@ -1,0 +1,30 @@
+/* local-html-tools MD3 Token Spec v1.0.0 (2026-02-08) */
+:root {
+  --md-danger: #b3261e;
+  --md-state-layer: rgba(98, 0, 238, 0.12);
+  --md-sys-color-background: #f6f4f8;
+  --md-sys-color-focus-ring: rgba(98, 0, 238, 0.35);
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-on-secondary: #00332c;
+  --md-sys-color-on-surface: #1c1b1f;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-on-tertiary: #FFFFFF;
+  --md-sys-color-on-tertiary-container: #3d2e5a;
+  --md-sys-color-outline: #c8c5d0;
+  --md-sys-color-primary: #6200ee;
+  --md-sys-color-secondary: #03dac6;
+  --md-sys-color-shadow: rgba(0, 0, 0, 0.2);
+  --md-sys-color-state-layer: rgba(98, 0, 238, 0.08);
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-variant: #f4f1f7;
+  --md-sys-color-tertiary: #7D5260;
+  --md-sys-color-tertiary-container: #f3e8fd;
+  --md-typography-body-medium: 1rem;
+  --md-typography-body-small: 0.875rem;
+  --md-typography-headline-large: 1.85rem;
+  --md-typography-title-medium: 1.1rem;
+  --md-typography-title-small: 1.05rem;
+  --status-later: #ff9800;
+  --status-ok: #4caf50;
+  --status-todo: #00bcd4;
+}
