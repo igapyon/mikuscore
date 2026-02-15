@@ -102,6 +102,61 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.ms-flow-collapsible {
+  overflow: hidden;
+}
+
+.ms-flow-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ms-flow-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-flow-summary .md-section-title {
+  margin-bottom: 0;
+}
+
+.ms-flow-summary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #7a6a99;
+}
+
+.ms-flow-state {
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid #d7cdee;
+  background: #f4effc;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ms-flow-caret {
+  font-size: 0.85rem;
+  transition: transform 150ms ease;
+}
+
+.ms-flow-collapsible[open] .ms-flow-caret {
+  transform: rotate(180deg);
+}
+
+.ms-flow-collapsible:not([open]) .ms-flow-state {
+  opacity: 1;
+}
+
+.ms-flow-body {
+  margin-top: 0.8rem;
+}
+
 .ms-step-no {
   display: inline-flex;
   align-items: center;
@@ -146,6 +201,22 @@ body {
 
 .ms-actions .md-button {
   width: auto;
+}
+
+.ms-preview-actions {
+  margin-bottom: 0.7rem;
+}
+
+.ms-icon-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ms-btn-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 auto;
 }
 
 .ms-status {
