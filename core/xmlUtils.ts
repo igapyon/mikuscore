@@ -57,6 +57,17 @@ export const setDurationValue = (note: Element, duration: number): void => {
     note.appendChild(durationNode);
   }
   durationNode.textContent = String(duration);
+  syncSimpleTypeFromDuration(note, duration);
+};
+
+export const getDurationNotationHint = (
+  note: Element,
+  duration: number
+): { type: string; dotCount: number; triplet: boolean } | null => {
+  if (!Number.isInteger(duration) || duration <= 0) return null;
+  const divisions = resolveEffectiveDivisions(note);
+  if (divisions === null || !Number.isInteger(divisions) || divisions <= 0) return null;
+  return durationToNotation(duration, divisions);
 };
 
 export const setPitch = (note: Element, pitch: Pitch): void => {
@@ -113,6 +124,25 @@ export const createNoteElement = (
   voiceNode.textContent = voice;
   note.appendChild(voiceNode);
 
+  return note;
+};
+
+export const createRestElement = (
+  doc: XMLDocument,
+  voice: string,
+  duration: number
+): Element => {
+  const note = doc.createElement("note");
+  const restNode = doc.createElement("rest");
+  note.appendChild(restNode);
+
+  const durationNode = doc.createElement("duration");
+  durationNode.textContent = String(duration);
+  note.appendChild(durationNode);
+
+  const voiceNode = doc.createElement("voice");
+  voiceNode.textContent = voice;
+  note.appendChild(voiceNode);
   return note;
 };
 
@@ -213,4 +243,88 @@ const accidentalFromAlter = (alter: number): string => {
   if (alter === 0) return "natural";
   if (alter === 1) return "sharp";
   return "double-sharp";
+};
+
+const syncSimpleTypeFromDuration = (note: Element, duration: number): void => {
+  if (!Number.isInteger(duration) || duration <= 0) return;
+  const divisions = resolveEffectiveDivisions(note);
+  if (divisions === null || !Number.isInteger(divisions) || divisions <= 0) return;
+
+  const notation = durationToNotation(duration, divisions);
+  if (!notation) return;
+
+  upsertSimpleChild(note, "type", notation.type);
+  Array.from(note.children)
+    .filter((child) => child.tagName === "dot" || child.tagName === "time-modification")
+    .forEach((child) => child.remove());
+
+  for (let i = 0; i < notation.dotCount; i += 1) {
+    const dot = note.ownerDocument.createElement("dot");
+    note.appendChild(dot);
+  }
+
+  if (notation.triplet) {
+    const tm = note.ownerDocument.createElement("time-modification");
+    const actual = note.ownerDocument.createElement("actual-notes");
+    actual.textContent = "3";
+    const normal = note.ownerDocument.createElement("normal-notes");
+    normal.textContent = "2";
+    tm.appendChild(actual);
+    tm.appendChild(normal);
+    note.appendChild(tm);
+  }
+};
+
+const resolveEffectiveDivisions = (note: Element): number | null => {
+  const measure = findAncestorMeasure(note);
+  if (!measure) return null;
+  const part = measure.parentElement;
+  if (!part || part.tagName !== "part") return null;
+
+  const measures = Array.from(part.children).filter((child) => child.tagName === "measure");
+  const measureIndex = measures.indexOf(measure);
+  if (measureIndex < 0) return null;
+
+  let divisions: number | null = null;
+  for (let i = measureIndex; i >= 0; i -= 1) {
+    const candidate = measures[i];
+    const text = candidate.querySelector("attributes > divisions")?.textContent?.trim() ?? "";
+    const n = Number(text);
+    if (Number.isInteger(n) && n > 0) {
+      divisions = n;
+      break;
+    }
+  }
+  return divisions;
+};
+
+const durationToNotation = (
+  duration: number,
+  divisions: number
+): { type: string; dotCount: number; triplet: boolean } | null => {
+  const defs: Array<{ num: number; den: number; type: string; dotCount: number; triplet: boolean }> = [
+    { num: 4, den: 1, type: "whole", dotCount: 0, triplet: false },
+    { num: 3, den: 1, type: "half", dotCount: 1, triplet: false },
+    { num: 2, den: 1, type: "half", dotCount: 0, triplet: false },
+    { num: 4, den: 3, type: "half", dotCount: 0, triplet: true },
+    { num: 3, den: 2, type: "quarter", dotCount: 1, triplet: false },
+    { num: 1, den: 1, type: "quarter", dotCount: 0, triplet: false },
+    { num: 2, den: 3, type: "quarter", dotCount: 0, triplet: true },
+    { num: 3, den: 4, type: "eighth", dotCount: 1, triplet: false },
+    { num: 1, den: 2, type: "eighth", dotCount: 0, triplet: false },
+    { num: 1, den: 3, type: "eighth", dotCount: 0, triplet: true },
+    { num: 3, den: 8, type: "16th", dotCount: 1, triplet: false },
+    { num: 1, den: 4, type: "16th", dotCount: 0, triplet: false },
+    { num: 1, den: 6, type: "16th", dotCount: 0, triplet: true },
+    { num: 1, den: 8, type: "32nd", dotCount: 0, triplet: false },
+    { num: 1, den: 16, type: "64th", dotCount: 0, triplet: false },
+  ];
+  for (const def of defs) {
+    const value = (divisions * def.num) / def.den;
+    if (!Number.isInteger(value) || value <= 0) continue;
+    if (duration === value) {
+      return { type: def.type, dotCount: def.dotCount, triplet: def.triplet };
+    }
+  }
+  return null;
 };

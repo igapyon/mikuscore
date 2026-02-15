@@ -113,6 +113,7 @@
 
         <section class="md-section ms-flow-step">
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
+          <div id="uiMessage" class="ms-ui-message md-hidden" role="status" aria-live="polite"></div>
           <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
           <p id="measureSelectionText" class="ms-status">小節未選択（譜面プレビューをクリックしてください）</p>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
@@ -146,12 +147,13 @@
             </label>
             <input id="pitchOctave" type="hidden" value="4" />
             <label class="ms-field">音価(duration)
-              <input id="durationInput" type="number" min="1" step="1" value="1" class="md-input" />
+              <select id="durationPreset" class="md-select" aria-label="音価プリセット">
+                <option value="">（音価を選択）</option>
+              </select>
             </label>
           </div>
 
           <div class="ms-actions">
-            <button id="changeDurationBtn" type="button" class="md-button md-button--primary">音価変更</button>
             <button id="insertAfterBtn" type="button" class="md-button md-button--tonal">後ろに音符追加</button>
             <button id="deleteBtn" type="button" class="md-button md-button--surface">音符削除</button>
           </div>

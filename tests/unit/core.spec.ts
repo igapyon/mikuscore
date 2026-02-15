@@ -11,6 +11,9 @@ const XML_WITH_BACKUP = loadFixture("with_backup.musicxml");
 const XML_WITH_MIXED_VOICES = loadFixture("mixed_voices.musicxml");
 const XML_WITH_INTERLEAVED_VOICES = loadFixture("interleaved_voices.musicxml");
 const XML_WITH_REST = loadFixture("with_rest.musicxml");
+const XML_WITH_FOLLOWING_REST = loadFixture("with_following_rest.musicxml");
+const XML_WITH_REST_TAIL = loadFixture("with_rest_tail.musicxml");
+const XML_WITH_FULL_WITH_HALF = loadFixture("full_with_half.musicxml");
 const XML_WITH_UNKNOWN = loadFixture("with_unknown.musicxml");
 const XML_WITH_BEAM = loadFixture("with_beam.musicxml");
 const XML_WITH_INHERITED_ATTRIBUTES = loadFixture("inherited_attributes.musicxml");
@@ -64,6 +67,81 @@ describe("ScoreCore MVP", () => {
     expect(saved.mode).toBe("serialized_dirty");
     expect(saved.xml).toContain("<step>G</step>");
     expect(saved.xml).toContain("<octave>5</octave>");
+  });
+
+  it("RT-1b: duration change updates note type for simple values", () => {
+    const core = new ScoreCore();
+    core.load(UNDERFULL_XML); // divisions=1, occupied=3/4
+    const [first] = core.listNoteNodeIds();
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: first,
+      voice: "1",
+      duration: 2, // half note when divisions=1
+    });
+
+    expect(result.ok).toBe(true);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const firstNote = doc.querySelector("measure > note");
+    expect(firstNote?.querySelector("duration")?.textContent?.trim()).toBe("2");
+    expect(firstNote?.querySelector("type")?.textContent?.trim()).toBe("half");
+  });
+
+  it("RT-1c: duration change updates dotted/triplet notation metadata", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_REST_TAIL); // divisions=1
+    const ids = core.listNoteNodeIds();
+    const first = ids[0];
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: first,
+      voice: "1",
+      duration: 3, // dotted half when divisions=1
+    });
+
+    expect(result.ok).toBe(true);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const note = doc.querySelector("measure > note");
+    expect(note?.querySelector("type")?.textContent?.trim()).toBe("half");
+    expect(note?.querySelectorAll("dot").length).toBe(1);
+    expect(note?.querySelector("time-modification")).toBeNull();
+  });
+
+  it("RT-1d: triplet duration is rejected when measure has no tuplet context", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>3</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>9</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const core = new ScoreCore();
+    core.load(xml);
+    const first = core.listNoteNodeIds()[0];
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: first,
+      voice: "1",
+      duration: 2, // quarter triplet when divisions=3
+    });
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics[0]?.code).toBe("MVP_INVALID_COMMAND_PAYLOAD");
   });
 
   it("DR-1: ui-only command does not set dirty", () => {
@@ -221,6 +299,67 @@ describe("ScoreCore MVP", () => {
     expect(firstAfter.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
     expect(firstAfter.querySelector(":scope > pitch > octave")?.textContent?.trim()).toBe("4");
     expect(firstAfter.querySelector(":scope > duration")?.textContent?.trim()).toBe("8");
+  });
+
+  it("TI-9: extending duration consumes following rest in same voice", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_FOLLOWING_REST);
+    const ids = core.listNoteNodeIds();
+    const second = ids[1];
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: second,
+      voice: "1",
+      duration: 2,
+    });
+
+    expect(result.ok).toBe(true);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+
+    // C(1), D(2), E(1): the following rest should be consumed away.
+    expect(notes).toHaveLength(3);
+    expect(notes[0]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(notes[1]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("D");
+    expect(notes[1]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("2");
+    expect(notes[2]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
+  });
+
+  it("TI-10: shortening duration auto-fills trailing rest to avoid underfull", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_FULL_WITH_HALF);
+    const ids = core.listNoteNodeIds();
+    const first = ids[0];
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: first,
+      voice: "1",
+      duration: 1,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toEqual([]);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+
+    // C(1), auto rest(1), D(1), E(1)
+    expect(notes).toHaveLength(4);
+    const inserted = notes[1];
+    expect(inserted?.querySelector(":scope > rest")).not.toBeNull();
+    expect(inserted?.querySelector(":scope > duration")?.textContent?.trim()).toBe("1");
+    expect(inserted?.querySelector(":scope > voice")?.textContent?.trim()).toBe("1");
+    expect(inserted?.querySelector(":scope > type")?.textContent?.trim()).toBe("quarter");
+    expect(inserted?.querySelector(":scope > dot")).toBeNull();
+    expect(inserted?.querySelector(":scope > time-modification")).toBeNull();
+    expect(notes[2]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("D");
+    expect(notes[3]?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
   });
 
   it("IN-2: insert that makes measure overfull is rejected", () => {
