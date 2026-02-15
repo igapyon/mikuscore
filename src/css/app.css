@@ -263,11 +263,48 @@ body {
   color: var(--md-sys-color-on-surface-variant);
 }
 
-.ms-track-label {
-  margin: 0.15rem 0;
-  color: var(--md-sys-color-on-surface-variant);
+.ms-empty-state {
+  border: 1px solid #dfd9e9;
+  border-radius: 12px;
+  background: #f4f1f7;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.ms-empty-state.md-hidden {
+  display: none !important;
+}
+
+.ms-empty-state-inner {
+  text-align: center;
+}
+
+.ms-empty-state-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #3d3947;
+}
+
+.ms-empty-state-body {
+  margin-top: 0.35rem;
   font-size: 0.9rem;
-  font-weight: 600;
+  color: #6a6675;
+}
+
+.ms-empty-state-actions {
+  margin-top: 0.7rem;
+}
+
+.ms-track-label {
+  margin: 0.05rem 0 0.35rem;
+  color: #7a7587;
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.005em;
 }
 
 .ms-ui-message {
@@ -277,6 +314,11 @@ body {
   border: 1px solid transparent;
   font-size: 0.88rem;
   line-height: 1.4;
+}
+
+.ms-ui-message--inline {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
 }
 
 .ms-ui-message--error {
@@ -304,39 +346,110 @@ body {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.ms-field-label {
+  display: none;
+}
+
+/* Keep duration selector on its own row for compact editing flow */
+.ms-grid .ms-field:nth-of-type(3) {
+  grid-column: 1 / -1;
+}
+
+.ms-grid .ms-field:nth-of-type(3) .md-select {
+  width: min(26rem, 100%);
+}
+
+.ms-grid .ms-field:nth-of-type(1) {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+
+.ms-grid .ms-field:nth-of-type(2) {
+  align-self: start;
+}
+
 .ms-step-row {
   display: grid;
-  grid-template-columns: auto auto auto;
-  gap: 0.4rem;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  column-gap: 0.55rem;
+  row-gap: 0.32rem;
   align-items: center;
+  align-content: center;
   justify-content: start;
 }
 
 .ms-step-value {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   display: inline-block;
   padding: 0.1rem 0.1rem 0.1rem 0;
-  font-weight: 700;
+  min-width: 1.2em;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--md-sys-color-on-surface);
   line-height: 1.2;
 }
 
+#pitchStepUpBtn {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#pitchStepDownBtn {
+  grid-column: 2;
+  grid-row: 2;
+}
+
 .ms-step-btn {
-  min-width: 2.4rem;
-  padding: 0.5rem 0.6rem;
+  min-width: 6.3rem;
+  width: 6.3rem;
+  height: 6.3rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3.42rem;
+  line-height: 1;
   font-weight: 700;
 }
 
 .ms-alter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: repeat(5, auto);
+  align-items: center;
+  justify-content: start;
+  gap: 0.35rem 0.35rem;
+  margin-top: 0.35rem;
 }
 
 .ms-alter-btn {
-  min-width: 2.6rem;
-  padding: 0.5rem 0.65rem;
+  min-width: 2.7rem;
+  width: 2.7rem;
+  height: 2.7rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1.1rem;
   font-weight: 700;
 }
+
+.ms-alter-btn[data-alter="none"] {
+  grid-column: 1;
+  grid-row: 3;
+  width: auto;
+  min-width: 3.7rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  font-size: 1rem;
+}
+
+.ms-alter-btn[data-alter="2"] { grid-column: 2; grid-row: 1; }
+.ms-alter-btn[data-alter="1"] { grid-column: 2; grid-row: 2; }
+.ms-alter-btn[data-alter="0"] { grid-column: 2; grid-row: 3; }
+.ms-alter-btn[data-alter="-1"] { grid-column: 2; grid-row: 4; }
+.ms-alter-btn[data-alter="-2"] { grid-column: 2; grid-row: 5; }
 
 .ms-alter-btn.is-active {
   background: rgba(98, 0, 238, 0.12);
@@ -471,7 +584,10 @@ body {
   }
 
   .ms-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
+    column-gap: 0.65rem;
+    row-gap: 0.45rem;
+    align-items: start;
   }
 
   .ms-top-tab {
@@ -503,4 +619,13 @@ body {
   .ms-top-tab::after {
     display: none;
   }
+
+  .ms-grid .ms-field:nth-of-type(2) .ms-alter-row {
+    justify-content: start;
+  }
+
+  .ms-grid .ms-field:nth-of-type(3) {
+    margin-top: 0.15rem;
+  }
+
 }

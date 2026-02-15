@@ -110,7 +110,8 @@ const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
 const uiMessage = q<HTMLDivElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
-const measureSelectionText = q<HTMLParagraphElement>("#measureSelectionText");
+const measureEmptyState = q<HTMLDivElement>("#measureEmptyState");
+const measureSelectGuideBtn = q<HTMLButtonElement>("#measureSelectGuideBtn");
 const measureEditorWrap = q<HTMLDivElement>("#measureEditorWrap");
 const measureEditorArea = q<HTMLDivElement>("#measureEditorArea");
 const measureApplyBtn = q<HTMLButtonElement>("#measureApplyBtn");
@@ -646,9 +647,9 @@ const syncStepFromSelectedDraftNote = (): void => {
 
 const renderMeasureEditorState = (): void => {
   if (!selectedMeasure || !draftCore) {
-    measurePartNameText.textContent = "小節未選択（譜面から小節クリックして選択）";
-    measureSelectionText.textContent = "小節未選択（譜面から小節クリックして選択）";
-    measureSelectionText.classList.add("md-hidden");
+    measurePartNameText.textContent = "トラック名: -";
+    measurePartNameText.classList.add("md-hidden");
+    measureEmptyState.classList.remove("md-hidden");
     measureEditorWrap.classList.add("md-hidden");
     measureApplyBtn.disabled = true;
     measureDiscardBtn.disabled = true;
@@ -658,8 +659,8 @@ const renderMeasureEditorState = (): void => {
   const partName = partIdToName.get(selectedMeasure.partId) ?? selectedMeasure.partId;
   measurePartNameText.textContent =
     `トラック名: ${partName} / 選択中: トラック=${selectedMeasure.partId} / 小節=${selectedMeasure.measureNumber}`;
-  measureSelectionText.textContent = "";
-  measureSelectionText.classList.add("md-hidden");
+  measurePartNameText.classList.remove("md-hidden");
+  measureEmptyState.classList.add("md-hidden");
   measureEditorWrap.classList.remove("md-hidden");
   measureDiscardBtn.disabled = false;
   measureApplyBtn.disabled = !draftCore.isDirty();
@@ -1807,6 +1808,9 @@ if (topTabButtons.length > 0 && topTabPanels.length > 0) {
     topTabButtons.find((button) => button.classList.contains("is-active"))?.dataset.tab || "input"
   );
 }
+measureSelectGuideBtn.addEventListener("click", () => {
+  activateTopTab("score");
+});
 
 inputTypeXml.addEventListener("change", renderInputMode);
 inputTypeAbc.addEventListener("change", renderInputMode);

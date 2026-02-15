@@ -69,7 +69,8 @@ const debugScoreMeta = qo("#debugScoreMeta");
 const debugScoreArea = q("#debugScoreArea");
 const uiMessage = q("#uiMessage");
 const measurePartNameText = q("#measurePartNameText");
-const measureSelectionText = q("#measureSelectionText");
+const measureEmptyState = q("#measureEmptyState");
+const measureSelectGuideBtn = q("#measureSelectGuideBtn");
 const measureEditorWrap = q("#measureEditorWrap");
 const measureEditorArea = q("#measureEditorArea");
 const measureApplyBtn = q("#measureApplyBtn");
@@ -577,9 +578,9 @@ const syncStepFromSelectedDraftNote = () => {
 const renderMeasureEditorState = () => {
     var _a;
     if (!selectedMeasure || !draftCore) {
-        measurePartNameText.textContent = "小節未選択（譜面から小節クリックして選択）";
-        measureSelectionText.textContent = "小節未選択（譜面から小節クリックして選択）";
-        measureSelectionText.classList.add("md-hidden");
+        measurePartNameText.textContent = "トラック名: -";
+        measurePartNameText.classList.add("md-hidden");
+        measureEmptyState.classList.remove("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
         measureApplyBtn.disabled = true;
         measureDiscardBtn.disabled = true;
@@ -588,8 +589,8 @@ const renderMeasureEditorState = () => {
     const partName = (_a = partIdToName.get(selectedMeasure.partId)) !== null && _a !== void 0 ? _a : selectedMeasure.partId;
     measurePartNameText.textContent =
         `トラック名: ${partName} / 選択中: トラック=${selectedMeasure.partId} / 小節=${selectedMeasure.measureNumber}`;
-    measureSelectionText.textContent = "";
-    measureSelectionText.classList.add("md-hidden");
+    measurePartNameText.classList.remove("md-hidden");
+    measureEmptyState.classList.add("md-hidden");
     measureEditorWrap.classList.remove("md-hidden");
     measureDiscardBtn.disabled = false;
     measureApplyBtn.disabled = !draftCore.isDirty();
@@ -1695,6 +1696,9 @@ if (topTabButtons.length > 0 && topTabPanels.length > 0) {
     }
     activateTopTab(((_a = topTabButtons.find((button) => button.classList.contains("is-active"))) === null || _a === void 0 ? void 0 : _a.dataset.tab) || "input");
 }
+measureSelectGuideBtn.addEventListener("click", () => {
+    activateTopTab("score");
+});
 inputTypeXml.addEventListener("change", renderInputMode);
 inputTypeAbc.addEventListener("change", renderInputMode);
 inputTypeNew.addEventListener("change", renderInputMode);
