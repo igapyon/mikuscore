@@ -16,14 +16,20 @@ body {
   font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+.md-shell {
+  width: 100%;
+}
+
 .ms-app {
   margin: 24px auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .ms-hero {
   position: relative;
   margin: -6px -6px 14px;
-  padding: 16px 16px 14px;
+  padding: 12px 14px 10px;
   border-radius: 16px;
   border: 1px solid #dacdf2;
   background:
@@ -33,31 +39,11 @@ body {
   box-shadow: 0 8px 20px rgba(86, 58, 132, 0.12);
 }
 
-.ms-hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-}
-
-.ms-hero-eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: #6f5c92;
-}
-
-.ms-hero-chip {
-  margin-left: 0;
-  background: rgba(98, 0, 238, 0.16);
-}
-
 .ms-hero-title {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin: 0.25rem 0 0.2rem;
+  margin: 0;
 }
 
 .ms-hero-subtitle {
@@ -98,6 +84,93 @@ body {
   gap: 1.2rem;
 }
 
+.ms-top-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.2rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ms-top-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  appearance: none;
+  border: 1px solid #ddd2f0;
+  background: #f7f3fc;
+  color: #4a4458;
+  border-radius: 14px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ms-top-tab::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.2rem);
+  width: 0.45rem;
+  height: 2px;
+  background: #d8cceb;
+  transform: translateY(-50%);
+}
+
+.ms-top-tab:last-child::after {
+  display: none;
+}
+
+.ms-top-tab-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #ece5f8;
+  color: #5a4b79;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.ms-top-tab-label {
+  display: inline-block;
+  letter-spacing: 0.01em;
+}
+
+.ms-top-tab.is-active {
+  border-color: rgba(98, 0, 238, 0.5);
+  color: #4d2aa5;
+  background: rgba(98, 0, 238, 0.14);
+}
+
+.ms-top-tab.is-active .ms-top-tab-no {
+  background: rgba(98, 0, 238, 0.22);
+  color: #4d2aa5;
+}
+
+.ms-top-tab.is-complete {
+  border-color: rgba(3, 137, 123, 0.35);
+  background: rgba(3, 218, 198, 0.12);
+  color: #284f48;
+}
+
+.ms-top-tab.is-complete .ms-top-tab-no {
+  background: rgba(3, 137, 123, 0.2);
+  color: #0f5b4f;
+}
+
+.ms-tab-panel[hidden] {
+  display: none !important;
+}
+
 .ms-flow-step {
   border-top: 1px solid #ece7f3;
   padding-top: 0.8rem;
@@ -109,61 +182,6 @@ body {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.8rem;
-}
-
-.ms-flow-collapsible {
-  overflow: hidden;
-}
-
-.ms-flow-summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.ms-flow-summary::-webkit-details-marker {
-  display: none;
-}
-
-.ms-flow-summary .md-section-title {
-  margin-bottom: 0;
-}
-
-.ms-flow-summary-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #7a6a99;
-}
-
-.ms-flow-state {
-  font-size: 0.78rem;
-  border-radius: 999px;
-  padding: 0.12rem 0.5rem;
-  border: 1px solid #d7cdee;
-  background: #f4effc;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.ms-flow-caret {
-  font-size: 0.85rem;
-  transition: transform 150ms ease;
-}
-
-.ms-flow-collapsible[open] .ms-flow-caret {
-  transform: rotate(180deg);
-}
-
-.ms-flow-collapsible:not([open]) .ms-flow-state {
-  opacity: 1;
-}
-
-.ms-flow-body {
-  margin-top: 0.8rem;
 }
 
 .ms-step-no {
@@ -327,7 +345,7 @@ body {
   max-width: 100%;
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.55rem;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -350,7 +368,7 @@ body {
 .ms-measure-editor {
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.55rem;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -411,13 +429,62 @@ body {
 }
 
 @media (max-width: 640px) {
+  html,
+  body,
+  .md-page {
+    overflow-x: clip;
+  }
+
+  .md-page {
+    padding: 8px;
+  }
+
+  .md-card.ms-app {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .ms-app {
+    margin: 8px auto;
+  }
+
   .ms-hero {
     margin: -2px -2px 12px;
-    padding: 14px 12px 12px;
+    padding: 10px 10px 8px;
   }
 
   .ms-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ms-top-tab {
+    min-width: 0;
+    padding: 0.42rem 0.45rem;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .ms-top-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ms-radio-group {
+    gap: 0.65rem;
+  }
+
+  .ms-file-name {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  .ms-debug-wrap,
+  .ms-measure-editor {
+    padding: 0.45rem;
+  }
+
+  .ms-top-tab::after {
+    display: none;
   }
 }
 
@@ -427,10 +494,6 @@ body {
   <main class="md-shell">
     <section class="md-card ms-app">
       <header class="ms-hero">
-        <div class="ms-hero-top">
-          <p class="ms-hero-eyebrow">LOCAL SCORE TOOL</p>
-          <span class="md-chip ms-hero-chip">v0.1.0</span>
-        </div>
         <h1 class="md-headline ms-hero-title">
           <span class="ms-hero-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
@@ -455,21 +518,30 @@ body {
             </span>
           </span>
         </h1>
-        <p class="md-subtitle ms-hero-subtitle">
-          ブラウザ上で完結し、既存MusicXMLを壊さずに編集することを重視したスコアエディタです。
-        </p>
       </header>
 
+      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore セクション">
+        <button type="button" class="ms-top-tab is-active" data-tab="input">
+          <span class="ms-top-tab-no">1</span>
+          <span class="ms-top-tab-label">入力</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="score">
+          <span class="ms-top-tab-no">2</span>
+          <span class="ms-top-tab-label">譜面</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="edit">
+          <span class="ms-top-tab-no">3</span>
+          <span class="ms-top-tab-label">編集</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="save">
+          <span class="ms-top-tab-no">4</span>
+          <span class="ms-top-tab-label">出力</span>
+        </button>
+      </div>
+
       <div class="ms-flow">
-        <details id="inputSectionDetails" class="md-section ms-flow-step ms-flow-collapsible" open>
-          <summary class="ms-flow-summary">
-            <span class="md-section-title"><span class="ms-step-no">1</span>入力</span>
-            <span class="ms-flow-summary-meta">
-              <span class="ms-flow-state">折りたたみ中</span>
-              <span class="ms-flow-caret" aria-hidden="true">▾</span>
-            </span>
-          </summary>
-          <div class="ms-flow-body">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
+          <h2 class="md-section-title"><span class="ms-step-no">1</span>入力</h2>
           <div class="ms-radio-group" role="radiogroup" aria-label="入力フォーマット">
             <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML入力</label>
             <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC入力</label>
@@ -554,12 +626,11 @@ body {
               <span>読み込み</span>
             </button>
           </div>
-          </div>
-        </details>
+        </section>
 
-        <section class="md-section ms-flow-step">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="score" hidden>
           <h2 class="md-section-title">
-            <span class="ms-step-no">2</span>フルスコア
+            <span class="ms-step-no">2</span>譜面
             <span class="md-tooltip-group">
               <span class="md-info-chip" aria-label="譜面プレビューの説明">
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
@@ -592,11 +663,11 @@ body {
           </div>
         </section>
 
-        <section class="md-section ms-flow-step">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
           <div id="uiMessage" class="ms-ui-message md-hidden" role="status" aria-live="polite"></div>
           <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
-          <p id="measureSelectionText" class="ms-status">小節未選択（譜面プレビューをクリックしてください）</p>
+          <p id="measureSelectionText" class="ms-status">小節未選択（譜面から小節クリックして選択）</p>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
           </div>
@@ -605,20 +676,20 @@ body {
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 7L9 18l-5-5"></path>
               </svg>
-              <span>編集確定</span>
+              <span>確定</span>
             </button>
             <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 6L6 18"></path>
                 <path d="M6 6l12 12"></path>
               </svg>
-              <span>編集破棄</span>
+              <span>破棄</span>
             </button>
             <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <path d="M8 6.5v11l9-5.5z"></path>
               </svg>
-              <span>小節再生</span>
+              <span>再生</span>
             </button>
           </div>
 
@@ -689,10 +760,10 @@ body {
           </div>
         </section>
 
-        <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>保存</h2>
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>出力</h2>
           <div class="ms-actions">
-            <button id="downloadBtn" type="button" class="md-button md-button--secondary ms-icon-button" disabled>
+            <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3v12"></path>
                 <path d="M8 11l4 4 4-4"></path>
@@ -727,32 +798,6 @@ body {
         </section>
       </div>
 
-      <details class="ms-dev">
-        <summary>詳細情報</summary>
-        <section class="md-section">
-          <h2 class="md-section-title">状態</h2>
-          <p id="statusText" class="ms-status">未ロード</p>
-          <p id="playbackText" class="ms-status">再生: 停止中</p>
-          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">ノート選択</h2>
-          <label for="noteSelect" class="md-label">ノート選択 (nodeId)</label>
-          <select id="noteSelect" class="md-select"></select>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">診断</h2>
-          <div id="diagArea" aria-live="polite"></div>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">譜面プレビュー情報</h2>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">出力XML</h2>
-          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
-        </section>
-      </details>
     </section>
   </main>
 
@@ -763,6 +808,7 @@ body {
 const modules = {
   "src/ts/main.js": function (require, module, exports) {
 "use strict";
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
@@ -780,12 +826,14 @@ const q = (selector) => {
         throw new Error(`Missing element: ${selector}`);
     return el;
 };
+const qo = (selector) => {
+    return document.querySelector(selector);
+};
 const inputTypeXml = q("#inputTypeXml");
 const inputTypeAbc = q("#inputTypeAbc");
 const inputTypeNew = q("#inputTypeNew");
 const inputModeFile = q("#inputModeFile");
 const inputModeSource = q("#inputModeSource");
-const inputSectionDetails = q("#inputSectionDetails");
 const newInputBlock = q("#newInputBlock");
 const newPartCountInput = q("#newPartCount");
 const newKeyFifthsSelect = q("#newKeyFifths");
@@ -801,8 +849,8 @@ const fileSelectBtn = q("#fileSelectBtn");
 const fileInput = q("#fileInput");
 const fileNameText = q("#fileNameText");
 const loadBtn = q("#loadBtn");
-const noteSelect = q("#noteSelect");
-const statusText = q("#statusText");
+const noteSelect = qo("#noteSelect");
+const statusText = qo("#statusText");
 const pitchStep = q("#pitchStep");
 const pitchStepValue = q("#pitchStepValue");
 const pitchStepDownBtn = q("#pitchStepDownBtn");
@@ -819,11 +867,11 @@ const stopBtn = q("#stopBtn");
 const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
-const saveModeText = q("#saveModeText");
-const playbackText = q("#playbackText");
-const outputXml = q("#outputXml");
-const diagArea = q("#diagArea");
-const debugScoreMeta = q("#debugScoreMeta");
+const saveModeText = qo("#saveModeText");
+const playbackText = qo("#playbackText");
+const outputXml = qo("#outputXml");
+const diagArea = qo("#diagArea");
+const debugScoreMeta = qo("#debugScoreMeta");
 const debugScoreArea = q("#debugScoreArea");
 const uiMessage = q("#uiMessage");
 const measurePartNameText = q("#measurePartNameText");
@@ -833,6 +881,8 @@ const measureEditorArea = q("#measureEditorArea");
 const measureApplyBtn = q("#measureApplyBtn");
 const measureDiscardBtn = q("#measureDiscardBtn");
 const playMeasureBtn = q("#playMeasureBtn");
+const topTabButtons = Array.from(document.querySelectorAll(".ms-top-tab"));
+const topTabPanels = Array.from(document.querySelectorAll(".ms-tab-panel"));
 const core = new ScoreCore_1.ScoreCore({ editableVoice: EDITABLE_VOICE });
 const state = {
     loaded: false,
@@ -844,7 +894,7 @@ const state = {
 };
 xmlInput.value = sampleXml_1.sampleXml;
 let isPlaying = false;
-const DEBUG_LOG = true;
+const DEBUG_LOG = false;
 let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map();
 let nodeIdToLocation = new Map();
@@ -1009,12 +1059,20 @@ const renderNewPartClefControls = () => {
     }
 };
 const renderStatus = () => {
+    if (!statusText)
+        return;
     const dirty = core.isDirty();
     statusText.textContent = state.loaded
         ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
         : "未ロード（まず読み込みしてください）";
 };
 const renderNotes = () => {
+    const selectedNodeId = state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)
+        ? state.selectedNodeId
+        : null;
+    state.selectedNodeId = selectedNodeId;
+    if (!noteSelect)
+        return;
     noteSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -1026,11 +1084,10 @@ const renderNotes = () => {
         option.textContent = nodeId;
         noteSelect.appendChild(option);
     }
-    if (state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)) {
-        noteSelect.value = state.selectedNodeId;
+    if (selectedNodeId) {
+        noteSelect.value = selectedNodeId;
     }
     else {
-        state.selectedNodeId = null;
         noteSelect.value = "";
     }
 };
@@ -1326,8 +1383,8 @@ const syncStepFromSelectedDraftNote = () => {
 const renderMeasureEditorState = () => {
     var _a;
     if (!selectedMeasure || !draftCore) {
-        measurePartNameText.textContent = "小節未選択（譜面プレビューをクリックしてください）";
-        measureSelectionText.textContent = "小節未選択（譜面プレビューをクリックしてください）";
+        measurePartNameText.textContent = "小節未選択（譜面から小節クリックして選択）";
+        measureSelectionText.textContent = "小節未選択（譜面から小節クリックして選択）";
         measureSelectionText.classList.add("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
         measureApplyBtn.disabled = true;
@@ -1386,6 +1443,8 @@ const highlightSelectedMeasureInMainPreview = () => {
     }
 };
 const renderDiagnostics = () => {
+    if (!diagArea)
+        return;
     diagArea.innerHTML = "";
     const dispatch = state.lastDispatchResult;
     const save = state.lastSaveResult;
@@ -1451,8 +1510,12 @@ const renderUiMessage = () => {
 };
 const renderOutput = () => {
     var _a, _b, _c, _d;
-    saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
-    outputXml.value = ((_a = state.lastSaveResult) === null || _a === void 0 ? void 0 : _a.ok) ? state.lastSaveResult.xml : "";
+    if (saveModeText) {
+        saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
+    }
+    if (outputXml) {
+        outputXml.value = ((_a = state.lastSaveResult) === null || _a === void 0 ? void 0 : _a.ok) ? state.lastSaveResult.xml : "";
+    }
     downloadBtn.disabled = !((_b = state.lastSaveResult) === null || _b === void 0 ? void 0 : _b.ok);
     downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
     downloadAbcBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
@@ -1460,7 +1523,9 @@ const renderOutput = () => {
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
     const hasSelection = Boolean(state.selectedNodeId);
-    noteSelect.disabled = !hasDraft;
+    if (noteSelect) {
+        noteSelect.disabled = !hasDraft;
+    }
     pitchStepDownBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     pitchStepUpBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     for (const btn of pitchAlterBtns) {
@@ -1530,6 +1595,20 @@ const rebuildPartNameMap = (doc) => {
             ((_f = (_e = scorePart.querySelector(":scope > part-abbreviation")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) ||
             partId;
         partIdToName.set(partId, partName);
+    }
+};
+const stripPartNamesInRenderDoc = (doc) => {
+    const removableSelectors = [
+        "score-partwise > part-list > score-part > part-name",
+        "score-partwise > part-list > score-part > part-abbreviation",
+        "score-partwise > part > measure > attributes > part-name-display",
+        "score-partwise > part > measure > attributes > part-abbreviation-display",
+        "score-partwise > part > measure > attributes > staff-details > staff-name",
+    ];
+    for (const selector of removableSelectors) {
+        for (const node of Array.from(doc.querySelectorAll(selector))) {
+            node.remove();
+        }
     }
 };
 const buildRenderXmlForVerovio = (xml) => {
@@ -1778,7 +1857,9 @@ const renderScorePreview = () => {
         xml,
         noteNodeIds: state.noteNodeIds,
         setMetaText: (text) => {
-            debugScoreMeta.textContent = text;
+            if (debugScoreMeta) {
+                debugScoreMeta.textContent = text;
+            }
         },
         setSvgHtml: (svgHtml) => {
             debugScoreArea.innerHTML = svgHtml;
@@ -1786,7 +1867,13 @@ const renderScorePreview = () => {
         setSvgIdMap: (map) => {
             currentSvgIdToNodeId = map;
         },
-        buildRenderXmlForVerovio,
+        buildRenderXmlForVerovio: (sourceXml) => {
+            const renderBundle = buildRenderXmlForVerovio(sourceXml);
+            if (renderBundle.renderDoc) {
+                stripPartNamesInRenderDoc(renderBundle.renderDoc);
+            }
+            return renderBundle;
+        },
         deriveRenderedNoteIds,
         buildFallbackSvgIdMap,
         onRendered: () => {
@@ -1848,7 +1935,9 @@ const playbackFlowOptions = {
         isPlaying = playing;
     },
     setPlaybackText: (text) => {
-        playbackText.textContent = text;
+        if (playbackText) {
+            playbackText.textContent = text;
+        }
     },
     renderControlState,
     renderAll,
@@ -1982,7 +2071,7 @@ const autoSaveCurrentXml = () => {
     }
     state.lastSuccessfulSaveXml = result.xml;
 };
-const loadFromText = (xml, collapseInputSection) => {
+const loadFromText = (xml) => {
     try {
         core.load(xml);
     }
@@ -2020,9 +2109,6 @@ const loadFromText = (xml, collapseInputSection) => {
     draftSvgIdToNodeId = new Map();
     refreshNotesFromCore();
     autoSaveCurrentXml();
-    if (collapseInputSection) {
-        inputSectionDetails.open = false;
-    }
     renderAll();
     renderScorePreview();
 };
@@ -2056,7 +2142,7 @@ const onLoadClick = async () => {
     if (result.nextXmlInputText !== undefined) {
         xmlInput.value = result.nextXmlInputText;
     }
-    loadFromText(result.xmlToLoad, result.collapseInputSection);
+    loadFromText(result.xmlToLoad);
 };
 const createNewMusicXml = () => {
     const partCount = normalizeNewPartCount();
@@ -2392,6 +2478,29 @@ const onDownloadAbc = () => {
         return;
     (0, download_flow_1.triggerFileDownload)(payload);
 };
+const activateTopTab = (tabName) => {
+    const activeIndex = topTabButtons.findIndex((button) => button.dataset.tab === tabName);
+    for (const button of topTabButtons) {
+        const currentIndex = topTabButtons.indexOf(button);
+        const active = button.dataset.tab === tabName;
+        button.classList.toggle("is-active", active);
+        button.classList.toggle("is-complete", activeIndex >= 0 && currentIndex < activeIndex);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    for (const panel of topTabPanels) {
+        panel.hidden = panel.dataset.tabPanel !== tabName;
+    }
+};
+if (topTabButtons.length > 0 && topTabPanels.length > 0) {
+    for (const button of topTabButtons) {
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", button.classList.contains("is-active") ? "true" : "false");
+        button.addEventListener("click", () => {
+            activateTopTab(button.dataset.tab || "input");
+        });
+    }
+    activateTopTab(((_a = topTabButtons.find((button) => button.classList.contains("is-active"))) === null || _a === void 0 ? void 0 : _a.dataset.tab) || "input");
+}
 inputTypeXml.addEventListener("change", renderInputMode);
 inputTypeAbc.addEventListener("change", renderInputMode);
 inputTypeNew.addEventListener("change", renderInputMode);
@@ -2408,10 +2517,12 @@ fileInput.addEventListener("change", () => {
 loadBtn.addEventListener("click", () => {
     void onLoadClick();
 });
-noteSelect.addEventListener("change", () => {
-    state.selectedNodeId = noteSelect.value || null;
-    renderAll();
-});
+if (noteSelect) {
+    noteSelect.addEventListener("change", () => {
+        state.selectedNodeId = noteSelect.value || null;
+        renderAll();
+    });
+}
 durationPreset.addEventListener("change", () => {
     onDurationPresetChange();
 });
@@ -2449,7 +2560,7 @@ playMeasureBtn.addEventListener("click", () => {
     void startMeasurePlayback();
 });
 renderNewPartClefControls();
-loadFromText(xmlInput.value, false);
+loadFromText(xmlInput.value);
 
   },
   "src/ts/sampleXml.js": function (require, module, exports) {
