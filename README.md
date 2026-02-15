@@ -16,7 +16,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ### MVP Highlights
 - If `dirty === false`, save returns original XML text (`original_noop`).
 - Overfull measures are rejected with `MEASURE_OVERFULL`.
-- Non-editable voices are rejected with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- Commands must target the same voice as the selected note; mismatches are rejected with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 - MVP commands: `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, `split_note`.
 - Rests are not a normal edit target, but rest-to-note via `change_to_pitch` is allowed.
 - Serialization is compact (no pretty-print).
@@ -75,7 +75,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ### MVP 仕様ハイライト
 - `dirty === false` の保存は入力 XML をそのまま返す（`original_noop`）。
 - 小節 overfull は `MEASURE_OVERFULL` で拒否。
-- 非編集対象 voice は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否。
+- コマンド voice と対象ノート voice が不一致の場合は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否。
 - `change_to_pitch` / `change_duration` / `insert_note_after` / `delete_note` / `split_note` をMVPコマンドとして扱う。
 - 休符は通常の編集対象外だが、`change_to_pitch` による休符音符化は許可。
 - pretty-print なしでシリアライズ。

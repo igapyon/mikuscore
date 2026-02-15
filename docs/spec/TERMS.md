@@ -14,14 +14,14 @@ Normative terms and MVP scope boundaries.
 
 - `Core`: non-UI engine for MusicXML load/edit/save guarantees.
 - `UI`: interaction/render layer; MUST NOT mutate score DOM directly.
-- `Editable voice`: editable voice ID (default `1`).
+- `Command voice`: voice ID carried by each edit command; MUST match target note voice.
 - `Dirty`: successful content-changing edit has occurred.
 - `No-op save`: `dirty === false`, returns original XML text unchanged.
 
 ## MVP In Scope
 
 - DOM-preserving load/edit/save.
-- Commands on editable voice.
+- Commands whose voice matches the target note voice.
 - Overfull rejection / underfull warning model.
 - Verovio click-to-select mapping.
 - Split-note command (`split_note`).

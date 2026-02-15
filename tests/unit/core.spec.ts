@@ -524,7 +524,7 @@ describe("ScoreCore MVP", () => {
     expect(afterNotes).toEqual(["1:C:4:1", "1:A:4:1", "1:D:4:1", "1:E:4:1"]);
   });
 
-  it("BF-1: non-editable voice is rejected", () => {
+  it("BF-1: change command with target voice mismatch is rejected", () => {
     const core = new ScoreCore();
     core.load(BASE_XML);
     const [first] = core.listNoteNodeIds();
@@ -543,6 +543,97 @@ describe("ScoreCore MVP", () => {
     expect(result.changedNodeIds).toEqual([]);
     expect(core.isDirty()).toBe(false);
     expectNoopStateUnchanged(core, before.xml);
+  });
+
+  it("BF-1a: non-primary voice is editable when command voice matches target", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_MIXED_VOICES);
+    const ids = core.listNoteNodeIds();
+    const second = ids[1]; // voice=2
+    const before = core.save();
+    expect(before.ok).toBe(true);
+
+    const result = core.dispatch({
+      type: "change_to_pitch",
+      targetNodeId: second,
+      voice: "2",
+      pitch: { step: "A", octave: 3 },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(core.isDirty()).toBe(true);
+    expect(result.changedNodeIds).toEqual([second]);
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+
+    const beforeDoc = new DOMParser().parseFromString(before.xml, "application/xml");
+    const afterDoc = new DOMParser().parseFromString(saved.xml, "application/xml");
+
+    const noteSig = (n: Element): string => {
+      const voice = n.querySelector(":scope > voice")?.textContent?.trim() ?? "";
+      const duration = n.querySelector(":scope > duration")?.textContent?.trim() ?? "";
+      if (n.querySelector(":scope > rest")) return `${voice}:rest:${duration}`;
+      const step = n.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+      const octave = n.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+      return `${voice}:${step}${octave}:${duration}`;
+    };
+    const beforeNotes = Array.from(beforeDoc.querySelectorAll("measure > note")).map(noteSig);
+    const afterNotes = Array.from(afterDoc.querySelectorAll("measure > note")).map(noteSig);
+
+    expect(beforeNotes).toEqual(["1:C4:1", "2:G3:1", "1:D4:1", "1:E4:1"]);
+    expect(afterNotes).toEqual(["1:C4:1", "2:A3:1", "1:D4:1", "1:E4:1"]);
+  });
+
+  it("BF-1b: changing duration in voice 2 does not mutate voice 1 notes", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>1</duration><voice>2</voice></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const core = new ScoreCore();
+    core.load(xml);
+    const ids = core.listNoteNodeIds();
+    const second = ids[1]; // voice=2
+
+    const result = core.dispatch({
+      type: "change_duration",
+      targetNodeId: second,
+      voice: "2",
+      duration: 3,
+    });
+    expect(result.ok).toBe(true);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+    const voice1 = notes
+      .filter((n) => (n.querySelector(":scope > voice")?.textContent?.trim() ?? "") === "1")
+      .map((n) => {
+        const step = n.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+        const octave = n.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+        const duration = n.querySelector(":scope > duration")?.textContent?.trim() ?? "";
+        return `${step}${octave}:${duration}`;
+      });
+    const voice2 = notes
+      .filter((n) => (n.querySelector(":scope > voice")?.textContent?.trim() ?? "") === "2")
+      .map((n) => n.querySelector(":scope > duration")?.textContent?.trim() ?? "");
+
+    expect(voice1).toEqual(["C4:2", "D4:2"]);
+    // Engine may auto-fill underfull gap in the edited voice lane.
+    expect(voice2).toEqual(["3", "1"]);
   });
 
   it("BF-3: insert anchor voice mismatch is rejected", () => {

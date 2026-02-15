@@ -240,6 +240,7 @@ body {
 }
 
 .ms-local-draft {
+  margin-top: 0.45rem;
   margin-bottom: 0.75rem;
   border: 1px solid #b7dde4;
   border-radius: 12px;

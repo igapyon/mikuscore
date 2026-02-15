@@ -35,8 +35,8 @@ Executable test planning mapped from MVP requirements.
   - warning MAY include `MEASURE_UNDERFULL`
   - implementation-dependent rest compensation behavior stays consistent
 
-5. `BF-1 Non-editable voice rejected`
-- Given: command targeting non-editable voice
+5. `BF-1 Voice mismatch rejected`
+- Given: command voice does not match target note voice
 - Then:
   - `ok=false`
   - `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`

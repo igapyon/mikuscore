@@ -166,9 +166,9 @@ Core supports the following command family:
 - `split_note`
 - `ui_noop`
 
-## 7.1 Voice Restriction
+## 7.1 Voice Match Restriction
 
-- Editing non-editable voice MUST fail with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- Command voice MUST match target note voice; mismatch MUST fail with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 
 ## 7.2 Note-kind Restriction
 
@@ -227,7 +227,7 @@ Automated tests MUST cover:
 - dirty save (`serialized_dirty`)
 - overfull rejection
 - underfull behavior
-- non-editable voice rejection
+- voice mismatch rejection
 - unsupported note-kind rejection rules
 - split-note behavior
 - rest-to-note conversion path

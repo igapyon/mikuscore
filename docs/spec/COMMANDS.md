@@ -27,7 +27,7 @@ type SaveResult = {
 ## Required Behavior
 
 1. `dispatch(command)`
-- MUST reject non-editable voice with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
+- MUST reject command/target voice mismatch with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
 - MUST reject malformed payload with `MVP_INVALID_COMMAND_PAYLOAD`.
 - MUST reject overfull with `MEASURE_OVERFULL`.
 - MUST be atomic on failure (DOM unchanged, dirty unchanged).

@@ -8,9 +8,10 @@ import {
 
 export const validateVoice = (
   command: CoreCommand,
-  editableVoice: VoiceId
+  editableVoice?: VoiceId | null
 ): Diagnostic | null => {
   if (command.type === "ui_noop") return null;
+  if (!editableVoice) return null;
   if (command.voice === editableVoice) return null;
   return {
     code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",

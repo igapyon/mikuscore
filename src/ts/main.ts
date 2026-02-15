@@ -53,7 +53,7 @@ type NoteLocation = {
   measureNumber: string;
 };
 
-const EDITABLE_VOICE = "1";
+const DEFAULT_VOICE = "1";
 
 const q = <T extends Element>(selector: string): T => {
   const el = document.querySelector(selector);
@@ -124,7 +124,7 @@ const playMeasureBtn = q<HTMLButtonElement>("#playMeasureBtn");
 const topTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-top-tab"));
 const topTabPanels = Array.from(document.querySelectorAll<HTMLElement>(".ms-tab-panel"));
 
-const core = new ScoreCore({ editableVoice: EDITABLE_VOICE });
+const core = new ScoreCore();
 const state: UiState = {
   loaded: false,
   selectedNodeId: null,
@@ -144,7 +144,7 @@ let selectedMeasure: NoteLocation | null = null;
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
-let selectedDraftVoice = EDITABLE_VOICE;
+let selectedDraftVoice = DEFAULT_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue: number | null = null;
@@ -302,12 +302,18 @@ const formatLocalDraftTime = (timestamp: number): string => {
 const renderLocalDraftUi = (): void => {
   const draft = readLocalDraft();
   const hasDraft = Boolean(draft);
-  const draftLoadedInInput =
-    hasDraft && draft ? draft.xml.trim() === String(xmlInput.value || "").trim() : false;
-  localDraftNotice.classList.toggle("md-hidden", !draftLoadedInInput);
-  discardDraftExportBtn.classList.toggle("md-hidden", !hasDraft);
-  if (!draftLoadedInInput || !draft) return;
-  localDraftText.textContent = `Local draft loaded (saved at ${formatLocalDraftTime(draft.updatedAt)}).`;
+  const inputPanelVisible = topTabPanels.some(
+    (panel) => panel.dataset.tabPanel === "input" && !panel.hidden
+  );
+  const showNotice = hasDraft && inputPanelVisible;
+  localDraftNotice.classList.toggle("md-hidden", !showNotice);
+  discardDraftExportBtn.classList.remove("md-hidden");
+  discardDraftExportBtn.disabled = !hasDraft;
+  if (!showNotice || !draft) {
+    localDraftText.textContent = "";
+    return;
+  }
+  localDraftText.textContent = `Local draft exists (saved at ${formatLocalDraftTime(draft.updatedAt)}).`;
 };
 
 const applyInitialXmlInputValue = (): void => {
@@ -606,7 +612,7 @@ const renderAlterButtons = (): void => {
 };
 
 const syncStepFromSelectedDraftNote = (): void => {
-  selectedDraftVoice = EDITABLE_VOICE;
+  selectedDraftVoice = DEFAULT_VOICE;
   selectedDraftNoteIsRest = false;
   pitchStep.disabled = false;
   pitchStep.title = "";
@@ -617,7 +623,7 @@ const syncStepFromSelectedDraftNote = (): void => {
   }
 
   if (!draftCore || !state.selectedNodeId) {
-    selectedDraftVoice = EDITABLE_VOICE;
+    selectedDraftVoice = DEFAULT_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
     setDurationPresetFromValue(null);
@@ -629,7 +635,7 @@ const syncStepFromSelectedDraftNote = (): void => {
   }
   const xml = draftCore.debugSerializeCurrentXml();
   if (!xml) {
-    selectedDraftVoice = EDITABLE_VOICE;
+    selectedDraftVoice = DEFAULT_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
     setDurationPresetFromValue(null);
@@ -642,7 +648,7 @@ const syncStepFromSelectedDraftNote = (): void => {
 
   const doc = parseMusicXmlDocument(xml);
   if (!doc) {
-    selectedDraftVoice = EDITABLE_VOICE;
+    selectedDraftVoice = DEFAULT_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
     setDurationPresetFromValue(null);
@@ -657,7 +663,7 @@ const syncStepFromSelectedDraftNote = (): void => {
   const count = Math.min(notes.length, draftNoteNodeIds.length);
   for (let i = 0; i < count; i += 1) {
     if (draftNoteNodeIds[i] !== state.selectedNodeId) continue;
-    selectedDraftVoice = notes[i].querySelector(":scope > voice")?.textContent?.trim() || EDITABLE_VOICE;
+    selectedDraftVoice = notes[i].querySelector(":scope > voice")?.textContent?.trim() || DEFAULT_VOICE;
     const measure = notes[i].closest("measure");
     const divisions = resolveEffectiveDivisionsForMeasure(doc, measure);
     rebuildDurationPresetOptions(divisions);
@@ -722,7 +728,7 @@ const syncStepFromSelectedDraftNote = (): void => {
     renderAlterButtons();
     return;
   }
-  selectedDraftVoice = EDITABLE_VOICE;
+  selectedDraftVoice = DEFAULT_VOICE;
   selectedDraftDurationValue = null;
   rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
   setDurationPresetFromValue(null);
@@ -1168,7 +1174,7 @@ const initializeMeasureEditor = (location: NoteLocation): void => {
     setUiMappingDiagnostic("Failed to extract selected measure.");
     return;
   }
-  const nextDraft = new ScoreCore({ editableVoice: EDITABLE_VOICE });
+  const nextDraft = new ScoreCore();
   try {
     nextDraft.load(extracted);
   } catch (error) {
@@ -1305,7 +1311,7 @@ const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS
 const playbackFlowOptions: PlaybackFlowOptions = {
   engine: synthEngine,
   ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER,
-  editableVoice: EDITABLE_VOICE,
+  editableVoice: DEFAULT_VOICE,
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -1377,7 +1383,7 @@ const readDuration = (): number | null => {
 
 const commandVoiceForSelection = (): string => {
   const voice = String(selectedDraftVoice || "").trim();
-  return voice || EDITABLE_VOICE;
+  return voice || DEFAULT_VOICE;
 };
 
 const onDurationPresetChange = (): void => {
@@ -1440,7 +1446,7 @@ const autoSaveCurrentXml = (persistLocalDraft = false): void => {
     if (result.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
       const debugXml = core.debugSerializeCurrentXml();
       if (debugXml) {
-        dumpOverfullContext(debugXml, EDITABLE_VOICE);
+        dumpOverfullContext(debugXml, DEFAULT_VOICE);
       } else if (DEBUG_LOG) {
         console.warn("[mikuscore][debug] no in-memory XML to dump.");
       }
@@ -1526,6 +1532,8 @@ const onLoadClick = async (): Promise<void> => {
   if (result.nextXmlInputText !== undefined) {
     xmlInput.value = result.nextXmlInputText;
   }
+  // Persist immediately on explicit load actions (Load / Load sample).
+  writeLocalDraft(result.xmlToLoad);
   loadFromText(result.xmlToLoad);
 };
 
@@ -1895,6 +1903,10 @@ const activateTopTab = (tabName: string): void => {
   for (const panel of topTabPanels) {
     panel.hidden = panel.dataset.tabPanel !== tabName;
   }
+  if (tabName !== "input") {
+    localDraftNotice.classList.add("md-hidden");
+  }
+  renderLocalDraftUi();
 };
 
 if (topTabButtons.length > 0 && topTabPanels.length > 0) {
