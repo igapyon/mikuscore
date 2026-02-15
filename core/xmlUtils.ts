@@ -70,9 +70,12 @@ export const setPitch = (note: Element, pitch: Pitch): void => {
   upsertSimpleChild(pitchNode, "step", pitch.step);
   if (typeof pitch.alter === "number") {
     upsertSimpleChild(pitchNode, "alter", String(pitch.alter));
+    upsertSimpleChild(note, "accidental", accidentalFromAlter(pitch.alter));
   } else {
     const alter = getDirectChild(pitchNode, "alter");
     if (alter) alter.remove();
+    const accidental = getDirectChild(note, "accidental");
+    if (accidental) accidental.remove();
   }
   upsertSimpleChild(pitchNode, "octave", String(pitch.octave));
 };
@@ -98,6 +101,9 @@ export const createNoteElement = (
   }
   upsertSimpleChild(pitchNode, "octave", String(pitch.octave));
   note.appendChild(pitchNode);
+  if (typeof pitch.alter === "number") {
+    upsertSimpleChild(note, "accidental", accidentalFromAlter(pitch.alter));
+  }
 
   const durationNode = doc.createElement("duration");
   durationNode.textContent = String(duration);
@@ -142,3 +148,11 @@ const hasDirectChild = (parent: Element, tagName: string): boolean =>
 
 const getDirectChild = (parent: Element, tagName: string): Element | null =>
   Array.from(parent.children).find((child) => child.tagName === tagName) ?? null;
+
+const accidentalFromAlter = (alter: number): string => {
+  if (alter <= -2) return "flat-flat";
+  if (alter === -1) return "flat";
+  if (alter === 0) return "natural";
+  if (alter === 1) return "sharp";
+  return "double-sharp";
+};

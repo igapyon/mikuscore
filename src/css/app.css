@@ -265,6 +265,24 @@ body {
   font-weight: 700;
 }
 
+.ms-alter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ms-alter-btn {
+  min-width: 2.6rem;
+  padding: 0.5rem 0.65rem;
+  font-weight: 700;
+}
+
+.ms-alter-btn.is-active {
+  background: rgba(98, 0, 238, 0.12);
+  border-color: rgba(98, 0, 238, 0.45);
+  color: var(--md-sys-color-primary);
+}
+
 .ms-debug-meta {
   margin: 0.35rem 0;
   color: var(--md-sys-color-on-surface-variant);

@@ -134,18 +134,17 @@
               </div>
             </label>
             <label class="ms-field">変化記号(alter)
-              <select id="pitchAlter" class="md-select">
-                <option value="">none</option>
-                <option value="-2">-2</option>
-                <option value="-1">-1</option>
-                <option value="0">0</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-              </select>
+              <div class="ms-alter-row" role="group" aria-label="変化記号">
+                <input id="pitchAlter" type="hidden" value="none" />
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="変化記号なし">なし</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="ダブルフラット">♭♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="フラット">♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="ナチュラル">♮</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="シャープ">♯</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="ダブルシャープ">♯♯</button>
+              </div>
             </label>
-            <label class="ms-field">オクターブ(octave)
-              <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" class="md-input" />
-            </label>
+            <input id="pitchOctave" type="hidden" value="4" />
             <label class="ms-field">音価(duration)
               <input id="durationInput" type="number" min="1" step="1" value="1" class="md-input" />
             </label>
