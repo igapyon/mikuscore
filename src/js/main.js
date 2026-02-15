@@ -84,6 +84,7 @@ let selectedMeasure = null;
 let draftCore = null;
 let draftNoteNodeIds = [];
 let draftSvgIdToNodeId = new Map();
+let selectedDraftVoice = EDITABLE_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue = null;
@@ -357,7 +358,8 @@ const renderAlterButtons = () => {
     }
 };
 const syncStepFromSelectedDraftNote = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
+    selectedDraftVoice = EDITABLE_VOICE;
     selectedDraftNoteIsRest = false;
     pitchStep.disabled = false;
     pitchStep.title = "";
@@ -367,6 +369,7 @@ const syncStepFromSelectedDraftNote = () => {
         btn.title = "";
     }
     if (!draftCore || !state.selectedNodeId) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -378,6 +381,7 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const xml = draftCore.debugSerializeCurrentXml();
     if (!xml) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -389,6 +393,7 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const doc = new DOMParser().parseFromString(xml, "application/xml");
     if (doc.querySelector("parsererror")) {
+        selectedDraftVoice = EDITABLE_VOICE;
         selectedDraftDurationValue = null;
         rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
         setDurationPresetFromValue(null);
@@ -403,11 +408,12 @@ const syncStepFromSelectedDraftNote = () => {
     for (let i = 0; i < count; i += 1) {
         if (draftNoteNodeIds[i] !== state.selectedNodeId)
             continue;
+        selectedDraftVoice = ((_b = (_a = notes[i].querySelector(":scope > voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || EDITABLE_VOICE;
         const measure = notes[i].closest("measure");
         const divisions = resolveEffectiveDivisionsForMeasure(doc, measure);
         rebuildDurationPresetOptions(divisions);
         applyDurationPresetAvailability(notes[i], divisions);
-        const durationText = (_c = (_b = (_a = notes[i].querySelector(":scope > duration")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const durationText = (_e = (_d = (_c = notes[i].querySelector(":scope > duration")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
         const durationNumber = Number(durationText);
         if (Number.isInteger(durationNumber) && durationNumber > 0) {
             selectedDraftDurationValue = durationNumber;
@@ -417,8 +423,8 @@ const syncStepFromSelectedDraftNote = () => {
             selectedDraftDurationValue = null;
             setDurationPresetFromValue(null);
         }
-        const alterText = (_f = (_e = (_d = notes[i].querySelector(":scope > pitch > alter")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
-        const accidentalText = (_j = (_h = (_g = notes[i].querySelector(":scope > accidental")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
+        const alterText = (_h = (_g = (_f = notes[i].querySelector(":scope > pitch > alter")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : "";
+        const accidentalText = (_l = (_k = (_j = notes[i].querySelector(":scope > accidental")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
         const alterNumber = Number(alterText);
         if (alterText === "") {
             if (accidentalText === "natural") {
@@ -460,11 +466,11 @@ const syncStepFromSelectedDraftNote = () => {
             renderAlterButtons();
             return;
         }
-        const stepText = (_m = (_l = (_k = notes[i].querySelector(":scope > pitch > step")) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "";
+        const stepText = (_p = (_o = (_m = notes[i].querySelector(":scope > pitch > step")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
         if (isPitchStepValue(stepText)) {
             pitchStep.value = stepText;
         }
-        const octaveText = (_q = (_p = (_o = notes[i].querySelector(":scope > pitch > octave")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
+        const octaveText = (_s = (_r = (_q = notes[i].querySelector(":scope > pitch > octave")) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : "";
         const octaveNumber = Number(octaveText);
         if (Number.isInteger(octaveNumber) && octaveNumber >= 0 && octaveNumber <= 9) {
             pitchOctave.value = String(octaveNumber);
@@ -473,6 +479,7 @@ const syncStepFromSelectedDraftNote = () => {
         renderAlterButtons();
         return;
     }
+    selectedDraftVoice = EDITABLE_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
     setDurationPresetFromValue(null);
@@ -624,7 +631,7 @@ const renderControlState = () => {
     }
     splitNoteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
-    deleteBtn.disabled = !hasDraft || !hasSelection;
+    deleteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     playMeasureBtn.disabled = !hasDraft || isPlaying;
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
@@ -1498,6 +1505,10 @@ const readDuration = () => {
         return null;
     return duration;
 };
+const commandVoiceForSelection = () => {
+    const voice = String(selectedDraftVoice || "").trim();
+    return voice || EDITABLE_VOICE;
+};
 const onDurationPresetChange = () => {
     if (suppressDurationPresetEvent)
         return;
@@ -1512,7 +1523,7 @@ const onDurationPresetChange = () => {
     const command = {
         type: "change_duration",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         duration: preset,
     };
     const result = runCommand(command);
@@ -1856,7 +1867,7 @@ const onChangePitch = () => {
     const command = {
         type: "change_to_pitch",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         pitch,
     };
     runCommand(command);
@@ -1994,7 +2005,7 @@ const onChangeDuration = () => {
     const command = {
         type: "change_duration",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         duration,
     };
     runCommand(command);
@@ -2020,7 +2031,7 @@ const onInsertAfter = () => {
     const command = {
         type: "insert_note_after",
         anchorNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         note: { duration, pitch },
     };
     runCommand(command);
@@ -2032,7 +2043,7 @@ const onDelete = () => {
     const command = {
         type: "delete_note",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
     };
     runCommand(command);
 };
@@ -2045,7 +2056,7 @@ const onSplitNote = () => {
     const command = {
         type: "split_note",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
     };
     runCommand(command);
 };
@@ -2067,7 +2078,7 @@ const onConvertRestToNote = () => {
     const command = {
         type: "change_to_pitch",
         targetNodeId,
-        voice: EDITABLE_VOICE,
+        voice: commandVoiceForSelection(),
         pitch,
     };
     runCommand(command);
