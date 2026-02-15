@@ -47,17 +47,21 @@
       <div class="ms-flow">
         <details id="inputSectionDetails" class="md-section ms-flow-step ms-flow-collapsible" open>
           <summary class="ms-flow-summary">
-            <span class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</span>
+            <span class="md-section-title"><span class="ms-step-no">1</span>入力</span>
             <span class="ms-flow-summary-meta">
               <span class="ms-flow-state">折りたたみ中</span>
               <span class="ms-flow-caret" aria-hidden="true">▾</span>
             </span>
           </summary>
           <div class="ms-flow-body">
-          <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
-            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
+          <div class="ms-radio-group" role="radiogroup" aria-label="入力フォーマット">
+            <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML入力</label>
+            <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC入力</label>
+          </div>
+
+          <div class="ms-radio-group" role="radiogroup" aria-label="取込方法">
+            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読み込み</label>
             <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
-            <label class="md-radio"><input id="inputModeAbc" type="radio" name="inputMode" value="abc" /> ABC入力</label>
           </div>
 
           <div id="fileInputBlock" class="ms-block">
@@ -66,7 +70,7 @@
             <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
           </div>
 
-          <div id="sourceInputBlock" class="ms-block md-hidden">
+          <div id="sourceXmlInputBlock" class="ms-block md-hidden">
             <label for="xmlInput" class="md-label">MusicXML</label>
             <textarea id="xmlInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
           </div>
