@@ -5,9 +5,10 @@ export const isUiOnlyCommand = (command: CoreCommand): boolean =>
 
 export const getCommandNodeId = (command: CoreCommand): NodeId | null => {
   switch (command.type) {
-    case "change_pitch":
+    case "change_to_pitch":
     case "change_duration":
     case "delete_note":
+    case "split_note":
       return command.targetNodeId;
     case "insert_note_after":
       return command.anchorNodeId;

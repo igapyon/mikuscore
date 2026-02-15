@@ -33,7 +33,8 @@ const pitchAlter = q("#pitchAlter");
 const pitchAlterBtns = Array.from(document.querySelectorAll(".ms-alter-btn"));
 const pitchOctave = q("#pitchOctave");
 const durationPreset = q("#durationPreset");
-const insertAfterBtn = q("#insertAfterBtn");
+const splitNoteBtn = q("#splitNoteBtn");
+const convertRestBtn = q("#convertRestBtn");
 const deleteBtn = q("#deleteBtn");
 const playBtn = q("#playBtn");
 const stopBtn = q("#stopBtn");
@@ -605,7 +606,8 @@ const renderControlState = () => {
     for (const btn of pitchAlterBtns) {
         btn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     }
-    insertAfterBtn.disabled = !hasDraft || !hasSelection;
+    splitNoteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
+    convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
     deleteBtn.disabled = !hasDraft || !hasSelection;
     playMeasureBtn.disabled = !hasDraft || isPlaying;
     playBtn.disabled = !state.loaded || isPlaying;
@@ -1839,7 +1841,7 @@ const onChangePitch = () => {
         return;
     }
     const command = {
-        type: "change_pitch",
+        type: "change_to_pitch",
         targetNodeId,
         voice: EDITABLE_VOICE,
         pitch,
@@ -2021,6 +2023,42 @@ const onDelete = () => {
     };
     runCommand(command);
 };
+const onSplitNote = () => {
+    if (selectedDraftNoteIsRest)
+        return;
+    const targetNodeId = requireSelectedNode();
+    if (!targetNodeId)
+        return;
+    const command = {
+        type: "split_note",
+        targetNodeId,
+        voice: EDITABLE_VOICE,
+    };
+    runCommand(command);
+};
+const onConvertRestToNote = () => {
+    if (!selectedDraftNoteIsRest)
+        return;
+    const targetNodeId = requireSelectedNode();
+    if (!targetNodeId)
+        return;
+    const stepRaw = pitchStep.value.trim();
+    const step = isPitchStepValue(stepRaw) ? stepRaw : "C";
+    const octaveRaw = Number(pitchOctave.value);
+    const octave = Number.isInteger(octaveRaw) ? octaveRaw : 4;
+    const alterText = normalizeAlterValue(pitchAlter.value);
+    const alterNum = Number(alterText);
+    const pitch = alterText !== "none" && Number.isInteger(alterNum) && alterNum >= -2 && alterNum <= 2
+        ? { step, octave, alter: alterNum }
+        : { step, octave };
+    const command = {
+        type: "change_to_pitch",
+        targetNodeId,
+        voice: EDITABLE_VOICE,
+        pitch,
+    };
+    runCommand(command);
+};
 const onDownload = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
@@ -2066,8 +2104,9 @@ for (const btn of pitchAlterBtns) {
         onAlterAutoChange();
     });
 }
-insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
+splitNoteBtn.addEventListener("click", onSplitNote);
+convertRestBtn.addEventListener("click", onConvertRestToNote);
 playBtn.addEventListener("click", () => {
     void startPlayback();
 });
@@ -16557,6 +16596,9 @@ const getDurationNotationHint = (note, duration) => {
 };
 exports.getDurationNotationHint = getDurationNotationHint;
 const setPitch = (note, pitch) => {
+    const restNode = getDirectChild(note, "rest");
+    if (restNode)
+        restNode.remove();
     let pitchNode = getDirectChild(note, "pitch");
     if (!pitchNode) {
         pitchNode = note.ownerDocument.createElement("pitch");
@@ -16841,7 +16883,7 @@ class ScoreCore {
         const target = this.idToNode.get(targetId);
         if (!target)
             return this.fail("MVP_TARGET_NOT_FOUND", `Unknown nodeId: ${targetId}`);
-        const noteKindDiagnostic = (0, validators_1.validateSupportedNoteKind)(target);
+        const noteKindDiagnostic = (0, validators_1.validateSupportedNoteKind)(command, target);
         if (noteKindDiagnostic)
             return this.failWith(noteKindDiagnostic);
         const targetVoiceDiagnostic = (0, validators_1.validateTargetVoiceMatch)(command, target);
@@ -16859,7 +16901,7 @@ class ScoreCore {
         let removedNodeId = null;
         const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
         try {
-            if (command.type === "change_pitch") {
+            if (command.type === "change_to_pitch") {
                 (0, xmlUtils_1.setPitch)(target, command.pitch);
             }
             else if (command.type === "change_duration") {
@@ -16910,6 +16952,22 @@ class ScoreCore {
                 else if (projectedWarning) {
                     warnings.push(projectedWarning);
                 }
+            }
+            else if (command.type === "split_note") {
+                const currentDuration = (0, xmlUtils_1.getDurationValue)(target);
+                if (!Number.isInteger(currentDuration) || (currentDuration !== null && currentDuration !== void 0 ? currentDuration : 0) <= 1) {
+                    return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "split_note requires duration >= 2.");
+                }
+                if (currentDuration % 2 !== 0) {
+                    return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "split_note requires an even duration value.");
+                }
+                const half = currentDuration / 2;
+                const duplicated = target.cloneNode(true);
+                // Attach clone first so duration->notation sync can resolve measure divisions.
+                target.after(duplicated);
+                (0, xmlUtils_1.setDurationValue)(target, half);
+                (0, xmlUtils_1.setDurationValue)(duplicated, half);
+                insertedNode = duplicated;
             }
             else if (command.type === "insert_note_after") {
                 const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
@@ -17147,13 +17205,17 @@ class ScoreCore {
         return null;
     }
     buildChangedNodeIds(command, targetId, insertedNode, removedNodeId) {
-        var _a;
+        var _a, _b;
         if (command.type === "insert_note_after") {
             const insertedId = insertedNode ? (_a = this.nodeToId.get(insertedNode)) !== null && _a !== void 0 ? _a : null : null;
             return insertedId ? [targetId, insertedId] : [targetId];
         }
         if (command.type === "delete_note") {
             return removedNodeId ? [removedNodeId] : [targetId];
+        }
+        if (command.type === "split_note") {
+            const insertedId = insertedNode ? (_b = this.nodeToId.get(insertedNode)) !== null && _b !== void 0 ? _b : null : null;
+            return insertedId ? [targetId, insertedId] : [targetId];
         }
         return [targetId];
     }
@@ -17331,18 +17393,29 @@ const validateCommandPayload = (command) => {
         }
         return null;
     }
-    if (command.type === "change_pitch") {
+    if (command.type === "change_to_pitch") {
         if (!isValidPitch(command.pitch)) {
             return {
                 code: "MVP_INVALID_COMMAND_PAYLOAD",
-                message: "change_pitch.pitch is invalid.",
+                message: "change_to_pitch.pitch is invalid.",
             };
         }
     }
     return null;
 };
 exports.validateCommandPayload = validateCommandPayload;
-const validateSupportedNoteKind = (note) => {
+const validateSupportedNoteKind = (command, note) => {
+    // Allow rest -> pitched note conversion via change_to_pitch.
+    if (command.type === "change_to_pitch") {
+        const hasUnsupportedExceptRest = note.querySelector(":scope > grace") !== null ||
+            note.querySelector(":scope > cue") !== null ||
+            note.querySelector(":scope > chord") !== null;
+        if (!hasUnsupportedExceptRest)
+            return null;
+    }
+    else if (!(0, xmlUtils_1.isUnsupportedNoteKind)(note)) {
+        return null;
+    }
     if (!(0, xmlUtils_1.isUnsupportedNoteKind)(note))
         return null;
     return {
@@ -17390,7 +17463,9 @@ const validateInsertLaneBoundary = (command, anchorNote) => {
 };
 exports.validateInsertLaneBoundary = validateInsertLaneBoundary;
 const validateBackupForwardBoundaryForStructuralEdit = (command, anchorOrTarget) => {
-    if (command.type !== "insert_note_after" && command.type !== "delete_note") {
+    if (command.type !== "insert_note_after" &&
+        command.type !== "delete_note" &&
+        command.type !== "split_note") {
         return null;
     }
     const prev = anchorOrTarget.previousElementSibling;
@@ -17400,6 +17475,15 @@ const validateBackupForwardBoundaryForStructuralEdit = (command, anchorOrTarget)
             return {
                 code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
                 message: "Insert point crosses a backup/forward boundary in MVP.",
+            };
+        }
+        return null;
+    }
+    if (command.type === "split_note") {
+        if (next && isBackupOrForward(next)) {
+            return {
+                code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
+                message: "Split point crosses a backup/forward boundary in MVP.",
             };
         }
         return null;
@@ -17465,9 +17549,10 @@ const isUiOnlyCommand = (command) => command.type === "ui_noop";
 exports.isUiOnlyCommand = isUiOnlyCommand;
 const getCommandNodeId = (command) => {
     switch (command.type) {
-        case "change_pitch":
+        case "change_to_pitch":
         case "change_duration":
         case "delete_note":
+        case "split_note":
             return command.targetNodeId;
         case "insert_note_after":
             return command.anchorNodeId;

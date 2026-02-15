@@ -92,7 +92,8 @@ const pitchAlter = q<HTMLInputElement>("#pitchAlter");
 const pitchAlterBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-alter-btn"));
 const pitchOctave = q<HTMLInputElement>("#pitchOctave");
 const durationPreset = q<HTMLSelectElement>("#durationPreset");
-const insertAfterBtn = q<HTMLButtonElement>("#insertAfterBtn");
+const splitNoteBtn = q<HTMLButtonElement>("#splitNoteBtn");
+const convertRestBtn = q<HTMLButtonElement>("#convertRestBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
@@ -691,7 +692,8 @@ const renderControlState = (): void => {
   for (const btn of pitchAlterBtns) {
     btn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
   }
-  insertAfterBtn.disabled = !hasDraft || !hasSelection;
+  splitNoteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
+  convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
   deleteBtn.disabled = !hasDraft || !hasSelection;
   playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
@@ -2016,7 +2018,7 @@ const onChangePitch = (): void => {
   }
 
   const command: ChangePitchCommand = {
-    type: "change_pitch",
+    type: "change_to_pitch",
     targetNodeId,
     voice: EDITABLE_VOICE,
     pitch,
@@ -2206,6 +2208,43 @@ const onDelete = (): void => {
   runCommand(command);
 };
 
+const onSplitNote = (): void => {
+  if (selectedDraftNoteIsRest) return;
+  const targetNodeId = requireSelectedNode();
+  if (!targetNodeId) return;
+  const command: CoreCommand = {
+    type: "split_note",
+    targetNodeId,
+    voice: EDITABLE_VOICE,
+  };
+  runCommand(command);
+};
+
+const onConvertRestToNote = (): void => {
+  if (!selectedDraftNoteIsRest) return;
+  const targetNodeId = requireSelectedNode();
+  if (!targetNodeId) return;
+
+  const stepRaw = pitchStep.value.trim();
+  const step: Pitch["step"] = isPitchStepValue(stepRaw) ? stepRaw : "C";
+  const octaveRaw = Number(pitchOctave.value);
+  const octave = Number.isInteger(octaveRaw) ? octaveRaw : 4;
+  const alterText = normalizeAlterValue(pitchAlter.value);
+  const alterNum = Number(alterText);
+  const pitch: Pitch =
+    alterText !== "none" && Number.isInteger(alterNum) && alterNum >= -2 && alterNum <= 2
+      ? { step, octave, alter: alterNum as -2 | -1 | 0 | 1 | 2 }
+      : { step, octave };
+
+  const command: ChangePitchCommand = {
+    type: "change_to_pitch",
+    targetNodeId,
+    voice: EDITABLE_VOICE,
+    pitch,
+  };
+  runCommand(command);
+};
+
 const onDownload = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
   const blob = new Blob([state.lastSuccessfulSaveXml], { type: "application/xml;charset=utf-8" });
@@ -2249,8 +2288,9 @@ for (const btn of pitchAlterBtns) {
     onAlterAutoChange();
   });
 }
-insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
+splitNoteBtn.addEventListener("click", onSplitNote);
+convertRestBtn.addEventListener("click", onConvertRestToNote);
 playBtn.addEventListener("click", () => {
   void startPlayback();
 });

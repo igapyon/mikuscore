@@ -224,7 +224,7 @@ Executable test planning mapped from `SPEC.md` requirements.
 
 31. `PL-2 Dispatch rejects invalid pitch payload`
 - Given: command payload with invalid pitch fields
-- When: `dispatch(change_pitch|insert_note_after)`
+- When: `dispatch(change_to_pitch|insert_note_after)`
 - Then:
   - result `ok=false`
   - diagnostic `MVP_INVALID_COMMAND_PAYLOAD`

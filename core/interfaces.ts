@@ -51,7 +51,7 @@ export type Pitch = {
 };
 
 export type ChangePitchCommand = {
-  type: "change_pitch";
+  type: "change_to_pitch";
   targetNodeId: NodeId;
   voice: VoiceId;
   pitch: Pitch;
@@ -80,6 +80,12 @@ export type DeleteNoteCommand = {
   voice: VoiceId;
 };
 
+export type SplitNoteCommand = {
+  type: "split_note";
+  targetNodeId: NodeId;
+  voice: VoiceId;
+};
+
 export type UiNoopCommand = {
   type: "ui_noop";
   reason: "selection_change" | "cursor_move" | "viewport_change";
@@ -90,6 +96,7 @@ export type CoreCommand =
   | ChangeDurationCommand
   | InsertNoteAfterCommand
   | DeleteNoteCommand
+  | SplitNoteCommand
   | UiNoopCommand;
 
 export type ScoreCoreOptions = {
