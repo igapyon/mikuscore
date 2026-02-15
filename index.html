@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mikuscore</title>
+  <style>
+    :root {
+      --bg: #f6f4f8;
+      --surface: #ffffff;
+      --text: #1c1b1f;
+      --muted: #5f5a6b;
+      --primary: #6200ee;
+      --on-primary: #ffffff;
+      --outline: #ddd6ea;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans JP", "Hiragino Sans", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(680px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(20, 14, 35, 0.08);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.9rem;
+      line-height: 1.2;
+    }
+    p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    .link-btn {
+      display: inline-block;
+      text-decoration: none;
+      background: var(--primary);
+      color: var(--on-primary);
+      padding: 0.68rem 1.2rem;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .sub {
+      margin-top: 14px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>mikuscore</h1>
+    <p>
+      MusicXML/ABC の読み込み、譜面プレビュー、ノート編集、MusicXML/ABC/MIDI 出力を行うツールです。
+      GitHub Pages 公開用の入口ページです。
+    </p>
+    <a class="link-btn" href="./mikuscore.html">mikuscore を開く</a>
+    <p class="sub">もし開けない場合は、同じ階層に <code>mikuscore.html</code> があるか確認してください。</p>
+  </main>
+</body>
+</html>

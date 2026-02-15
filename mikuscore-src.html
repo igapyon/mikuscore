@@ -12,10 +12,6 @@
   <main class="md-shell">
     <section class="md-card ms-app">
       <header class="ms-hero">
-        <div class="ms-hero-top">
-          <p class="ms-hero-eyebrow">LOCAL SCORE TOOL</p>
-          <span class="md-chip ms-hero-chip">v0.1.0</span>
-        </div>
         <h1 class="md-headline ms-hero-title">
           <span class="ms-hero-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
@@ -40,21 +36,30 @@
             </span>
           </span>
         </h1>
-        <p class="md-subtitle ms-hero-subtitle">
-          ブラウザ上で完結し、既存MusicXMLを壊さずに編集することを重視したスコアエディタです。
-        </p>
       </header>
 
+      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore セクション">
+        <button type="button" class="ms-top-tab is-active" data-tab="input">
+          <span class="ms-top-tab-no">1</span>
+          <span class="ms-top-tab-label">入力</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="score">
+          <span class="ms-top-tab-no">2</span>
+          <span class="ms-top-tab-label">譜面</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="edit">
+          <span class="ms-top-tab-no">3</span>
+          <span class="ms-top-tab-label">編集</span>
+        </button>
+        <button type="button" class="ms-top-tab" data-tab="save">
+          <span class="ms-top-tab-no">4</span>
+          <span class="ms-top-tab-label">出力</span>
+        </button>
+      </div>
+
       <div class="ms-flow">
-        <details id="inputSectionDetails" class="md-section ms-flow-step ms-flow-collapsible" open>
-          <summary class="ms-flow-summary">
-            <span class="md-section-title"><span class="ms-step-no">1</span>入力</span>
-            <span class="ms-flow-summary-meta">
-              <span class="ms-flow-state">折りたたみ中</span>
-              <span class="ms-flow-caret" aria-hidden="true">▾</span>
-            </span>
-          </summary>
-          <div class="ms-flow-body">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
+          <h2 class="md-section-title"><span class="ms-step-no">1</span>入力</h2>
           <div class="ms-radio-group" role="radiogroup" aria-label="入力フォーマット">
             <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML入力</label>
             <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC入力</label>
@@ -139,12 +144,11 @@
               <span>読み込み</span>
             </button>
           </div>
-          </div>
-        </details>
+        </section>
 
-        <section class="md-section ms-flow-step">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="score" hidden>
           <h2 class="md-section-title">
-            <span class="ms-step-no">2</span>フルスコア
+            <span class="ms-step-no">2</span>譜面
             <span class="md-tooltip-group">
               <span class="md-info-chip" aria-label="譜面プレビューの説明">
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
@@ -177,11 +181,11 @@
           </div>
         </section>
 
-        <section class="md-section ms-flow-step">
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
           <div id="uiMessage" class="ms-ui-message md-hidden" role="status" aria-live="polite"></div>
           <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
-          <p id="measureSelectionText" class="ms-status">小節未選択（譜面プレビューをクリックしてください）</p>
+          <p id="measureSelectionText" class="ms-status">小節未選択（譜面から小節クリックして選択）</p>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
           </div>
@@ -190,20 +194,20 @@
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 7L9 18l-5-5"></path>
               </svg>
-              <span>編集確定</span>
+              <span>確定</span>
             </button>
             <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 6L6 18"></path>
                 <path d="M6 6l12 12"></path>
               </svg>
-              <span>編集破棄</span>
+              <span>破棄</span>
             </button>
             <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <path d="M8 6.5v11l9-5.5z"></path>
               </svg>
-              <span>小節再生</span>
+              <span>再生</span>
             </button>
           </div>
 
@@ -274,10 +278,10 @@
           </div>
         </section>
 
-        <section class="md-section ms-flow-step">
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>保存</h2>
+        <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>出力</h2>
           <div class="ms-actions">
-            <button id="downloadBtn" type="button" class="md-button md-button--secondary ms-icon-button" disabled>
+            <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3v12"></path>
                 <path d="M8 11l4 4 4-4"></path>
@@ -312,32 +316,6 @@
         </section>
       </div>
 
-      <details class="ms-dev">
-        <summary>詳細情報</summary>
-        <section class="md-section">
-          <h2 class="md-section-title">状態</h2>
-          <p id="statusText" class="ms-status">未ロード</p>
-          <p id="playbackText" class="ms-status">再生: 停止中</p>
-          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">ノート選択</h2>
-          <label for="noteSelect" class="md-label">ノート選択 (nodeId)</label>
-          <select id="noteSelect" class="md-select"></select>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">診断</h2>
-          <div id="diagArea" aria-live="polite"></div>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">譜面プレビュー情報</h2>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
-        </section>
-        <section class="md-section">
-          <h2 class="md-section-title">出力XML</h2>
-          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
-        </section>
-      </details>
     </section>
   </main>
 

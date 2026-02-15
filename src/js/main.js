@@ -2,6 +2,7 @@
 const modules = {
   "src/ts/main.js": function (require, module, exports) {
 "use strict";
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
@@ -19,12 +20,14 @@ const q = (selector) => {
         throw new Error(`Missing element: ${selector}`);
     return el;
 };
+const qo = (selector) => {
+    return document.querySelector(selector);
+};
 const inputTypeXml = q("#inputTypeXml");
 const inputTypeAbc = q("#inputTypeAbc");
 const inputTypeNew = q("#inputTypeNew");
 const inputModeFile = q("#inputModeFile");
 const inputModeSource = q("#inputModeSource");
-const inputSectionDetails = q("#inputSectionDetails");
 const newInputBlock = q("#newInputBlock");
 const newPartCountInput = q("#newPartCount");
 const newKeyFifthsSelect = q("#newKeyFifths");
@@ -40,8 +43,8 @@ const fileSelectBtn = q("#fileSelectBtn");
 const fileInput = q("#fileInput");
 const fileNameText = q("#fileNameText");
 const loadBtn = q("#loadBtn");
-const noteSelect = q("#noteSelect");
-const statusText = q("#statusText");
+const noteSelect = qo("#noteSelect");
+const statusText = qo("#statusText");
 const pitchStep = q("#pitchStep");
 const pitchStepValue = q("#pitchStepValue");
 const pitchStepDownBtn = q("#pitchStepDownBtn");
@@ -58,11 +61,11 @@ const stopBtn = q("#stopBtn");
 const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
-const saveModeText = q("#saveModeText");
-const playbackText = q("#playbackText");
-const outputXml = q("#outputXml");
-const diagArea = q("#diagArea");
-const debugScoreMeta = q("#debugScoreMeta");
+const saveModeText = qo("#saveModeText");
+const playbackText = qo("#playbackText");
+const outputXml = qo("#outputXml");
+const diagArea = qo("#diagArea");
+const debugScoreMeta = qo("#debugScoreMeta");
 const debugScoreArea = q("#debugScoreArea");
 const uiMessage = q("#uiMessage");
 const measurePartNameText = q("#measurePartNameText");
@@ -72,6 +75,8 @@ const measureEditorArea = q("#measureEditorArea");
 const measureApplyBtn = q("#measureApplyBtn");
 const measureDiscardBtn = q("#measureDiscardBtn");
 const playMeasureBtn = q("#playMeasureBtn");
+const topTabButtons = Array.from(document.querySelectorAll(".ms-top-tab"));
+const topTabPanels = Array.from(document.querySelectorAll(".ms-tab-panel"));
 const core = new ScoreCore_1.ScoreCore({ editableVoice: EDITABLE_VOICE });
 const state = {
     loaded: false,
@@ -83,7 +88,7 @@ const state = {
 };
 xmlInput.value = sampleXml_1.sampleXml;
 let isPlaying = false;
-const DEBUG_LOG = true;
+const DEBUG_LOG = false;
 let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map();
 let nodeIdToLocation = new Map();
@@ -248,12 +253,20 @@ const renderNewPartClefControls = () => {
     }
 };
 const renderStatus = () => {
+    if (!statusText)
+        return;
     const dirty = core.isDirty();
     statusText.textContent = state.loaded
         ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
         : "未ロード（まず読み込みしてください）";
 };
 const renderNotes = () => {
+    const selectedNodeId = state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)
+        ? state.selectedNodeId
+        : null;
+    state.selectedNodeId = selectedNodeId;
+    if (!noteSelect)
+        return;
     noteSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -265,11 +278,10 @@ const renderNotes = () => {
         option.textContent = nodeId;
         noteSelect.appendChild(option);
     }
-    if (state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)) {
-        noteSelect.value = state.selectedNodeId;
+    if (selectedNodeId) {
+        noteSelect.value = selectedNodeId;
     }
     else {
-        state.selectedNodeId = null;
         noteSelect.value = "";
     }
 };
@@ -565,8 +577,8 @@ const syncStepFromSelectedDraftNote = () => {
 const renderMeasureEditorState = () => {
     var _a;
     if (!selectedMeasure || !draftCore) {
-        measurePartNameText.textContent = "小節未選択（譜面プレビューをクリックしてください）";
-        measureSelectionText.textContent = "小節未選択（譜面プレビューをクリックしてください）";
+        measurePartNameText.textContent = "小節未選択（譜面から小節クリックして選択）";
+        measureSelectionText.textContent = "小節未選択（譜面から小節クリックして選択）";
         measureSelectionText.classList.add("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
         measureApplyBtn.disabled = true;
@@ -625,6 +637,8 @@ const highlightSelectedMeasureInMainPreview = () => {
     }
 };
 const renderDiagnostics = () => {
+    if (!diagArea)
+        return;
     diagArea.innerHTML = "";
     const dispatch = state.lastDispatchResult;
     const save = state.lastSaveResult;
@@ -690,8 +704,12 @@ const renderUiMessage = () => {
 };
 const renderOutput = () => {
     var _a, _b, _c, _d;
-    saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
-    outputXml.value = ((_a = state.lastSaveResult) === null || _a === void 0 ? void 0 : _a.ok) ? state.lastSaveResult.xml : "";
+    if (saveModeText) {
+        saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
+    }
+    if (outputXml) {
+        outputXml.value = ((_a = state.lastSaveResult) === null || _a === void 0 ? void 0 : _a.ok) ? state.lastSaveResult.xml : "";
+    }
     downloadBtn.disabled = !((_b = state.lastSaveResult) === null || _b === void 0 ? void 0 : _b.ok);
     downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
     downloadAbcBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
@@ -699,7 +717,9 @@ const renderOutput = () => {
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
     const hasSelection = Boolean(state.selectedNodeId);
-    noteSelect.disabled = !hasDraft;
+    if (noteSelect) {
+        noteSelect.disabled = !hasDraft;
+    }
     pitchStepDownBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     pitchStepUpBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     for (const btn of pitchAlterBtns) {
@@ -769,6 +789,20 @@ const rebuildPartNameMap = (doc) => {
             ((_f = (_e = scorePart.querySelector(":scope > part-abbreviation")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) ||
             partId;
         partIdToName.set(partId, partName);
+    }
+};
+const stripPartNamesInRenderDoc = (doc) => {
+    const removableSelectors = [
+        "score-partwise > part-list > score-part > part-name",
+        "score-partwise > part-list > score-part > part-abbreviation",
+        "score-partwise > part > measure > attributes > part-name-display",
+        "score-partwise > part > measure > attributes > part-abbreviation-display",
+        "score-partwise > part > measure > attributes > staff-details > staff-name",
+    ];
+    for (const selector of removableSelectors) {
+        for (const node of Array.from(doc.querySelectorAll(selector))) {
+            node.remove();
+        }
     }
 };
 const buildRenderXmlForVerovio = (xml) => {
@@ -1017,7 +1051,9 @@ const renderScorePreview = () => {
         xml,
         noteNodeIds: state.noteNodeIds,
         setMetaText: (text) => {
-            debugScoreMeta.textContent = text;
+            if (debugScoreMeta) {
+                debugScoreMeta.textContent = text;
+            }
         },
         setSvgHtml: (svgHtml) => {
             debugScoreArea.innerHTML = svgHtml;
@@ -1025,7 +1061,13 @@ const renderScorePreview = () => {
         setSvgIdMap: (map) => {
             currentSvgIdToNodeId = map;
         },
-        buildRenderXmlForVerovio,
+        buildRenderXmlForVerovio: (sourceXml) => {
+            const renderBundle = buildRenderXmlForVerovio(sourceXml);
+            if (renderBundle.renderDoc) {
+                stripPartNamesInRenderDoc(renderBundle.renderDoc);
+            }
+            return renderBundle;
+        },
         deriveRenderedNoteIds,
         buildFallbackSvgIdMap,
         onRendered: () => {
@@ -1087,7 +1129,9 @@ const playbackFlowOptions = {
         isPlaying = playing;
     },
     setPlaybackText: (text) => {
-        playbackText.textContent = text;
+        if (playbackText) {
+            playbackText.textContent = text;
+        }
     },
     renderControlState,
     renderAll,
@@ -1221,7 +1265,7 @@ const autoSaveCurrentXml = () => {
     }
     state.lastSuccessfulSaveXml = result.xml;
 };
-const loadFromText = (xml, collapseInputSection) => {
+const loadFromText = (xml) => {
     try {
         core.load(xml);
     }
@@ -1259,9 +1303,6 @@ const loadFromText = (xml, collapseInputSection) => {
     draftSvgIdToNodeId = new Map();
     refreshNotesFromCore();
     autoSaveCurrentXml();
-    if (collapseInputSection) {
-        inputSectionDetails.open = false;
-    }
     renderAll();
     renderScorePreview();
 };
@@ -1295,7 +1336,7 @@ const onLoadClick = async () => {
     if (result.nextXmlInputText !== undefined) {
         xmlInput.value = result.nextXmlInputText;
     }
-    loadFromText(result.xmlToLoad, result.collapseInputSection);
+    loadFromText(result.xmlToLoad);
 };
 const createNewMusicXml = () => {
     const partCount = normalizeNewPartCount();
@@ -1631,6 +1672,29 @@ const onDownloadAbc = () => {
         return;
     (0, download_flow_1.triggerFileDownload)(payload);
 };
+const activateTopTab = (tabName) => {
+    const activeIndex = topTabButtons.findIndex((button) => button.dataset.tab === tabName);
+    for (const button of topTabButtons) {
+        const currentIndex = topTabButtons.indexOf(button);
+        const active = button.dataset.tab === tabName;
+        button.classList.toggle("is-active", active);
+        button.classList.toggle("is-complete", activeIndex >= 0 && currentIndex < activeIndex);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    for (const panel of topTabPanels) {
+        panel.hidden = panel.dataset.tabPanel !== tabName;
+    }
+};
+if (topTabButtons.length > 0 && topTabPanels.length > 0) {
+    for (const button of topTabButtons) {
+        button.setAttribute("role", "tab");
+        button.setAttribute("aria-selected", button.classList.contains("is-active") ? "true" : "false");
+        button.addEventListener("click", () => {
+            activateTopTab(button.dataset.tab || "input");
+        });
+    }
+    activateTopTab(((_a = topTabButtons.find((button) => button.classList.contains("is-active"))) === null || _a === void 0 ? void 0 : _a.dataset.tab) || "input");
+}
 inputTypeXml.addEventListener("change", renderInputMode);
 inputTypeAbc.addEventListener("change", renderInputMode);
 inputTypeNew.addEventListener("change", renderInputMode);
@@ -1647,10 +1711,12 @@ fileInput.addEventListener("change", () => {
 loadBtn.addEventListener("click", () => {
     void onLoadClick();
 });
-noteSelect.addEventListener("change", () => {
-    state.selectedNodeId = noteSelect.value || null;
-    renderAll();
-});
+if (noteSelect) {
+    noteSelect.addEventListener("change", () => {
+        state.selectedNodeId = noteSelect.value || null;
+        renderAll();
+    });
+}
 durationPreset.addEventListener("change", () => {
     onDurationPresetChange();
 });
@@ -1688,7 +1754,7 @@ playMeasureBtn.addEventListener("click", () => {
     void startMeasurePlayback();
 });
 renderNewPartClefControls();
-loadFromText(xmlInput.value, false);
+loadFromText(xmlInput.value);
 
   },
   "src/ts/sampleXml.js": function (require, module, exports) {

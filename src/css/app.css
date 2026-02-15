@@ -7,14 +7,20 @@ body {
   font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+.md-shell {
+  width: 100%;
+}
+
 .ms-app {
   margin: 24px auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .ms-hero {
   position: relative;
   margin: -6px -6px 14px;
-  padding: 16px 16px 14px;
+  padding: 12px 14px 10px;
   border-radius: 16px;
   border: 1px solid #dacdf2;
   background:
@@ -24,31 +30,11 @@ body {
   box-shadow: 0 8px 20px rgba(86, 58, 132, 0.12);
 }
 
-.ms-hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-}
-
-.ms-hero-eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: #6f5c92;
-}
-
-.ms-hero-chip {
-  margin-left: 0;
-  background: rgba(98, 0, 238, 0.16);
-}
-
 .ms-hero-title {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin: 0.25rem 0 0.2rem;
+  margin: 0;
 }
 
 .ms-hero-subtitle {
@@ -89,6 +75,93 @@ body {
   gap: 1.2rem;
 }
 
+.ms-top-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.2rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ms-top-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  appearance: none;
+  border: 1px solid #ddd2f0;
+  background: #f7f3fc;
+  color: #4a4458;
+  border-radius: 14px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ms-top-tab::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.2rem);
+  width: 0.45rem;
+  height: 2px;
+  background: #d8cceb;
+  transform: translateY(-50%);
+}
+
+.ms-top-tab:last-child::after {
+  display: none;
+}
+
+.ms-top-tab-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #ece5f8;
+  color: #5a4b79;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.ms-top-tab-label {
+  display: inline-block;
+  letter-spacing: 0.01em;
+}
+
+.ms-top-tab.is-active {
+  border-color: rgba(98, 0, 238, 0.5);
+  color: #4d2aa5;
+  background: rgba(98, 0, 238, 0.14);
+}
+
+.ms-top-tab.is-active .ms-top-tab-no {
+  background: rgba(98, 0, 238, 0.22);
+  color: #4d2aa5;
+}
+
+.ms-top-tab.is-complete {
+  border-color: rgba(3, 137, 123, 0.35);
+  background: rgba(3, 218, 198, 0.12);
+  color: #284f48;
+}
+
+.ms-top-tab.is-complete .ms-top-tab-no {
+  background: rgba(3, 137, 123, 0.2);
+  color: #0f5b4f;
+}
+
+.ms-tab-panel[hidden] {
+  display: none !important;
+}
+
 .ms-flow-step {
   border-top: 1px solid #ece7f3;
   padding-top: 0.8rem;
@@ -100,61 +173,6 @@ body {
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.8rem;
-}
-
-.ms-flow-collapsible {
-  overflow: hidden;
-}
-
-.ms-flow-summary {
-  list-style: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.ms-flow-summary::-webkit-details-marker {
-  display: none;
-}
-
-.ms-flow-summary .md-section-title {
-  margin-bottom: 0;
-}
-
-.ms-flow-summary-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  color: #7a6a99;
-}
-
-.ms-flow-state {
-  font-size: 0.78rem;
-  border-radius: 999px;
-  padding: 0.12rem 0.5rem;
-  border: 1px solid #d7cdee;
-  background: #f4effc;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.ms-flow-caret {
-  font-size: 0.85rem;
-  transition: transform 150ms ease;
-}
-
-.ms-flow-collapsible[open] .ms-flow-caret {
-  transform: rotate(180deg);
-}
-
-.ms-flow-collapsible:not([open]) .ms-flow-state {
-  opacity: 1;
-}
-
-.ms-flow-body {
-  margin-top: 0.8rem;
 }
 
 .ms-step-no {
@@ -318,7 +336,7 @@ body {
   max-width: 100%;
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.55rem;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -341,7 +359,7 @@ body {
 .ms-measure-editor {
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.55rem;
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -402,12 +420,61 @@ body {
 }
 
 @media (max-width: 640px) {
+  html,
+  body,
+  .md-page {
+    overflow-x: clip;
+  }
+
+  .md-page {
+    padding: 8px;
+  }
+
+  .md-card.ms-app {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .ms-app {
+    margin: 8px auto;
+  }
+
   .ms-hero {
     margin: -2px -2px 12px;
-    padding: 14px 12px 12px;
+    padding: 10px 10px 8px;
   }
 
   .ms-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ms-top-tab {
+    min-width: 0;
+    padding: 0.42rem 0.45rem;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .ms-top-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ms-radio-group {
+    gap: 0.65rem;
+  }
+
+  .ms-file-name {
+    display: block;
+    overflow-wrap: anywhere;
+  }
+
+  .ms-debug-wrap,
+  .ms-measure-editor {
+    padding: 0.45rem;
+  }
+
+  .ms-top-tab::after {
+    display: none;
   }
 }
