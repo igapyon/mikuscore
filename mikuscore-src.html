@@ -9,19 +9,16 @@
 <body>
   <main class="ms-shell">
     <section class="ms-card">
-      <h1 class="ms-title">mikuscore (MVP)</h1>
+      <h1 class="ms-title">mikuscore</h1>
       <p class="ms-intro">
-        既存MusicXMLを壊さずに、安全に最小編集するためのMVPエディタです。
+        ブラウザ上で完結し、既存MusicXMLを壊さずに編集することを重視したスコアエディタです。
       </p>
       <ol class="ms-steps">
         <li>入力を選んで読み込み</li>
+        <li>譜面プレビューで選択</li>
         <li>ノートを編集</li>
         <li>再生で確認して保存 / ダウンロード</li>
       </ol>
-      <div class="ms-actions">
-        <button id="loadSampleBtn" type="button">サンプルを読む（ソース入力）</button>
-      </div>
-
       <div class="ms-flow">
         <section class="ms-section ms-flow-step">
           <h2><span class="ms-step-no">1</span>MusicXML入力</h2>
@@ -47,7 +44,23 @@
         </section>
 
         <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">2</span>編集</h2>
+          <h2><span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）</h2>
+          <p class="ms-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
+          <div class="ms-actions">
+            <label class="ms-inline-check">
+              <input id="debugLongSvgMode" type="checkbox" checked disabled />
+              <span>改ページ抑制（ON固定）</span>
+            </label>
+            <button id="renderDebugScoreBtn" type="button">譜面再描画</button>
+          </div>
+          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
+          <div id="debugScoreWrap" class="ms-debug-wrap">
+            <div id="debugScoreArea" class="ms-debug-score"></div>
+          </div>
+        </section>
+
+        <section class="ms-section ms-flow-step">
+          <h2><span class="ms-step-no">3</span>編集</h2>
           <p id="statusText">未ロード</p>
           <label for="noteSelect" class="ms-label">ノート選択 (nodeId)</label>
           <select id="noteSelect"></select>
@@ -91,23 +104,7 @@
         </section>
 
         <section class="ms-section ms-flow-step">
-          <h2>譜面プレビュー（クリックで選択）</h2>
-          <p class="ms-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
-          <div class="ms-actions">
-            <label class="ms-inline-check">
-              <input id="debugLongSvgMode" type="checkbox" checked disabled />
-              <span>改ページ抑制（ON固定）</span>
-            </label>
-            <button id="renderDebugScoreBtn" type="button">譜面再描画</button>
-          </div>
-          <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
-          <div id="debugScoreWrap" class="ms-debug-wrap">
-            <div id="debugScoreArea" class="ms-debug-score"></div>
-          </div>
-        </section>
-
-        <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">3</span>検証 / 保存</h2>
+          <h2><span class="ms-step-no">4</span>検証 / 保存</h2>
           <div class="ms-actions">
             <button id="playBtn" type="button">再生</button>
             <button id="stopBtn" type="button" disabled>停止</button>
