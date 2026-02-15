@@ -1108,3 +1108,186 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
   return `${headerLines.join("\n")}\n\n${bodyLines.join("\n")}\n`;
 };
+
+const xmlEscape = (text: string): string =>
+  text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+
+const normalizeTypeForMusicXml = (t?: string): string => {
+  const raw = String(t || "").trim();
+  if (!raw) return "quarter";
+  if (raw === "16th" || raw === "32nd" || raw === "64th" || raw === "128th") return raw;
+  if (raw === "whole" || raw === "half" || raw === "quarter" || raw === "eighth") return raw;
+  return "quarter";
+};
+
+export const clefXmlFromAbcClef = (rawClef?: string): string => {
+  const clef = String(rawClef || "").trim().toLowerCase();
+  if (clef === "bass" || clef === "f") {
+    return "<clef><sign>F</sign><line>4</line></clef>";
+  }
+  if (clef === "alto" || clef === "c3") {
+    return "<clef><sign>C</sign><line>3</line></clef>";
+  }
+  if (clef === "tenor" || clef === "c4") {
+    return "<clef><sign>C</sign><line>4</line></clef>";
+  }
+  return "<clef><sign>G</sign><line>2</line></clef>";
+};
+
+type AbcParsedMeta = {
+  title: string;
+  composer: string;
+  meter: { beats: number; beatType: number };
+  keyInfo: { fifths: number };
+};
+
+type AbcParsedNote = {
+  isRest: boolean;
+  duration: number;
+  type?: string;
+  step?: string;
+  octave?: number;
+  alter?: number | null;
+  accidentalText?: string | null;
+  tieStart?: boolean;
+  tieStop?: boolean;
+  chord?: boolean;
+  voice?: string;
+};
+
+type AbcParsedPart = {
+  partId: string;
+  partName: string;
+  clef?: string;
+  transpose?: { chromatic: number } | null;
+  measures: AbcParsedNote[][];
+};
+
+type AbcParsedResult = {
+  meta: AbcParsedMeta;
+  parts: AbcParsedPart[];
+  warnings?: string[];
+};
+
+const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
+  const parts =
+    parsed.parts && parsed.parts.length > 0
+      ? parsed.parts
+      : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
+  const measureCount = parts.reduce((max, part) => Math.max(max, part.measures.length), 1);
+  const title = parsed.meta?.title || "mikuscore";
+  const composer = parsed.meta?.composer || "Unknown";
+  const beats = parsed.meta?.meter?.beats || 4;
+  const beatType = parsed.meta?.meter?.beatType || 4;
+  const fifths = Number.isFinite(parsed.meta?.keyInfo?.fifths) ? parsed.meta.keyInfo.fifths : 0;
+
+  const partListXml = parts
+    .map((part, index) => {
+      const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
+      return [
+        `<score-part id="${xmlEscape(part.partId)}">`,
+        `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
+        `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
+        `<midi-channel>${midiChannel}</midi-channel>`,
+        `<midi-program>6</midi-program>`,
+        "</midi-instrument>",
+        "</score-part>",
+      ].join("");
+    })
+    .join("");
+
+  const partBodyXml = parts
+    .map((part) => {
+      const measuresXml: string[] = [];
+      for (let i = 0; i < measureCount; i += 1) {
+        const measureNo = i + 1;
+        const notes = part.measures[i] ?? [];
+        const header =
+          i === 0
+            ? [
+                "<attributes>",
+                "<divisions>960</divisions>",
+                `<key><fifths>${Math.round(fifths)}</fifths></key>`,
+                `<time><beats>${Math.round(beats)}</beats><beat-type>${Math.round(beatType)}</beat-type></time>`,
+                part.transpose && Number.isFinite(part.transpose.chromatic)
+                  ? `<transpose><chromatic>${Math.round(part.transpose.chromatic)}</chromatic></transpose>`
+                  : "",
+                clefXmlFromAbcClef(part.clef),
+                "</attributes>",
+              ].join("")
+            : "";
+
+        const notesXml =
+          notes.length > 0
+            ? notes
+                .map((note) => {
+                  const chunks: string[] = ["<note>"];
+                  if (note.chord) chunks.push("<chord/>");
+                  if (note.isRest) {
+                    chunks.push("<rest/>");
+                  } else {
+                    const step = /^[A-G]$/.test(String(note.step || "").toUpperCase())
+                      ? String(note.step).toUpperCase()
+                      : "C";
+                    const octave = Number.isFinite(note.octave)
+                      ? Math.max(0, Math.min(9, Math.round(note.octave as number)))
+                      : 4;
+                    chunks.push("<pitch>");
+                    chunks.push(`<step>${step}</step>`);
+                    if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
+                      chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
+                    }
+                    chunks.push(`<octave>${octave}</octave>`);
+                    chunks.push("</pitch>");
+                  }
+                  const duration = Math.max(1, Math.round(Number(note.duration) || 1));
+                  chunks.push(`<duration>${duration}</duration>`);
+                  chunks.push(`<voice>${xmlEscape(String(note.voice || "1"))}</voice>`);
+                  chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+                  if (note.accidentalText) {
+                    chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);
+                  }
+                  if (note.tieStart) chunks.push('<tie type="start"/>');
+                  if (note.tieStop) chunks.push('<tie type="stop"/>');
+                  if (note.tieStart || note.tieStop) {
+                    chunks.push("<notations>");
+                    if (note.tieStart) chunks.push('<tied type="start"/>');
+                    if (note.tieStop) chunks.push('<tied type="stop"/>');
+                    chunks.push("</notations>");
+                  }
+                  chunks.push("</note>");
+                  return chunks.join("");
+                })
+                .join("")
+            : '<note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>';
+
+        measuresXml.push(`<measure number="${measureNo}">${header}${notesXml}</measure>`);
+      }
+      return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
+    })
+    .join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<score-partwise version="4.0">',
+    `<work><work-title>${xmlEscape(title)}</work-title></work>`,
+    `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`,
+    `<part-list>${partListXml}</part-list>`,
+    partBodyXml,
+    "</score-partwise>",
+  ].join("");
+};
+
+export const convertAbcToMusicXml = (abcSource: string): string => {
+  const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
+    defaultTitle: "mikuscore",
+    defaultComposer: "Unknown",
+    inferTransposeFromPartName: true,
+  }) as AbcParsedResult;
+  return buildMusicXmlFromAbcParsed(parsed);
+};
