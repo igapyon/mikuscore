@@ -88,7 +88,8 @@ const pitchStep = q<HTMLInputElement>("#pitchStep");
 const pitchStepValue = q<HTMLSpanElement>("#pitchStepValue");
 const pitchStepDownBtn = q<HTMLButtonElement>("#pitchStepDownBtn");
 const pitchStepUpBtn = q<HTMLButtonElement>("#pitchStepUpBtn");
-const pitchAlter = q<HTMLSelectElement>("#pitchAlter");
+const pitchAlter = q<HTMLInputElement>("#pitchAlter");
+const pitchAlterBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-alter-btn"));
 const pitchOctave = q<HTMLInputElement>("#pitchOctave");
 const durationInput = q<HTMLInputElement>("#durationInput");
 const changeDurationBtn = q<HTMLButtonElement>("#changeDurationBtn");
@@ -270,31 +271,57 @@ const renderPitchStepValue = (): void => {
   }
 };
 
+const normalizeAlterValue = (value: string): string => {
+  const v = value.trim();
+  if (v === "none") return "none";
+  if (v === "-2" || v === "-1" || v === "0" || v === "1" || v === "2") return v;
+  if (v === "") return "none";
+  return "none";
+};
+
+const renderAlterButtons = (): void => {
+  const active = normalizeAlterValue(pitchAlter.value);
+  pitchAlter.value = active;
+  for (const btn of pitchAlterBtns) {
+    const value = normalizeAlterValue(btn.dataset.alter ?? "");
+    const isActive = value === active;
+    btn.classList.toggle("is-active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  }
+};
+
 const syncStepFromSelectedDraftNote = (): void => {
   selectedDraftNoteIsRest = false;
   pitchStep.disabled = false;
-  pitchAlter.disabled = false;
-  pitchOctave.disabled = false;
   pitchStep.title = "";
-  pitchAlter.title = "";
-  pitchOctave.title = "";
+  pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
+  for (const btn of pitchAlterBtns) {
+    btn.disabled = false;
+    btn.title = "";
+  }
 
   if (!draftCore || !state.selectedNodeId) {
     pitchStep.value = "";
+    pitchAlter.value = "none";
     renderPitchStepValue();
+    renderAlterButtons();
     return;
   }
   const xml = draftCore.debugSerializeCurrentXml();
   if (!xml) {
     pitchStep.value = "";
+    pitchAlter.value = "none";
     renderPitchStepValue();
+    renderAlterButtons();
     return;
   }
 
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) {
     pitchStep.value = "";
+    pitchAlter.value = "none";
     renderPitchStepValue();
+    renderAlterButtons();
     return;
   }
 
@@ -302,26 +329,64 @@ const syncStepFromSelectedDraftNote = (): void => {
   const count = Math.min(notes.length, draftNoteNodeIds.length);
   for (let i = 0; i < count; i += 1) {
     if (draftNoteNodeIds[i] !== state.selectedNodeId) continue;
+    const durationText = notes[i].querySelector(":scope > duration")?.textContent?.trim() ?? "";
+    const durationNumber = Number(durationText);
+    if (Number.isInteger(durationNumber) && durationNumber > 0) {
+      durationInput.value = String(durationNumber);
+    }
+
+    const alterText = notes[i].querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "";
+    const accidentalText = notes[i].querySelector(":scope > accidental")?.textContent?.trim() ?? "";
+    const alterNumber = Number(alterText);
+    if (alterText === "") {
+      if (accidentalText === "natural") {
+        pitchAlter.value = "0";
+      } else if (accidentalText === "flat") {
+        pitchAlter.value = "-1";
+      } else if (accidentalText === "flat-flat") {
+        pitchAlter.value = "-2";
+      } else if (accidentalText === "sharp") {
+        pitchAlter.value = "1";
+      } else if (accidentalText === "double-sharp") {
+        pitchAlter.value = "2";
+      } else {
+        pitchAlter.value = "none";
+      }
+    } else if (Number.isInteger(alterNumber) && alterNumber >= -2 && alterNumber <= 2) {
+      pitchAlter.value = String(alterNumber);
+    } else {
+      pitchAlter.value = "none";
+    }
+
     if (notes[i].querySelector(":scope > rest")) {
       selectedDraftNoteIsRest = true;
       pitchStep.value = "";
       pitchStep.disabled = true;
-      pitchAlter.disabled = true;
-      pitchOctave.disabled = true;
       pitchStep.title = "休符は音高を持たないため、音高変更はできません。";
-      pitchAlter.title = "休符は音高を持たないため、音高変更はできません。";
-      pitchOctave.title = "休符は音高を持たないため、音高変更はできません。";
+      for (const btn of pitchAlterBtns) {
+        btn.disabled = true;
+        btn.title = "休符は音高を持たないため、音高変更はできません。";
+      }
+      pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
       renderPitchStepValue();
+      renderAlterButtons();
       return;
     }
     const stepText = notes[i].querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
     if (isPitchStepValue(stepText)) {
       pitchStep.value = stepText;
     }
+    const octaveText = notes[i].querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+    const octaveNumber = Number(octaveText);
+    if (Number.isInteger(octaveNumber) && octaveNumber >= 0 && octaveNumber <= 9) {
+      pitchOctave.value = String(octaveNumber);
+    }
     renderPitchStepValue();
+    renderAlterButtons();
     return;
   }
   renderPitchStepValue();
+  renderAlterButtons();
 };
 
 const renderMeasureEditorState = (): void => {
@@ -439,6 +504,9 @@ const renderControlState = (): void => {
   noteSelect.disabled = !hasDraft;
   pitchStepDownBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
   pitchStepUpBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
+  for (const btn of pitchAlterBtns) {
+    btn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
+  }
   changeDurationBtn.disabled = !hasDraft || !hasSelection;
   insertAfterBtn.disabled = !hasDraft || !hasSelection;
   deleteBtn.disabled = !hasDraft || !hasSelection;
@@ -1561,13 +1629,14 @@ const readSelectedPitch = (): Pitch | null => {
   const octave = Number(pitchOctave.value);
   if (!Number.isInteger(octave)) return null;
 
-  const alterText = pitchAlter.value.trim();
+  const alterText = normalizeAlterValue(pitchAlter.value);
   const base: Pitch = {
     step,
     octave,
   };
-  if (alterText === "") return base;
-
+  if (alterText === "none") {
+    return base;
+  }
   const alter = Number(alterText);
   if (!Number.isInteger(alter) || alter < -2 || alter > 2) return null;
   return { ...base, alter: alter as -2 | -1 | 0 | 1 | 2 };
@@ -1745,6 +1814,12 @@ const onPitchStepAutoChange = (): void => {
   onChangePitch();
 };
 
+const onAlterAutoChange = (): void => {
+  if (!draftCore || !state.selectedNodeId || selectedDraftNoteIsRest) return;
+  renderAlterButtons();
+  onChangePitch();
+};
+
 const shiftPitchStep = (delta: 1 | -1): void => {
   if (!draftCore || !state.selectedNodeId || selectedDraftNoteIsRest) return;
   const order: Pitch["step"][] = ["C", "D", "E", "F", "G", "A", "B"];
@@ -1752,8 +1827,34 @@ const shiftPitchStep = (delta: 1 | -1): void => {
   if (!isPitchStepValue(current)) return;
   const index = order.indexOf(current);
   if (index < 0) return;
-  const next = order[(index + delta + order.length) % order.length];
-  pitchStep.value = next;
+  // Clamp lower bound to A0.
+  if (delta === -1) {
+    const currentOctave = Number(pitchOctave.value);
+    if (Number.isInteger(currentOctave) && currentOctave === 0 && current !== "B") {
+      return;
+    }
+  }
+  const rawNext = index + delta;
+  let nextIndex = rawNext;
+  let octave = Number(pitchOctave.value);
+  if (!Number.isInteger(octave)) octave = 4;
+
+  if (rawNext < 0) {
+    if (octave <= 0) {
+      return;
+    }
+    octave -= 1;
+    nextIndex = order.length - 1;
+  } else if (rawNext >= order.length) {
+    if (octave >= 9) {
+      return;
+    }
+    octave += 1;
+    nextIndex = 0;
+  }
+
+  pitchOctave.value = String(octave);
+  pitchStep.value = order[nextIndex];
   renderPitchStepValue();
   onPitchStepAutoChange();
 };
@@ -1921,6 +2022,12 @@ pitchStepDownBtn.addEventListener("click", () => {
 pitchStepUpBtn.addEventListener("click", () => {
   shiftPitchStep(1);
 });
+for (const btn of pitchAlterBtns) {
+  btn.addEventListener("click", () => {
+    pitchAlter.value = normalizeAlterValue(btn.dataset.alter ?? "");
+    onAlterAutoChange();
+  });
+}
 changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
