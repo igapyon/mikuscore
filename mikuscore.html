@@ -500,14 +500,6 @@ body {
               </label>
               <label class="ms-field">調号
                 <select id="newKeyFifths" class="md-select">
-                  <option value="-7">♭7 (Cb)</option>
-                  <option value="-6">♭6 (Gb)</option>
-                  <option value="-5">♭5 (Db)</option>
-                  <option value="-4">♭4 (Ab)</option>
-                  <option value="-3">♭3 (Eb)</option>
-                  <option value="-2">♭2 (Bb)</option>
-                  <option value="-1">♭1 (F)</option>
-                  <option value="0" selected>なし (C)</option>
                   <option value="1">♯1 (G)</option>
                   <option value="2">♯2 (D)</option>
                   <option value="3">♯3 (A)</option>
@@ -515,6 +507,14 @@ body {
                   <option value="5">♯5 (B)</option>
                   <option value="6">♯6 (F#)</option>
                   <option value="7">♯7 (C#)</option>
+                  <option value="0" selected>なし (C)</option>
+                  <option value="-1">♭1 (F)</option>
+                  <option value="-2">♭2 (Bb)</option>
+                  <option value="-3">♭3 (Eb)</option>
+                  <option value="-4">♭4 (Ab)</option>
+                  <option value="-5">♭5 (Db)</option>
+                  <option value="-6">♭6 (Gb)</option>
+                  <option value="-7">♭7 (Cb)</option>
                 </select>
               </label>
             </div>
@@ -559,7 +559,7 @@ body {
 
         <section class="md-section ms-flow-step">
           <h2 class="md-section-title">
-            <span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）
+            <span class="ms-step-no">2</span>フルスコア
             <span class="md-tooltip-group">
               <span class="md-info-chip" aria-label="譜面プレビューの説明">
                 <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
@@ -766,10 +766,12 @@ const modules = {
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
-const abc_common_1 = require("./abc-common");
-const abc_compat_parser_1 = require("./abc-compat-parser");
-const playback_1 = require("./playback");
+const abc_io_1 = require("./abc-io");
+const abc_io_2 = require("./abc-io");
+const midi_io_1 = require("./midi-io");
+const musicxml_io_1 = require("./musicxml-io");
 const sampleXml_1 = require("./sampleXml");
+const verovio_out_1 = require("./verovio-out");
 const EDITABLE_VOICE = "1";
 const q = (selector) => {
     const el = document.querySelector(selector);
@@ -842,8 +844,6 @@ const state = {
 xmlInput.value = sampleXml_1.sampleXml;
 let isPlaying = false;
 const DEBUG_LOG = true;
-let verovioToolkit = null;
-let verovioInitPromise = null;
 let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map();
 let nodeIdToLocation = new Map();
@@ -1537,39 +1537,23 @@ const rebuildPartNameMap = (xml) => {
         partIdToName.set(partId, partName);
     }
 };
-const buildRenderXmlWithNodeIds = (xml, nodeIds, idPrefix) => {
-    const map = new Map();
-    if (nodeIds.length === 0) {
-        return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
-    }
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror")) {
-        return { renderXml: xml, svgIdToNodeId: map, noteCount: 0 };
-    }
-    const notes = Array.from(doc.querySelectorAll("note"));
-    const count = Math.min(notes.length, nodeIds.length);
-    for (let i = 0; i < count; i += 1) {
-        const nodeId = nodeIds[i];
-        const svgId = `${idPrefix}-${nodeId}`;
-        notes[i].setAttribute("xml:id", svgId);
-        notes[i].setAttribute("id", svgId);
-        map.set(svgId, nodeId);
-    }
-    return {
-        renderXml: new XMLSerializer().serializeToString(doc),
-        svgIdToNodeId: map,
-        noteCount: count,
-    };
-};
 const buildRenderXmlForVerovio = (xml) => {
-    if (!state.loaded) {
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!sourceDoc) {
         return {
-            renderXml: xml,
+            renderDoc: null,
             svgIdToNodeId: new Map(),
             noteCount: 0,
         };
     }
-    return buildRenderXmlWithNodeIds(xml, state.noteNodeIds.slice(), "mks-main");
+    if (!state.loaded) {
+        return {
+            renderDoc: sourceDoc,
+            svgIdToNodeId: new Map(),
+            noteCount: 0,
+        };
+    }
+    return (0, musicxml_io_1.buildRenderDocWithNodeIds)(sourceDoc, state.noteNodeIds.slice(), "mks-main");
 };
 const deriveRenderedNoteIds = (root) => {
     const direct = Array.from(root.querySelectorAll('[id^="mks-"], [id*="mks-"]')).map((el) => el.id);
@@ -1715,117 +1699,13 @@ const resolveDraftNodeIdFromNearestPoint = (clickEvent) => {
     return resolveNodeIdFromNearestPointInArea(clickEvent, measureEditorArea, draftSvgIdToNodeId, NOTE_CLICK_SNAP_PX);
 };
 const extractMeasureEditorXml = (xml, partId, measureNumber) => {
-    var _a;
-    const source = new DOMParser().parseFromString(xml, "application/xml");
-    if (source.querySelector("parsererror"))
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!sourceDoc)
         return null;
-    const srcRoot = source.querySelector("score-partwise");
-    const srcPart = source.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`);
-    if (!srcRoot || !srcPart)
+    const extractedDoc = (0, musicxml_io_1.extractMeasureEditorDocument)(sourceDoc, partId, measureNumber);
+    if (!extractedDoc)
         return null;
-    const srcMeasure = Array.from(srcPart.querySelectorAll(":scope > measure")).find((m) => { var _a; return ((_a = m.getAttribute("number")) !== null && _a !== void 0 ? _a : "") === measureNumber; });
-    if (!srcMeasure)
-        return null;
-    const collectEffectiveAttributes = (part, targetMeasure) => {
-        var _a;
-        let divisions = null;
-        let key = null;
-        let time = null;
-        let staves = null;
-        const clefByNo = new Map();
-        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-            const attrs = measure.querySelector(":scope > attributes");
-            if (attrs) {
-                const nextDivisions = attrs.querySelector(":scope > divisions");
-                if (nextDivisions)
-                    divisions = nextDivisions.cloneNode(true);
-                const nextKey = attrs.querySelector(":scope > key");
-                if (nextKey)
-                    key = nextKey.cloneNode(true);
-                const nextTime = attrs.querySelector(":scope > time");
-                if (nextTime)
-                    time = nextTime.cloneNode(true);
-                const nextStaves = attrs.querySelector(":scope > staves");
-                if (nextStaves)
-                    staves = nextStaves.cloneNode(true);
-                for (const clef of Array.from(attrs.querySelectorAll(":scope > clef"))) {
-                    const no = (_a = clef.getAttribute("number")) !== null && _a !== void 0 ? _a : "1";
-                    clefByNo.set(no, clef.cloneNode(true));
-                }
-            }
-            if (measure === targetMeasure)
-                break;
-        }
-        const doc = targetMeasure.ownerDocument;
-        const effective = doc.createElement("attributes");
-        if (divisions)
-            effective.appendChild(divisions);
-        if (key)
-            effective.appendChild(key);
-        if (time)
-            effective.appendChild(time);
-        if (staves)
-            effective.appendChild(staves);
-        for (const no of Array.from(clefByNo.keys()).sort()) {
-            const clef = clefByNo.get(no);
-            if (clef)
-                effective.appendChild(clef);
-        }
-        return effective.childElementCount > 0 ? effective : null;
-    };
-    const patchedMeasure = srcMeasure.cloneNode(true);
-    const effectiveAttrs = collectEffectiveAttributes(srcPart, srcMeasure);
-    if (effectiveAttrs) {
-        const existing = patchedMeasure.querySelector(":scope > attributes");
-        if (!existing) {
-            patchedMeasure.insertBefore(effectiveAttrs, patchedMeasure.firstChild);
-        }
-        else {
-            const ensureSingle = (selector) => {
-                if (existing.querySelector(`:scope > ${selector}`))
-                    return;
-                const src = effectiveAttrs.querySelector(`:scope > ${selector}`);
-                if (src)
-                    existing.appendChild(src.cloneNode(true));
-            };
-            ensureSingle("divisions");
-            ensureSingle("key");
-            ensureSingle("time");
-            ensureSingle("staves");
-            const existingClefNos = new Set(Array.from(existing.querySelectorAll(":scope > clef")).map((c) => { var _a; return (_a = c.getAttribute("number")) !== null && _a !== void 0 ? _a : "1"; }));
-            for (const clef of Array.from(effectiveAttrs.querySelectorAll(":scope > clef"))) {
-                const no = (_a = clef.getAttribute("number")) !== null && _a !== void 0 ? _a : "1";
-                if (existingClefNos.has(no))
-                    continue;
-                existing.appendChild(clef.cloneNode(true));
-            }
-        }
-    }
-    const dst = document.implementation.createDocument("", "score-partwise", null);
-    const dstRoot = dst.documentElement;
-    if (!dstRoot)
-        return null;
-    const version = srcRoot.getAttribute("version");
-    if (version)
-        dstRoot.setAttribute("version", version);
-    const srcPartList = source.querySelector("score-partwise > part-list");
-    const srcScorePart = source.querySelector(`score-partwise > part-list > score-part[id="${CSS.escape(partId)}"]`);
-    if (srcPartList && srcScorePart) {
-        const dstPartList = dst.importNode(srcPartList, false);
-        const dstScorePart = dst.importNode(srcScorePart, true);
-        const dstPartName = dstScorePart.querySelector(":scope > part-name");
-        if (dstPartName)
-            dstPartName.textContent = "";
-        const dstPartAbbreviation = dstScorePart.querySelector(":scope > part-abbreviation");
-        if (dstPartAbbreviation)
-            dstPartAbbreviation.textContent = "";
-        dstPartList.appendChild(dstScorePart);
-        dstRoot.appendChild(dstPartList);
-    }
-    const dstPart = dst.importNode(srcPart, false);
-    dstPart.appendChild(dst.importNode(patchedMeasure, true));
-    dstRoot.appendChild(dstPart);
-    return new XMLSerializer().serializeToString(dst);
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(extractedDoc);
 };
 const initializeMeasureEditor = (location) => {
     var _a;
@@ -1893,63 +1773,6 @@ const onMeasureEditorClick = (event) => {
     state.lastDispatchResult = null;
     renderAll();
 };
-const getVerovioRuntime = () => {
-    var _a;
-    return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
-};
-const ensureVerovioToolkit = async () => {
-    if (verovioToolkit) {
-        return verovioToolkit;
-    }
-    if (verovioInitPromise) {
-        return verovioInitPromise;
-    }
-    verovioInitPromise = (async () => {
-        const runtime = getVerovioRuntime();
-        if (!runtime || typeof runtime.toolkit !== "function") {
-            throw new Error("verovio.js が読み込まれていません。");
-        }
-        const moduleObj = runtime.module;
-        if (!moduleObj) {
-            throw new Error("verovio module が見つかりません。");
-        }
-        if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
-            await new Promise((resolve, reject) => {
-                let settled = false;
-                const timeoutId = window.setTimeout(() => {
-                    if (settled)
-                        return;
-                    settled = true;
-                    reject(new Error("verovio 初期化待機がタイムアウトしました。"));
-                }, 8000);
-                const complete = () => {
-                    if (settled)
-                        return;
-                    settled = true;
-                    window.clearTimeout(timeoutId);
-                    resolve();
-                };
-                const previous = moduleObj.onRuntimeInitialized;
-                moduleObj.onRuntimeInitialized = () => {
-                    if (typeof previous === "function") {
-                        previous();
-                    }
-                    complete();
-                };
-                if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
-                    complete();
-                }
-            });
-        }
-        verovioToolkit = new runtime.toolkit();
-        return verovioToolkit;
-    })()
-        .catch((error) => {
-        verovioInitPromise = null;
-        throw error;
-    });
-    return verovioInitPromise;
-};
 const renderScorePreview = () => {
     var _a, _b;
     const renderSeq = ++verovioRenderSeq;
@@ -1961,39 +1784,28 @@ const renderScorePreview = () => {
         return;
     }
     const renderBundle = buildRenderXmlForVerovio(xml);
+    const renderDoc = renderBundle.renderDoc;
+    if (!renderDoc) {
+        debugScoreMeta.textContent = "描画失敗: MusicXML解析失敗";
+        debugScoreArea.innerHTML = "";
+        currentSvgIdToNodeId = new Map();
+        return;
+    }
     debugScoreMeta.textContent = "verovio 描画中...";
-    void ensureVerovioToolkit()
-        .then((toolkit) => {
+    void (0, verovio_out_1.renderMusicXmlDomToSvg)(renderDoc, {
+        pageWidth: 20000,
+        pageHeight: 3000,
+        scale: 40,
+        breaks: "none",
+        mnumInterval: 1,
+        adjustPageHeight: 1,
+        footer: "none",
+        header: "none",
+    })
+        .then(({ svg, pageCount }) => {
         if (renderSeq !== verovioRenderSeq)
             return;
-        if (!toolkit) {
-            throw new Error("verovio toolkit の初期化に失敗しました。");
-        }
-        const options = {
-            pageWidth: 20000,
-            pageHeight: 3000,
-            scale: 40,
-            breaks: "none",
-            mnumInterval: 1,
-            adjustPageHeight: 1,
-            footer: "none",
-            header: "none",
-        };
-        toolkit.setOptions(options);
-        const loaded = toolkit.loadData(renderBundle.renderXml);
-        if (!loaded) {
-            throw new Error("verovio loadData が失敗しました。");
-        }
-        const pageCount = toolkit.getPageCount();
-        if (!Number.isFinite(pageCount) || pageCount < 1) {
-            throw new Error("verovio pageCount が不正です。");
-        }
-        const svg = toolkit.renderToSVG(1, {});
-        if (!svg) {
-            throw new Error("verovio SVG 生成に失敗しました。");
-        }
-        const doc = new DOMParser().parseFromString(xml, "application/xml");
-        const measures = doc.querySelectorAll("part > measure").length;
+        const measures = renderDoc.querySelectorAll("part > measure").length;
         debugScoreArea.innerHTML = svg;
         const renderedNoteIds = deriveRenderedNoteIds(debugScoreArea);
         let mapMode = "direct";
@@ -2042,27 +1854,30 @@ const renderMeasureEditorPreview = () => {
         draftSvgIdToNodeId = new Map();
         return;
     }
-    const renderBundle = buildRenderXmlWithNodeIds(xml, draftNoteNodeIds.slice(), "mks-draft");
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!sourceDoc) {
+        measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
+        draftSvgIdToNodeId = new Map();
+        return;
+    }
+    const renderBundle = (0, musicxml_io_1.buildRenderDocWithNodeIds)(sourceDoc, draftNoteNodeIds.slice(), "mks-draft");
+    const renderDoc = renderBundle.renderDoc;
+    if (!renderDoc) {
+        measureEditorArea.innerHTML = "描画失敗: MusicXML解析失敗";
+        draftSvgIdToNodeId = new Map();
+        return;
+    }
     measureEditorArea.innerHTML = "描画中...";
-    void ensureVerovioToolkit()
-        .then((toolkit) => {
-        if (!toolkit)
-            throw new Error("verovio toolkit の初期化に失敗しました。");
-        toolkit.setOptions({
-            pageWidth: 6000,
-            pageHeight: 2200,
-            scale: 58,
-            breaks: "none",
-            adjustPageHeight: 1,
-            footer: "none",
-            header: "none",
-        });
-        if (!toolkit.loadData(renderBundle.renderXml)) {
-            throw new Error("verovio loadData が失敗しました。");
-        }
-        const svg = toolkit.renderToSVG(1, {});
-        if (!svg)
-            throw new Error("verovio SVG 生成に失敗しました。");
+    void (0, verovio_out_1.renderMusicXmlDomToSvg)(renderDoc, {
+        pageWidth: 6000,
+        pageHeight: 2200,
+        scale: 58,
+        breaks: "none",
+        adjustPageHeight: 1,
+        footer: "none",
+        header: "none",
+    })
+        .then(({ svg }) => {
         measureEditorArea.innerHTML = svg;
         const renderedNoteIds = deriveRenderedNoteIds(measureEditorArea);
         if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
@@ -2213,7 +2028,13 @@ const startPlayback = async () => {
         playbackText.textContent = "再生: 保存失敗";
         return;
     }
-    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
+    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
+    if (!playbackDoc) {
+        playbackText.textContent = "再生: MusicXML解析失敗";
+        renderControlState();
+        return;
+    }
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
     const events = parsedPlayback.events;
     if (events.length === 0) {
         playbackText.textContent = "再生: 再生可能ノートなし";
@@ -2222,7 +2043,7 @@ const startPlayback = async () => {
     }
     let midiBytes;
     try {
-        midiBytes = (0, playback_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo);
     }
     catch (error) {
         playbackText.textContent =
@@ -2280,7 +2101,13 @@ const startMeasurePlayback = async () => {
         renderAll();
         return;
     }
-    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(saveResult.xml, PLAYBACK_TICKS_PER_QUARTER);
+    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
+    if (!playbackDoc) {
+        playbackText.textContent = "再生: MusicXML解析失敗";
+        renderControlState();
+        return;
+    }
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
     const events = parsedPlayback.events;
     if (events.length === 0) {
         playbackText.textContent = "再生: この小節に再生可能ノートなし";
@@ -2550,7 +2377,7 @@ const buildMusicXmlFromAbcParsed = (parsed) => {
     ].join("");
 };
 const convertAbcToMusicXml = (abcSource) => {
-    const parsed = abc_compat_parser_1.AbcCompatParser.parseForMusicXml(abcSource, {
+    const parsed = abc_io_2.AbcCompatParser.parseForMusicXml(abcSource, {
         defaultTitle: "mikuscore",
         defaultComposer: "Unknown",
         inferTransposeFromPartName: true,
@@ -2835,21 +2662,14 @@ const shiftPitchStep = (delta) => {
     onPitchStepAutoChange();
 };
 const replaceMeasureInMainXml = (sourceXml, partId, measureNumber, measureXml) => {
-    const mainDoc = new DOMParser().parseFromString(sourceXml, "application/xml");
-    const measureDoc = new DOMParser().parseFromString(measureXml, "application/xml");
-    if (mainDoc.querySelector("parsererror") || measureDoc.querySelector("parsererror"))
+    const mainDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    const measureDoc = (0, musicxml_io_1.parseMusicXmlDocument)(measureXml);
+    if (!mainDoc || !measureDoc)
         return null;
-    const replacementMeasure = measureDoc.querySelector("part > measure");
-    if (!replacementMeasure)
+    const mergedDoc = (0, musicxml_io_1.replaceMeasureInMainDocument)(mainDoc, partId, measureNumber, measureDoc);
+    if (!mergedDoc)
         return null;
-    const targetPart = mainDoc.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`);
-    if (!targetPart)
-        return null;
-    const targetMeasure = Array.from(targetPart.querySelectorAll(":scope > measure")).find((m) => { var _a; return ((_a = m.getAttribute("number")) !== null && _a !== void 0 ? _a : "") === measureNumber; });
-    if (!targetMeasure)
-        return null;
-    targetMeasure.replaceWith(mainDoc.importNode(replacementMeasure, true));
-    return new XMLSerializer().serializeToString(mainDoc);
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(mergedDoc);
 };
 const onMeasureApply = () => {
     if (!draftCore || !selectedMeasure)
@@ -3019,7 +2839,7 @@ const convertMusicXmlToAbc = (xml) => {
     const meterBeatType = ((_k = (_j = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > time > beat-type")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) || "4";
     const fifths = Number(((_m = (_l = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > key > fifths")) === null || _l === void 0 ? void 0 : _l.textContent) === null || _m === void 0 ? void 0 : _m.trim()) || "0");
     const mode = ((_p = (_o = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > key > mode")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) || "major";
-    const key = abc_common_1.AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
+    const key = abc_io_1.AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
     const partNameById = new Map();
     for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
         const id = (_q = scorePart.getAttribute("id")) !== null && _q !== void 0 ? _q : "";
@@ -3129,9 +2949,9 @@ const convertMusicXmlToAbc = (xml) => {
                 const duration = Number(((_f = (_e = child.querySelector("duration")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) || "0");
                 if (!Number.isFinite(duration) || duration <= 0)
                     continue;
-                const wholeFraction = abc_common_1.AbcCommon.reduceFraction(duration, currentDivisions * 4, { num: 1, den: 4 });
-                const lenRatio = abc_common_1.AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
-                const len = abc_common_1.AbcCommon.abcLengthTokenFromFraction(lenRatio);
+                const wholeFraction = abc_io_1.AbcCommon.reduceFraction(duration, currentDivisions * 4, { num: 1, den: 4 });
+                const lenRatio = abc_io_1.AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
+                const len = abc_io_1.AbcCommon.abcLengthTokenFromFraction(lenRatio);
                 const hasTieStart = Boolean(child.querySelector('tie[type="start"]'));
                 let pitchToken = "z";
                 if (!child.querySelector("rest")) {
@@ -3157,10 +2977,10 @@ const convertMusicXmlToAbc = (xml) => {
                     }
                     const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
                     const accidental = shouldEmitAccidental
-                        ? (targetAlter === 0 ? "=" : abc_common_1.AbcCommon.accidentalFromAlter(targetAlter))
+                        ? (targetAlter === 0 ? "=" : abc_io_1.AbcCommon.accidentalFromAlter(targetAlter))
                         : "";
                     measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
-                    pitchToken = `${accidental}${abc_common_1.AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
+                    pitchToken = `${accidental}${abc_io_1.AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
                 }
                 if (!isChord) {
                     flush();
@@ -3187,12 +3007,15 @@ const convertMusicXmlToAbc = (xml) => {
 const onDownloadMidi = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
-    const parsedPlayback = (0, playback_1.buildPlaybackEventsFromXml)(state.lastSuccessfulSaveXml, PLAYBACK_TICKS_PER_QUARTER);
+    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(state.lastSuccessfulSaveXml);
+    if (!playbackDoc)
+        return;
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, PLAYBACK_TICKS_PER_QUARTER);
     if (parsedPlayback.events.length === 0)
         return;
     let midiBytes;
     try {
-        midiBytes = (0, playback_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo);
     }
     catch (_a) {
         return;
@@ -3283,6 +3106,93 @@ playMeasureBtn.addEventListener("click", () => {
 });
 renderNewPartClefControls();
 loadFromText(xmlInput.value, false);
+
+  },
+  "src/ts/verovio-out.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.renderMusicXmlDomToSvg = void 0;
+let verovioToolkit = null;
+let verovioInitPromise = null;
+const getVerovioRuntime = () => {
+    var _a;
+    return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
+};
+const ensureVerovioToolkit = async () => {
+    if (verovioToolkit) {
+        return verovioToolkit;
+    }
+    if (verovioInitPromise) {
+        return verovioInitPromise;
+    }
+    verovioInitPromise = (async () => {
+        const runtime = getVerovioRuntime();
+        if (!runtime || typeof runtime.toolkit !== "function") {
+            throw new Error("verovio.js が読み込まれていません。");
+        }
+        const moduleObj = runtime.module;
+        if (!moduleObj) {
+            throw new Error("verovio module が見つかりません。");
+        }
+        if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
+            await new Promise((resolve, reject) => {
+                let settled = false;
+                const timeoutId = window.setTimeout(() => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    reject(new Error("verovio 初期化待機がタイムアウトしました。"));
+                }, 8000);
+                const complete = () => {
+                    if (settled)
+                        return;
+                    settled = true;
+                    window.clearTimeout(timeoutId);
+                    resolve();
+                };
+                const previous = moduleObj.onRuntimeInitialized;
+                moduleObj.onRuntimeInitialized = () => {
+                    if (typeof previous === "function") {
+                        previous();
+                    }
+                    complete();
+                };
+                if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
+                    complete();
+                }
+            });
+        }
+        verovioToolkit = new runtime.toolkit();
+        return verovioToolkit;
+    })()
+        .catch((error) => {
+        verovioInitPromise = null;
+        throw error;
+    });
+    return verovioInitPromise;
+};
+const renderMusicXmlDomToSvg = async (doc, options) => {
+    const toolkit = await ensureVerovioToolkit();
+    if (!toolkit) {
+        throw new Error("verovio toolkit の初期化に失敗しました。");
+    }
+    const xml = new XMLSerializer().serializeToString(doc);
+    toolkit.setOptions(options);
+    const loaded = toolkit.loadData(xml);
+    if (!loaded) {
+        throw new Error("verovio loadData が失敗しました。");
+    }
+    const pageCount = toolkit.getPageCount();
+    if (!Number.isFinite(pageCount) || pageCount < 1) {
+        throw new Error("verovio pageCount が不正です。");
+    }
+    const svg = toolkit.renderToSVG(1, {});
+    if (!svg) {
+        throw new Error("verovio SVG 生成に失敗しました。");
+    }
+    return { svg, pageCount };
+};
+exports.renderMusicXmlDomToSvg = renderMusicXmlDomToSvg;
 
   },
   "src/ts/sampleXml.js": function (require, module, exports) {
@@ -17594,10 +17504,209 @@ exports.sampleXml = `<?xml version="1.0" encoding="UTF-8"?>
 </score-partwise>`;
 
   },
-  "src/ts/playback.js": function (require, module, exports) {
+  "src/ts/musicxml-io.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPlaybackEventsFromXml = exports.buildMidiBytesForPlayback = void 0;
+exports.replaceMeasureInMainDocument = exports.extractMeasureEditorDocument = exports.buildRenderDocWithNodeIds = exports.serializeMusicXmlDocument = exports.parseMusicXmlDocument = void 0;
+const parseMusicXmlDocument = (xml) => {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    return doc.querySelector("parsererror") ? null : doc;
+};
+exports.parseMusicXmlDocument = parseMusicXmlDocument;
+const serializeMusicXmlDocument = (doc) => {
+    return new XMLSerializer().serializeToString(doc);
+};
+exports.serializeMusicXmlDocument = serializeMusicXmlDocument;
+const cloneXmlDocument = (doc) => {
+    const cloned = document.implementation.createDocument("", "", null);
+    const root = cloned.importNode(doc.documentElement, true);
+    cloned.appendChild(root);
+    return cloned;
+};
+const findPartById = (doc, partId) => {
+    var _a;
+    for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+        if (((_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "") === partId)
+            return part;
+    }
+    return null;
+};
+const findScorePartById = (doc, partId) => {
+    var _a;
+    for (const scorePart of Array.from(doc.querySelectorAll("score-partwise > part-list > score-part"))) {
+        if (((_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "") === partId)
+            return scorePart;
+    }
+    return null;
+};
+const findMeasureByNumber = (part, measureNumber) => {
+    var _a;
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+        if (((_a = measure.getAttribute("number")) !== null && _a !== void 0 ? _a : "") === measureNumber)
+            return measure;
+    }
+    return null;
+};
+const buildRenderDocWithNodeIds = (sourceDoc, nodeIds, idPrefix) => {
+    const map = new Map();
+    if (nodeIds.length === 0) {
+        return { renderDoc: sourceDoc, svgIdToNodeId: map, noteCount: 0 };
+    }
+    const doc = cloneXmlDocument(sourceDoc);
+    const notes = Array.from(doc.querySelectorAll("note"));
+    const count = Math.min(notes.length, nodeIds.length);
+    for (let i = 0; i < count; i += 1) {
+        const nodeId = nodeIds[i];
+        const svgId = `${idPrefix}-${nodeId}`;
+        notes[i].setAttribute("xml:id", svgId);
+        notes[i].setAttribute("id", svgId);
+        map.set(svgId, nodeId);
+    }
+    return {
+        renderDoc: doc,
+        svgIdToNodeId: map,
+        noteCount: count,
+    };
+};
+exports.buildRenderDocWithNodeIds = buildRenderDocWithNodeIds;
+const extractMeasureEditorDocument = (sourceDoc, partId, measureNumber) => {
+    var _a;
+    const srcRoot = sourceDoc.querySelector("score-partwise");
+    const srcPart = findPartById(sourceDoc, partId);
+    if (!srcRoot || !srcPart)
+        return null;
+    const srcMeasure = findMeasureByNumber(srcPart, measureNumber);
+    if (!srcMeasure)
+        return null;
+    const collectEffectiveAttributes = (part, targetMeasure) => {
+        var _a;
+        let divisions = null;
+        let key = null;
+        let time = null;
+        let staves = null;
+        const clefByNo = new Map();
+        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+            const attrs = measure.querySelector(":scope > attributes");
+            if (attrs) {
+                const nextDivisions = attrs.querySelector(":scope > divisions");
+                if (nextDivisions)
+                    divisions = nextDivisions.cloneNode(true);
+                const nextKey = attrs.querySelector(":scope > key");
+                if (nextKey)
+                    key = nextKey.cloneNode(true);
+                const nextTime = attrs.querySelector(":scope > time");
+                if (nextTime)
+                    time = nextTime.cloneNode(true);
+                const nextStaves = attrs.querySelector(":scope > staves");
+                if (nextStaves)
+                    staves = nextStaves.cloneNode(true);
+                for (const clef of Array.from(attrs.querySelectorAll(":scope > clef"))) {
+                    const no = (_a = clef.getAttribute("number")) !== null && _a !== void 0 ? _a : "1";
+                    clefByNo.set(no, clef.cloneNode(true));
+                }
+            }
+            if (measure === targetMeasure)
+                break;
+        }
+        const doc = targetMeasure.ownerDocument;
+        const effective = doc.createElement("attributes");
+        if (divisions)
+            effective.appendChild(divisions);
+        if (key)
+            effective.appendChild(key);
+        if (time)
+            effective.appendChild(time);
+        if (staves)
+            effective.appendChild(staves);
+        for (const no of Array.from(clefByNo.keys()).sort()) {
+            const clef = clefByNo.get(no);
+            if (clef)
+                effective.appendChild(clef);
+        }
+        return effective.childElementCount > 0 ? effective : null;
+    };
+    const patchedMeasure = srcMeasure.cloneNode(true);
+    const effectiveAttrs = collectEffectiveAttributes(srcPart, srcMeasure);
+    if (effectiveAttrs) {
+        const existing = patchedMeasure.querySelector(":scope > attributes");
+        if (!existing) {
+            patchedMeasure.insertBefore(effectiveAttrs, patchedMeasure.firstChild);
+        }
+        else {
+            const ensureSingle = (selector) => {
+                if (existing.querySelector(`:scope > ${selector}`))
+                    return;
+                const src = effectiveAttrs.querySelector(`:scope > ${selector}`);
+                if (src)
+                    existing.appendChild(src.cloneNode(true));
+            };
+            ensureSingle("divisions");
+            ensureSingle("key");
+            ensureSingle("time");
+            ensureSingle("staves");
+            const existingClefNos = new Set(Array.from(existing.querySelectorAll(":scope > clef")).map((c) => { var _a; return (_a = c.getAttribute("number")) !== null && _a !== void 0 ? _a : "1"; }));
+            for (const clef of Array.from(effectiveAttrs.querySelectorAll(":scope > clef"))) {
+                const no = (_a = clef.getAttribute("number")) !== null && _a !== void 0 ? _a : "1";
+                if (existingClefNos.has(no))
+                    continue;
+                existing.appendChild(clef.cloneNode(true));
+            }
+        }
+    }
+    const dst = document.implementation.createDocument("", "score-partwise", null);
+    const dstRoot = dst.documentElement;
+    if (!dstRoot)
+        return null;
+    const version = srcRoot.getAttribute("version");
+    if (version)
+        dstRoot.setAttribute("version", version);
+    const srcPartList = sourceDoc.querySelector("score-partwise > part-list");
+    const srcScorePart = findScorePartById(sourceDoc, partId);
+    if (srcPartList && srcScorePart) {
+        const dstPartList = dst.importNode(srcPartList, false);
+        const dstScorePart = dst.importNode(srcScorePart, true);
+        const dstPartName = dstScorePart.querySelector(":scope > part-name");
+        if (dstPartName)
+            dstPartName.textContent = "";
+        const dstPartAbbreviation = dstScorePart.querySelector(":scope > part-abbreviation");
+        if (dstPartAbbreviation)
+            dstPartAbbreviation.textContent = "";
+        dstPartList.appendChild(dstScorePart);
+        dstRoot.appendChild(dstPartList);
+    }
+    const dstPart = dst.importNode(srcPart, false);
+    dstPart.appendChild(dst.importNode(patchedMeasure, true));
+    dstRoot.appendChild(dstPart);
+    return dst;
+};
+exports.extractMeasureEditorDocument = extractMeasureEditorDocument;
+const replaceMeasureInMainDocument = (mainDoc, partId, measureNumber, measureDoc) => {
+    const replacementMeasure = measureDoc.querySelector("part > measure");
+    if (!replacementMeasure)
+        return null;
+    const targetPart = findPartById(mainDoc, partId);
+    if (!targetPart)
+        return null;
+    const targetMeasure = findMeasureByNumber(targetPart, measureNumber);
+    if (!targetMeasure)
+        return null;
+    const next = cloneXmlDocument(mainDoc);
+    const nextPart = findPartById(next, partId);
+    if (!nextPart)
+        return null;
+    const nextTargetMeasure = findMeasureByNumber(nextPart, measureNumber);
+    if (!nextTargetMeasure)
+        return null;
+    nextTargetMeasure.replaceWith(next.importNode(replacementMeasure, true));
+    return next;
+};
+exports.replaceMeasureInMainDocument = replaceMeasureInMainDocument;
+
+  },
+  "src/ts/midi-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.buildMidiBytesForPlayback = void 0;
 const clampTempo = (tempo) => {
     if (!Number.isFinite(tempo))
         return 120;
@@ -17730,12 +17839,9 @@ const buildMidiBytesForPlayback = (events, tempo) => {
     return built instanceof Uint8Array ? built : Uint8Array.from(built);
 };
 exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
-const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
+const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return { tempo: 120, events: [] };
     const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
     if (partNodes.length === 0)
         return { tempo: 120, events: [] };
@@ -17879,16 +17985,177 @@ const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
     });
     return { tempo, events };
 };
+exports.buildPlaybackEventsFromMusicXmlDoc = buildPlaybackEventsFromMusicXmlDoc;
+const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror"))
+        return { tempo: 120, events: [] };
+    return (0, exports.buildPlaybackEventsFromMusicXmlDoc)(doc, ticksPerQuarter);
+};
 exports.buildPlaybackEventsFromXml = buildPlaybackEventsFromXml;
 
   },
-  "src/ts/abc-compat-parser.js": function (require, module, exports) {
+  "src/ts/abc-io.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbcCompatParser = void 0;
-// @ts-nocheck
-const abc_common_1 = require("./abc-common");
-const abcCommon = abc_common_1.AbcCommon;
+exports.AbcCompatParser = exports.AbcCommon = void 0;
+const DEFAULT_UNIT = { num: 1, den: 8 };
+const DEFAULT_RATIO = { num: 1, den: 1 };
+const gcd = (a, b) => {
+    let x = Math.abs(Number(a) || 0);
+    let y = Math.abs(Number(b) || 0);
+    while (y !== 0) {
+        const t = x % y;
+        x = y;
+        y = t;
+    }
+    return x || 1;
+};
+const reduceFraction = (num, den, fallback = DEFAULT_RATIO) => {
+    if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) {
+        return { num: fallback.num, den: fallback.den };
+    }
+    const sign = den < 0 ? -1 : 1;
+    const n = num * sign;
+    const d = den * sign;
+    const g = gcd(n, d);
+    return { num: n / g, den: d / g };
+};
+const multiplyFractions = (a, b, fallback = DEFAULT_RATIO) => {
+    return reduceFraction(a.num * b.num, a.den * b.den, fallback);
+};
+const divideFractions = (a, b, fallback = DEFAULT_RATIO) => {
+    return reduceFraction(a.num * b.den, a.den * b.num, fallback);
+};
+const parseFractionText = (text, fallback = DEFAULT_UNIT) => {
+    const m = String(text || "").match(/^\s*(\d+)\/(\d+)\s*$/);
+    if (!m) {
+        return { num: fallback.num, den: fallback.den };
+    }
+    const num = Number.parseInt(m[1], 10);
+    const den = Number.parseInt(m[2], 10);
+    if (!num || !den) {
+        return { num: fallback.num, den: fallback.den };
+    }
+    return reduceFraction(num, den, fallback);
+};
+const parseAbcLengthToken = (token, lineNo) => {
+    if (!token) {
+        return { num: 1, den: 1 };
+    }
+    if (token === "/") {
+        return { num: 1, den: 2 };
+    }
+    if (/^\d+$/.test(token)) {
+        return { num: Number(token), den: 1 };
+    }
+    if (/^\/\d+$/.test(token)) {
+        return { num: 1, den: Number(token.slice(1)) };
+    }
+    if (/^\d+\/\d+$/.test(token)) {
+        const p = token.split("/");
+        return reduceFraction(Number(p[0]), Number(p[1]), { num: 1, den: 1 });
+    }
+    throw new Error(`line ${lineNo}: 長さ指定を解釈できません: ${token}`);
+};
+const abcLengthTokenFromFraction = (ratio) => {
+    const reduced = reduceFraction(ratio.num, ratio.den, { num: 1, den: 1 });
+    if (reduced.num === reduced.den)
+        return "";
+    if (reduced.den === 1)
+        return String(reduced.num);
+    if (reduced.num === 1 && reduced.den === 2)
+        return "/";
+    if (reduced.num === 1)
+        return `/${reduced.den}`;
+    return `${reduced.num}/${reduced.den}`;
+};
+const abcPitchFromStepOctave = (step, octave) => {
+    const upperStep = String(step || "").toUpperCase();
+    if (!/^[A-G]$/.test(upperStep)) {
+        return "C";
+    }
+    if (octave >= 5) {
+        return upperStep.toLowerCase() + "'".repeat(octave - 5);
+    }
+    return upperStep + ",".repeat(Math.max(0, 4 - octave));
+};
+const accidentalFromAlter = (alter) => {
+    if (alter === 0)
+        return "";
+    if (alter > 0)
+        return "^".repeat(Math.min(2, alter));
+    return "_".repeat(Math.min(2, Math.abs(alter)));
+};
+const keyFromFifthsMode = (fifths, mode) => {
+    const major = ["Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#"];
+    const minor = ["Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m"];
+    const idx = Number(fifths) + 7;
+    if (idx < 0 || idx >= major.length) {
+        return "C";
+    }
+    const lowerMode = String(mode || "").toLowerCase();
+    if (lowerMode === "minor") {
+        return minor[idx];
+    }
+    return major[idx];
+};
+const fifthsFromAbcKey = (raw) => {
+    const table = {
+        C: 0,
+        G: 1,
+        D: 2,
+        A: 3,
+        E: 4,
+        B: 5,
+        "F#": 6,
+        "C#": 7,
+        F: -1,
+        Bb: -2,
+        Eb: -3,
+        Ab: -4,
+        Db: -5,
+        Gb: -6,
+        Cb: -7,
+        Am: 0,
+        Em: 1,
+        Bm: 2,
+        "F#m": 3,
+        "C#m": 4,
+        "G#m": 5,
+        "D#m": 6,
+        "A#m": 7,
+        Dm: -1,
+        Gm: -2,
+        Cm: -3,
+        Fm: -4,
+        Bbm: -5,
+        Ebm: -6,
+        Abm: -7,
+    };
+    const normalized = String(raw || "").trim().replace(/\s+/g, "");
+    if (Object.prototype.hasOwnProperty.call(table, normalized)) {
+        return table[normalized];
+    }
+    return null;
+};
+exports.AbcCommon = {
+    gcd,
+    reduceFraction,
+    multiplyFractions,
+    divideFractions,
+    parseFractionText,
+    parseAbcLengthToken,
+    abcLengthTokenFromFraction,
+    abcPitchFromStepOctave,
+    accidentalFromAlter,
+    keyFromFifthsMode,
+    fifthsFromAbcKey,
+};
+if (typeof window !== "undefined") {
+    window.AbcCommon = exports.AbcCommon;
+}
+const abcCommon = exports.AbcCommon;
 function parseForMusicXml(source, settings) {
     const warnings = [];
     const lines = String(source || "").split("\n");
@@ -18570,176 +18837,11 @@ function typeFromDuration(duration, divisionsPerQuarter) {
     }
     return "32nd";
 }
-function multiplyFractions(a, b) {
-    return abcCommon.multiplyFractions(a, b, { num: 1, den: 1 });
-}
 exports.AbcCompatParser = {
     parseForMusicXml
 };
 if (typeof window !== "undefined") {
     window.AbcCompatParser = exports.AbcCompatParser;
-}
-
-  },
-  "src/ts/abc-common.js": function (require, module, exports) {
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.AbcCommon = void 0;
-const DEFAULT_UNIT = { num: 1, den: 8 };
-const DEFAULT_RATIO = { num: 1, den: 1 };
-const gcd = (a, b) => {
-    let x = Math.abs(Number(a) || 0);
-    let y = Math.abs(Number(b) || 0);
-    while (y !== 0) {
-        const t = x % y;
-        x = y;
-        y = t;
-    }
-    return x || 1;
-};
-const reduceFraction = (num, den, fallback = DEFAULT_RATIO) => {
-    if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) {
-        return { num: fallback.num, den: fallback.den };
-    }
-    const sign = den < 0 ? -1 : 1;
-    const n = num * sign;
-    const d = den * sign;
-    const g = gcd(n, d);
-    return { num: n / g, den: d / g };
-};
-const multiplyFractions = (a, b, fallback = DEFAULT_RATIO) => {
-    return reduceFraction(a.num * b.num, a.den * b.den, fallback);
-};
-const divideFractions = (a, b, fallback = DEFAULT_RATIO) => {
-    return reduceFraction(a.num * b.den, a.den * b.num, fallback);
-};
-const parseFractionText = (text, fallback = DEFAULT_UNIT) => {
-    const m = String(text || "").match(/^\s*(\d+)\/(\d+)\s*$/);
-    if (!m) {
-        return { num: fallback.num, den: fallback.den };
-    }
-    const num = Number.parseInt(m[1], 10);
-    const den = Number.parseInt(m[2], 10);
-    if (!num || !den) {
-        return { num: fallback.num, den: fallback.den };
-    }
-    return reduceFraction(num, den, fallback);
-};
-const parseAbcLengthToken = (token, lineNo) => {
-    if (!token) {
-        return { num: 1, den: 1 };
-    }
-    if (token === "/") {
-        return { num: 1, den: 2 };
-    }
-    if (/^\d+$/.test(token)) {
-        return { num: Number(token), den: 1 };
-    }
-    if (/^\/\d+$/.test(token)) {
-        return { num: 1, den: Number(token.slice(1)) };
-    }
-    if (/^\d+\/\d+$/.test(token)) {
-        const p = token.split("/");
-        return reduceFraction(Number(p[0]), Number(p[1]), { num: 1, den: 1 });
-    }
-    throw new Error(`line ${lineNo}: 長さ指定を解釈できません: ${token}`);
-};
-const abcLengthTokenFromFraction = (ratio) => {
-    const reduced = reduceFraction(ratio.num, ratio.den, { num: 1, den: 1 });
-    if (reduced.num === reduced.den)
-        return "";
-    if (reduced.den === 1)
-        return String(reduced.num);
-    if (reduced.num === 1 && reduced.den === 2)
-        return "/";
-    if (reduced.num === 1)
-        return `/${reduced.den}`;
-    return `${reduced.num}/${reduced.den}`;
-};
-const abcPitchFromStepOctave = (step, octave) => {
-    const upperStep = String(step || "").toUpperCase();
-    if (!/^[A-G]$/.test(upperStep)) {
-        return "C";
-    }
-    if (octave >= 5) {
-        return upperStep.toLowerCase() + "'".repeat(octave - 5);
-    }
-    return upperStep + ",".repeat(Math.max(0, 4 - octave));
-};
-const accidentalFromAlter = (alter) => {
-    if (alter === 0)
-        return "";
-    if (alter > 0)
-        return "^".repeat(Math.min(2, alter));
-    return "_".repeat(Math.min(2, Math.abs(alter)));
-};
-const keyFromFifthsMode = (fifths, mode) => {
-    const major = ["Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#"];
-    const minor = ["Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m"];
-    const idx = Number(fifths) + 7;
-    if (idx < 0 || idx >= major.length) {
-        return "C";
-    }
-    const lowerMode = String(mode || "").toLowerCase();
-    if (lowerMode === "minor") {
-        return minor[idx];
-    }
-    return major[idx];
-};
-const fifthsFromAbcKey = (raw) => {
-    const table = {
-        C: 0,
-        G: 1,
-        D: 2,
-        A: 3,
-        E: 4,
-        B: 5,
-        "F#": 6,
-        "C#": 7,
-        F: -1,
-        Bb: -2,
-        Eb: -3,
-        Ab: -4,
-        Db: -5,
-        Gb: -6,
-        Cb: -7,
-        Am: 0,
-        Em: 1,
-        Bm: 2,
-        "F#m": 3,
-        "C#m": 4,
-        "G#m": 5,
-        "D#m": 6,
-        "A#m": 7,
-        Dm: -1,
-        Gm: -2,
-        Cm: -3,
-        Fm: -4,
-        Bbm: -5,
-        Ebm: -6,
-        Abm: -7,
-    };
-    const normalized = String(raw || "").trim().replace(/\s+/g, "");
-    if (Object.prototype.hasOwnProperty.call(table, normalized)) {
-        return table[normalized];
-    }
-    return null;
-};
-exports.AbcCommon = {
-    gcd,
-    reduceFraction,
-    multiplyFractions,
-    divideFractions,
-    parseFractionText,
-    parseAbcLengthToken,
-    abcLengthTokenFromFraction,
-    abcPitchFromStepOctave,
-    accidentalFromAlter,
-    keyFromFifthsMode,
-    fifthsFromAbcKey,
-};
-if (typeof window !== "undefined") {
-    window.AbcCommon = exports.AbcCommon;
 }
 
   },
