@@ -16859,7 +16859,7 @@ const resolveTimingContext = (measure) => {
   "core/xmlUtils.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.setDurationValue = exports.getDurationValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
+exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.replaceWithRestNote = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.setDurationValue = exports.getDurationValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
 const SCORE_PARTWISE = "score-partwise";
 const parseXml = (xmlText) => {
     const parser = new DOMParser();
@@ -16963,6 +16963,59 @@ const createNoteElement = (doc, voice, duration, pitch) => {
     return note;
 };
 exports.createNoteElement = createNoteElement;
+const replaceWithRestNote = (note, fallbackVoice = "1", forcedDuration) => {
+    var _a;
+    const doc = note.ownerDocument;
+    const pitchNode = getDirectChild(note, "pitch");
+    if (pitchNode)
+        pitchNode.remove();
+    const accidentalNode = getDirectChild(note, "accidental");
+    if (accidentalNode)
+        accidentalNode.remove();
+    const chordNode = getDirectChild(note, "chord");
+    if (chordNode)
+        chordNode.remove();
+    // Remove tie markers that no longer make sense after replacing with rest.
+    Array.from(note.children)
+        .filter((child) => child.tagName === "tie")
+        .forEach((child) => child.remove());
+    const notations = getDirectChild(note, "notations");
+    if (notations) {
+        Array.from(notations.children)
+            .filter((child) => child.tagName === "tied")
+            .forEach((child) => child.remove());
+        if (notations.children.length === 0) {
+            notations.remove();
+        }
+    }
+    let restNode = getDirectChild(note, "rest");
+    if (!restNode) {
+        restNode = doc.createElement("rest");
+        const durationNode = getDirectChild(note, "duration");
+        if (durationNode) {
+            note.insertBefore(restNode, durationNode);
+        }
+        else {
+            note.insertBefore(restNode, note.firstChild);
+        }
+    }
+    let durationNode = getDirectChild(note, "duration");
+    if (!durationNode) {
+        durationNode = doc.createElement("duration");
+        note.appendChild(durationNode);
+    }
+    const duration = Number.isInteger(forcedDuration) && (forcedDuration !== null && forcedDuration !== void 0 ? forcedDuration : 0) > 0
+        ? forcedDuration
+        : ((_a = (0, exports.getDurationValue)(note)) !== null && _a !== void 0 ? _a : 1);
+    durationNode.textContent = String(duration);
+    let voiceNode = getDirectChild(note, "voice");
+    if (!voiceNode) {
+        voiceNode = doc.createElement("voice");
+        voiceNode.textContent = fallbackVoice;
+        note.appendChild(voiceNode);
+    }
+};
+exports.replaceWithRestNote = replaceWithRestNote;
 const findAncestorMeasure = (node) => {
     let cursor = node;
     while (cursor) {
@@ -17026,7 +17079,7 @@ class ScoreCore {
         this.reindex();
     }
     dispatch(command) {
-        var _a, _b;
+        var _a;
         if (!this.doc) {
             return this.fail("MVP_SCORE_NOT_LOADED", "Score is not loaded.");
         }
@@ -17102,21 +17155,26 @@ class ScoreCore {
                 insertedNode = note;
             }
             else if (command.type === "delete_note") {
-                const duration = (_b = (0, xmlUtils_1.getDurationValue)(target)) !== null && _b !== void 0 ? _b : 0;
-                const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
-                if (timing) {
-                    const projected = timing.occupied - duration;
-                    const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, projected);
-                    if (result.diagnostic)
-                        return this.failWith(result.diagnostic);
-                    if (result.warning)
-                        warnings.push(result.warning);
+                const nextChordTone = findImmediateNextChordTone(target);
+                if (nextChordTone) {
+                    // Deleting a chord head must not inject a timed rest.
+                    // Promote the next chord tone to chord head and remove only target pitch.
+                    const chordMarker = nextChordTone.querySelector(":scope > chord");
+                    if (chordMarker)
+                        chordMarker.remove();
+                    target.remove();
+                    removedNodeId = targetId;
                 }
-                removedNodeId = targetId;
-                target.remove();
+                else {
+                    const duration = (0, xmlUtils_1.getDurationValue)(target);
+                    if (duration === null || duration <= 0) {
+                        return this.fail("MVP_INVALID_NOTE_DURATION", "Target note has invalid duration.");
+                    }
+                    (0, xmlUtils_1.replaceWithRestNote)(target, command.voice, duration);
+                }
             }
         }
-        catch (_c) {
+        catch (_b) {
             this.restoreFrom(snapshot);
             return this.fail("MVP_COMMAND_EXECUTION_FAILED", "Command failed unexpectedly.");
         }
@@ -17330,6 +17388,15 @@ class ScoreCore {
     }
 }
 exports.ScoreCore = ScoreCore;
+const hasDirectChild = (node, tagName) => Array.from(node.children).some((child) => child.tagName === tagName);
+const findImmediateNextChordTone = (note) => {
+    const next = note.nextElementSibling;
+    if (!next || next.tagName !== "note")
+        return null;
+    if (!hasDirectChild(next, "chord"))
+        return null;
+    return next;
+};
 
   },
   "core/validators.js": function (require, module, exports) {

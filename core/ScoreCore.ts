@@ -14,6 +14,7 @@ import {
   findAncestorMeasure,
   getDurationValue,
   getVoiceText,
+  replaceWithRestNote,
   parseXml,
   reindexNodeIds,
   serializeXml,
@@ -130,16 +131,21 @@ export class ScoreCore {
         target.after(note);
         insertedNode = note;
       } else if (command.type === "delete_note") {
-        const duration = getDurationValue(target) ?? 0;
-        const timing = getMeasureTimingForVoice(target, command.voice);
-        if (timing) {
-          const projected = timing.occupied - duration;
-          const result = validateProjectedMeasureTiming(target, command.voice, projected);
-          if (result.diagnostic) return this.failWith(result.diagnostic);
-          if (result.warning) warnings.push(result.warning);
+        const nextChordTone = findImmediateNextChordTone(target);
+        if (nextChordTone) {
+          // Deleting a chord head must not inject a timed rest.
+          // Promote the next chord tone to chord head and remove only target pitch.
+          const chordMarker = nextChordTone.querySelector(":scope > chord");
+          if (chordMarker) chordMarker.remove();
+          target.remove();
+          removedNodeId = targetId;
+        } else {
+          const duration = getDurationValue(target);
+          if (duration === null || duration <= 0) {
+            return this.fail("MVP_INVALID_NOTE_DURATION", "Target note has invalid duration.");
+          }
+          replaceWithRestNote(target, command.voice, duration);
         }
-        removedNodeId = targetId;
-        target.remove();
       }
     } catch {
       this.restoreFrom(snapshot);
@@ -369,3 +375,13 @@ export class ScoreCore {
     return [targetId];
   }
 }
+
+const hasDirectChild = (node: Element, tagName: string): boolean =>
+  Array.from(node.children).some((child) => child.tagName === tagName);
+
+const findImmediateNextChordTone = (note: Element): Element | null => {
+  const next = note.nextElementSibling;
+  if (!next || next.tagName !== "note") return null;
+  if (!hasDirectChild(next, "chord")) return null;
+  return next;
+};

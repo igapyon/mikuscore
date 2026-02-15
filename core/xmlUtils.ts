@@ -116,6 +116,64 @@ export const createNoteElement = (
   return note;
 };
 
+export const replaceWithRestNote = (
+  note: Element,
+  fallbackVoice: string = "1",
+  forcedDuration?: number
+): void => {
+  const doc = note.ownerDocument;
+  const pitchNode = getDirectChild(note, "pitch");
+  if (pitchNode) pitchNode.remove();
+
+  const accidentalNode = getDirectChild(note, "accidental");
+  if (accidentalNode) accidentalNode.remove();
+
+  const chordNode = getDirectChild(note, "chord");
+  if (chordNode) chordNode.remove();
+
+  // Remove tie markers that no longer make sense after replacing with rest.
+  Array.from(note.children)
+    .filter((child) => child.tagName === "tie")
+    .forEach((child) => child.remove());
+  const notations = getDirectChild(note, "notations");
+  if (notations) {
+    Array.from(notations.children)
+      .filter((child) => child.tagName === "tied")
+      .forEach((child) => child.remove());
+    if (notations.children.length === 0) {
+      notations.remove();
+    }
+  }
+
+  let restNode = getDirectChild(note, "rest");
+  if (!restNode) {
+    restNode = doc.createElement("rest");
+    const durationNode = getDirectChild(note, "duration");
+    if (durationNode) {
+      note.insertBefore(restNode, durationNode);
+    } else {
+      note.insertBefore(restNode, note.firstChild);
+    }
+  }
+
+  let durationNode = getDirectChild(note, "duration");
+  if (!durationNode) {
+    durationNode = doc.createElement("duration");
+    note.appendChild(durationNode);
+  }
+  const duration = Number.isInteger(forcedDuration) && (forcedDuration ?? 0) > 0
+    ? (forcedDuration as number)
+    : (getDurationValue(note) ?? 1);
+  durationNode.textContent = String(duration);
+
+  let voiceNode = getDirectChild(note, "voice");
+  if (!voiceNode) {
+    voiceNode = doc.createElement("voice");
+    voiceNode.textContent = fallbackVoice;
+    note.appendChild(voiceNode);
+  }
+};
+
 export const findAncestorMeasure = (node: Element): Element | null => {
   let cursor: Element | null = node;
   while (cursor) {
