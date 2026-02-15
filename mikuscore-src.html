@@ -202,41 +202,20 @@
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
-          <div id="uiMessage" class="ms-ui-message md-hidden" role="status" aria-live="polite"></div>
-          <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
-          <p id="measureSelectionText" class="ms-status">小節未選択（譜面から小節クリックして選択）</p>
+          <div id="measureEmptyState" class="ms-empty-state" role="status" aria-live="polite">
+            <div class="ms-empty-state-inner">
+              <div class="ms-empty-state-title">小節が未選択です</div>
+              <div class="ms-empty-state-body">譜面から小節クリックして選択してください</div>
+              <div class="ms-empty-state-actions">
+                <button id="measureSelectGuideBtn" type="button" class="md-button md-button--surface">
+                  譜面へ移動
+                </button>
+              </div>
+            </div>
+          </div>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
           </div>
-
-          <div class="ms-grid">
-            <label class="ms-field">音名(step)
-              <div class="ms-step-row">
-                <input id="pitchStep" type="hidden" value="" />
-                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">休符</span>
-                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を下げる">↓</button>
-                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を上げる">↑</button>
-              </div>
-            </label>
-            <label class="ms-field">変化記号(alter)
-              <div class="ms-alter-row" role="group" aria-label="変化記号">
-                <input id="pitchAlter" type="hidden" value="none" />
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="変化記号なし">なし</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="ダブルフラット">♭♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="フラット">♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="ナチュラル">♮</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="シャープ">♯</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="ダブルシャープ">♯♯</button>
-              </div>
-            </label>
-            <input id="pitchOctave" type="hidden" value="4" />
-            <label class="ms-field">音価(duration)
-              <select id="durationPreset" class="md-select" aria-label="音価プリセット">
-                <option value="">（音価を選択）</option>
-              </select>
-            </label>
-          </div>
-
           <div class="ms-actions">
             <button id="convertRestBtn" type="button" class="md-button md-button--tonal ms-icon-button">
               <svg aria-hidden="true" viewBox="0 0 34 24" class="ms-btn-icon ms-btn-icon--wide" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -274,6 +253,40 @@
               <span>音符削除</span>
             </button>
           </div>
+
+          <div class="ms-grid">
+            <label class="ms-field">
+              <span class="ms-field-label">音名(step)</span>
+              <div class="ms-step-row">
+                <input id="pitchStep" type="hidden" value="" />
+                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">休符</span>
+                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を下げる">↓</button>
+                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="音名を上げる">↑</button>
+              </div>
+            </label>
+            <label class="ms-field">
+              <span class="ms-field-label">変化記号(alter)</span>
+              <div class="ms-alter-row" role="group" aria-label="変化記号">
+                <input id="pitchAlter" type="hidden" value="none" />
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="変化記号なし">なし</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="ダブルフラット">♭♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="フラット">♭</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="ナチュラル">♮</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="シャープ">♯</button>
+                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="ダブルシャープ">♯♯</button>
+              </div>
+            </label>
+            <input id="pitchOctave" type="hidden" value="4" />
+            <label class="ms-field">
+              <span class="ms-field-label">音価(duration)</span>
+              <select id="durationPreset" class="md-select" aria-label="音価プリセット">
+                <option value="">（音価を選択）</option>
+              </select>
+              <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
+            </label>
+          </div>
+
+          <p id="measurePartNameText" class="ms-track-label md-hidden">トラック名: -</p>
           <div class="ms-actions">
             <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
