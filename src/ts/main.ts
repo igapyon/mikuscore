@@ -80,6 +80,10 @@ const sourceXmlInputBlock = q<HTMLDivElement>("#sourceXmlInputBlock");
 const abcInputBlock = q<HTMLDivElement>("#abcInputBlock");
 const xmlInput = q<HTMLTextAreaElement>("#xmlInput");
 const abcInput = q<HTMLTextAreaElement>("#abcInput");
+const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
+const localDraftText = q<HTMLDivElement>("#localDraftText");
+const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
+const loadSampleBtn = q<HTMLButtonElement>("#loadSampleBtn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
@@ -130,7 +134,6 @@ const state: UiState = {
   lastSuccessfulSaveXml: "",
 };
 
-xmlInput.value = sampleXml;
 let isPlaying = false;
 const DEBUG_LOG = false;
 let verovioRenderSeq = 0;
@@ -148,6 +151,12 @@ let selectedDraftDurationValue: number | null = null;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
+const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
+
+type LocalDraft = {
+  xml: string;
+  updatedAt: number;
+};
 
 const logDiagnostics = (
   phase: "load" | "dispatch" | "save" | "playback",
@@ -232,6 +241,82 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
   if (!found) {
     console.warn("[mikuscore][debug] no overfull measure found while dumping context.");
   }
+};
+
+const readLocalDraft = (): LocalDraft | null => {
+  try {
+    const raw = localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LocalDraft>;
+    if (typeof parsed.xml !== "string" || !parsed.xml.trim()) return null;
+    if (!Number.isFinite(parsed.updatedAt)) return null;
+    return {
+      xml: parsed.xml,
+      updatedAt: Number(parsed.updatedAt),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalDraft = (xml: string): void => {
+  const normalized = String(xml || "").trim();
+  if (!normalized) return;
+  try {
+    const payload: LocalDraft = {
+      xml: normalized,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore quota/security errors in MVP.
+  }
+};
+
+const clearLocalDraft = (): void => {
+  try {
+    localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY);
+  } catch {
+    // Ignore quota/security errors in MVP.
+  }
+};
+
+const formatLocalDraftTime = (timestamp: number): string => {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "unknown";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+};
+
+const renderLocalDraftUi = (): void => {
+  const draft = readLocalDraft();
+  const hasDraft = Boolean(draft);
+  const draftLoadedInInput =
+    hasDraft && draft ? draft.xml.trim() === String(xmlInput.value || "").trim() : false;
+  localDraftNotice.classList.toggle("md-hidden", !draftLoadedInInput);
+  discardDraftExportBtn.classList.toggle("md-hidden", !hasDraft);
+  if (!draftLoadedInInput || !draft) return;
+  localDraftText.textContent = `Local draft loaded (saved at ${formatLocalDraftTime(draft.updatedAt)}).`;
+};
+
+const applyInitialXmlInputValue = (): void => {
+  const draft = readLocalDraft();
+  if (draft) {
+    xmlInput.value = draft.xml;
+    return;
+  }
+  xmlInput.value = sampleXml;
 };
 
 const renderInputMode = (): void => {
@@ -816,6 +901,7 @@ const renderControlState = (): void => {
 
 const renderAll = (): void => {
   renderInputMode();
+  renderLocalDraftUi();
   renderNotes();
   syncStepFromSelectedDraftNote();
   renderStatus();
@@ -1334,8 +1420,6 @@ const runCommand = (command: CoreCommand): DispatchResult | null => {
       state.lastDispatchResult.warnings
     );
   }
-  state.lastSaveResult = null;
-
   if (state.lastDispatchResult.ok) {
     draftNoteNodeIds = draftCore.listNoteNodeIds();
     if (state.selectedNodeId && !draftNoteNodeIds.includes(state.selectedNodeId)) {
@@ -1347,7 +1431,7 @@ const runCommand = (command: CoreCommand): DispatchResult | null => {
   return state.lastDispatchResult;
 };
 
-const autoSaveCurrentXml = (): void => {
+const autoSaveCurrentXml = (persistLocalDraft = false): void => {
   if (!state.loaded) return;
   const result = core.save();
   state.lastSaveResult = result;
@@ -1364,6 +1448,9 @@ const autoSaveCurrentXml = (): void => {
     return;
   }
   state.lastSuccessfulSaveXml = result.xml;
+  if (persistLocalDraft) {
+    writeLocalDraft(result.xml);
+  }
 };
 
 const loadFromText = (xml: string): void => {
@@ -1403,7 +1490,7 @@ const loadFromText = (xml: string): void => {
   draftNoteNodeIds = [];
   draftSvgIdToNodeId = new Map<string, string>();
   refreshNotesFromCore();
-  autoSaveCurrentXml();
+  autoSaveCurrentXml(false);
   renderAll();
   renderScorePreview();
 };
@@ -1440,6 +1527,11 @@ const onLoadClick = async (): Promise<void> => {
     xmlInput.value = result.nextXmlInputText;
   }
   loadFromText(result.xmlToLoad);
+};
+
+const onDiscardLocalDraft = (): void => {
+  clearLocalDraft();
+  renderLocalDraftUi();
 };
 
 const createNewMusicXml = (): string => {
@@ -1613,6 +1705,15 @@ const shiftPitchStep = (delta: 1 | -1): void => {
   onPitchStepAutoChange();
 };
 
+const flashStepButton = (button: HTMLButtonElement): void => {
+  pitchStepUpBtn.classList.remove("is-pressed");
+  pitchStepDownBtn.classList.remove("is-pressed");
+  button.classList.add("is-pressed");
+  window.setTimeout(() => {
+    button.classList.remove("is-pressed");
+  }, 140);
+};
+
 const replaceMeasureInMainXml = (sourceXml: string, partId: string, measureNumber: string, measureXml: string): string | null => {
   const mainDoc = parseMusicXmlDocument(sourceXml);
   const measureDoc = parseMusicXmlDocument(measureXml);
@@ -1661,7 +1762,7 @@ const onMeasureApply = (): void => {
   state.loaded = true;
   state.lastDispatchResult = null;
   refreshNotesFromCore();
-  autoSaveCurrentXml();
+  autoSaveCurrentXml(true);
   renderAll();
   renderScorePreview();
   initializeMeasureEditor(selectedMeasure);
@@ -1827,6 +1928,18 @@ fileInput.addEventListener("change", () => {
 loadBtn.addEventListener("click", () => {
   void onLoadClick();
 });
+discardDraftExportBtn.addEventListener("click", onDiscardLocalDraft);
+loadSampleBtn.addEventListener("click", () => {
+  inputTypeXml.checked = true;
+  inputTypeAbc.checked = false;
+  inputTypeNew.checked = false;
+  inputModeSource.checked = true;
+  inputModeFile.checked = false;
+  xmlInput.value = sampleXml;
+  renderInputMode();
+  renderLocalDraftUi();
+  void onLoadClick();
+});
 if (noteSelect) {
   noteSelect.addEventListener("change", () => {
     state.selectedNodeId = noteSelect.value || null;
@@ -1840,9 +1953,11 @@ durationPreset.addEventListener("input", () => {
   onDurationPresetChange();
 });
 pitchStepDownBtn.addEventListener("click", () => {
+  flashStepButton(pitchStepDownBtn);
   shiftPitchStep(-1);
 });
 pitchStepUpBtn.addEventListener("click", () => {
+  flashStepButton(pitchStepUpBtn);
   shiftPitchStep(1);
 });
 for (const btn of pitchAlterBtns) {
@@ -1870,4 +1985,5 @@ playMeasureBtn.addEventListener("click", () => {
 });
 
 renderNewPartClefControls();
+applyInitialXmlInputValue();
 loadFromText(xmlInput.value);

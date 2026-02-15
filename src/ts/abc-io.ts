@@ -1125,6 +1125,17 @@ const normalizeTypeForMusicXml = (t?: string): string => {
   return "quarter";
 };
 
+const normalizeVoiceForMusicXml = (voice?: string): string => {
+  const raw = String(voice || "").trim();
+  if (!raw) return "1";
+  if (/^[1-9]\d*$/.test(raw)) return raw;
+  const m = raw.match(/\d+/);
+  if (!m) return "1";
+  const n = Number(m[0]);
+  if (!Number.isFinite(n) || n <= 0) return "1";
+  return String(Math.round(n));
+};
+
 export const clefXmlFromAbcClef = (rawClef?: string): string => {
   const clef = String(rawClef || "").trim().toLowerCase();
   if (clef === "bass" || clef === "f") {
@@ -1247,7 +1258,7 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                   }
                   const duration = Math.max(1, Math.round(Number(note.duration) || 1));
                   chunks.push(`<duration>${duration}</duration>`);
-                  chunks.push(`<voice>${xmlEscape(String(note.voice || "1"))}</voice>`);
+                  chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
                   chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
                   if (note.accidentalText) {
                     chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);

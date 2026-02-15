@@ -1,18 +1,17 @@
 # mikuscore
 
 ## English
-mikuscore is a browser-only MusicXML score editor.
+mikuscore is a browser-only MusicXML sheet editor.
 
-Its primary goal is reliability, not feature volume: preserve existing MusicXML and apply only safe, minimal edits.
+Its primary goal is reliability, not feature volume: edit while preserving existing MusicXML as much as possible.
 
 ### Core Principles
-- Preserve existing MusicXML as much as possible.
-- Apply minimal patches (change only required nodes).
-- Keep round-trip safety (`load -> edit -> save`).
+- Prioritize preserving existing MusicXML with minimal patch editing.
 - Preserve unknown/unsupported elements.
 - Preserve `<backup>`, `<forward>`, and existing `<beam>` nodes.
 - Roll back atomically on failure.
 - Keep Core/UI separated so UI can be replaced later.
+- Support smartphones.
 
 ### MVP Highlights
 - If `dirty === false`, save returns original XML text (`original_noop`).
@@ -52,21 +51,26 @@ Its primary goal is reliability, not feature volume: preserve existing MusicXML 
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
 
+### Screenshots
+![mikuscore screenshot 1](screenshots/screen1.png)
+![mikuscore screenshot 2](screenshots/screen2.png)
+![mikuscore screenshot 3](screenshots/screen3.png)
+![mikuscore screenshot 4](screenshots/screen4.png)
+
 ---
 
 ## 日本語
-ブラウザ上で完結する MusicXML スコアエディタのプロジェクトです。
+ブラウザ上で完結する MusicXML 譜面エディタです。
 
-このアプリの主眼は「多機能化」ではなく、既存 MusicXML を壊さずに編集する信頼性です。
+このアプリの主眼は「多機能化」ではなく、極力既存 MusicXML を壊さずに編集する信頼性です。
 
 ### 基本方針
-- 既存 MusicXML の保全を最優先。
-- 最小パッチ編集（必要なノードだけ変更）。
-- ラウンドトリップ安全性（`load -> edit -> save`）。
+- 既存 MusicXML の保全を最優先に最小パッチ編集を実現。
 - unknown / unsupported 要素を保持。
 - `<backup>` / `<forward>` / 既存 `<beam>` を保持。
 - 失敗時は原子的にロールバック。
 - 将来の UI 置換を考慮した Core / UI 分離設計。
+- スマートフォンをサポート。
 
 ### MVP 仕様ハイライト
 - `dirty === false` の保存は入力 XML をそのまま返す（`original_noop`）。
@@ -105,3 +109,9 @@ Its primary goal is reliability, not feature volume: preserve existing MusicXML 
 - `docs/spec/UI_SPEC.md`
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
+
+### スクリーンショット
+![mikuscore スクリーンショット 1](screenshots/screen1.png)
+![mikuscore スクリーンショット 2](screenshots/screen2.png)
+![mikuscore スクリーンショット 3](screenshots/screen3.png)
+![mikuscore スクリーンショット 4](screenshots/screen4.png)

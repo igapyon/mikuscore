@@ -153,6 +153,17 @@ body {
   letter-spacing: 0.01em;
 }
 
+.ms-top-tab-badge {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(98, 0, 238, 0.18);
+  color: #4d2aa5;
+}
+
 .ms-top-tab.is-active {
   border-color: rgba(98, 0, 238, 0.5);
   color: #4d2aa5;
@@ -212,6 +223,14 @@ body {
   flex-wrap: wrap;
 }
 
+.ms-radio-group-wrap {
+  border: 1px solid #ddd2f0;
+  border-radius: 12px;
+  background: #fbf9ff;
+  padding: 0.55rem 0.75rem 0.15rem;
+  margin-bottom: 0.65rem;
+}
+
 .ms-radio-group input {
   width: auto;
 }
@@ -220,11 +239,48 @@ body {
   margin-bottom: 0.8rem;
 }
 
+.ms-local-draft {
+  margin-bottom: 0.75rem;
+  border: 1px solid #b7dde4;
+  border-radius: 12px;
+  background: #ecf8fb;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.ms-local-draft-text {
+  font-size: 0.88rem;
+  color: #1f4b53;
+}
+
+.ms-local-draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.ms-source-actions {
+  margin-top: 0.2rem;
+  margin-bottom: 0.45rem;
+}
+
 .ms-file-name {
   display: inline-block;
   margin-top: 0.5rem;
   color: var(--md-sys-color-on-surface-variant);
   font-size: 0.9rem;
+}
+
+.ms-file-select-button {
+  background: #b7ece6;
+  color: #0d4a42;
+  border: 1px solid #8fd8cf;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.ms-file-select-button:hover {
+  background: #a5e4dc;
 }
 
 .ms-actions {
@@ -413,6 +469,11 @@ body {
   font-size: 3.42rem;
   line-height: 1;
   font-weight: 700;
+}
+
+.ms-step-btn.is-pressed {
+  background: rgba(98, 0, 238, 0.16);
+  border-color: rgba(98, 0, 238, 0.48);
 }
 
 .ms-alter-row {

@@ -79,15 +79,23 @@
       <div class="ms-flow">
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
           <h2 class="md-section-title"><span class="ms-step-no">1</span>Input</h2>
-          <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
-            <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
-            <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
-            <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
+
+          <div id="localDraftNotice" class="ms-local-draft md-hidden" role="status" aria-live="polite">
+            <div id="localDraftText" class="ms-local-draft-text"></div>
+          </div>
+          <div class="ms-radio-group-wrap">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
+              <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
+              <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
+              <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
+            </div>
           </div>
 
-          <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
-            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
-            <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
+          <div class="ms-radio-group-wrap">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
+              <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
+              <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
+            </div>
           </div>
 
           <div id="newInputBlock" class="ms-block md-hidden">
@@ -131,7 +139,7 @@
           </div>
 
           <div id="fileInputBlock" class="ms-block">
-            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal ms-icon-button ms-file-select-button">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
                 <path d="M12 10v6"></path>
@@ -162,6 +170,7 @@
               </svg>
               <span>Load</span>
             </button>
+            <button id="loadSampleBtn" type="button" class="md-button md-button--tonal">Load sample</button>
           </div>
         </section>
 
@@ -343,6 +352,18 @@
                 <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
               </svg>
               <span>Export MIDI</span>
+            </button>
+          </div>
+          <div class="ms-actions">
+            <button id="discardDraftExportBtn" type="button" class="md-button md-button--surface ms-icon-button md-hidden">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16"></path>
+                <path d="M9 7V5h6v2"></path>
+                <rect x="6.5" y="7" width="11" height="13" rx="1.5"></rect>
+                <path d="M10 10v7"></path>
+                <path d="M14 10v7"></path>
+              </svg>
+              <span>Discard Draft</span>
             </button>
           </div>
         </section>

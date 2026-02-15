@@ -21,6 +21,7 @@
 - [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
 - [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
 - [ ] Some accidental rendering in `ABC export` is still incorrect (key/accidental precedence needs review).
+- [ ] On iPhone SE3, tapping `Play` sometimes produces no sound. Investigate root cause (autoplay policy / AudioContext resume / user gesture handling) and implement a fix.
 
 ### Next Priorities
 #### P1: Editing stability
@@ -65,6 +66,7 @@
 - [ ] クリック選択は音符クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になりうる。
 - [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。
 - [ ] `ABC出力` で一部臨時記号（alter/accidental）の表現が崩れる問題が残っている。
+- [ ] iPhone SE3 で `再生` を押しても音が出ないことがある。原因（autoplay 制約 / AudioContext resume / ユーザー操作扱い）を調査し、改善を実装する。
 
 ### 次にやること
 #### P1: 編集体験の安定化
