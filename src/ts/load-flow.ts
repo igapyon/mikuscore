@@ -45,7 +45,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       return {
         ok: false,
         diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-        diagnosticMessage: "ファイルを選択してください。",
+        diagnosticMessage: "Please select a file.",
       };
     }
     sourceText = await selected.text();
@@ -70,7 +70,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       return {
         ok: false,
         diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-        diagnosticMessage: `ABCの解析に失敗しました: ${
+        diagnosticMessage: `Failed to parse ABC: ${
           error instanceof Error ? error.message : String(error)
         }`,
       };
@@ -98,10 +98,9 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     return {
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-      diagnosticMessage: `ABCの解析に失敗しました: ${
+      diagnosticMessage: `Failed to parse ABC: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };
   }
 };
-

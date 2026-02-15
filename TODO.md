@@ -1,48 +1,86 @@
 # TODO
 
-## 現在地（2026-02 時点）
+## English
+### Current Status (2026-02)
 
-### 完了済み
+#### Done
+- [x] Implemented core `ScoreCore` load/dispatch/save and key validations.
+- [x] Prepared unit and property test baseline.
+- [x] Reorganized UI flow for edit/check/export.
+- [x] Promoted Verovio rendering to official path.
+- [x] Implemented note click selection.
+- [x] Improved SVG click -> `nodeId` resolution (`elementsFromPoint` fallback).
+- [x] Implemented `change_to_pitch`.
+- [x] Implemented `split_note`.
+- [x] Implemented rest-to-note conversion.
+- [x] Added playback path with `midi-writer.js`.
+- [x] Fixed transpose behavior including Clarinet in A.
 
+#### Known Issues
+- [ ] Verovio warning `slur ... could not be ended` may appear from input MusicXML; loading currently continues.
+- [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
+- [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
+- [ ] Some accidental rendering in `ABC export` is still incorrect (key/accidental precedence needs review).
+
+### Next Priorities
+#### P1: Editing stability
+- [ ] Improve selected-note highlight visibility.
+- [ ] Unify failure message policy (UI + console wording).
+- [ ] Add at least one E2E click-mapping test.
+
+#### P2: Spec and tests sync
+- [ ] Add save-XML/re-render consistency checks in `docs/spec`.
+- [ ] Document and test selection retention rules across re-render.
+
+#### P3: Feature expansion
+- [ ] Decide whether to reintroduce `insert_note_after` in UI.
+- [ ] Reconfirm in-session `xml:id` strategy and operation rules.
+
+### Resume Checklist
+1. `npm run build`
+2. Hard reload `mikuscore.html`
+3. Confirm note click selection on score panel
+4. Run `change_to_pitch` / `change_duration` / `split_note` -> save -> confirm re-render
+
+---
+
+## 日本語
+### 現在地（2026-02 時点）
+
+#### 完了済み
 - [x] Core（`ScoreCore`）の load / dispatch / save と主要バリデーションを実装済み。
 - [x] 単体テスト + property test の基盤を整備済み。
-- [x] UI を日本語中心に整理し、編集・確認・出力の導線を再配置済み。
-- [x] Verovio レンダリングを正式採用（デバッグ用途から昇格）。
-- [x] Verovio クリック選択（ノート 1 つ選択）を実装済み。
-- [x] SVG 上クリック -> `nodeId` 解決の改善（`elementsFromPoint` フォールバック）を実装済み。
-- [x] `change_to_pitch` 先行導入（選択ノート対象）を実装済み。
+- [x] UI の編集・確認・出力導線を再配置済み。
+- [x] Verovio レンダリングを正式採用済み。
+- [x] ノートクリック選択を実装済み。
+- [x] SVG 上クリック -> `nodeId` 解決を改善済み（`elementsFromPoint` フォールバック）。
+- [x] `change_to_pitch` を実装済み。
 - [x] `split_note` を実装済み。
 - [x] 休符の音符化（rest -> pitched note）を実装済み。
 - [x] `midi-writer.js` を使った再生経路を導入済み。
 - [x] Clarinet in A 含む `transpose` 反映を修正済み。
 
-### 既知事項（把握中）
+#### 既知事項
+- [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示されることがある。現状は読み込み継続。
+- [ ] クリック選択は音符クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になりうる。
+- [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。
+- [ ] `ABC出力` で一部臨時記号（alter/accidental）の表現が崩れる問題が残っている。
 
-- [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示される。現状は読み込み継続。
-- [ ] クリック選択は「音符そのもの」クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になる（想定動作）。
-- [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。将来は連符生成を含む自然な編集体験へ改善する。
-- [ ] `ABC出力` で一部臨時記号（alter/accidental）の表現が崩れる問題を修正（調号・臨時記号・小節内事故記号の優先順を見直し）。
+### 次にやること
+#### P1: 編集体験の安定化
+- [ ] 選択ノートの視覚ハイライトを強化。
+- [ ] 失敗時メッセージを統一（UI表示と console 文面）。
+- [ ] クリックマッピングの E2E テストを追加（最低 1 ケース）。
 
-## 次にやること（優先順）
-
-### P1: 編集体験の安定化
-
-- [ ] 選択ノートの視覚ハイライトを強化（現在選択が一目で分かる状態）。
-- [ ] 失敗時メッセージを統一（UI表示と `console` ログの文面ポリシー確定）。
-- [ ] クリックマッピングの E2E テスト追加（最低 1 ケース）。
-
-### P2: 仕様とテストの同期
-
+#### P2: 仕様とテストの同期
 - [ ] 保存 XML と再レンダリング結果の整合チェック手順を `docs/spec` に追記。
-- [ ] Verovio レンダリング更新時の選択維持ルールを明文化しテスト化。
+- [ ] レンダリング更新時の選択維持ルールを明文化しテスト化。
 
-### P3: 仕様拡張
-
+#### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。
 - [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
 
-## 次回の再開手順
-
+### 次回の再開手順
 1. `npm run build`
 2. `mikuscore.html` をハードリロードして動作確認
 3. 譜面でノートクリック -> 選択状態更新を確認

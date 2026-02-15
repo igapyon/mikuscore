@@ -188,7 +188,7 @@ const renderInputMode = () => {
     inputModeSource.disabled = isNewType;
     const loadLabel = loadBtn.querySelector("span");
     if (loadLabel) {
-        loadLabel.textContent = isNewType ? "新規作成" : "読み込み";
+        loadLabel.textContent = isNewType ? "Create" : "Load";
     }
     fileInput.accept = isAbcType
         ? ".abc,text/plain"
@@ -232,14 +232,14 @@ const renderNewPartClefControls = () => {
         row.className = "ms-form-row";
         const label = document.createElement("label");
         label.className = "ms-field";
-        label.textContent = `パート${i + 1} 記号`;
+        label.textContent = `Part ${i + 1} clef`;
         const select = document.createElement("select");
         select.className = "md-select";
         select.setAttribute("data-part-clef", "true");
         const options = [
-            { value: "treble", label: "ト音記号" },
-            { value: "alto", label: "ハ音記号" },
-            { value: "bass", label: "ヘ音記号" },
+            { value: "treble", label: "Treble clef" },
+            { value: "alto", label: "Alto clef" },
+            { value: "bass", label: "Bass clef" },
         ];
         for (const optionDef of options) {
             const option = document.createElement("option");
@@ -258,8 +258,8 @@ const renderStatus = () => {
         return;
     const dirty = core.isDirty();
     statusText.textContent = state.loaded
-        ? `ロード済み / 変更あり=${dirty} / ノート数=${state.noteNodeIds.length}`
-        : "未ロード（まず読み込みしてください）";
+        ? `Loaded / dirty=${dirty}  / notes=${state.noteNodeIds.length}`
+        : "Not loaded (please load first)";
 };
 const renderNotes = () => {
     const selectedNodeId = state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)
@@ -271,7 +271,7 @@ const renderNotes = () => {
     noteSelect.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = draftNoteNodeIds.length === 0 ? "(ノートなし)" : "(選択してください)";
+    placeholder.textContent = draftNoteNodeIds.length === 0 ? "(No notes)" : "(Select one)";
     noteSelect.appendChild(placeholder);
     for (const nodeId of draftNoteNodeIds) {
         const option = document.createElement("option");
@@ -295,7 +295,7 @@ const renderPitchStepValue = () => {
         pitchStepValue.textContent = step;
     }
     else {
-        pitchStepValue.textContent = "休符";
+        pitchStepValue.textContent = "Rest";
     }
 };
 const normalizeAlterValue = (value) => {
@@ -330,26 +330,26 @@ const resolveEffectiveDivisionsForMeasure = (doc, targetMeasure) => {
 const rebuildDurationPresetOptions = (divisions) => {
     const safeDivisions = Number.isInteger(divisions) && divisions > 0 ? divisions : DEFAULT_DIVISIONS;
     const defs = [
-        { label: "全音符", num: 4, den: 1 },
-        { label: "付点2分音符", num: 3, den: 1 },
-        { label: "2分音符", num: 2, den: 1 },
-        { label: "2分3連(1音)", num: 4, den: 3 },
-        { label: "付点4分音符", num: 3, den: 2 },
-        { label: "4分音符", num: 1, den: 1 },
-        { label: "4分3連(1音)", num: 2, den: 3 },
-        { label: "付点8分音符", num: 3, den: 4 },
-        { label: "8分音符", num: 1, den: 2 },
-        { label: "8分3連(1音)", num: 1, den: 3 },
-        { label: "付点16分音符", num: 3, den: 8 },
-        { label: "16分音符", num: 1, den: 4 },
-        { label: "16分3連(1音)", num: 1, den: 6 },
-        { label: "32分音符", num: 1, den: 8 },
-        { label: "64分音符", num: 1, den: 16 },
+        { label: "Whole note", num: 4, den: 1 },
+        { label: "Dotted half note", num: 3, den: 1 },
+        { label: "Half note", num: 2, den: 1 },
+        { label: "Half-note triplet (1 note)", num: 4, den: 3 },
+        { label: "Dotted quarter note", num: 3, den: 2 },
+        { label: "Quarter note", num: 1, den: 1 },
+        { label: "Quarter-note triplet (1 note)", num: 2, den: 3 },
+        { label: "Dotted eighth note", num: 3, den: 4 },
+        { label: "Eighth note", num: 1, den: 2 },
+        { label: "Eighth-note triplet (1 note)", num: 1, den: 3 },
+        { label: "Dotted sixteenth note", num: 3, den: 8 },
+        { label: "Sixteenth note", num: 1, den: 4 },
+        { label: "Sixteenth-note triplet (1 note)", num: 1, den: 6 },
+        { label: "3Half note", num: 1, den: 8 },
+        { label: "6Quarter note", num: 1, den: 16 },
     ];
     durationPreset.innerHTML = "";
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = "（音価を選択）";
+    placeholder.textContent = "(Select duration)";
     durationPreset.appendChild(placeholder);
     const used = new Set();
     for (const def of defs) {
@@ -383,7 +383,7 @@ const setDurationPresetFromValue = (duration) => {
     }
     const custom = document.createElement("option");
     custom.value = String(duration);
-    custom.textContent = `カスタム(${duration})`;
+    custom.textContent = `Custom(${duration})`;
     custom.className = "ms-duration-custom";
     durationPreset.appendChild(custom);
     durationPreset.value = custom.value;
@@ -431,8 +431,8 @@ const applyDurationPresetAvailability = (selectedNote, divisions) => {
         const isTriplet = durationValueIsTriplet(value, divisions);
         const unavailable = isTriplet && !hasTupletContext;
         option.disabled = unavailable;
-        const baseLabel = (_b = (_a = option.textContent) === null || _a === void 0 ? void 0 : _a.replace("（この小節では不可）", "").trim()) !== null && _b !== void 0 ? _b : "";
-        option.textContent = unavailable ? `${baseLabel}（この小節では不可）` : baseLabel;
+        const baseLabel = (_b = (_a = option.textContent) === null || _a === void 0 ? void 0 : _a.replace(" (not allowed in this measure)", "").trim()) !== null && _b !== void 0 ? _b : "";
+        option.textContent = unavailable ? `${baseLabel} (not allowed in this measure)` : baseLabel;
     }
 };
 const renderAlterButtons = () => {
@@ -452,7 +452,7 @@ const syncStepFromSelectedDraftNote = () => {
     selectedDraftNoteIsRest = false;
     pitchStep.disabled = false;
     pitchStep.title = "";
-    pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
+    pitchOctave.title = "Automatically adjusted with pitch step up/down.";
     for (const btn of pitchAlterBtns) {
         btn.disabled = false;
         btn.title = "";
@@ -545,12 +545,12 @@ const syncStepFromSelectedDraftNote = () => {
             selectedDraftNoteIsRest = true;
             pitchStep.value = "";
             pitchStep.disabled = true;
-            pitchStep.title = "休符は音高を持たないため、音高変更はできません。";
+            pitchStep.title = "Rests do not have pitch. Pitch changes are disabled.";
             for (const btn of pitchAlterBtns) {
                 btn.disabled = true;
-                btn.title = "休符は音高を持たないため、音高変更はできません。";
+                btn.title = "Rests do not have pitch. Pitch changes are disabled.";
             }
-            pitchOctave.title = "音名 ↑/↓ に連動して自動調整されます。";
+            pitchOctave.title = "Automatically adjusted with pitch step up/down.";
             renderPitchStepValue();
             renderAlterButtons();
             return;
@@ -578,7 +578,7 @@ const syncStepFromSelectedDraftNote = () => {
 const renderMeasureEditorState = () => {
     var _a;
     if (!selectedMeasure || !draftCore) {
-        measurePartNameText.textContent = "トラック名: -";
+        measurePartNameText.textContent = "Track: -";
         measurePartNameText.classList.add("md-hidden");
         measureEmptyState.classList.remove("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
@@ -588,7 +588,7 @@ const renderMeasureEditorState = () => {
     }
     const partName = (_a = partIdToName.get(selectedMeasure.partId)) !== null && _a !== void 0 ? _a : selectedMeasure.partId;
     measurePartNameText.textContent =
-        `トラック名: ${partName} / 選択中: トラック=${selectedMeasure.partId} / 小節=${selectedMeasure.measureNumber}`;
+        `Track: ${partName} / Selected: track=${selectedMeasure.partId}  / measure=${selectedMeasure.measureNumber}`;
     measurePartNameText.classList.remove("md-hidden");
     measureEmptyState.classList.add("md-hidden");
     measureEditorWrap.classList.remove("md-hidden");
@@ -644,7 +644,7 @@ const renderDiagnostics = () => {
     const dispatch = state.lastDispatchResult;
     const save = state.lastSaveResult;
     if (!dispatch && !save) {
-        diagArea.textContent = "診断なし";
+        diagArea.textContent = "No diagnostics";
         return;
     }
     if (dispatch) {
@@ -670,7 +670,7 @@ const renderDiagnostics = () => {
         }
     }
     if (!diagArea.firstChild) {
-        diagArea.textContent = "診断なし";
+        diagArea.textContent = "No diagnostics";
     }
 };
 const renderUiMessage = () => {
@@ -680,14 +680,14 @@ const renderUiMessage = () => {
     if (dispatch) {
         if (!dispatch.ok && dispatch.diagnostics.length > 0) {
             const d = dispatch.diagnostics[0];
-            uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+            uiMessage.textContent = `Error: ${d.message} (${d.code})`;
             uiMessage.classList.add("ms-ui-message--error");
             uiMessage.classList.remove("md-hidden");
             return;
         }
         if (dispatch.warnings.length > 0) {
             const w = dispatch.warnings[0];
-            uiMessage.textContent = `警告: ${w.message} (${w.code})`;
+            uiMessage.textContent = `Warning: ${w.message} (${w.code})`;
             uiMessage.classList.add("ms-ui-message--warning");
             uiMessage.classList.remove("md-hidden");
             return;
@@ -696,7 +696,7 @@ const renderUiMessage = () => {
     const save = state.lastSaveResult;
     if (save && !save.ok && save.diagnostics.length > 0) {
         const d = save.diagnostics[0];
-        uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+        uiMessage.textContent = `Error: ${d.message} (${d.code})`;
         uiMessage.classList.add("ms-ui-message--error");
         uiMessage.classList.remove("md-hidden");
         return;
@@ -983,7 +983,7 @@ const initializeMeasureEditor = (location) => {
         return;
     const extracted = extractMeasureEditorXml(xml, location.partId, location.measureNumber);
     if (!extracted) {
-        setUiMappingDiagnostic("選択小節の抽出に失敗しました。");
+        setUiMappingDiagnostic("Failed to extract selected measure.");
         return;
     }
     const nextDraft = new ScoreCore_1.ScoreCore({ editableVoice: EDITABLE_VOICE });
@@ -991,7 +991,7 @@ const initializeMeasureEditor = (location) => {
         nextDraft.load(extracted);
     }
     catch (error) {
-        setUiMappingDiagnostic(`選択小節の読み込みに失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+        setUiMappingDiagnostic(`Failed to load the selected measure: ${error instanceof Error ? error.message : String(error)}`);
         return;
     }
     draftCore = nextDraft;
@@ -1017,16 +1017,16 @@ const onVerovioScoreClick = (event) => {
         });
     }
     if (!nodeId) {
-        setUiMappingDiagnostic("クリック位置からノートを特定できませんでした。");
+        setUiMappingDiagnostic("Could not resolve a note from the clicked position.");
         return;
     }
     if (!state.noteNodeIds.includes(nodeId)) {
-        setUiMappingDiagnostic(`クリック要素に対応する nodeId が見つかりませんでした: ${nodeId}`);
+        setUiMappingDiagnostic(`No nodeId matched the clicked element: ${nodeId}`);
         return;
     }
     const location = nodeIdToLocation.get(nodeId);
     if (!location) {
-        setUiMappingDiagnostic(`nodeId からトラック/小節を特定できませんでした: ${nodeId}`);
+        setUiMappingDiagnostic(`Could not resolve track/measure from nodeId: ${nodeId}`);
         return;
     }
     initializeMeasureEditor(location);
@@ -1220,7 +1220,7 @@ const onDurationPresetChange = () => {
             diagnostics: [
                 {
                     code: first.code,
-                    message: "この音価には変更できません。小節内の長さ上限を超えます。",
+                    message: "This duration is not allowed. It exceeds the measure capacity.",
                 },
             ],
         };
@@ -1283,7 +1283,7 @@ const loadFromText = (xml) => {
             diagnostics: [
                 {
                     code: "MVP_COMMAND_EXECUTION_FAILED",
-                    message: err instanceof Error ? err.message : "読み込みに失敗しました。",
+                    message: err instanceof Error ? err.message : "Load failed.",
                 },
             ],
             warnings: [],
@@ -1411,7 +1411,7 @@ const requireSelectedNode = () => {
             dirtyChanged: false,
             changedNodeIds: [],
             affectedMeasureNumbers: [],
-            diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "先に小節を選択してください。" }],
+            diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "Select a measure first." }],
             warnings: [],
         };
         renderAll();
@@ -1425,7 +1425,7 @@ const requireSelectedNode = () => {
         dirtyChanged: false,
         changedNodeIds: [],
         affectedMeasureNumbers: [],
-        diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "ノートを選択してください。" }],
+        diagnostics: [{ code: "MVP_COMMAND_TARGET_MISSING", message: "Select a note." }],
         warnings: [],
     };
     renderAll();
@@ -1442,7 +1442,7 @@ const onChangePitch = () => {
             dirtyChanged: false,
             changedNodeIds: [],
             affectedMeasureNumbers: [],
-            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "pitch 入力が不正です。" }],
+            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid pitch input." }],
             warnings: [],
         };
         renderAll();
@@ -1539,14 +1539,14 @@ const onMeasureApply = () => {
         return;
     const merged = replaceMeasureInMainXml(mainXml, selectedMeasure.partId, selectedMeasure.measureNumber, draftSave.xml);
     if (!merged) {
-        setUiMappingDiagnostic("小節確定に失敗しました。");
+        setUiMappingDiagnostic("Failed to apply measure changes.");
         return;
     }
     try {
         core.load(merged);
     }
     catch (error) {
-        setUiMappingDiagnostic(`小節確定後の再読込に失敗しました: ${error instanceof Error ? error.message : String(error)}`);
+        setUiMappingDiagnostic(`Failed to reload after applying measure changes: ${error instanceof Error ? error.message : String(error)}`);
         return;
     }
     state.loaded = true;
@@ -1573,7 +1573,7 @@ const onChangeDuration = () => {
             dirtyChanged: false,
             changedNodeIds: [],
             affectedMeasureNumbers: [],
-            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "duration 入力が不正です。" }],
+            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid duration input." }],
             warnings: [],
         };
         renderAll();
@@ -1599,7 +1599,7 @@ const onInsertAfter = () => {
             dirtyChanged: false,
             changedNodeIds: [],
             affectedMeasureNumbers: [],
-            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "挿入ノート入力が不正です。" }],
+            diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: "Invalid inserted note input." }],
             warnings: [],
         };
         renderAll();
@@ -1710,7 +1710,7 @@ fileSelectBtn.addEventListener("click", () => fileInput.click());
 fileInput.addEventListener("change", () => {
     var _a;
     const f = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
-    fileNameText.textContent = f ? f.name : "未選択";
+    fileNameText.textContent = f ? f.name : "No file selected";
 });
 loadBtn.addEventListener("click", () => {
     void onLoadClick();
@@ -16077,7 +16077,7 @@ exports.renderMeasureEditorPreview = exports.renderScorePreview = void 0;
 const verovio_out_1 = require("./verovio-out");
 const renderScorePreview = async (params) => {
     if (!params.xml) {
-        params.setMetaText("描画対象XMLがありません");
+        params.setMetaText("No XML to render.");
         params.setSvgHtml("");
         params.setSvgIdMap(new Map());
         return;
@@ -16085,12 +16085,12 @@ const renderScorePreview = async (params) => {
     const renderBundle = params.buildRenderXmlForVerovio(params.xml);
     const renderDoc = renderBundle.renderDoc;
     if (!renderDoc) {
-        params.setMetaText("描画失敗: MusicXML解析失敗");
+        params.setMetaText("Render failed: invalid MusicXML.");
         params.setSvgHtml("");
         params.setSvgIdMap(new Map());
         return;
     }
-    params.setMetaText("verovio 描画中...");
+    params.setMetaText("Rendering with verovio...");
     try {
         const { svg, pageCount } = await (0, verovio_out_1.renderMusicXmlDomToSvg)(renderDoc, {
             pageWidth: 20000,
@@ -16135,7 +16135,7 @@ const renderScorePreview = async (params) => {
         if (!params.isRenderSeqCurrent(params.renderSeq))
             return;
         const message = error instanceof Error ? error.message : String(error);
-        params.setMetaText("描画失敗: " + message);
+        params.setMetaText("Render failed: " + message);
         params.setSvgHtml("");
         params.setSvgIdMap(new Map());
     }
@@ -16149,18 +16149,18 @@ const renderMeasureEditorPreview = async (params) => {
     }
     const sourceDoc = params.parseMusicXmlDocument(params.xml);
     if (!sourceDoc) {
-        params.setHtml("描画失敗: MusicXML解析失敗");
+        params.setHtml("Render failed: invalid MusicXML.");
         params.setSvgIdMap(new Map());
         return;
     }
     const renderBundle = params.buildRenderDocWithNodeIds(sourceDoc, params.draftNoteNodeIds.slice(), "mks-draft");
     const renderDoc = renderBundle.renderDoc;
     if (!renderDoc) {
-        params.setHtml("描画失敗: MusicXML解析失敗");
+        params.setHtml("Render failed: invalid MusicXML.");
         params.setSvgIdMap(new Map());
         return;
     }
-    params.setHtml("描画中...");
+    params.setHtml("Rendering...");
     try {
         const { svg } = await (0, verovio_out_1.renderMusicXmlDomToSvg)(renderDoc, {
             pageWidth: 6000,
@@ -16181,7 +16181,7 @@ const renderMeasureEditorPreview = async (params) => {
         params.onRendered();
     }
     catch (error) {
-        params.setHtml(`描画失敗: ${error instanceof Error ? error.message : String(error)}`);
+        params.setHtml(`Render failed: ${error instanceof Error ? error.message : String(error)}`);
         params.setSvgIdMap(new Map());
     }
 };
@@ -16274,11 +16274,11 @@ const ensureVerovioToolkit = async () => {
     verovioInitPromise = (async () => {
         const runtime = getVerovioRuntime();
         if (!runtime || typeof runtime.toolkit !== "function") {
-            throw new Error("verovio.js が読み込まれていません。");
+            throw new Error("verovio.js is not loaded.");
         }
         const moduleObj = runtime.module;
         if (!moduleObj) {
-            throw new Error("verovio module が見つかりません。");
+            throw new Error("verovio module was not found.");
         }
         if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
             await new Promise((resolve, reject) => {
@@ -16287,7 +16287,7 @@ const ensureVerovioToolkit = async () => {
                     if (settled)
                         return;
                     settled = true;
-                    reject(new Error("verovio 初期化待機がタイムアウトしました。"));
+                    reject(new Error("Timed out while waiting for verovio initialization."));
                 }, 8000);
                 const complete = () => {
                     if (settled)
@@ -16320,7 +16320,7 @@ const ensureVerovioToolkit = async () => {
 const renderMusicXmlDomToSvg = async (doc, options) => {
     const toolkit = await ensureVerovioToolkit();
     if (!toolkit) {
-        throw new Error("verovio toolkit の初期化に失敗しました。");
+        throw new Error("Failed to initialize verovio toolkit.");
     }
     // Keep source DOM intact and only sanitize slur mismatch on render copy.
     const renderDoc = cloneXmlDocument(doc);
@@ -16329,15 +16329,15 @@ const renderMusicXmlDomToSvg = async (doc, options) => {
     toolkit.setOptions(options);
     const loaded = toolkit.loadData(xml);
     if (!loaded) {
-        throw new Error("verovio loadData が失敗しました。");
+        throw new Error("verovio loadData failed.");
     }
     const pageCount = toolkit.getPageCount();
     if (!Number.isFinite(pageCount) || pageCount < 1) {
-        throw new Error("verovio pageCount が不正です。");
+        throw new Error("verovio returned an invalid pageCount.");
     }
     const svg = toolkit.renderToSVG(1, {});
     if (!svg) {
-        throw new Error("verovio SVG 生成に失敗しました。");
+        throw new Error("Failed to generate SVG with verovio.");
     }
     return { svg, pageCount };
 };
@@ -16627,7 +16627,7 @@ const createBasicWaveSynthEngine = (options) => {
     };
     const playSchedule = async (schedule, waveform, onEnded) => {
         if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
-            throw new Error("先に変換してください。");
+            throw new Error("Please convert first.");
         }
         if (!audioContext) {
             audioContext = new AudioContext();
@@ -16671,7 +16671,7 @@ const toSynthSchedule = (tempo, events) => {
 const stopPlayback = (options) => {
     options.engine.stop();
     options.setIsPlaying(false);
-    options.setPlaybackText("再生: 停止中");
+    options.setPlaybackText("Playback: stopped");
     options.renderControlState();
 };
 exports.stopPlayback = stopPlayback;
@@ -16692,19 +16692,19 @@ const startPlayback = async (options, params) => {
             }
         }
         options.renderAll();
-        options.setPlaybackText("再生: 保存失敗");
+        options.setPlaybackText("Playback: save failed");
         return;
     }
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
     if (!playbackDoc) {
-        options.setPlaybackText("再生: MusicXML解析失敗");
+        options.setPlaybackText("Playback: invalid MusicXML");
         options.renderControlState();
         return;
     }
     const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter);
     const events = parsedPlayback.events;
     if (events.length === 0) {
-        options.setPlaybackText("再生: 再生可能ノートなし");
+        options.setPlaybackText("Playback: no playable notes");
         options.renderControlState();
         return;
     }
@@ -16713,24 +16713,24 @@ const startPlayback = async (options, params) => {
         midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo);
     }
     catch (error) {
-        options.setPlaybackText("再生: MIDI生成失敗 (" + (error instanceof Error ? error.message : String(error)) + ")");
+        options.setPlaybackText("Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")");
         options.renderControlState();
         return;
     }
     try {
         await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), FIXED_PLAYBACK_WAVEFORM, () => {
             options.setIsPlaying(false);
-            options.setPlaybackText("再生: 停止中");
+            options.setPlaybackText("Playback: stopped");
             options.renderControlState();
         });
     }
     catch (error) {
-        options.setPlaybackText("再生: シンセ再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")");
+        options.setPlaybackText("Playback: synth playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
         options.renderControlState();
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`再生中: ノート${events.length}件 / MIDI ${midiBytes.length} bytes / 波形 sine`);
+    options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform sine`);
     options.renderControlState();
     options.renderAll();
 };
@@ -16742,37 +16742,37 @@ const startMeasurePlayback = async (options, params) => {
     if (!saveResult.ok) {
         options.onMeasureSaveDiagnostics(saveResult.diagnostics);
         options.logDiagnostics("playback", saveResult.diagnostics);
-        options.setPlaybackText("再生: 小節保存失敗");
+        options.setPlaybackText("Playback: measure save failed");
         options.renderAll();
         return;
     }
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
     if (!playbackDoc) {
-        options.setPlaybackText("再生: MusicXML解析失敗");
+        options.setPlaybackText("Playback: invalid MusicXML");
         options.renderControlState();
         return;
     }
     const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter);
     const events = parsedPlayback.events;
     if (events.length === 0) {
-        options.setPlaybackText("再生: この小節に再生可能ノートなし");
+        options.setPlaybackText("Playback: no playable notes in this measure");
         options.renderControlState();
         return;
     }
     try {
         await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), FIXED_PLAYBACK_WAVEFORM, () => {
             options.setIsPlaying(false);
-            options.setPlaybackText("再生: 停止中");
+            options.setPlaybackText("Playback: stopped");
             options.renderControlState();
         });
     }
     catch (error) {
-        options.setPlaybackText("再生: 小節再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")");
+        options.setPlaybackText("Playback: measure playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
         options.renderControlState();
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`再生中: 選択小節 ノート${events.length}件 / 波形 sine`);
+    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform sine`);
     options.renderControlState();
 };
 exports.startMeasurePlayback = startMeasurePlayback;
@@ -16860,7 +16860,7 @@ const buildMidiBytesForPlayback = (events, tempo) => {
     var _a;
     const midiWriter = getMidiWriterRuntime();
     if (!midiWriter) {
-        throw new Error("midi-writer.js が読み込まれていません。");
+        throw new Error("midi-writer.js is not loaded.");
     }
     const tracksById = new Map();
     for (const event of events) {
@@ -16907,7 +16907,7 @@ const buildMidiBytesForPlayback = (events, tempo) => {
         midiTracks.push(track);
     });
     if (!midiTracks.length) {
-        throw new Error("MIDI化するノートがありません。");
+        throw new Error("No notes available for MIDI conversion.");
     }
     const writer = new midiWriter.Writer(midiTracks);
     const built = writer.buildFile();
@@ -17097,7 +17097,7 @@ const resolveLoadFlow = async (params) => {
             return {
                 ok: false,
                 diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: "ファイルを選択してください。",
+                diagnosticMessage: "Please select a file.",
             };
         }
         sourceText = await selected.text();
@@ -17123,7 +17123,7 @@ const resolveLoadFlow = async (params) => {
             return {
                 ok: false,
                 diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: `ABCの解析に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+                diagnosticMessage: `Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`,
             };
         }
     }
@@ -17148,7 +17148,7 @@ const resolveLoadFlow = async (params) => {
         return {
             ok: false,
             diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-            diagnosticMessage: `ABCの解析に失敗しました: ${error instanceof Error ? error.message : String(error)}`,
+            diagnosticMessage: `Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`,
         };
     }
 };
@@ -17293,7 +17293,7 @@ const parseAbcLengthToken = (token, lineNo) => {
         const p = token.split("/");
         return reduceFraction(Number(p[0]), Number(p[1]), { num: 1, den: 1 });
     }
-    throw new Error(`line ${lineNo}: 長さ指定を解釈できません: ${token}`);
+    throw new Error(`line ${lineNo}: Could not parse length token: ${token}`);
 };
 const abcLengthTokenFromFraction = (ratio) => {
     const reduced = reduceFraction(ratio.num, ratio.den, { num: 1, den: 1 });
@@ -17455,7 +17455,7 @@ function parseForMusicXml(source, settings) {
         bodyEntries.push({ text: noComment, lineNo, voiceId: currentVoiceId });
     }
     if (bodyEntries.length === 0) {
-        throw new Error("本文が見つかりません。ABCのノート列を入力してください。 (line 1)");
+        throw new Error("Body not found. Please provide ABC note content. (line 1)");
     }
     const meter = parseMeter(headers.M || "4/4", warnings);
     const unitLength = parseFraction(headers.L || "1/8", "L", warnings);
@@ -17507,7 +17507,7 @@ function parseForMusicXml(source, settings) {
             }
             if (ch === ">" || ch === "<") {
                 if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
-                    warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ") の前にノートがないためスキップしました。");
+                    warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ")  has no preceding note; skipped.");
                     idx += 1;
                     continue;
                 }
@@ -17530,12 +17530,12 @@ function parseForMusicXml(source, settings) {
                         tupletRemaining = r;
                     }
                     else {
-                        warnings.push("line " + entry.lineNo + ": 連符記法の解釈に失敗しました: " + tupletMatch[0]);
+                        warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tupletMatch[0]);
                     }
                     idx += tupletMatch[0].length;
                     continue;
                 }
-                warnings.push("line " + entry.lineNo + ": 非対応の連符記法をスキップしました: (");
+                warnings.push("line " + entry.lineNo + ": Skipped unsupported tuplet notation: (");
                 idx += 1;
                 continue;
             }
@@ -17545,7 +17545,7 @@ function parseForMusicXml(source, settings) {
                     pendingTieToNext = true;
                 }
                 else {
-                    warnings.push("line " + entry.lineNo + ": tie(-) の前にノートがないためスキップしました。");
+                    warnings.push("line " + entry.lineNo + ": tie(-)  has no preceding note; skipped.");
                 }
                 idx += 1;
                 continue;
@@ -17558,7 +17558,7 @@ function parseForMusicXml(source, settings) {
                 else {
                     idx = text.length;
                 }
-                warnings.push("line " + entry.lineNo + ': インライン文字列("...")はスキップしました。');
+                warnings.push("line " + entry.lineNo + ': Skipped inline string ("...").');
                 continue;
             }
             if (ch === "!" || ch === "+") {
@@ -17569,13 +17569,13 @@ function parseForMusicXml(source, settings) {
                 else {
                     idx += 1;
                 }
-                warnings.push("line " + entry.lineNo + ": 装飾記法をスキップしました: " + ch + "..." + ch);
+                warnings.push("line " + entry.lineNo + ": Skipped decoration: " + ch + "..." + ch);
                 continue;
             }
             if (ch === "[") {
                 const chordResult = parseChordAt(text, idx, entry.lineNo);
                 if (!chordResult) {
-                    warnings.push("line " + entry.lineNo + ": 和音記法の解釈に失敗したためスキップしました。");
+                    warnings.push("line " + entry.lineNo + ": Failed to parse chord notation; skipped.");
                     idx += 1;
                     continue;
                 }
@@ -17610,7 +17610,7 @@ function parseForMusicXml(source, settings) {
                 }
                 const dur = durationInDivisions(absoluteLength, 960);
                 if (dur <= 0) {
-                    throw new Error("line " + entry.lineNo + ": 長さが不正です");
+                    throw new Error("line " + entry.lineNo + ": Invalid length");
                 }
                 const chordNotes = [];
                 for (let chordIndex = 0; chordIndex < chordResult.notes.length; chordIndex += 1) {
@@ -17635,7 +17635,7 @@ function parseForMusicXml(source, settings) {
                 continue;
             }
             if (ch === "]" || ch === ")" || ch === "{" || ch === "}") {
-                warnings.push("line " + entry.lineNo + ": 非対応記法をスキップしました: " + ch);
+                warnings.push("line " + entry.lineNo + ": Skipped unsupported notation: " + ch);
                 idx += 1;
                 continue;
             }
@@ -17655,7 +17655,7 @@ function parseForMusicXml(source, settings) {
             }
             const pitchChar = text[idx];
             if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-                throw new Error("line " + entry.lineNo + ": ノート/休符の解釈に失敗しました: " + text.slice(idx, idx + 12));
+                throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
             }
             idx += 1;
             let octaveShift = "";
@@ -17696,7 +17696,7 @@ function parseForMusicXml(source, settings) {
             }
             const dur = durationInDivisions(absoluteLength, 960);
             if (dur <= 0) {
-                throw new Error("line " + entry.lineNo + ": 長さが不正です");
+                throw new Error("line " + entry.lineNo + ": Invalid length");
             }
             const note = buildNoteData(pitchChar, accidentalText, octaveShift, absoluteLength, dur, entry.lineNo, keySignatureAccidentals, measureAccidentals);
             if (pendingTieToNext && !note.isRest) {
@@ -17704,7 +17704,7 @@ function parseForMusicXml(source, settings) {
                 pendingTieToNext = false;
             }
             else if (note.isRest && pendingTieToNext) {
-                warnings.push("line " + entry.lineNo + ": tie(-) の後ろが休符のため tie を解除しました。");
+                warnings.push("line " + entry.lineNo + ": tie(-) was followed by a rest; tie removed.");
                 pendingTieToNext = false;
             }
             note.voice = entry.voiceId;
@@ -17721,7 +17721,7 @@ function parseForMusicXml(source, settings) {
         }
     }
     if (noteCount === 0) {
-        throw new Error("ノートまたは休符が見つかりませんでした。 (line 1)");
+        throw new Error("No notes or rests were found. (line 1)");
     }
     const orderedVoiceIds = parseScoreVoiceOrder(scoreDirective, declaredVoiceIds);
     const parts = orderedVoiceIds.map((voiceId, index) => {
@@ -17870,7 +17870,7 @@ function parseMeter(raw, warnings) {
     }
     const m = normalized.match(/^(\d+)\/(\d+)$/);
     if (!m) {
-        warnings.push("拍子 M: の形式が不正なため 4/4 を使用しました: " + raw);
+        warnings.push("Invalid meter M: format; defaulted to 4/4: " + raw);
         return { beats: 4, beatType: 4 };
     }
     return { beats: Number(m[1]), beatType: Number(m[2]) };
@@ -17878,12 +17878,12 @@ function parseMeter(raw, warnings) {
 function parseFraction(raw, fieldName, warnings) {
     const parsed = abcCommon.parseFractionText(raw, { num: 1, den: 8 });
     if (parsed.num === 1 && parsed.den === 8 && !/^\s*\d+\/\d+\s*$/.test(String(raw || ""))) {
-        warnings.push(fieldName + " の形式が不正なため 1/8 を使用しました: " + raw);
+        warnings.push(fieldName + " has invalid format; defaulted to 1/8: " + raw);
         return parsed;
     }
     const m = String(raw || "").match(/^\s*(\d+)\/(\d+)\s*$/);
     if (!m || !Number(m[1]) || !Number(m[2])) {
-        warnings.push(fieldName + " の値が不正なため 1/8 を使用しました: " + raw);
+        warnings.push(fieldName + " has invalid value; defaulted to 1/8: " + raw);
         return { num: 1, den: 8 };
     }
     return parsed;
@@ -17894,7 +17894,7 @@ function parseKey(raw, warnings) {
     if (fifths !== null) {
         return { fifths };
     }
-    warnings.push("K: 非対応キーのため C を使用しました: " + key);
+    warnings.push("K: unsupported key; defaulted to C: " + key);
     return { fifths: 0 };
 }
 function parseLengthToken(token, lineNo) {
@@ -17978,7 +17978,7 @@ function buildNoteData(pitchChar, accidental, octaveShift, absoluteLength, durat
         }
     }
     if (octave < 0 || octave > 9) {
-        throw new Error("line " + lineNo + ": オクターブが範囲外です");
+        throw new Error("line " + lineNo + ": Octave out of range");
     }
     let alter = null;
     let accidentalText = null;
@@ -18878,7 +18878,7 @@ class ScoreCore {
                 const durationNotation = (0, xmlUtils_1.getDurationNotationHint)(target, command.duration);
                 if ((durationNotation === null || durationNotation === void 0 ? void 0 : durationNotation.triplet) &&
                     !measureVoiceHasTupletContext(target, command.voice)) {
-                    return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "この小節/voice には3連コンテキストがないため、3連音価は適用できません。");
+                    return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "Tuplet durations are not allowed because this measure/voice has no tuplet context.");
                 }
                 const oldDuration = (_a = (0, xmlUtils_1.getDurationValue)(target)) !== null && _a !== void 0 ? _a : 0;
                 const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
