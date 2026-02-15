@@ -240,6 +240,27 @@ body {
   font-weight: 600;
 }
 
+.ms-ui-message {
+  margin: 0.15rem 0 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.ms-ui-message--error {
+  color: #7f1010;
+  background: #fde9e8;
+  border-color: #efb3b0;
+}
+
+.ms-ui-message--warning {
+  color: #6a3f06;
+  background: #fff4e6;
+  border-color: #efcf9d;
+}
+
 .ms-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -503,6 +524,7 @@ body {
 
         <section class="md-section ms-flow-step">
           <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
+          <div id="uiMessage" class="ms-ui-message md-hidden" role="status" aria-live="polite"></div>
           <p id="measurePartNameText" class="ms-track-label">トラック名: -</p>
           <p id="measureSelectionText" class="ms-status">小節未選択（譜面プレビューをクリックしてください）</p>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
@@ -536,12 +558,13 @@ body {
             </label>
             <input id="pitchOctave" type="hidden" value="4" />
             <label class="ms-field">音価(duration)
-              <input id="durationInput" type="number" min="1" step="1" value="1" class="md-input" />
+              <select id="durationPreset" class="md-select" aria-label="音価プリセット">
+                <option value="">（音価を選択）</option>
+              </select>
             </label>
           </div>
 
           <div class="ms-actions">
-            <button id="changeDurationBtn" type="button" class="md-button md-button--primary">音価変更</button>
             <button id="insertAfterBtn" type="button" class="md-button md-button--tonal">後ろに音符追加</button>
             <button id="deleteBtn" type="button" class="md-button md-button--surface">音符削除</button>
           </div>
@@ -621,8 +644,7 @@ const pitchStepUpBtn = q("#pitchStepUpBtn");
 const pitchAlter = q("#pitchAlter");
 const pitchAlterBtns = Array.from(document.querySelectorAll(".ms-alter-btn"));
 const pitchOctave = q("#pitchOctave");
-const durationInput = q("#durationInput");
-const changeDurationBtn = q("#changeDurationBtn");
+const durationPreset = q("#durationPreset");
 const insertAfterBtn = q("#insertAfterBtn");
 const deleteBtn = q("#deleteBtn");
 const playBtn = q("#playBtn");
@@ -634,6 +656,7 @@ const outputXml = q("#outputXml");
 const diagArea = q("#diagArea");
 const debugScoreMeta = q("#debugScoreMeta");
 const debugScoreArea = q("#debugScoreArea");
+const uiMessage = q("#uiMessage");
 const measurePartNameText = q("#measurePartNameText");
 const measureSelectionText = q("#measureSelectionText");
 const measureEditorWrap = q("#measureEditorWrap");
@@ -664,7 +687,10 @@ let draftCore = null;
 let draftNoteNodeIds = [];
 let draftSvgIdToNodeId = new Map();
 let selectedDraftNoteIsRest = false;
+let suppressDurationPresetEvent = false;
+let selectedDraftDurationValue = null;
 const NOTE_CLICK_SNAP_PX = 170;
+const DEFAULT_DIVISIONS = 480;
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
         return;
@@ -789,6 +815,133 @@ const normalizeAlterValue = (value) => {
         return "none";
     return "none";
 };
+const resolveEffectiveDivisionsForMeasure = (doc, targetMeasure) => {
+    var _a, _b, _c;
+    if (!targetMeasure)
+        return DEFAULT_DIVISIONS;
+    const part = targetMeasure.closest("part");
+    if (!part)
+        return DEFAULT_DIVISIONS;
+    let divisions = null;
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+        const divisionsText = (_c = (_b = (_a = measure.querySelector(":scope > attributes > divisions")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const parsed = Number(divisionsText);
+        if (Number.isInteger(parsed) && parsed > 0) {
+            divisions = parsed;
+        }
+        if (measure === targetMeasure)
+            break;
+    }
+    return divisions !== null && divisions !== void 0 ? divisions : DEFAULT_DIVISIONS;
+};
+const rebuildDurationPresetOptions = (divisions) => {
+    const safeDivisions = Number.isInteger(divisions) && divisions > 0 ? divisions : DEFAULT_DIVISIONS;
+    const defs = [
+        { label: "全音符", num: 4, den: 1 },
+        { label: "付点2分音符", num: 3, den: 1 },
+        { label: "2分音符", num: 2, den: 1 },
+        { label: "2分3連(1音)", num: 4, den: 3 },
+        { label: "付点4分音符", num: 3, den: 2 },
+        { label: "4分音符", num: 1, den: 1 },
+        { label: "4分3連(1音)", num: 2, den: 3 },
+        { label: "付点8分音符", num: 3, den: 4 },
+        { label: "8分音符", num: 1, den: 2 },
+        { label: "8分3連(1音)", num: 1, den: 3 },
+        { label: "付点16分音符", num: 3, den: 8 },
+        { label: "16分音符", num: 1, den: 4 },
+        { label: "16分3連(1音)", num: 1, den: 6 },
+        { label: "32分音符", num: 1, den: 8 },
+        { label: "64分音符", num: 1, den: 16 },
+    ];
+    durationPreset.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "（音価を選択）";
+    durationPreset.appendChild(placeholder);
+    const used = new Set();
+    for (const def of defs) {
+        const raw = (safeDivisions * def.num) / def.den;
+        if (!Number.isInteger(raw) || raw <= 0)
+            continue;
+        if (used.has(raw))
+            continue;
+        used.add(raw);
+        const option = document.createElement("option");
+        option.value = String(raw);
+        option.textContent = `${def.label}(${raw})`;
+        durationPreset.appendChild(option);
+    }
+};
+const hasDurationPresetValue = (duration) => {
+    return Array.from(durationPreset.options).some((opt) => Number(opt.value) === duration);
+};
+const setDurationPresetFromValue = (duration) => {
+    suppressDurationPresetEvent = true;
+    Array.from(durationPreset.querySelectorAll("option.ms-duration-custom")).forEach((opt) => opt.remove());
+    if (!Number.isInteger(duration) || (duration !== null && duration !== void 0 ? duration : 0) <= 0) {
+        durationPreset.value = "";
+        suppressDurationPresetEvent = false;
+        return;
+    }
+    if (hasDurationPresetValue(duration)) {
+        durationPreset.value = String(duration);
+        suppressDurationPresetEvent = false;
+        return;
+    }
+    const custom = document.createElement("option");
+    custom.value = String(duration);
+    custom.textContent = `カスタム(${duration})`;
+    custom.className = "ms-duration-custom";
+    durationPreset.appendChild(custom);
+    durationPreset.value = custom.value;
+    suppressDurationPresetEvent = false;
+};
+const durationValueIsTriplet = (duration, divisions) => {
+    if (!Number.isInteger(duration) || duration <= 0)
+        return false;
+    if (!Number.isInteger(divisions) || divisions <= 0)
+        return false;
+    return (duration === (divisions * 4) / 3 ||
+        duration === (divisions * 2) / 3 ||
+        duration === divisions / 3 ||
+        duration === divisions / 6);
+};
+const noteHasTupletContextInMeasure = (note) => {
+    var _a, _b, _c, _d, _e, _f;
+    const measure = note.closest("measure");
+    if (!measure)
+        return false;
+    const voice = (_c = (_b = (_a = note.querySelector(":scope > voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    if (!voice)
+        return false;
+    const notes = Array.from(measure.children).filter((child) => child.tagName === "note");
+    for (const candidate of notes) {
+        const candidateVoice = (_f = (_e = (_d = candidate.querySelector(":scope > voice")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+        if (candidateVoice !== voice)
+            continue;
+        if (candidate.querySelector(":scope > time-modification"))
+            return true;
+        if (candidate.querySelector(":scope > notations > tuplet"))
+            return true;
+    }
+    return false;
+};
+const applyDurationPresetAvailability = (selectedNote, divisions) => {
+    var _a, _b;
+    const hasTupletContext = noteHasTupletContextInMeasure(selectedNote);
+    for (const option of Array.from(durationPreset.options)) {
+        if (!option.value) {
+            option.disabled = false;
+            continue;
+        }
+        const value = Number(option.value);
+        const isTriplet = durationValueIsTriplet(value, divisions);
+        const unavailable = isTriplet && !hasTupletContext;
+        option.disabled = unavailable;
+        const baseLabel = (_b = (_a = option.textContent) === null || _a === void 0 ? void 0 : _a.replace("（この小節では不可）", "").trim()) !== null && _b !== void 0 ? _b : "";
+        option.textContent = unavailable ? `${baseLabel}（この小節では不可）` : baseLabel;
+    }
+};
 const renderAlterButtons = () => {
     var _a;
     const active = normalizeAlterValue(pitchAlter.value);
@@ -811,6 +964,9 @@ const syncStepFromSelectedDraftNote = () => {
         btn.title = "";
     }
     if (!draftCore || !state.selectedNodeId) {
+        selectedDraftDurationValue = null;
+        rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+        setDurationPresetFromValue(null);
         pitchStep.value = "";
         pitchAlter.value = "none";
         renderPitchStepValue();
@@ -819,6 +975,9 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const xml = draftCore.debugSerializeCurrentXml();
     if (!xml) {
+        selectedDraftDurationValue = null;
+        rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+        setDurationPresetFromValue(null);
         pitchStep.value = "";
         pitchAlter.value = "none";
         renderPitchStepValue();
@@ -827,6 +986,9 @@ const syncStepFromSelectedDraftNote = () => {
     }
     const doc = new DOMParser().parseFromString(xml, "application/xml");
     if (doc.querySelector("parsererror")) {
+        selectedDraftDurationValue = null;
+        rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+        setDurationPresetFromValue(null);
         pitchStep.value = "";
         pitchAlter.value = "none";
         renderPitchStepValue();
@@ -838,10 +1000,19 @@ const syncStepFromSelectedDraftNote = () => {
     for (let i = 0; i < count; i += 1) {
         if (draftNoteNodeIds[i] !== state.selectedNodeId)
             continue;
+        const measure = notes[i].closest("measure");
+        const divisions = resolveEffectiveDivisionsForMeasure(doc, measure);
+        rebuildDurationPresetOptions(divisions);
+        applyDurationPresetAvailability(notes[i], divisions);
         const durationText = (_c = (_b = (_a = notes[i].querySelector(":scope > duration")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
         const durationNumber = Number(durationText);
         if (Number.isInteger(durationNumber) && durationNumber > 0) {
-            durationInput.value = String(durationNumber);
+            selectedDraftDurationValue = durationNumber;
+            setDurationPresetFromValue(durationNumber);
+        }
+        else {
+            selectedDraftDurationValue = null;
+            setDurationPresetFromValue(null);
         }
         const alterText = (_f = (_e = (_d = notes[i].querySelector(":scope > pitch > alter")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
         const accidentalText = (_j = (_h = (_g = notes[i].querySelector(":scope > accidental")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
@@ -899,6 +1070,9 @@ const syncStepFromSelectedDraftNote = () => {
         renderAlterButtons();
         return;
     }
+    selectedDraftDurationValue = null;
+    rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+    setDurationPresetFromValue(null);
     renderPitchStepValue();
     renderAlterButtons();
 };
@@ -998,6 +1172,36 @@ const renderDiagnostics = () => {
         diagArea.textContent = "診断なし";
     }
 };
+const renderUiMessage = () => {
+    uiMessage.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
+    uiMessage.textContent = "";
+    const dispatch = state.lastDispatchResult;
+    if (dispatch) {
+        if (!dispatch.ok && dispatch.diagnostics.length > 0) {
+            const d = dispatch.diagnostics[0];
+            uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+            uiMessage.classList.add("ms-ui-message--error");
+            uiMessage.classList.remove("md-hidden");
+            return;
+        }
+        if (dispatch.warnings.length > 0) {
+            const w = dispatch.warnings[0];
+            uiMessage.textContent = `警告: ${w.message} (${w.code})`;
+            uiMessage.classList.add("ms-ui-message--warning");
+            uiMessage.classList.remove("md-hidden");
+            return;
+        }
+    }
+    const save = state.lastSaveResult;
+    if (save && !save.ok && save.diagnostics.length > 0) {
+        const d = save.diagnostics[0];
+        uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+        uiMessage.classList.add("ms-ui-message--error");
+        uiMessage.classList.remove("md-hidden");
+        return;
+    }
+    uiMessage.classList.add("md-hidden");
+};
 const renderOutput = () => {
     var _a, _b;
     saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
@@ -1013,7 +1217,6 @@ const renderControlState = () => {
     for (const btn of pitchAlterBtns) {
         btn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     }
-    changeDurationBtn.disabled = !hasDraft || !hasSelection;
     insertAfterBtn.disabled = !hasDraft || !hasSelection;
     deleteBtn.disabled = !hasDraft || !hasSelection;
     playMeasureBtn.disabled = !hasDraft || isPlaying;
@@ -1025,6 +1228,7 @@ const renderAll = () => {
     renderNotes();
     syncStepFromSelectedDraftNote();
     renderStatus();
+    renderUiMessage();
     renderDiagnostics();
     renderOutput();
     renderMeasureEditorState();
@@ -1598,7 +1802,7 @@ const renderMeasureEditorPreview = () => {
         toolkit.setOptions({
             pageWidth: 6000,
             pageHeight: 2200,
-            scale: 46,
+            scale: 58,
             breaks: "none",
             adjustPageHeight: 1,
             footer: "none",
@@ -2059,15 +2263,49 @@ const readSelectedPitch = () => {
     return { ...base, alter: alter };
 };
 const readDuration = () => {
-    const duration = Number(durationInput.value);
+    const duration = Number(durationPreset.value);
     if (!Number.isInteger(duration) || duration <= 0)
         return null;
     return duration;
 };
+const onDurationPresetChange = () => {
+    if (suppressDurationPresetEvent)
+        return;
+    const preset = Number(durationPreset.value);
+    if (!Number.isInteger(preset) || preset <= 0)
+        return;
+    if (Number.isInteger(selectedDraftDurationValue) && selectedDraftDurationValue === preset)
+        return;
+    const targetNodeId = requireSelectedNode();
+    if (!targetNodeId)
+        return;
+    const command = {
+        type: "change_duration",
+        targetNodeId,
+        voice: EDITABLE_VOICE,
+        duration: preset,
+    };
+    const result = runCommand(command);
+    if (!result || result.ok)
+        return;
+    const first = result.diagnostics[0];
+    if ((first === null || first === void 0 ? void 0 : first.code) === "MEASURE_OVERFULL") {
+        state.lastDispatchResult = {
+            ...result,
+            diagnostics: [
+                {
+                    code: first.code,
+                    message: "この音価には変更できません。小節内の長さ上限を超えます。",
+                },
+            ],
+        };
+        renderAll();
+    }
+};
 const runCommand = (command) => {
     var _a;
     if (!draftCore)
-        return;
+        return null;
     state.lastDispatchResult = draftCore.dispatch(command);
     if (!state.lastDispatchResult.ok || state.lastDispatchResult.warnings.length > 0) {
         logDiagnostics("dispatch", state.lastDispatchResult.diagnostics, state.lastDispatchResult.warnings);
@@ -2081,6 +2319,7 @@ const runCommand = (command) => {
     }
     renderAll();
     renderMeasureEditorPreview();
+    return state.lastDispatchResult;
 };
 const autoSaveCurrentXml = () => {
     if (!state.loaded)
@@ -2420,6 +2659,12 @@ noteSelect.addEventListener("change", () => {
     state.selectedNodeId = noteSelect.value || null;
     renderAll();
 });
+durationPreset.addEventListener("change", () => {
+    onDurationPresetChange();
+});
+durationPreset.addEventListener("input", () => {
+    onDurationPresetChange();
+});
 pitchStepDownBtn.addEventListener("click", () => {
     shiftPitchStep(-1);
 });
@@ -2433,7 +2678,6 @@ for (const btn of pitchAlterBtns) {
         onAlterAutoChange();
     });
 }
-changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
 playBtn.addEventListener("click", () => {
@@ -16859,7 +17103,7 @@ const resolveTimingContext = (measure) => {
   "core/xmlUtils.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.replaceWithRestNote = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.setDurationValue = exports.getDurationValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
+exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.replaceWithRestNote = exports.createRestElement = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.getDurationNotationHint = exports.setDurationValue = exports.getDurationValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
 const SCORE_PARTWISE = "score-partwise";
 const parseXml = (xmlText) => {
     const parser = new DOMParser();
@@ -16912,8 +17156,18 @@ const setDurationValue = (note, duration) => {
         note.appendChild(durationNode);
     }
     durationNode.textContent = String(duration);
+    syncSimpleTypeFromDuration(note, duration);
 };
 exports.setDurationValue = setDurationValue;
+const getDurationNotationHint = (note, duration) => {
+    if (!Number.isInteger(duration) || duration <= 0)
+        return null;
+    const divisions = resolveEffectiveDivisions(note);
+    if (divisions === null || !Number.isInteger(divisions) || divisions <= 0)
+        return null;
+    return durationToNotation(duration, divisions);
+};
+exports.getDurationNotationHint = getDurationNotationHint;
 const setPitch = (note, pitch) => {
     let pitchNode = getDirectChild(note, "pitch");
     if (!pitchNode) {
@@ -16963,6 +17217,19 @@ const createNoteElement = (doc, voice, duration, pitch) => {
     return note;
 };
 exports.createNoteElement = createNoteElement;
+const createRestElement = (doc, voice, duration) => {
+    const note = doc.createElement("note");
+    const restNode = doc.createElement("rest");
+    note.appendChild(restNode);
+    const durationNode = doc.createElement("duration");
+    durationNode.textContent = String(duration);
+    note.appendChild(durationNode);
+    const voiceNode = doc.createElement("voice");
+    voiceNode.textContent = voice;
+    note.appendChild(voiceNode);
+    return note;
+};
+exports.createRestElement = createRestElement;
 const replaceWithRestNote = (note, fallbackVoice = "1", forcedDuration) => {
     var _a;
     const doc = note.ownerDocument;
@@ -17049,6 +17316,86 @@ const accidentalFromAlter = (alter) => {
         return "sharp";
     return "double-sharp";
 };
+const syncSimpleTypeFromDuration = (note, duration) => {
+    if (!Number.isInteger(duration) || duration <= 0)
+        return;
+    const divisions = resolveEffectiveDivisions(note);
+    if (divisions === null || !Number.isInteger(divisions) || divisions <= 0)
+        return;
+    const notation = durationToNotation(duration, divisions);
+    if (!notation)
+        return;
+    upsertSimpleChild(note, "type", notation.type);
+    Array.from(note.children)
+        .filter((child) => child.tagName === "dot" || child.tagName === "time-modification")
+        .forEach((child) => child.remove());
+    for (let i = 0; i < notation.dotCount; i += 1) {
+        const dot = note.ownerDocument.createElement("dot");
+        note.appendChild(dot);
+    }
+    if (notation.triplet) {
+        const tm = note.ownerDocument.createElement("time-modification");
+        const actual = note.ownerDocument.createElement("actual-notes");
+        actual.textContent = "3";
+        const normal = note.ownerDocument.createElement("normal-notes");
+        normal.textContent = "2";
+        tm.appendChild(actual);
+        tm.appendChild(normal);
+        note.appendChild(tm);
+    }
+};
+const resolveEffectiveDivisions = (note) => {
+    var _a, _b, _c;
+    const measure = (0, exports.findAncestorMeasure)(note);
+    if (!measure)
+        return null;
+    const part = measure.parentElement;
+    if (!part || part.tagName !== "part")
+        return null;
+    const measures = Array.from(part.children).filter((child) => child.tagName === "measure");
+    const measureIndex = measures.indexOf(measure);
+    if (measureIndex < 0)
+        return null;
+    let divisions = null;
+    for (let i = measureIndex; i >= 0; i -= 1) {
+        const candidate = measures[i];
+        const text = (_c = (_b = (_a = candidate.querySelector("attributes > divisions")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const n = Number(text);
+        if (Number.isInteger(n) && n > 0) {
+            divisions = n;
+            break;
+        }
+    }
+    return divisions;
+};
+const durationToNotation = (duration, divisions) => {
+    const defs = [
+        { num: 4, den: 1, type: "whole", dotCount: 0, triplet: false },
+        { num: 3, den: 1, type: "half", dotCount: 1, triplet: false },
+        { num: 2, den: 1, type: "half", dotCount: 0, triplet: false },
+        { num: 4, den: 3, type: "half", dotCount: 0, triplet: true },
+        { num: 3, den: 2, type: "quarter", dotCount: 1, triplet: false },
+        { num: 1, den: 1, type: "quarter", dotCount: 0, triplet: false },
+        { num: 2, den: 3, type: "quarter", dotCount: 0, triplet: true },
+        { num: 3, den: 4, type: "eighth", dotCount: 1, triplet: false },
+        { num: 1, den: 2, type: "eighth", dotCount: 0, triplet: false },
+        { num: 1, den: 3, type: "eighth", dotCount: 0, triplet: true },
+        { num: 3, den: 8, type: "16th", dotCount: 1, triplet: false },
+        { num: 1, den: 4, type: "16th", dotCount: 0, triplet: false },
+        { num: 1, den: 6, type: "16th", dotCount: 0, triplet: true },
+        { num: 1, den: 8, type: "32nd", dotCount: 0, triplet: false },
+        { num: 1, den: 16, type: "64th", dotCount: 0, triplet: false },
+    ];
+    for (const def of defs) {
+        const value = (divisions * def.num) / def.den;
+        if (!Number.isInteger(value) || value <= 0)
+            continue;
+        if (duration === value) {
+            return { type: def.type, dotCount: def.dotCount, triplet: def.triplet };
+        }
+    }
+    return null;
+};
 
   },
   "core/ScoreCore.js": function (require, module, exports) {
@@ -17128,17 +17475,53 @@ class ScoreCore {
                 (0, xmlUtils_1.setPitch)(target, command.pitch);
             }
             else if (command.type === "change_duration") {
+                const durationNotation = (0, xmlUtils_1.getDurationNotationHint)(target, command.duration);
+                if ((durationNotation === null || durationNotation === void 0 ? void 0 : durationNotation.triplet) &&
+                    !measureVoiceHasTupletContext(target, command.voice)) {
+                    return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "この小節/voice には3連コンテキストがないため、3連音価は適用できません。");
+                }
                 const oldDuration = (_a = (0, xmlUtils_1.getDurationValue)(target)) !== null && _a !== void 0 ? _a : 0;
                 const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
+                let underfullDelta = 0;
+                let projectedWarning = null;
                 if (timing) {
                     const projected = timing.occupied - oldDuration + command.duration;
-                    const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, projected);
+                    const overflow = projected - timing.capacity;
+                    if (overflow > 0) {
+                        const consumedAfter = consumeFollowingRestsForDurationExpansion(target, command.voice, overflow);
+                        const remainingAfter = overflow - consumedAfter;
+                        const consumedBefore = remainingAfter > 0
+                            ? consumePrecedingRestsForDurationExpansion(target, command.voice, remainingAfter)
+                            : 0;
+                        const consumed = consumedAfter + consumedBefore;
+                        if (consumed < overflow) {
+                            const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, projected);
+                            if (result.diagnostic)
+                                return this.failWith(result.diagnostic);
+                        }
+                    }
+                    const timingAfterRestAdjust = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
+                    const adjustedProjected = timingAfterRestAdjust
+                        ? timingAfterRestAdjust.occupied - oldDuration + command.duration
+                        : projected;
+                    const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, adjustedProjected);
                     if (result.diagnostic)
                         return this.failWith(result.diagnostic);
-                    if (result.warning)
-                        warnings.push(result.warning);
+                    projectedWarning = result.warning;
+                    if (adjustedProjected < timing.capacity) {
+                        underfullDelta = timing.capacity - adjustedProjected;
+                    }
                 }
                 (0, xmlUtils_1.setDurationValue)(target, command.duration);
+                if (underfullDelta > 0) {
+                    const filled = fillUnderfullGapAfterTarget(target, command.voice, underfullDelta);
+                    if (!filled && projectedWarning) {
+                        warnings.push(projectedWarning);
+                    }
+                }
+                else if (projectedWarning) {
+                    warnings.push(projectedWarning);
+                }
             }
             else if (command.type === "insert_note_after") {
                 const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
@@ -17396,6 +17779,123 @@ const findImmediateNextChordTone = (note) => {
     if (!hasDirectChild(next, "chord"))
         return null;
     return next;
+};
+const consumeFollowingRestsForDurationExpansion = (target, voice, overflow) => {
+    var _a;
+    if (!Number.isInteger(overflow) || overflow <= 0)
+        return 0;
+    let remaining = overflow;
+    let cursor = target.nextElementSibling;
+    while (cursor && remaining > 0) {
+        const next = cursor.nextElementSibling;
+        if (cursor.tagName === "backup" || cursor.tagName === "forward")
+            break;
+        if (cursor.tagName !== "note") {
+            cursor = next;
+            continue;
+        }
+        const noteVoice = (0, xmlUtils_1.getVoiceText)(cursor);
+        if (noteVoice !== voice) {
+            cursor = next;
+            continue;
+        }
+        const isRest = cursor.querySelector(":scope > rest") !== null;
+        const isChord = cursor.querySelector(":scope > chord") !== null;
+        const duration = (_a = (0, xmlUtils_1.getDurationValue)(cursor)) !== null && _a !== void 0 ? _a : 0;
+        if (!isRest || isChord || duration <= 0) {
+            cursor = next;
+            continue;
+        }
+        if (duration <= remaining) {
+            remaining -= duration;
+            cursor.remove();
+        }
+        else {
+            (0, xmlUtils_1.setDurationValue)(cursor, duration - remaining);
+            remaining = 0;
+        }
+        cursor = next;
+    }
+    return overflow - remaining;
+};
+const consumePrecedingRestsForDurationExpansion = (target, voice, overflow) => {
+    var _a;
+    if (!Number.isInteger(overflow) || overflow <= 0)
+        return 0;
+    let remaining = overflow;
+    let cursor = target.previousElementSibling;
+    while (cursor && remaining > 0) {
+        const prev = cursor.previousElementSibling;
+        if (cursor.tagName === "backup" || cursor.tagName === "forward")
+            break;
+        if (cursor.tagName !== "note") {
+            cursor = prev;
+            continue;
+        }
+        const noteVoice = (0, xmlUtils_1.getVoiceText)(cursor);
+        if (noteVoice !== voice) {
+            cursor = prev;
+            continue;
+        }
+        const isRest = cursor.querySelector(":scope > rest") !== null;
+        const isChord = cursor.querySelector(":scope > chord") !== null;
+        const duration = (_a = (0, xmlUtils_1.getDurationValue)(cursor)) !== null && _a !== void 0 ? _a : 0;
+        if (!isRest || isChord || duration <= 0) {
+            cursor = prev;
+            continue;
+        }
+        if (duration <= remaining) {
+            remaining -= duration;
+            cursor.remove();
+        }
+        else {
+            (0, xmlUtils_1.setDurationValue)(cursor, duration - remaining);
+            remaining = 0;
+        }
+        cursor = prev;
+    }
+    return overflow - remaining;
+};
+const fillUnderfullGapAfterTarget = (target, voice, deficit) => {
+    var _a;
+    if (!Number.isInteger(deficit) || deficit <= 0)
+        return true;
+    const measure = (0, xmlUtils_1.findAncestorMeasure)(target);
+    if (!measure)
+        return false;
+    if ((0, xmlUtils_1.measureHasBackupOrForward)(measure))
+        return false;
+    // Keep rhythmic gap close to the edited note to avoid visual/timing drift.
+    const next = target.nextElementSibling;
+    if (next && next.tagName === "note" && (0, xmlUtils_1.getVoiceText)(next) === voice) {
+        const isRest = next.querySelector(":scope > rest") !== null;
+        const isChord = next.querySelector(":scope > chord") !== null;
+        if (isRest && !isChord) {
+            const current = (_a = (0, xmlUtils_1.getDurationValue)(next)) !== null && _a !== void 0 ? _a : 0;
+            (0, xmlUtils_1.setDurationValue)(next, current + deficit);
+            return true;
+        }
+    }
+    const rest = (0, xmlUtils_1.createRestElement)(target.ownerDocument, voice, deficit);
+    target.after(rest);
+    // Ensure notation metadata (<type>/<dot>/<time-modification>) is consistent for Verovio.
+    (0, xmlUtils_1.setDurationValue)(rest, deficit);
+    return true;
+};
+const measureVoiceHasTupletContext = (target, voice) => {
+    const measure = (0, xmlUtils_1.findAncestorMeasure)(target);
+    if (!measure)
+        return false;
+    const notes = Array.from(measure.children).filter((child) => child.tagName === "note");
+    for (const note of notes) {
+        if ((0, xmlUtils_1.getVoiceText)(note) !== voice)
+            continue;
+        if (note.querySelector(":scope > time-modification"))
+            return true;
+        if (note.querySelector(":scope > notations > tuplet"))
+            return true;
+    }
+    return false;
 };
 
   },

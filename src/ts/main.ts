@@ -91,8 +91,7 @@ const pitchStepUpBtn = q<HTMLButtonElement>("#pitchStepUpBtn");
 const pitchAlter = q<HTMLInputElement>("#pitchAlter");
 const pitchAlterBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-alter-btn"));
 const pitchOctave = q<HTMLInputElement>("#pitchOctave");
-const durationInput = q<HTMLInputElement>("#durationInput");
-const changeDurationBtn = q<HTMLButtonElement>("#changeDurationBtn");
+const durationPreset = q<HTMLSelectElement>("#durationPreset");
 const insertAfterBtn = q<HTMLButtonElement>("#insertAfterBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
@@ -104,6 +103,7 @@ const outputXml = q<HTMLTextAreaElement>("#outputXml");
 const diagArea = q<HTMLDivElement>("#diagArea");
 const debugScoreMeta = q<HTMLParagraphElement>("#debugScoreMeta");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
+const uiMessage = q<HTMLDivElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
 const measureSelectionText = q<HTMLParagraphElement>("#measureSelectionText");
 const measureEditorWrap = q<HTMLDivElement>("#measureEditorWrap");
@@ -136,7 +136,10 @@ let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
 let selectedDraftNoteIsRest = false;
+let suppressDurationPresetEvent = false;
+let selectedDraftDurationValue: number | null = null;
 const NOTE_CLICK_SNAP_PX = 170;
+const DEFAULT_DIVISIONS = 480;
 
 const logDiagnostics = (
   phase: "load" | "dispatch" | "save" | "playback",
@@ -279,6 +282,133 @@ const normalizeAlterValue = (value: string): string => {
   return "none";
 };
 
+const resolveEffectiveDivisionsForMeasure = (
+  doc: XMLDocument,
+  targetMeasure: Element | null
+): number => {
+  if (!targetMeasure) return DEFAULT_DIVISIONS;
+  const part = targetMeasure.closest("part");
+  if (!part) return DEFAULT_DIVISIONS;
+
+  let divisions: number | null = null;
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const divisionsText = measure.querySelector(":scope > attributes > divisions")?.textContent?.trim() ?? "";
+    const parsed = Number(divisionsText);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      divisions = parsed;
+    }
+    if (measure === targetMeasure) break;
+  }
+  return divisions ?? DEFAULT_DIVISIONS;
+};
+
+const rebuildDurationPresetOptions = (divisions: number): void => {
+  const safeDivisions = Number.isInteger(divisions) && divisions > 0 ? divisions : DEFAULT_DIVISIONS;
+  const defs: Array<{ label: string; num: number; den: number }> = [
+    { label: "全音符", num: 4, den: 1 },
+    { label: "付点2分音符", num: 3, den: 1 },
+    { label: "2分音符", num: 2, den: 1 },
+    { label: "2分3連(1音)", num: 4, den: 3 },
+    { label: "付点4分音符", num: 3, den: 2 },
+    { label: "4分音符", num: 1, den: 1 },
+    { label: "4分3連(1音)", num: 2, den: 3 },
+    { label: "付点8分音符", num: 3, den: 4 },
+    { label: "8分音符", num: 1, den: 2 },
+    { label: "8分3連(1音)", num: 1, den: 3 },
+    { label: "付点16分音符", num: 3, den: 8 },
+    { label: "16分音符", num: 1, den: 4 },
+    { label: "16分3連(1音)", num: 1, den: 6 },
+    { label: "32分音符", num: 1, den: 8 },
+    { label: "64分音符", num: 1, den: 16 },
+  ];
+
+  durationPreset.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "（音価を選択）";
+  durationPreset.appendChild(placeholder);
+
+  const used = new Set<number>();
+  for (const def of defs) {
+    const raw = (safeDivisions * def.num) / def.den;
+    if (!Number.isInteger(raw) || raw <= 0) continue;
+    if (used.has(raw)) continue;
+    used.add(raw);
+    const option = document.createElement("option");
+    option.value = String(raw);
+    option.textContent = `${def.label}(${raw})`;
+    durationPreset.appendChild(option);
+  }
+};
+
+const hasDurationPresetValue = (duration: number): boolean => {
+  return Array.from(durationPreset.options).some((opt) => Number(opt.value) === duration);
+};
+
+const setDurationPresetFromValue = (duration: number | null): void => {
+  suppressDurationPresetEvent = true;
+  Array.from(durationPreset.querySelectorAll("option.ms-duration-custom")).forEach((opt) => opt.remove());
+  if (!Number.isInteger(duration) || (duration ?? 0) <= 0) {
+    durationPreset.value = "";
+    suppressDurationPresetEvent = false;
+    return;
+  }
+  if (hasDurationPresetValue(duration as number)) {
+    durationPreset.value = String(duration);
+    suppressDurationPresetEvent = false;
+    return;
+  }
+  const custom = document.createElement("option");
+  custom.value = String(duration);
+  custom.textContent = `カスタム(${duration})`;
+  custom.className = "ms-duration-custom";
+  durationPreset.appendChild(custom);
+  durationPreset.value = custom.value;
+  suppressDurationPresetEvent = false;
+};
+
+const durationValueIsTriplet = (duration: number, divisions: number): boolean => {
+  if (!Number.isInteger(duration) || duration <= 0) return false;
+  if (!Number.isInteger(divisions) || divisions <= 0) return false;
+  return (
+    duration === (divisions * 4) / 3 ||
+    duration === (divisions * 2) / 3 ||
+    duration === divisions / 3 ||
+    duration === divisions / 6
+  );
+};
+
+const noteHasTupletContextInMeasure = (note: Element): boolean => {
+  const measure = note.closest("measure");
+  if (!measure) return false;
+  const voice = note.querySelector(":scope > voice")?.textContent?.trim() ?? "";
+  if (!voice) return false;
+  const notes = Array.from(measure.children).filter((child) => child.tagName === "note");
+  for (const candidate of notes) {
+    const candidateVoice = candidate.querySelector(":scope > voice")?.textContent?.trim() ?? "";
+    if (candidateVoice !== voice) continue;
+    if (candidate.querySelector(":scope > time-modification")) return true;
+    if (candidate.querySelector(":scope > notations > tuplet")) return true;
+  }
+  return false;
+};
+
+const applyDurationPresetAvailability = (selectedNote: Element, divisions: number): void => {
+  const hasTupletContext = noteHasTupletContextInMeasure(selectedNote);
+  for (const option of Array.from(durationPreset.options)) {
+    if (!option.value) {
+      option.disabled = false;
+      continue;
+    }
+    const value = Number(option.value);
+    const isTriplet = durationValueIsTriplet(value, divisions);
+    const unavailable = isTriplet && !hasTupletContext;
+    option.disabled = unavailable;
+    const baseLabel = option.textContent?.replace("（この小節では不可）", "").trim() ?? "";
+    option.textContent = unavailable ? `${baseLabel}（この小節では不可）` : baseLabel;
+  }
+};
+
 const renderAlterButtons = (): void => {
   const active = normalizeAlterValue(pitchAlter.value);
   pitchAlter.value = active;
@@ -301,6 +431,9 @@ const syncStepFromSelectedDraftNote = (): void => {
   }
 
   if (!draftCore || !state.selectedNodeId) {
+    selectedDraftDurationValue = null;
+    rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+    setDurationPresetFromValue(null);
     pitchStep.value = "";
     pitchAlter.value = "none";
     renderPitchStepValue();
@@ -309,6 +442,9 @@ const syncStepFromSelectedDraftNote = (): void => {
   }
   const xml = draftCore.debugSerializeCurrentXml();
   if (!xml) {
+    selectedDraftDurationValue = null;
+    rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+    setDurationPresetFromValue(null);
     pitchStep.value = "";
     pitchAlter.value = "none";
     renderPitchStepValue();
@@ -318,6 +454,9 @@ const syncStepFromSelectedDraftNote = (): void => {
 
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (doc.querySelector("parsererror")) {
+    selectedDraftDurationValue = null;
+    rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+    setDurationPresetFromValue(null);
     pitchStep.value = "";
     pitchAlter.value = "none";
     renderPitchStepValue();
@@ -329,10 +468,18 @@ const syncStepFromSelectedDraftNote = (): void => {
   const count = Math.min(notes.length, draftNoteNodeIds.length);
   for (let i = 0; i < count; i += 1) {
     if (draftNoteNodeIds[i] !== state.selectedNodeId) continue;
+    const measure = notes[i].closest("measure");
+    const divisions = resolveEffectiveDivisionsForMeasure(doc, measure);
+    rebuildDurationPresetOptions(divisions);
+    applyDurationPresetAvailability(notes[i], divisions);
     const durationText = notes[i].querySelector(":scope > duration")?.textContent?.trim() ?? "";
     const durationNumber = Number(durationText);
     if (Number.isInteger(durationNumber) && durationNumber > 0) {
-      durationInput.value = String(durationNumber);
+      selectedDraftDurationValue = durationNumber;
+      setDurationPresetFromValue(durationNumber);
+    } else {
+      selectedDraftDurationValue = null;
+      setDurationPresetFromValue(null);
     }
 
     const alterText = notes[i].querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "";
@@ -385,6 +532,9 @@ const syncStepFromSelectedDraftNote = (): void => {
     renderAlterButtons();
     return;
   }
+  selectedDraftDurationValue = null;
+  rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
+  setDurationPresetFromValue(null);
   renderPitchStepValue();
   renderAlterButtons();
 };
@@ -492,6 +642,40 @@ const renderDiagnostics = (): void => {
   }
 };
 
+const renderUiMessage = (): void => {
+  uiMessage.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
+  uiMessage.textContent = "";
+
+  const dispatch = state.lastDispatchResult;
+  if (dispatch) {
+    if (!dispatch.ok && dispatch.diagnostics.length > 0) {
+      const d = dispatch.diagnostics[0];
+      uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+      uiMessage.classList.add("ms-ui-message--error");
+      uiMessage.classList.remove("md-hidden");
+      return;
+    }
+    if (dispatch.warnings.length > 0) {
+      const w = dispatch.warnings[0];
+      uiMessage.textContent = `警告: ${w.message} (${w.code})`;
+      uiMessage.classList.add("ms-ui-message--warning");
+      uiMessage.classList.remove("md-hidden");
+      return;
+    }
+  }
+
+  const save = state.lastSaveResult;
+  if (save && !save.ok && save.diagnostics.length > 0) {
+    const d = save.diagnostics[0];
+    uiMessage.textContent = `エラー: ${d.message} (${d.code})`;
+    uiMessage.classList.add("ms-ui-message--error");
+    uiMessage.classList.remove("md-hidden");
+    return;
+  }
+
+  uiMessage.classList.add("md-hidden");
+};
+
 const renderOutput = (): void => {
   saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
   outputXml.value = state.lastSaveResult?.ok ? state.lastSaveResult.xml : "";
@@ -507,7 +691,6 @@ const renderControlState = (): void => {
   for (const btn of pitchAlterBtns) {
     btn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
   }
-  changeDurationBtn.disabled = !hasDraft || !hasSelection;
   insertAfterBtn.disabled = !hasDraft || !hasSelection;
   deleteBtn.disabled = !hasDraft || !hasSelection;
   playMeasureBtn.disabled = !hasDraft || isPlaying;
@@ -520,6 +703,7 @@ const renderAll = (): void => {
   renderNotes();
   syncStepFromSelectedDraftNote();
   renderStatus();
+  renderUiMessage();
   renderDiagnostics();
   renderOutput();
   renderMeasureEditorState();
@@ -1114,7 +1298,7 @@ const renderMeasureEditorPreview = (): void => {
       toolkit.setOptions({
         pageWidth: 6000,
         pageHeight: 2200,
-        scale: 46,
+        scale: 58,
         breaks: "none",
         adjustPageHeight: 1,
         footer: "none",
@@ -1643,13 +1827,43 @@ const readSelectedPitch = (): Pitch | null => {
 };
 
 const readDuration = (): number | null => {
-  const duration = Number(durationInput.value);
+  const duration = Number(durationPreset.value);
   if (!Number.isInteger(duration) || duration <= 0) return null;
   return duration;
 };
 
-const runCommand = (command: CoreCommand): void => {
-  if (!draftCore) return;
+const onDurationPresetChange = (): void => {
+  if (suppressDurationPresetEvent) return;
+  const preset = Number(durationPreset.value);
+  if (!Number.isInteger(preset) || preset <= 0) return;
+  if (Number.isInteger(selectedDraftDurationValue) && selectedDraftDurationValue === preset) return;
+  const targetNodeId = requireSelectedNode();
+  if (!targetNodeId) return;
+  const command: ChangeDurationCommand = {
+    type: "change_duration",
+    targetNodeId,
+    voice: EDITABLE_VOICE,
+    duration: preset,
+  };
+  const result = runCommand(command);
+  if (!result || result.ok) return;
+  const first = result.diagnostics[0];
+  if (first?.code === "MEASURE_OVERFULL") {
+    state.lastDispatchResult = {
+      ...result,
+      diagnostics: [
+        {
+          code: first.code,
+          message: "この音価には変更できません。小節内の長さ上限を超えます。",
+        },
+      ],
+    };
+    renderAll();
+  }
+};
+
+const runCommand = (command: CoreCommand): DispatchResult | null => {
+  if (!draftCore) return null;
   state.lastDispatchResult = draftCore.dispatch(command);
   if (!state.lastDispatchResult.ok || state.lastDispatchResult.warnings.length > 0) {
     logDiagnostics(
@@ -1668,6 +1882,7 @@ const runCommand = (command: CoreCommand): void => {
   }
   renderAll();
   renderMeasureEditorPreview();
+  return state.lastDispatchResult;
 };
 
 const autoSaveCurrentXml = (): void => {
@@ -2016,6 +2231,12 @@ noteSelect.addEventListener("change", () => {
   state.selectedNodeId = noteSelect.value || null;
   renderAll();
 });
+durationPreset.addEventListener("change", () => {
+  onDurationPresetChange();
+});
+durationPreset.addEventListener("input", () => {
+  onDurationPresetChange();
+});
 pitchStepDownBtn.addEventListener("click", () => {
   shiftPitchStep(-1);
 });
@@ -2028,7 +2249,6 @@ for (const btn of pitchAlterBtns) {
     onAlterAutoChange();
   });
 }
-changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
 playBtn.addEventListener("click", () => {

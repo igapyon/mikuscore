@@ -231,6 +231,27 @@ body {
   font-weight: 600;
 }
 
+.ms-ui-message {
+  margin: 0.15rem 0 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.ms-ui-message--error {
+  color: #7f1010;
+  background: #fde9e8;
+  border-color: #efb3b0;
+}
+
+.ms-ui-message--warning {
+  color: #6a3f06;
+  background: #fff4e6;
+  border-color: #efcf9d;
+}
+
 .ms-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -10,14 +10,17 @@ import type {
 } from "./interfaces";
 import { getMeasureTimingForVoice } from "./timeIndex";
 import {
+  createRestElement,
   createNoteElement,
   findAncestorMeasure,
   getDurationValue,
   getVoiceText,
+  measureHasBackupOrForward,
   replaceWithRestNote,
   parseXml,
   reindexNodeIds,
   serializeXml,
+  getDurationNotationHint,
   setDurationValue,
   setPitch,
 } from "./xmlUtils";
@@ -105,15 +108,63 @@ export class ScoreCore {
       if (command.type === "change_pitch") {
         setPitch(target, command.pitch);
       } else if (command.type === "change_duration") {
+        const durationNotation = getDurationNotationHint(target, command.duration);
+        if (
+          durationNotation?.triplet &&
+          !measureVoiceHasTupletContext(target, command.voice)
+        ) {
+          return this.fail(
+            "MVP_INVALID_COMMAND_PAYLOAD",
+            "この小節/voice には3連コンテキストがないため、3連音価は適用できません。"
+          );
+        }
         const oldDuration = getDurationValue(target) ?? 0;
         const timing = getMeasureTimingForVoice(target, command.voice);
+        let underfullDelta = 0;
+        let projectedWarning: Warning | null = null;
         if (timing) {
           const projected = timing.occupied - oldDuration + command.duration;
-          const result = validateProjectedMeasureTiming(target, command.voice, projected);
+          const overflow = projected - timing.capacity;
+          if (overflow > 0) {
+            const consumedAfter = consumeFollowingRestsForDurationExpansion(
+              target,
+              command.voice,
+              overflow
+            );
+            const remainingAfter = overflow - consumedAfter;
+            const consumedBefore = remainingAfter > 0
+              ? consumePrecedingRestsForDurationExpansion(target, command.voice, remainingAfter)
+              : 0;
+            const consumed = consumedAfter + consumedBefore;
+            if (consumed < overflow) {
+              const result = validateProjectedMeasureTiming(target, command.voice, projected);
+              if (result.diagnostic) return this.failWith(result.diagnostic);
+            }
+          }
+          const timingAfterRestAdjust = getMeasureTimingForVoice(target, command.voice);
+          const adjustedProjected = timingAfterRestAdjust
+            ? timingAfterRestAdjust.occupied - oldDuration + command.duration
+            : projected;
+          const result = validateProjectedMeasureTiming(
+            target,
+            command.voice,
+            adjustedProjected
+          );
           if (result.diagnostic) return this.failWith(result.diagnostic);
-          if (result.warning) warnings.push(result.warning);
+          projectedWarning = result.warning;
+          if (adjustedProjected < timing.capacity) {
+            underfullDelta = timing.capacity - adjustedProjected;
+          }
         }
         setDurationValue(target, command.duration);
+        if (underfullDelta > 0) {
+          const filled = fillUnderfullGapAfterTarget(target, command.voice, underfullDelta);
+          if (!filled && projectedWarning) {
+            warnings.push(projectedWarning);
+          }
+        } else if (projectedWarning) {
+          warnings.push(projectedWarning);
+        }
       } else if (command.type === "insert_note_after") {
         const timing = getMeasureTimingForVoice(target, command.voice);
         if (timing) {
@@ -384,4 +435,129 @@ const findImmediateNextChordTone = (note: Element): Element | null => {
   if (!next || next.tagName !== "note") return null;
   if (!hasDirectChild(next, "chord")) return null;
   return next;
+};
+
+const consumeFollowingRestsForDurationExpansion = (
+  target: Element,
+  voice: string,
+  overflow: number
+): number => {
+  if (!Number.isInteger(overflow) || overflow <= 0) return 0;
+  let remaining = overflow;
+  let cursor: Element | null = target.nextElementSibling;
+  while (cursor && remaining > 0) {
+    const next = cursor.nextElementSibling;
+    if (cursor.tagName === "backup" || cursor.tagName === "forward") break;
+    if (cursor.tagName !== "note") {
+      cursor = next;
+      continue;
+    }
+
+    const noteVoice = getVoiceText(cursor);
+    if (noteVoice !== voice) {
+      cursor = next;
+      continue;
+    }
+
+    const isRest = cursor.querySelector(":scope > rest") !== null;
+    const isChord = cursor.querySelector(":scope > chord") !== null;
+    const duration = getDurationValue(cursor) ?? 0;
+    if (!isRest || isChord || duration <= 0) {
+      cursor = next;
+      continue;
+    }
+
+    if (duration <= remaining) {
+      remaining -= duration;
+      cursor.remove();
+    } else {
+      setDurationValue(cursor, duration - remaining);
+      remaining = 0;
+    }
+    cursor = next;
+  }
+  return overflow - remaining;
+};
+
+const consumePrecedingRestsForDurationExpansion = (
+  target: Element,
+  voice: string,
+  overflow: number
+): number => {
+  if (!Number.isInteger(overflow) || overflow <= 0) return 0;
+  let remaining = overflow;
+  let cursor: Element | null = target.previousElementSibling;
+  while (cursor && remaining > 0) {
+    const prev = cursor.previousElementSibling;
+    if (cursor.tagName === "backup" || cursor.tagName === "forward") break;
+    if (cursor.tagName !== "note") {
+      cursor = prev;
+      continue;
+    }
+
+    const noteVoice = getVoiceText(cursor);
+    if (noteVoice !== voice) {
+      cursor = prev;
+      continue;
+    }
+
+    const isRest = cursor.querySelector(":scope > rest") !== null;
+    const isChord = cursor.querySelector(":scope > chord") !== null;
+    const duration = getDurationValue(cursor) ?? 0;
+    if (!isRest || isChord || duration <= 0) {
+      cursor = prev;
+      continue;
+    }
+
+    if (duration <= remaining) {
+      remaining -= duration;
+      cursor.remove();
+    } else {
+      setDurationValue(cursor, duration - remaining);
+      remaining = 0;
+    }
+    cursor = prev;
+  }
+  return overflow - remaining;
+};
+
+const fillUnderfullGapAfterTarget = (
+  target: Element,
+  voice: string,
+  deficit: number
+): boolean => {
+  if (!Number.isInteger(deficit) || deficit <= 0) return true;
+  const measure = findAncestorMeasure(target);
+  if (!measure) return false;
+  if (measureHasBackupOrForward(measure)) return false;
+
+  // Keep rhythmic gap close to the edited note to avoid visual/timing drift.
+  const next = target.nextElementSibling;
+  if (next && next.tagName === "note" && getVoiceText(next) === voice) {
+    const isRest = next.querySelector(":scope > rest") !== null;
+    const isChord = next.querySelector(":scope > chord") !== null;
+    if (isRest && !isChord) {
+      const current = getDurationValue(next) ?? 0;
+      setDurationValue(next, current + deficit);
+      return true;
+    }
+  }
+
+  const rest = createRestElement(target.ownerDocument, voice, deficit);
+  target.after(rest);
+  // Ensure notation metadata (<type>/<dot>/<time-modification>) is consistent for Verovio.
+  setDurationValue(rest, deficit);
+  return true;
+};
+
+const measureVoiceHasTupletContext = (target: Element, voice: string): boolean => {
+  const measure = findAncestorMeasure(target);
+  if (!measure) return false;
+  const notes = Array.from(measure.children).filter((child) => child.tagName === "note");
+  for (const note of notes) {
+    if (getVoiceText(note) !== voice) continue;
+    if (note.querySelector(":scope > time-modification")) return true;
+    if (note.querySelector(":scope > notations > tuplet")) return true;
+  }
+  return false;
 };
