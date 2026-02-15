@@ -144,8 +144,8 @@ const logDiagnostics = (
 
 const dumpOverfullContext = (xml: string, voice: string): void => {
   if (!DEBUG_LOG) return;
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) {
     console.error("[mikuscore][debug] XML parse failed while dumping overfull context.");
     return;
   }
@@ -527,8 +527,8 @@ const syncStepFromSelectedDraftNote = (): void => {
     return;
   }
 
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) {
     selectedDraftVoice = EDITABLE_VOICE;
     selectedDraftDurationValue = null;
     rebuildDurationPresetOptions(DEFAULT_DIVISIONS);
@@ -808,11 +808,8 @@ const setUiMappingDiagnostic = (message: string): void => {
   renderAll();
 };
 
-const rebuildNodeLocationMap = (xml: string): void => {
+const rebuildNodeLocationMap = (doc: Document): void => {
   nodeIdToLocation = new Map<string, NoteLocation>();
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) return;
-
   const notes = Array.from(doc.querySelectorAll("part > measure > note"));
   const count = Math.min(notes.length, state.noteNodeIds.length);
   for (let i = 0; i < count; i += 1) {
@@ -828,11 +825,8 @@ const rebuildNodeLocationMap = (xml: string): void => {
   }
 };
 
-const rebuildPartNameMap = (xml: string): void => {
+const rebuildPartNameMap = (doc: Document): void => {
   partIdToName = new Map<string, string>();
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) return;
-
   for (const scorePart of Array.from(doc.querySelectorAll("score-partwise > part-list > score-part"))) {
     const partId = scorePart.getAttribute("id")?.trim() ?? "";
     if (!partId) continue;
@@ -1220,8 +1214,14 @@ const refreshNotesFromCore = (): void => {
   state.noteNodeIds = core.listNoteNodeIds();
   const currentXml = core.debugSerializeCurrentXml();
   if (currentXml) {
-    rebuildNodeLocationMap(currentXml);
-    rebuildPartNameMap(currentXml);
+    const currentDoc = parseMusicXmlDocument(currentXml);
+    if (currentDoc) {
+      rebuildNodeLocationMap(currentDoc);
+      rebuildPartNameMap(currentDoc);
+    } else {
+      nodeIdToLocation = new Map<string, NoteLocation>();
+      partIdToName = new Map<string, string>();
+    }
   } else {
     nodeIdToLocation = new Map<string, NoteLocation>();
     partIdToName = new Map<string, string>();
@@ -2238,12 +2238,7 @@ const onDownload = (): void => {
   URL.revokeObjectURL(url);
 };
 
-const convertMusicXmlToAbc = (xml: string): string => {
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) {
-    throw new Error("MusicXMLの解析に失敗しました。");
-  }
-
+const convertMusicXmlToAbc = (doc: Document): string => {
   const title =
     doc.querySelector("work > work-title")?.textContent?.trim() ||
     doc.querySelector("movement-title")?.textContent?.trim() ||
@@ -2439,9 +2434,11 @@ const onDownloadMidi = (): void => {
 
 const onDownloadAbc = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
+  const musicXmlDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
+  if (!musicXmlDoc) return;
   let abcText = "";
   try {
-    abcText = convertMusicXmlToAbc(state.lastSuccessfulSaveXml);
+    abcText = convertMusicXmlToAbc(musicXmlDoc);
   } catch {
     return;
   }
