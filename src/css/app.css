@@ -244,6 +244,27 @@ body {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.ms-step-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.ms-step-value {
+  display: inline-block;
+  padding: 0.1rem 0.1rem 0.1rem 0;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+  line-height: 1.2;
+}
+
+.ms-step-btn {
+  min-width: 2.4rem;
+  padding: 0.5rem 0.6rem;
+  font-weight: 700;
+}
+
 .ms-debug-meta {
   margin: 0.35rem 0;
   color: var(--md-sys-color-on-surface-variant);
