@@ -1,0 +1,24 @@
+<!-- local-html-tools MD3 Icon Spec v1.0.0 (2026-02-08) -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     aria-hidden="true"
+     width="0"
+     height="0"
+     viewBox="0 0 0 0"
+     style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <symbol id="md-icon-menu" viewBox="0 0 24 24">
+      <path d="M4 6h16"/>
+      <path d="M4 12h16"/>
+      <path d="M4 18h16"/>
+    </symbol>
+    <symbol id="md-icon-copy" viewBox="0 0 24 24">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <rect x="4" y="4" width="11" height="11" rx="2"/>
+    </symbol>
+    <symbol id="md-icon-refresh" viewBox="0 0 24 24">
+      <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+      <path d="M20 4v6h-6"/>
+    </symbol>
+  </defs>
+</svg>

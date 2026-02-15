@@ -202,8 +202,8 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
 
 const renderInputMode = (): void => {
   const fileMode = inputModeFile.checked;
-  fileInputBlock.classList.toggle("ms-hidden", !fileMode);
-  sourceInputBlock.classList.toggle("ms-hidden", fileMode);
+  fileInputBlock.classList.toggle("md-hidden", !fileMode);
+  sourceInputBlock.classList.toggle("md-hidden", fileMode);
 };
 
 const renderStatus = (): void => {

@@ -4,18 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mikuscore</title>
+  <link rel="stylesheet" href="src/css/md3/token-spec.css" />
+  <link rel="stylesheet" href="src/css/md3/core-spec.css" />
   <style>
-:root {
-  --bg: #f5f7fb;
-  --card: #ffffff;
-  --text: #17212b;
-  --muted: #4b5d73;
-  --border: #d8e1ed;
-  --primary: #1456d8;
-  --danger: #c02626;
-  --warn: #9a6700;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -23,46 +14,101 @@
 body {
   margin: 0;
   font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
-  color: var(--text);
-  background: radial-gradient(circle at top left, #e6edff 0%, var(--bg) 60%);
 }
 
-.ms-shell {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 24px;
+.ms-app {
+  margin: 24px auto;
 }
 
-.ms-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 18px;
+.ms-hero {
+  position: relative;
+  margin: -6px -6px 14px;
+  padding: 16px 16px 14px;
+  border-radius: 16px;
+  border: 1px solid #dacdf2;
+  background:
+    radial-gradient(circle at 8% 10%, rgba(98, 0, 238, 0.26), transparent 46%),
+    radial-gradient(circle at 92% 18%, rgba(3, 218, 198, 0.14), transparent 40%),
+    linear-gradient(135deg, #f8f3ff 0%, #efe8fb 100%);
+  box-shadow: 0 8px 20px rgba(86, 58, 132, 0.12);
 }
 
-.ms-title {
-  margin: 0 0 8px;
+.ms-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
 }
 
-.ms-intro {
-  margin: 0 0 8px;
-  color: var(--muted);
+.ms-hero-eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #6f5c92;
+}
+
+.ms-hero-chip {
+  margin-left: 0;
+  background: rgba(98, 0, 238, 0.16);
+}
+
+.ms-hero-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.25rem 0 0.2rem;
+}
+
+.ms-hero-subtitle {
+  margin: 0;
+  max-width: 70ch;
+}
+
+.ms-hero-icon {
+  width: 1.95rem;
+  height: 1.95rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(98, 0, 238, 0.14);
+  color: #5b33a8;
+  border: 1px solid rgba(98, 0, 238, 0.22);
+}
+
+.ms-hero-icon svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .ms-steps {
-  margin: 0 0 10px;
+  margin: 0.25rem 0 1rem;
   padding-left: 1.2rem;
-  color: var(--muted);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .ms-flow {
-  margin-top: 8px;
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 1.2rem;
 }
 
-.ms-flow-step h2 {
+.ms-flow-step {
+  border-top: 1px solid #ece7f3;
+  padding-top: 0.8rem;
+  min-width: 0;
+}
+
+.ms-flow-step .md-section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
 }
 
 .ms-step-no {
@@ -72,224 +118,216 @@ body {
   width: 1.35rem;
   height: 1.35rem;
   border-radius: 999px;
-  background: #e7efff;
-  color: #0f397e;
-  font-size: 0.8rem;
+  background: rgba(98, 0, 238, 0.12);
+  color: var(--md-sys-color-primary);
+  font-size: 0.78rem;
   font-weight: 700;
-}
-
-.ms-section {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-  margin-top: 14px;
-}
-
-.ms-section h2 {
-  margin: 0 0 10px;
-  font-size: 1rem;
-}
-
-.ms-block {
-  margin-bottom: 10px;
-}
-
-.ms-hidden {
-  display: none;
-}
-
-.ms-label {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--muted);
-}
-
-.ms-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.ms-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-textarea,
-input,
-select,
-button {
-  width: 100%;
-  font: inherit;
-}
-
-textarea,
-input,
-select {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px;
-}
-
-button {
-  border: 1px solid var(--primary);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: #eff4ff;
-  color: #0f397e;
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
 }
 
 .ms-radio-group {
   display: flex;
-  gap: 16px;
-  margin-bottom: 8px;
-}
-
-.ms-radio-group label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .ms-radio-group input {
   width: auto;
 }
 
-#diagArea .diag-error {
-  color: var(--danger);
+.ms-block {
+  margin-bottom: 0.8rem;
 }
 
-#diagArea .diag-warning {
-  color: var(--warn);
+.ms-file-name {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.9rem;
 }
 
-#statusText {
-  margin: 0 0 8px;
-  color: var(--muted);
+.ms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
 }
 
-#playbackText {
-  margin: 8px 0 0;
-  color: var(--muted);
-}
-
-.ms-inline-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.ms-actions .md-button {
   width: auto;
-  color: var(--muted);
 }
 
-.ms-inline-check input {
-  width: auto;
+.ms-status {
+  margin: 0.35rem 0;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.ms-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.ms-field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .ms-debug-meta {
-  margin: 8px 0;
-  color: var(--muted);
+  margin: 0.35rem 0;
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .ms-debug-wrap {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 12px;
+  padding: 0.7rem;
   overflow-x: auto;
-  background: #fbfcff;
+  overflow-y: hidden;
+  white-space: nowrap;
+  background: var(--md-sys-color-surface);
+  -webkit-overflow-scrolling: touch;
 }
 
 .ms-debug-score {
+  display: inline-block;
   min-height: 100px;
+  min-width: max-content;
+}
+
+.ms-debug-score svg {
+  display: block;
+  max-width: none;
+  height: auto;
 }
 
 .ms-dev {
-  margin-top: 18px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #f9fbff;
-  padding: 8px 12px 12px;
+  margin-top: 1.1rem;
+  border: 1px solid #e6e1ee;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-variant);
+  padding: 0.55rem 0.9rem 0.9rem;
 }
 
 .ms-dev > summary {
   cursor: pointer;
-  color: #214a93;
+  color: var(--md-sys-color-primary);
   font-weight: 700;
 }
 
 .ms-dev[open] > summary {
-  margin-bottom: 6px;
+  margin-bottom: 0.5rem;
 }
 
-@media (max-width: 768px) {
+#diagArea .diag-error {
+  color: var(--md-danger);
+}
+
+#diagArea .diag-warning {
+  color: #8a4b0f;
+}
+
+@media (max-width: 900px) {
   .ms-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
+@media (max-width: 640px) {
+  .ms-hero {
+    margin: -2px -2px 12px;
+    padding: 14px 12px 12px;
+  }
+
+  .ms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>
 </head>
-<body>
-  <main class="ms-shell">
-    <section class="ms-card">
-      <h1 class="ms-title">mikuscore</h1>
-      <p class="ms-intro">
-        ブラウザ上で完結し、既存MusicXMLを壊さずに編集することを重視したスコアエディタです。
-      </p>
-      <ol class="ms-steps">
-        <li>入力を選んで読み込み</li>
-        <li>譜面プレビューで選択</li>
-        <li>ノートを編集</li>
-        <li>再生で確認して保存 / ダウンロード</li>
-      </ol>
+<body class="md-page">
+  <main class="md-shell">
+    <section class="md-card ms-app">
+      <header class="ms-hero">
+        <div class="ms-hero-top">
+          <p class="ms-hero-eyebrow">LOCAL SCORE TOOL</p>
+          <span class="md-chip ms-hero-chip">v0.1.0</span>
+        </div>
+        <h1 class="md-headline ms-hero-title">
+          <span class="ms-hero-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M9 3v12.4a3.6 3.6 0 1 1-1.2-2.7V6.2l9-2.2v9.6a3.6 3.6 0 1 1-1.2-2.7V5.6L9 7.1Z" />
+            </svg>
+          </span>
+          <span>mikuscore</span>
+          <span class="md-tooltip-group">
+            <span class="md-info-chip" aria-label="mikuscore の詳細説明">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+              </svg>
+            </span>
+            <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
+              mikuscore は、MusicXML の既存構造をできるだけ保持しながら編集することを重視したローカル完結型エディタです。
+              入力（ファイル/ソース）から譜面プレビュー、ノート編集、再生確認、保存/ダウンロードまでを一画面で行えます。
+              操作手順: 1) 入力を選んで読み込み 2) 譜面プレビューで選択 3) ノートを編集 4) 再生で確認して保存 / ダウンロード。
+              まず読み込み後に譜面をクリックして対象ノートを選び、音高・音価を調整してください。
+            </span>
+          </span>
+        </h1>
+        <p class="md-subtitle ms-hero-subtitle">
+          ブラウザ上で完結し、既存MusicXMLを壊さずに編集することを重視したスコアエディタです。
+        </p>
+      </header>
+
       <div class="ms-flow">
-        <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">1</span>MusicXML入力</h2>
+        <section class="md-section ms-flow-step">
+          <h2 class="md-section-title"><span class="ms-step-no">1</span>MusicXML入力</h2>
           <div class="ms-radio-group" role="radiogroup" aria-label="入力方式">
-            <label><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
-            <label><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
+            <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> ファイル読込</label>
+            <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> ソース入力</label>
           </div>
 
           <div id="fileInputBlock" class="ms-block">
-            <button id="fileSelectBtn" type="button">ファイルを選択</button>
-            <span id="fileNameText">未選択</span>
+            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal">ファイルを選択</button>
+            <span id="fileNameText" class="ms-file-name">未選択</span>
             <input id="fileInput" type="file" accept=".musicxml,.xml,text/xml,application/xml" hidden />
           </div>
 
-          <div id="sourceInputBlock" class="ms-block ms-hidden">
-            <label for="xmlInput" class="ms-label">MusicXML</label>
-            <textarea id="xmlInput" rows="12" spellcheck="false"></textarea>
+          <div id="sourceInputBlock" class="ms-block md-hidden">
+            <label for="xmlInput" class="md-label">MusicXML</label>
+            <textarea id="xmlInput" rows="12" spellcheck="false" class="md-textarea"></textarea>
           </div>
 
           <div class="ms-actions">
-            <button id="loadBtn" type="button">読み込み</button>
+            <button id="loadBtn" type="button" class="md-button md-button--primary">読み込み</button>
           </div>
         </section>
 
-        <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）</h2>
-          <p class="ms-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
+        <section class="md-section ms-flow-step">
+          <h2 class="md-section-title"><span class="ms-step-no">2</span>譜面プレビュー（クリックで選択）</h2>
+          <p class="md-label">Verovioレンダリング上の音符をクリックすると、編集対象として選択します。</p>
           <p id="debugScoreMeta" class="ms-debug-meta">未描画</p>
           <div id="debugScoreWrap" class="ms-debug-wrap">
             <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
         </section>
 
-        <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">3</span>編集</h2>
-          <p id="statusText">未ロード</p>
-          <label for="noteSelect" class="ms-label">ノート選択 (nodeId)</label>
-          <select id="noteSelect"></select>
+        <section class="md-section ms-flow-step">
+          <h2 class="md-section-title"><span class="ms-step-no">3</span>編集</h2>
+          <p id="statusText" class="ms-status">未ロード</p>
+          <label for="noteSelect" class="md-label">ノート選択 (nodeId)</label>
+          <select id="noteSelect" class="md-select"></select>
 
           <div class="ms-grid">
-            <label>音名(step)
-              <select id="pitchStep">
+            <label class="ms-field">音名(step)
+              <select id="pitchStep" class="md-select">
                 <option value="C">C</option>
                 <option value="D">D</option>
                 <option value="E">E</option>
@@ -299,8 +337,8 @@ button:disabled {
                 <option value="B">B</option>
               </select>
             </label>
-            <label>変化記号(alter)
-              <select id="pitchAlter">
+            <label class="ms-field">変化記号(alter)
+              <select id="pitchAlter" class="md-select">
                 <option value="">none</option>
                 <option value="-2">-2</option>
                 <option value="-1">-1</option>
@@ -309,42 +347,41 @@ button:disabled {
                 <option value="2">2</option>
               </select>
             </label>
-            <label>オクターブ(octave)
-              <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" />
+            <label class="ms-field">オクターブ(octave)
+              <input id="pitchOctave" type="number" min="0" max="9" step="1" value="4" class="md-input" />
             </label>
-            <label>音価(duration)
-              <input id="durationInput" type="number" min="1" step="1" value="1" />
+            <label class="ms-field">音価(duration)
+              <input id="durationInput" type="number" min="1" step="1" value="1" class="md-input" />
             </label>
           </div>
 
           <div class="ms-actions">
-            <button id="changePitchBtn" type="button">音高変更</button>
-            <button id="changeDurationBtn" type="button">音価変更</button>
-            <button id="insertAfterBtn" type="button">後ろに音符追加</button>
-            <button id="deleteBtn" type="button">音符削除</button>
+            <button id="changePitchBtn" type="button" class="md-button md-button--primary">音高変更</button>
+            <button id="changeDurationBtn" type="button" class="md-button md-button--primary">音価変更</button>
+            <button id="insertAfterBtn" type="button" class="md-button md-button--tonal">後ろに音符追加</button>
+            <button id="deleteBtn" type="button" class="md-button md-button--surface">音符削除</button>
           </div>
         </section>
 
-        <section class="ms-section ms-flow-step">
-          <h2><span class="ms-step-no">4</span>検証 / 保存</h2>
+        <section class="md-section ms-flow-step">
+          <h2 class="md-section-title"><span class="ms-step-no">4</span>検証 / 保存</h2>
           <div class="ms-actions">
-            <button id="playBtn" type="button">再生</button>
-            <button id="stopBtn" type="button" disabled>停止</button>
-            <button id="saveBtn" type="button">保存</button>
-            <button id="downloadBtn" type="button" disabled>XMLダウンロード</button>
+            <button id="playBtn" type="button" class="md-button md-button--primary">再生</button>
+            <button id="stopBtn" type="button" class="md-button md-button--surface" disabled>停止</button>
+            <button id="saveBtn" type="button" class="md-button md-button--tonal">保存</button>
+            <button id="downloadBtn" type="button" class="md-button md-button--secondary" disabled>XMLダウンロード</button>
           </div>
-          <p id="playbackText">再生: 停止中</p>
-          <p>保存モード: <span id="saveModeText">-</span></p>
-          <label for="outputXml" class="ms-label">出力XML</label>
-          <textarea id="outputXml" rows="12" readonly></textarea>
+          <p id="playbackText" class="ms-status">再生: 停止中</p>
+          <p class="ms-status">保存モード: <span id="saveModeText">-</span></p>
+          <label for="outputXml" class="md-label">出力XML</label>
+          <textarea id="outputXml" rows="12" readonly class="md-textarea"></textarea>
         </section>
       </div>
 
       <details class="ms-dev">
         <summary>詳細情報</summary>
-
-        <section class="ms-section">
-          <h2>診断</h2>
+        <section class="md-section">
+          <h2 class="md-section-title">診断</h2>
           <div id="diagArea" aria-live="polite"></div>
         </section>
       </details>
@@ -487,8 +524,8 @@ const dumpOverfullContext = (xml, voice) => {
 };
 const renderInputMode = () => {
     const fileMode = inputModeFile.checked;
-    fileInputBlock.classList.toggle("ms-hidden", !fileMode);
-    sourceInputBlock.classList.toggle("ms-hidden", fileMode);
+    fileInputBlock.classList.toggle("md-hidden", !fileMode);
+    sourceInputBlock.classList.toggle("md-hidden", fileMode);
 };
 const renderStatus = () => {
     const dirty = core.isDirty();
