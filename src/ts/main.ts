@@ -84,11 +84,13 @@ const fileNameText = q<HTMLSpanElement>("#fileNameText");
 const loadBtn = q<HTMLButtonElement>("#loadBtn");
 const noteSelect = q<HTMLSelectElement>("#noteSelect");
 const statusText = q<HTMLParagraphElement>("#statusText");
-const pitchStep = q<HTMLSelectElement>("#pitchStep");
+const pitchStep = q<HTMLInputElement>("#pitchStep");
+const pitchStepValue = q<HTMLSpanElement>("#pitchStepValue");
+const pitchStepDownBtn = q<HTMLButtonElement>("#pitchStepDownBtn");
+const pitchStepUpBtn = q<HTMLButtonElement>("#pitchStepUpBtn");
 const pitchAlter = q<HTMLSelectElement>("#pitchAlter");
 const pitchOctave = q<HTMLInputElement>("#pitchOctave");
 const durationInput = q<HTMLInputElement>("#durationInput");
-const changePitchBtn = q<HTMLButtonElement>("#changePitchBtn");
 const changeDurationBtn = q<HTMLButtonElement>("#changeDurationBtn");
 const insertAfterBtn = q<HTMLButtonElement>("#insertAfterBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
@@ -107,6 +109,7 @@ const measureEditorWrap = q<HTMLDivElement>("#measureEditorWrap");
 const measureEditorArea = q<HTMLDivElement>("#measureEditorArea");
 const measureApplyBtn = q<HTMLButtonElement>("#measureApplyBtn");
 const measureDiscardBtn = q<HTMLButtonElement>("#measureDiscardBtn");
+const playMeasureBtn = q<HTMLButtonElement>("#playMeasureBtn");
 
 const core = new ScoreCore({ editableVoice: EDITABLE_VOICE });
 const state: UiState = {
@@ -131,6 +134,7 @@ let selectedMeasure: NoteLocation | null = null;
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
+let selectedDraftNoteIsRest = false;
 const NOTE_CLICK_SNAP_PX = 170;
 
 const logDiagnostics = (
@@ -253,6 +257,73 @@ const renderNotes = (): void => {
   }
 };
 
+const isPitchStepValue = (value: string): value is Pitch["step"] => {
+  return value === "A" || value === "B" || value === "C" || value === "D" || value === "E" || value === "F" || value === "G";
+};
+
+const renderPitchStepValue = (): void => {
+  const step = pitchStep.value.trim();
+  if (isPitchStepValue(step)) {
+    pitchStepValue.textContent = step;
+  } else {
+    pitchStepValue.textContent = "休符";
+  }
+};
+
+const syncStepFromSelectedDraftNote = (): void => {
+  selectedDraftNoteIsRest = false;
+  pitchStep.disabled = false;
+  pitchAlter.disabled = false;
+  pitchOctave.disabled = false;
+  pitchStep.title = "";
+  pitchAlter.title = "";
+  pitchOctave.title = "";
+
+  if (!draftCore || !state.selectedNodeId) {
+    pitchStep.value = "";
+    renderPitchStepValue();
+    return;
+  }
+  const xml = draftCore.debugSerializeCurrentXml();
+  if (!xml) {
+    pitchStep.value = "";
+    renderPitchStepValue();
+    return;
+  }
+
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  if (doc.querySelector("parsererror")) {
+    pitchStep.value = "";
+    renderPitchStepValue();
+    return;
+  }
+
+  const notes = Array.from(doc.querySelectorAll("note"));
+  const count = Math.min(notes.length, draftNoteNodeIds.length);
+  for (let i = 0; i < count; i += 1) {
+    if (draftNoteNodeIds[i] !== state.selectedNodeId) continue;
+    if (notes[i].querySelector(":scope > rest")) {
+      selectedDraftNoteIsRest = true;
+      pitchStep.value = "";
+      pitchStep.disabled = true;
+      pitchAlter.disabled = true;
+      pitchOctave.disabled = true;
+      pitchStep.title = "休符は音高を持たないため、音高変更はできません。";
+      pitchAlter.title = "休符は音高を持たないため、音高変更はできません。";
+      pitchOctave.title = "休符は音高を持たないため、音高変更はできません。";
+      renderPitchStepValue();
+      return;
+    }
+    const stepText = notes[i].querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+    if (isPitchStepValue(stepText)) {
+      pitchStep.value = stepText;
+    }
+    renderPitchStepValue();
+    return;
+  }
+  renderPitchStepValue();
+};
+
 const renderMeasureEditorState = (): void => {
   if (!selectedMeasure || !draftCore) {
     measurePartNameText.textContent = "小節未選択（譜面プレビューをクリックしてください）";
@@ -366,10 +437,12 @@ const renderControlState = (): void => {
   const hasDraft = Boolean(draftCore);
   const hasSelection = Boolean(state.selectedNodeId);
   noteSelect.disabled = !hasDraft;
-  changePitchBtn.disabled = !hasDraft || !hasSelection;
+  pitchStepDownBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
+  pitchStepUpBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
   changeDurationBtn.disabled = !hasDraft || !hasSelection;
   insertAfterBtn.disabled = !hasDraft || !hasSelection;
   deleteBtn.disabled = !hasDraft || !hasSelection;
+  playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
 };
@@ -377,6 +450,7 @@ const renderControlState = (): void => {
 const renderAll = (): void => {
   renderInputMode();
   renderNotes();
+  syncStepFromSelectedDraftNote();
   renderStatus();
   renderDiagnostics();
   renderOutput();
@@ -1418,13 +1492,78 @@ const startPlayback = async (): Promise<void> => {
   renderAll();
 };
 
+const startMeasurePlayback = async (): Promise<void> => {
+  if (!draftCore || isPlaying) return;
+
+  const saveResult = draftCore.save();
+  if (!saveResult.ok) {
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: saveResult.diagnostics,
+      warnings: [],
+    };
+    logDiagnostics("playback", saveResult.diagnostics);
+    playbackText.textContent = "再生: 小節保存失敗";
+    renderAll();
+    return;
+  }
+
+  const parsedPlayback = buildPlaybackEventsFromXml(saveResult.xml);
+  const events = parsedPlayback.events;
+  if (events.length === 0) {
+    playbackText.textContent = "再生: この小節に再生可能ノートなし";
+    renderControlState();
+    return;
+  }
+
+  try {
+    await synthEngine.playSchedule(
+      {
+        tempo: parsedPlayback.tempo,
+        events: events
+          .slice()
+          .sort((a, b) =>
+            a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks
+          )
+          .map((event) => ({
+            midiNumber: event.midiNumber,
+            start: event.startTicks,
+            ticks: event.durTicks,
+            channel: event.channel,
+          })),
+      },
+      FIXED_PLAYBACK_WAVEFORM,
+      () => {
+        isPlaying = false;
+        playbackText.textContent = "再生: 停止中";
+        renderControlState();
+      }
+    );
+  } catch (error) {
+    playbackText.textContent =
+      "再生: 小節再生失敗 (" + (error instanceof Error ? error.message : String(error)) + ")";
+    renderControlState();
+    return;
+  }
+
+  isPlaying = true;
+  playbackText.textContent = `再生中: 選択小節 ノート${events.length}件 / 波形 sine`;
+  renderControlState();
+};
+
 const readSelectedPitch = (): Pitch | null => {
+  const step = pitchStep.value.trim();
+  if (!isPitchStepValue(step)) return null;
+
   const octave = Number(pitchOctave.value);
   if (!Number.isInteger(octave)) return null;
 
   const alterText = pitchAlter.value.trim();
   const base: Pitch = {
-    step: pitchStep.value as Pitch["step"],
+    step,
     octave,
   };
   if (alterText === "") return base;
@@ -1601,6 +1740,24 @@ const onChangePitch = (): void => {
   runCommand(command);
 };
 
+const onPitchStepAutoChange = (): void => {
+  if (!draftCore || !state.selectedNodeId || selectedDraftNoteIsRest) return;
+  onChangePitch();
+};
+
+const shiftPitchStep = (delta: 1 | -1): void => {
+  if (!draftCore || !state.selectedNodeId || selectedDraftNoteIsRest) return;
+  const order: Pitch["step"][] = ["C", "D", "E", "F", "G", "A", "B"];
+  const current = pitchStep.value.trim();
+  if (!isPitchStepValue(current)) return;
+  const index = order.indexOf(current);
+  if (index < 0) return;
+  const next = order[(index + delta + order.length) % order.length];
+  pitchStep.value = next;
+  renderPitchStepValue();
+  onPitchStepAutoChange();
+};
+
 const replaceMeasureInMainXml = (sourceXml: string, partId: string, measureNumber: string, measureXml: string): string | null => {
   const mainDoc = new DOMParser().parseFromString(sourceXml, "application/xml");
   const measureDoc = new DOMParser().parseFromString(measureXml, "application/xml");
@@ -1758,7 +1915,12 @@ noteSelect.addEventListener("change", () => {
   state.selectedNodeId = noteSelect.value || null;
   renderAll();
 });
-changePitchBtn.addEventListener("click", onChangePitch);
+pitchStepDownBtn.addEventListener("click", () => {
+  shiftPitchStep(-1);
+});
+pitchStepUpBtn.addEventListener("click", () => {
+  shiftPitchStep(1);
+});
 changeDurationBtn.addEventListener("click", onChangeDuration);
 insertAfterBtn.addEventListener("click", onInsertAfter);
 deleteBtn.addEventListener("click", onDelete);
@@ -1771,5 +1933,8 @@ debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
 measureDiscardBtn.addEventListener("click", onMeasureDiscard);
+playMeasureBtn.addEventListener("click", () => {
+  void startMeasurePlayback();
+});
 
 loadFromText(xmlInput.value, false);
