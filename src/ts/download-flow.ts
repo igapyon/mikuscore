@@ -1,5 +1,7 @@
 import {
   buildMidiBytesForPlayback,
+  collectMidiControlEventsFromMusicXmlDoc,
+  collectMidiTempoEventsFromMusicXmlDoc,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
   type MidiProgramPreset,
@@ -44,14 +46,19 @@ export const createMusicXmlDownloadPayload = (xmlText: string): DownloadFilePayl
 export const createMidiDownloadPayload = (
   xmlText: string,
   ticksPerQuarter: number,
-  programPreset: MidiProgramPreset = "electric_piano_2"
+  programPreset: MidiProgramPreset = "electric_piano_2",
+  forceProgramPreset = false
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
 
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter, { mode: "midi" });
   if (parsedPlayback.events.length === 0) return null;
-  const midiProgramOverrides = collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
+  const midiProgramOverrides = forceProgramPreset
+    ? new Map<string, number>()
+    : collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
+  const midiControlEvents = collectMidiControlEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
+  const midiTempoEvents = collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
 
   let midiBytes: Uint8Array;
   try {
@@ -59,7 +66,9 @@ export const createMidiDownloadPayload = (
       parsedPlayback.events,
       parsedPlayback.tempo,
       programPreset,
-      midiProgramOverrides
+      midiProgramOverrides,
+      midiControlEvents,
+      midiTempoEvents
     );
   } catch {
     return null;
