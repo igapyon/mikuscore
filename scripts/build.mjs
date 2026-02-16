@@ -10,6 +10,8 @@ const DIST = "mikuscore.html";
 const TOKEN_CSS_PATH = "src/css/md3/token-spec.css";
 const CORE_CSS_PATH = "src/css/md3/core-spec.css";
 const CSS_PATH = "src/css/app.css";
+const VEROVIO_JS_PATH = "src/js/verovio.js";
+const MIDI_WRITER_JS_PATH = "src/js/midi-writer.js";
 const JS_OUT = "src/js/main.js";
 const TMP_DIR = ".mikuscore-build";
 
@@ -99,6 +101,8 @@ const inlineTemplate = (jsBundle) => {
   const tokenCss = readText(TOKEN_CSS_PATH);
   const coreCss = readText(CORE_CSS_PATH);
   const css = readText(CSS_PATH);
+  const verovioJs = readText(VEROVIO_JS_PATH);
+  const midiWriterJs = readText(MIDI_WRITER_JS_PATH);
 
   if (!template.includes("href=\"src/css/md3/token-spec.css\"")) {
     throw new Error("Template must include src/css/md3/token-spec.css link tag.");
@@ -111,6 +115,12 @@ const inlineTemplate = (jsBundle) => {
   }
   if (!template.includes("src=\"src/js/main.js\"")) {
     throw new Error("Template must include src/js/main.js script tag.");
+  }
+  if (!template.includes("src=\"src/js/verovio.js\"")) {
+    throw new Error("Template must include src/js/verovio.js script tag.");
+  }
+  if (!template.includes("src=\"src/js/midi-writer.js\"")) {
+    throw new Error("Template must include src/js/midi-writer.js script tag.");
   }
 
   const withTokenCss = template.replace(
@@ -128,7 +138,17 @@ const inlineTemplate = (jsBundle) => {
     `<style>\n${css}\n</style>`
   );
 
-  return withCss.replace(
+  const withVerovioJs = withCss.replace(
+    /<script\s+src="src\/js\/verovio\.js"><\/script>/,
+    `<script>\n${verovioJs}\n</script>`
+  );
+
+  const withMidiWriterJs = withVerovioJs.replace(
+    /<script\s+src="src\/js\/midi-writer\.js"><\/script>/,
+    `<script>\n${midiWriterJs}\n</script>`
+  );
+
+  return withMidiWriterJs.replace(
     /<script\s+src="src\/js\/main\.js"><\/script>/,
     `<script>\n${jsBundle}\n</script>`
   );

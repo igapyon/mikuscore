@@ -62,6 +62,9 @@ const convertRestBtn = q("#convertRestBtn");
 const deleteBtn = q("#deleteBtn");
 const playBtn = q("#playBtn");
 const stopBtn = q("#stopBtn");
+const playbackWaveform = q("#playbackWaveform");
+const midiProgramSelect = q("#midiProgramSelect");
+const settingsAccordion = q("#settingsAccordion");
 const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
@@ -109,6 +112,54 @@ const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
 const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
+const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
+const normalizeMidiProgram = (value) => {
+    if (value === "acoustic_grand_piano" || value === "electric_piano_1")
+        return value;
+    return "electric_piano_2";
+};
+const normalizeWaveformSetting = (value) => {
+    if (value === "triangle" || value === "square")
+        return value;
+    return "sine";
+};
+const readPlaybackSettings = () => {
+    var _a, _b;
+    try {
+        const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
+        if (!raw)
+            return null;
+        const parsed = JSON.parse(raw);
+        return {
+            midiProgram: normalizeMidiProgram(String((_a = parsed.midiProgram) !== null && _a !== void 0 ? _a : "")),
+            waveform: normalizeWaveformSetting(String((_b = parsed.waveform) !== null && _b !== void 0 ? _b : "")),
+            settingsExpanded: Boolean(parsed.settingsExpanded),
+        };
+    }
+    catch (_c) {
+        return null;
+    }
+};
+const writePlaybackSettings = () => {
+    try {
+        const payload = {
+            midiProgram: normalizeMidiProgram(midiProgramSelect.value),
+            waveform: normalizeWaveformSetting(playbackWaveform.value),
+            settingsExpanded: settingsAccordion.open,
+        };
+        localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+    }
+    catch (_a) {
+        // Ignore quota/security errors in MVP.
+    }
+};
+const applyInitialPlaybackSettings = () => {
+    var _a, _b, _c;
+    const stored = readPlaybackSettings();
+    midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : "electric_piano_2";
+    playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : "sine";
+    settingsAccordion.open = (_c = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _c !== void 0 ? _c : false;
+};
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
         return;
@@ -820,6 +871,7 @@ const renderControlState = () => {
     playMeasureBtn.disabled = !hasDraft || isPlaying;
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
+    playbackWaveform.disabled = isPlaying;
 };
 const renderAll = () => {
     renderInputMode();
@@ -1209,10 +1261,30 @@ const refreshNotesFromCore = () => {
     }
 };
 const synthEngine = (0, playback_flow_1.createBasicWaveSynthEngine)({ ticksPerQuarter: playback_flow_1.PLAYBACK_TICKS_PER_QUARTER });
+const unlockAudioOnGesture = () => {
+    void synthEngine.unlockFromUserGesture();
+};
+const installGlobalAudioUnlock = () => {
+    const unlockOnce = () => {
+        void synthEngine.unlockFromUserGesture().then((ok) => {
+            if (!ok)
+                return;
+            window.removeEventListener("pointerdown", unlockOnce);
+            window.removeEventListener("touchstart", unlockOnce);
+            window.removeEventListener("keydown", unlockOnce);
+        });
+    };
+    window.addEventListener("pointerdown", unlockOnce, { passive: true });
+    window.addEventListener("touchstart", unlockOnce, { passive: true });
+    window.addEventListener("keydown", unlockOnce);
+};
 const playbackFlowOptions = {
     engine: synthEngine,
     ticksPerQuarter: playback_flow_1.PLAYBACK_TICKS_PER_QUARTER,
     editableVoice: DEFAULT_VOICE,
+    getPlaybackWaveform: () => {
+        return normalizeWaveformSetting(playbackWaveform.value);
+    },
     debugLog: DEBUG_LOG,
     getIsPlaying: () => isPlaying,
     setIsPlaying: (playing) => {
@@ -1246,10 +1318,23 @@ const playbackFlowOptions = {
 const stopPlayback = () => {
     (0, playback_flow_1.stopPlayback)(playbackFlowOptions);
 };
+const unlockAudioForPlayback = async () => {
+    const ok = await synthEngine.unlockFromUserGesture();
+    if (!ok && playbackText) {
+        playbackText.textContent = "Playback: audio unlock failed";
+    }
+    return ok;
+};
 const startPlayback = async () => {
+    const ok = await unlockAudioForPlayback();
+    if (!ok)
+        return;
     await (0, playback_flow_1.startPlayback)(playbackFlowOptions, { isLoaded: state.loaded, core });
 };
 const startMeasurePlayback = async () => {
+    const ok = await unlockAudioForPlayback();
+    if (!ok)
+        return;
     await (0, playback_flow_1.startMeasurePlayback)(playbackFlowOptions, { draftCore });
 };
 const readSelectedPitch = () => {
@@ -1765,7 +1850,7 @@ const onDownload = () => {
 const onDownloadMidi = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(state.lastSuccessfulSaveXml, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER);
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(state.lastSuccessfulSaveXml, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value));
     if (!payload)
         return;
     (0, download_flow_1.triggerFileDownload)(payload);
@@ -1869,10 +1954,15 @@ convertRestBtn.addEventListener("click", onConvertRestToNote);
 playBtn.addEventListener("click", () => {
     void startPlayback();
 });
+playBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+midiProgramSelect.addEventListener("change", writePlaybackSettings);
+playbackWaveform.addEventListener("change", writePlaybackSettings);
+settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
@@ -1880,8 +1970,12 @@ measureDiscardBtn.addEventListener("click", onMeasureDiscard);
 playMeasureBtn.addEventListener("click", () => {
     void startMeasurePlayback();
 });
+playMeasureBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 renderNewPartClefControls();
 applyInitialXmlInputValue();
+applyInitialPlaybackSettings();
+installGlobalAudioUnlock();
 loadFromText(xmlInput.value);
 
   },
@@ -16682,7 +16776,6 @@ exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = ex
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
 exports.PLAYBACK_TICKS_PER_QUARTER = 128;
-const FIXED_PLAYBACK_WAVEFORM = "sine";
 const midiToHz = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
 const normalizeWaveform = (value) => {
     if (value === "square" || value === "triangle")
@@ -16696,6 +16789,28 @@ const createBasicWaveSynthEngine = (options) => {
     let audioContext = null;
     let activeSynthNodes = [];
     let synthStopTimer = null;
+    const ensureAudioContext = () => {
+        if (audioContext)
+            return audioContext;
+        const ctor = window.AudioContext ||
+            window
+                .webkitAudioContext;
+        if (!ctor) {
+            throw new Error("Web Audio API is not available in this browser.");
+        }
+        audioContext = new ctor();
+        return audioContext;
+    };
+    const ensureAudioContextRunning = async () => {
+        const context = ensureAudioContext();
+        if (context.state !== "running") {
+            await context.resume();
+        }
+        if (context.state !== "running") {
+            throw new Error("AudioContext is not running.");
+        }
+        return context;
+    };
     const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform) => {
         if (!audioContext)
             return startAt;
@@ -16749,25 +16864,54 @@ const createBasicWaveSynthEngine = (options) => {
         }
         activeSynthNodes = [];
     };
+    const unlockFromUserGesture = async () => {
+        let context;
+        try {
+            context = await ensureAudioContextRunning();
+        }
+        catch (_a) {
+            return false;
+        }
+        try {
+            const src = context.createBufferSource();
+            src.buffer = context.createBuffer(1, 1, 22050);
+            const gainNode = context.createGain();
+            gainNode.gain.setValueAtTime(0.000001, context.currentTime);
+            src.connect(gainNode);
+            gainNode.connect(context.destination);
+            src.start(context.currentTime);
+            src.stop(context.currentTime + 0.005);
+            src.onended = () => {
+                try {
+                    src.disconnect();
+                    gainNode.disconnect();
+                }
+                catch (_a) {
+                    // ignore cleanup failure
+                }
+            };
+            return true;
+        }
+        catch (_b) {
+            return false;
+        }
+    };
     const playSchedule = async (schedule, waveform, onEnded) => {
         if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
             throw new Error("Please convert first.");
         }
-        if (!audioContext) {
-            audioContext = new AudioContext();
-        }
+        const runningContext = await ensureAudioContextRunning();
         stop();
-        await audioContext.resume();
         const normalizedWaveform = normalizeWaveform(waveform);
         const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
-        const baseTime = audioContext.currentTime + 0.04;
+        const baseTime = runningContext.currentTime + 0.04;
         let latestEndTime = baseTime;
         for (const event of schedule.events) {
             const startAt = baseTime + event.start * secPerTick;
             const bodyDuration = Math.max(0.04, event.ticks * secPerTick);
             latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform));
         }
-        const waitMs = Math.max(0, Math.ceil((latestEndTime - audioContext.currentTime) * 1000));
+        const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
         synthStopTimer = window.setTimeout(() => {
             activeSynthNodes = [];
             if (typeof onEnded === "function") {
@@ -16775,7 +16919,7 @@ const createBasicWaveSynthEngine = (options) => {
             }
         }, waitMs);
     };
-    return { playSchedule, stop };
+    return { unlockFromUserGesture, playSchedule, stop };
 };
 exports.createBasicWaveSynthEngine = createBasicWaveSynthEngine;
 const toSynthSchedule = (tempo, events) => {
@@ -16832,9 +16976,10 @@ const startPlayback = async (options, params) => {
         options.renderControlState();
         return;
     }
+    const waveform = options.getPlaybackWaveform();
     let midiBytes;
     try {
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc));
     }
     catch (error) {
         options.setPlaybackText("Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")");
@@ -16842,7 +16987,7 @@ const startPlayback = async (options, params) => {
         return;
     }
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), FIXED_PLAYBACK_WAVEFORM, () => {
+        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), waveform, () => {
             options.setIsPlaying(false);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
@@ -16854,7 +16999,7 @@ const startPlayback = async (options, params) => {
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform sine`);
+    options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
     options.renderControlState();
     options.renderAll();
 };
@@ -16883,8 +17028,9 @@ const startMeasurePlayback = async (options, params) => {
         options.renderControlState();
         return;
     }
+    const waveform = options.getPlaybackWaveform();
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), FIXED_PLAYBACK_WAVEFORM, () => {
+        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), waveform, () => {
             options.setIsPlaying(false);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
@@ -16896,7 +17042,7 @@ const startMeasurePlayback = async (options, params) => {
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform sine`);
+    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform ${waveform}`);
     options.renderControlState();
 };
 exports.startMeasurePlayback = startMeasurePlayback;
@@ -16905,7 +17051,7 @@ exports.startMeasurePlayback = startMeasurePlayback;
   "src/ts/midi-io.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.buildMidiBytesForPlayback = void 0;
+exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.buildMidiBytesForPlayback = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
 const clampTempo = (tempo) => {
     if (!Number.isFinite(tempo))
         return 120;
@@ -16980,7 +17126,38 @@ const normalizeTicksPerQuarter = (ticksPerQuarter) => {
         return 128;
     return Math.max(1, Math.round(ticksPerQuarter));
 };
-const buildMidiBytesForPlayback = (events, tempo) => {
+const normalizeMidiProgramNumber = (value) => {
+    if (!Number.isFinite(value))
+        return null;
+    const rounded = Math.round(value);
+    if (rounded < 1 || rounded > 128)
+        return null;
+    return rounded;
+};
+const collectMidiProgramOverridesFromMusicXmlDoc = (doc) => {
+    var _a, _b, _c, _d;
+    const byPartId = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_b = (_a = scorePart.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+        if (!partId)
+            continue;
+        const midiProgramNodes = Array.from(scorePart.querySelectorAll("midi-instrument > midi-program"));
+        for (const midiProgramNode of midiProgramNodes) {
+            const midiProgramText = (_d = (_c = midiProgramNode.textContent) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
+            if (!midiProgramText)
+                continue;
+            const parsed = Number.parseInt(midiProgramText, 10);
+            const normalized = normalizeMidiProgramNumber(parsed);
+            if (normalized === null)
+                continue;
+            byPartId.set(partId, normalized);
+            break;
+        }
+    }
+    return byPartId;
+};
+exports.collectMidiProgramOverridesFromMusicXmlDoc = collectMidiProgramOverridesFromMusicXmlDoc;
+const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_piano_2", trackProgramOverrides = new Map()) => {
     var _a;
     const midiWriter = getMidiWriterRuntime();
     if (!midiWriter) {
@@ -16994,9 +17171,17 @@ const buildMidiBytesForPlayback = (events, tempo) => {
         tracksById.set(key, bucket);
     }
     const midiTracks = [];
+    const normalizedProgramPreset = programPreset === "acoustic_grand_piano" || programPreset === "electric_piano_1"
+        ? programPreset
+        : "electric_piano_2";
+    const instrumentByPreset = {
+        electric_piano_2: 5, // Existing default in this app.
+        acoustic_grand_piano: 1,
+        electric_piano_1: 4,
+    };
     const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
     sortedTrackIds.forEach((trackId, index) => {
-        var _a, _b;
+        var _a, _b, _c;
         const trackEvents = ((_a = tracksById.get(trackId)) !== null && _a !== void 0 ? _a : [])
             .slice()
             .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
@@ -17009,12 +17194,14 @@ const buildMidiBytesForPlayback = (events, tempo) => {
         track.addTrackName(trackName);
         track.addInstrumentName(trackName);
         const channels = Array.from(new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))).sort((a, b) => a - b);
+        const overrideProgram = normalizeMidiProgramNumber((_c = trackProgramOverrides.get(trackId)) !== null && _c !== void 0 ? _c : NaN);
+        const selectedInstrumentProgram = overrideProgram !== null && overrideProgram !== void 0 ? overrideProgram : instrumentByPreset[normalizedProgramPreset];
         for (const channel of channels) {
             if (channel === 10)
                 continue;
             track.addEvent(new midiWriter.ProgramChangeEvent({
                 channel,
-                instrument: 5, // GM: Electric Piano 2
+                instrument: selectedInstrumentProgram,
                 delta: 0,
             }));
         }
@@ -17313,16 +17500,17 @@ const createMusicXmlDownloadPayload = (xmlText) => {
     };
 };
 exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
-const createMidiDownloadPayload = (xmlText, ticksPerQuarter) => {
+const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2") => {
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!playbackDoc)
         return null;
     const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, ticksPerQuarter);
     if (parsedPlayback.events.length === 0)
         return null;
+    const midiProgramOverrides = (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
     let midiBytes;
     try {
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides);
     }
     catch (_a) {
         return null;

@@ -207,6 +207,7 @@
           <div id="debugScoreWrap" class="ms-debug-wrap">
             <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
+          <p id="playbackText" class="ms-playback-status" aria-live="polite">Playback: idle</p>
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
@@ -366,6 +367,35 @@
               <span>Discard Draft</span>
             </button>
           </div>
+          <section class="ms-settings-card" aria-label="MIDI and playback settings">
+            <details id="settingsAccordion" class="ms-settings-accordion">
+              <summary class="ms-settings-summary">MIDI &amp; Playback Settings</summary>
+              <div class="ms-settings-body">
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">MIDI Settings (無指定の場合)</h4>
+                  <label class="ms-field" for="midiProgramSelect">
+                    <span class="ms-field-label">MIDI Export Instrument (when unspecified in MusicXML)</span>
+                    <select id="midiProgramSelect" class="md-select">
+                      <option value="electric_piano_2" selected>Electric Piano 2</option>
+                      <option value="acoustic_grand_piano">Acoustic Grand Piano</option>
+                      <option value="electric_piano_1">Electric Piano 1</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">Playback Settings</h4>
+                  <label class="ms-field" for="playbackWaveform">
+                    <span class="ms-field-label">Quick Playback Tone</span>
+                    <select id="playbackWaveform" class="md-select">
+                      <option value="sine" selected>Sine</option>
+                      <option value="triangle">Triangle</option>
+                      <option value="square">Square</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </details>
+          </section>
         </section>
       </div>
 

@@ -1,4 +1,9 @@
-import { buildMidiBytesForPlayback, buildPlaybackEventsFromMusicXmlDoc } from "./midi-io";
+import {
+  buildMidiBytesForPlayback,
+  buildPlaybackEventsFromMusicXmlDoc,
+  collectMidiProgramOverridesFromMusicXmlDoc,
+  type MidiProgramPreset,
+} from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
 
 export type DownloadFilePayload = {
@@ -38,17 +43,24 @@ export const createMusicXmlDownloadPayload = (xmlText: string): DownloadFilePayl
 
 export const createMidiDownloadPayload = (
   xmlText: string,
-  ticksPerQuarter: number
+  ticksPerQuarter: number,
+  programPreset: MidiProgramPreset = "electric_piano_2"
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
 
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
   if (parsedPlayback.events.length === 0) return null;
+  const midiProgramOverrides = collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
 
   let midiBytes: Uint8Array;
   try {
-    midiBytes = buildMidiBytesForPlayback(parsedPlayback.events, parsedPlayback.tempo);
+    midiBytes = buildMidiBytesForPlayback(
+      parsedPlayback.events,
+      parsedPlayback.tempo,
+      programPreset,
+      midiProgramOverrides
+    );
   } catch {
     return null;
   }

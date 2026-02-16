@@ -1,5 +1,9 @@
 import type { Diagnostic, SaveResult } from "../../core/interfaces";
-import { buildMidiBytesForPlayback, buildPlaybackEventsFromMusicXmlDoc } from "./midi-io";
+import {
+  buildMidiBytesForPlayback,
+  buildPlaybackEventsFromMusicXmlDoc,
+  collectMidiProgramOverridesFromMusicXmlDoc,
+} from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
 
 export type SynthSchedule = {
@@ -13,6 +17,7 @@ export type SynthSchedule = {
 };
 
 export type BasicWaveSynthEngine = {
+  unlockFromUserGesture: () => Promise<boolean>;
   playSchedule: (
     schedule: SynthSchedule,
     waveform: OscillatorType,
@@ -22,7 +27,6 @@ export type BasicWaveSynthEngine = {
 };
 
 export const PLAYBACK_TICKS_PER_QUARTER = 128;
-const FIXED_PLAYBACK_WAVEFORM: OscillatorType = "sine";
 
 const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
 
@@ -38,6 +42,30 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   let audioContext: AudioContext | null = null;
   let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
   let synthStopTimer: number | null = null;
+
+  const ensureAudioContext = (): AudioContext => {
+    if (audioContext) return audioContext;
+    const ctor =
+      window.AudioContext ||
+      (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!ctor) {
+      throw new Error("Web Audio API is not available in this browser.");
+    }
+    audioContext = new ctor();
+    return audioContext;
+  };
+
+  const ensureAudioContextRunning = async (): Promise<AudioContext> => {
+    const context = ensureAudioContext();
+    if (context.state !== "running") {
+      await context.resume();
+    }
+    if (context.state !== "running") {
+      throw new Error("AudioContext is not running.");
+    }
+    return context;
+  };
 
   const scheduleBasicWaveNote = (
     event: SynthSchedule["events"][number],
@@ -97,6 +125,37 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     activeSynthNodes = [];
   };
 
+  const unlockFromUserGesture = async (): Promise<boolean> => {
+    let context: AudioContext;
+    try {
+      context = await ensureAudioContextRunning();
+    } catch {
+      return false;
+    }
+
+    try {
+      const src = context.createBufferSource();
+      src.buffer = context.createBuffer(1, 1, 22050);
+      const gainNode = context.createGain();
+      gainNode.gain.setValueAtTime(0.000001, context.currentTime);
+      src.connect(gainNode);
+      gainNode.connect(context.destination);
+      src.start(context.currentTime);
+      src.stop(context.currentTime + 0.005);
+      src.onended = () => {
+        try {
+          src.disconnect();
+          gainNode.disconnect();
+        } catch {
+          // ignore cleanup failure
+        }
+      };
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const playSchedule = async (
     schedule: SynthSchedule,
     waveform: OscillatorType,
@@ -106,15 +165,12 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       throw new Error("Please convert first.");
     }
 
-    if (!audioContext) {
-      audioContext = new AudioContext();
-    }
+    const runningContext = await ensureAudioContextRunning();
     stop();
-    await audioContext.resume();
 
     const normalizedWaveform = normalizeWaveform(waveform);
     const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
-    const baseTime = audioContext.currentTime + 0.04;
+    const baseTime = runningContext.currentTime + 0.04;
     let latestEndTime = baseTime;
 
     for (const event of schedule.events) {
@@ -126,7 +182,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       );
     }
 
-    const waitMs = Math.max(0, Math.ceil((latestEndTime - audioContext.currentTime) * 1000));
+    const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
     synthStopTimer = window.setTimeout(() => {
       activeSynthNodes = [];
       if (typeof onEnded === "function") {
@@ -135,7 +191,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     }, waitMs);
   };
 
-  return { playSchedule, stop };
+  return { unlockFromUserGesture, playSchedule, stop };
 };
 
 const toSynthSchedule = (tempo: number, events: Array<{ midiNumber: number; startTicks: number; durTicks: number; channel: number }>): SynthSchedule => {
@@ -159,6 +215,7 @@ export type PlaybackFlowOptions = {
   engine: BasicWaveSynthEngine;
   ticksPerQuarter: number;
   editableVoice: string;
+  getPlaybackWaveform: () => OscillatorType;
   debugLog: boolean;
   getIsPlaying: () => boolean;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -224,9 +281,16 @@ export const startPlayback = async (
     return;
   }
 
+  const waveform = options.getPlaybackWaveform();
+
   let midiBytes: Uint8Array;
   try {
-    midiBytes = buildMidiBytesForPlayback(events, parsedPlayback.tempo);
+    midiBytes = buildMidiBytesForPlayback(
+      events,
+      parsedPlayback.tempo,
+      "electric_piano_2",
+      collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc)
+    );
   } catch (error) {
     options.setPlaybackText(
       "Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")"
@@ -238,7 +302,7 @@ export const startPlayback = async (
   try {
     await options.engine.playSchedule(
       toSynthSchedule(parsedPlayback.tempo, events),
-      FIXED_PLAYBACK_WAVEFORM,
+      waveform,
       () => {
         options.setIsPlaying(false);
         options.setPlaybackText("Playback: stopped");
@@ -254,7 +318,9 @@ export const startPlayback = async (
   }
 
   options.setIsPlaying(true);
-  options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform sine`);
+  options.setPlaybackText(
+    `Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform ${waveform}`
+  );
   options.renderControlState();
   options.renderAll();
 };
@@ -289,10 +355,12 @@ export const startMeasurePlayback = async (
     return;
   }
 
+  const waveform = options.getPlaybackWaveform();
+
   try {
     await options.engine.playSchedule(
       toSynthSchedule(parsedPlayback.tempo, events),
-      FIXED_PLAYBACK_WAVEFORM,
+      waveform,
       () => {
         options.setIsPlaying(false);
         options.setPlaybackText("Playback: stopped");
@@ -308,6 +376,6 @@ export const startMeasurePlayback = async (
   }
 
   options.setIsPlaying(true);
-  options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform sine`);
+  options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform ${waveform}`);
   options.renderControlState();
 };
