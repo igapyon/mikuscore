@@ -299,6 +299,88 @@ body {
   margin-bottom: 0.7rem;
 }
 
+.ms-playback-status {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 0.92rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.ms-settings-card {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e3deeb;
+  background: transparent;
+}
+
+.ms-settings-accordion {
+  border: 1px solid #d6d1e0;
+  border-radius: 12px;
+  background: #f4f1f8;
+  overflow: hidden;
+}
+
+.ms-settings-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #575163;
+  padding: 0.85rem 1rem;
+  background: #ece7f2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ms-settings-summary:focus,
+.ms-settings-summary:focus-visible {
+  outline: none;
+}
+
+.ms-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-settings-summary::after {
+  content: "";
+  width: 0.48rem;
+  height: 0.48rem;
+  border-right: 1.5px solid #766f86;
+  border-bottom: 1.5px solid #766f86;
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.ms-settings-accordion[open] > .ms-settings-summary::after {
+  transform: rotate(225deg);
+}
+
+.ms-settings-accordion[open] > .ms-settings-summary {
+  border-bottom: 1px solid #d9d3e5;
+}
+
+.ms-settings-body {
+  padding: 0.85rem 1rem 0.95rem;
+}
+
+.ms-settings-block + .ms-settings-block {
+  margin-top: 0.8rem;
+}
+
+.ms-settings-subtitle {
+  margin: 0 0 0.45rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #666074;
+}
+
+.ms-settings-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .ms-icon-button {
   display: inline-flex;
   align-items: center;

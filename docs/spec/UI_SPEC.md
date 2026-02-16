@@ -37,6 +37,14 @@ Top-level flow is a 4-step tabbed stepper:
   - `elementsFromPoint` fallback
 - Playback controls are provided (`Play`, `Stop`).
 
+## Playback Behavior (iPhone Safari Considerations)
+- iPhone Safari autoplay policy requires user gesture for sound start.
+- UI SHOULD unlock audio on early gesture events (`pointerdown` / `touchstart`) before `click`.
+- Synth engine MUST resume `AudioContext` in gesture-linked flow before scheduling notes.
+- Runtime SHOULD fallback to `webkitAudioContext` when `AudioContext` is unavailable.
+- Unlock SHOULD use a very short near-silent buffer playback to stabilize first audible playback.
+- Playback failure (no Web Audio API / resume failure) MUST NOT crash UI and SHOULD surface status text.
+
 ## Edit Behavior
 - If no measure selected, show empty-state card with `Go to Score` action.
 - If selected:
@@ -109,6 +117,14 @@ UI は操作レイヤのみで、譜面変更の正本は Core とする。
   - target/ancestor id 走査
   - `elementsFromPoint` フォールバック
 - 再生コントロール（`再生`, `停止`）を提供。
+
+## 再生仕様（iPhone Safari 配慮）
+- iPhone Safari の autoplay 制約上、音の開始にはユーザー操作起点が必要。
+- UI は `click` 前段の `pointerdown` / `touchstart` で先行アンロックを行う。
+- シンセ再生前に、ユーザー操作に紐づく経路で `AudioContext.resume()` を実行する。
+- `AudioContext` が無い実行環境では `webkitAudioContext` フォールバックを使う。
+- 初回再生安定化のため、極短いほぼ無音バッファ再生でアンロックする。
+- Web Audio 非対応や resume 失敗時は UI を壊さず、状態テキストで失敗を通知する。
 
 ## 編集仕様
 - 小節未選択時は empty-state カードを表示し、`譜面へ移動` を提供。

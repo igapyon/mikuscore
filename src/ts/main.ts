@@ -103,6 +103,9 @@ const convertRestBtn = q<HTMLButtonElement>("#convertRestBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
+const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
+const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
+const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
@@ -152,10 +155,62 @@ const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
 const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
+const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
 
 type LocalDraft = {
   xml: string;
   updatedAt: number;
+};
+
+type PlaybackSettings = {
+  midiProgram: "electric_piano_2" | "acoustic_grand_piano" | "electric_piano_1";
+  waveform: "sine" | "triangle" | "square";
+  settingsExpanded: boolean;
+};
+
+const normalizeMidiProgram = (value: string): PlaybackSettings["midiProgram"] => {
+  if (value === "acoustic_grand_piano" || value === "electric_piano_1") return value;
+  return "electric_piano_2";
+};
+
+const normalizeWaveformSetting = (value: string): PlaybackSettings["waveform"] => {
+  if (value === "triangle" || value === "square") return value;
+  return "sine";
+};
+
+const readPlaybackSettings = (): PlaybackSettings | null => {
+  try {
+    const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PlaybackSettings>;
+    return {
+      midiProgram: normalizeMidiProgram(String(parsed.midiProgram ?? "")),
+      waveform: normalizeWaveformSetting(String(parsed.waveform ?? "")),
+      settingsExpanded: Boolean(parsed.settingsExpanded),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writePlaybackSettings = (): void => {
+  try {
+    const payload: PlaybackSettings = {
+      midiProgram: normalizeMidiProgram(midiProgramSelect.value),
+      waveform: normalizeWaveformSetting(playbackWaveform.value),
+      settingsExpanded: settingsAccordion.open,
+    };
+    localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore quota/security errors in MVP.
+  }
+};
+
+const applyInitialPlaybackSettings = (): void => {
+  const stored = readPlaybackSettings();
+  midiProgramSelect.value = stored?.midiProgram ?? "electric_piano_2";
+  playbackWaveform.value = stored?.waveform ?? "sine";
+  settingsAccordion.open = stored?.settingsExpanded ?? false;
 };
 
 const logDiagnostics = (
@@ -903,6 +958,7 @@ const renderControlState = (): void => {
   playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
+  playbackWaveform.disabled = isPlaying;
 };
 
 const renderAll = (): void => {
@@ -1308,10 +1364,29 @@ const refreshNotesFromCore = (): void => {
 };
 
 const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
+const unlockAudioOnGesture = (): void => {
+  void synthEngine.unlockFromUserGesture();
+};
+const installGlobalAudioUnlock = (): void => {
+  const unlockOnce = (): void => {
+    void synthEngine.unlockFromUserGesture().then((ok) => {
+      if (!ok) return;
+      window.removeEventListener("pointerdown", unlockOnce);
+      window.removeEventListener("touchstart", unlockOnce);
+      window.removeEventListener("keydown", unlockOnce);
+    });
+  };
+  window.addEventListener("pointerdown", unlockOnce, { passive: true });
+  window.addEventListener("touchstart", unlockOnce, { passive: true });
+  window.addEventListener("keydown", unlockOnce);
+};
 const playbackFlowOptions: PlaybackFlowOptions = {
   engine: synthEngine,
   ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER,
   editableVoice: DEFAULT_VOICE,
+  getPlaybackWaveform: () => {
+    return normalizeWaveformSetting(playbackWaveform.value);
+  },
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -1347,11 +1422,23 @@ const stopPlayback = (): void => {
   stopPlaybackFlow(playbackFlowOptions);
 };
 
+const unlockAudioForPlayback = async (): Promise<boolean> => {
+  const ok = await synthEngine.unlockFromUserGesture();
+  if (!ok && playbackText) {
+    playbackText.textContent = "Playback: audio unlock failed";
+  }
+  return ok;
+};
+
 const startPlayback = async (): Promise<void> => {
+  const ok = await unlockAudioForPlayback();
+  if (!ok) return;
   await startPlaybackFlow(playbackFlowOptions, { isLoaded: state.loaded, core });
 };
 
 const startMeasurePlayback = async (): Promise<void> => {
+  const ok = await unlockAudioForPlayback();
+  if (!ok) return;
   await startMeasurePlaybackFlow(playbackFlowOptions, { draftCore });
 };
 
@@ -1879,7 +1966,11 @@ const onDownload = (): void => {
 
 const onDownloadMidi = (): void => {
   if (!state.lastSuccessfulSaveXml) return;
-  const payload = createMidiDownloadPayload(state.lastSuccessfulSaveXml, PLAYBACK_TICKS_PER_QUARTER);
+  const payload = createMidiDownloadPayload(
+    state.lastSuccessfulSaveXml,
+    PLAYBACK_TICKS_PER_QUARTER,
+    normalizeMidiProgram(midiProgramSelect.value)
+  );
   if (!payload) return;
   triggerFileDownload(payload);
 };
@@ -1984,10 +2075,15 @@ convertRestBtn.addEventListener("click", onConvertRestToNote);
 playBtn.addEventListener("click", () => {
   void startPlayback();
 });
+playBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+midiProgramSelect.addEventListener("change", writePlaybackSettings);
+playbackWaveform.addEventListener("change", writePlaybackSettings);
+settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
@@ -1995,7 +2091,11 @@ measureDiscardBtn.addEventListener("click", onMeasureDiscard);
 playMeasureBtn.addEventListener("click", () => {
   void startMeasurePlayback();
 });
+playMeasureBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 
 renderNewPartClefControls();
 applyInitialXmlInputValue();
+applyInitialPlaybackSettings();
+installGlobalAudioUnlock();
 loadFromText(xmlInput.value);

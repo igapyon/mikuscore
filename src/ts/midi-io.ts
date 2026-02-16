@@ -7,6 +7,9 @@ export type PlaybackEvent = {
   trackName: string;
 };
 
+export type MidiProgramPreset = "electric_piano_2" | "acoustic_grand_piano" | "electric_piano_1";
+export type MidiProgramOverrideMap = ReadonlyMap<string, number>;
+
 type MidiWriterTrackApi = {
   setTempo: (tempo: number) => void;
   addEvent: (event: unknown) => void;
@@ -99,7 +102,38 @@ const normalizeTicksPerQuarter = (ticksPerQuarter: number): number => {
   return Math.max(1, Math.round(ticksPerQuarter));
 };
 
-export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number): Uint8Array => {
+const normalizeMidiProgramNumber = (value: number): number | null => {
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  if (rounded < 1 || rounded > 128) return null;
+  return rounded;
+};
+
+export const collectMidiProgramOverridesFromMusicXmlDoc = (doc: Document): Map<string, number> => {
+  const byPartId = new Map<string, number>();
+  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+    const partId = scorePart.getAttribute("id")?.trim() ?? "";
+    if (!partId) continue;
+    const midiProgramNodes = Array.from(scorePart.querySelectorAll("midi-instrument > midi-program"));
+    for (const midiProgramNode of midiProgramNodes) {
+      const midiProgramText = midiProgramNode.textContent?.trim() ?? "";
+      if (!midiProgramText) continue;
+      const parsed = Number.parseInt(midiProgramText, 10);
+      const normalized = normalizeMidiProgramNumber(parsed);
+      if (normalized === null) continue;
+      byPartId.set(partId, normalized);
+      break;
+    }
+  }
+  return byPartId;
+};
+
+export const buildMidiBytesForPlayback = (
+  events: PlaybackEvent[],
+  tempo: number,
+  programPreset: MidiProgramPreset = "electric_piano_2",
+  trackProgramOverrides: MidiProgramOverrideMap = new Map<string, number>()
+): Uint8Array => {
   const midiWriter = getMidiWriterRuntime();
   if (!midiWriter) {
     throw new Error("midi-writer.js is not loaded.");
@@ -113,6 +147,15 @@ export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number
   }
 
   const midiTracks: unknown[] = [];
+  const normalizedProgramPreset: MidiProgramPreset =
+    programPreset === "acoustic_grand_piano" || programPreset === "electric_piano_1"
+      ? programPreset
+      : "electric_piano_2";
+  const instrumentByPreset: Record<MidiProgramPreset, number> = {
+    electric_piano_2: 5, // Existing default in this app.
+    acoustic_grand_piano: 1,
+    electric_piano_1: 4,
+  };
   const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
   sortedTrackIds.forEach((trackId, index) => {
     const trackEvents = (tracksById.get(trackId) ?? [])
@@ -131,12 +174,14 @@ export const buildMidiBytesForPlayback = (events: PlaybackEvent[], tempo: number
     const channels = Array.from(
       new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
     ).sort((a, b) => a - b);
+    const overrideProgram = normalizeMidiProgramNumber(trackProgramOverrides.get(trackId) ?? NaN);
+    const selectedInstrumentProgram = overrideProgram ?? instrumentByPreset[normalizedProgramPreset];
     for (const channel of channels) {
       if (channel === 10) continue;
       track.addEvent(
         new midiWriter.ProgramChangeEvent({
           channel,
-          instrument: 5, // GM: Electric Piano 2
+          instrument: selectedInstrumentProgram,
           delta: 0,
         })
       );

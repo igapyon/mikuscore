@@ -15,13 +15,13 @@
 - [x] Implemented rest-to-note conversion.
 - [x] Added playback path with `midi-writer.js`.
 - [x] Fixed transpose behavior including Clarinet in A.
+- [x] Improved iPhone Safari audio start stability (`pointerdown`/`touchstart` unlock, `AudioContext` resume flow, `webkitAudioContext` fallback).
 
 #### Known Issues
 - [ ] Verovio warning `slur ... could not be ended` may appear from input MusicXML; loading currently continues.
 - [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
 - [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
 - [ ] Some accidental rendering in `ABC export` is still incorrect (key/accidental precedence needs review).
-- [ ] On iPhone SE3, tapping `Play` sometimes produces no sound. Investigate root cause (autoplay policy / AudioContext resume / user gesture handling) and implement a fix.
 
 ### Next Priorities
 #### P1: Editing stability
@@ -60,13 +60,13 @@
 - [x] 休符の音符化（rest -> pitched note）を実装済み。
 - [x] `midi-writer.js` を使った再生経路を導入済み。
 - [x] Clarinet in A 含む `transpose` 反映を修正済み。
+- [x] iPhone Safari での音出し安定性を改善済み（`pointerdown`/`touchstart` 先行アンロック、`AudioContext` resume 経路、`webkitAudioContext` フォールバック）。
 
 #### 既知事項
 - [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示されることがある。現状は読み込み継続。
 - [ ] クリック選択は音符クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になりうる。
 - [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。
 - [ ] `ABC出力` で一部臨時記号（alter/accidental）の表現が崩れる問題が残っている。
-- [ ] iPhone SE3 で `再生` を押しても音が出ないことがある。原因（autoplay 制約 / AudioContext resume / ユーザー操作扱い）を調査し、改善を実装する。
 
 ### 次にやること
 #### P1: 編集体験の安定化
