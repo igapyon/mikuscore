@@ -39,17 +39,27 @@ export const getMeasureCapacity = (measure: Element): number | null => {
 
 export const getOccupiedTime = (measure: Element, voice: string): number => {
   const directChildren = Array.from(measure.children);
-  let total = 0;
+  let cursor = 0;
+  let occupied = 0;
   for (const child of directChildren) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      const shift = getDurationValue(child);
+      if (shift === null) continue;
+      cursor = child.tagName === "backup" ? Math.max(0, cursor - shift) : cursor + shift;
+      continue;
+    }
     if (child.tagName !== "note") continue;
     // Chord notes share onset with the previous note and must not advance time.
     if (Array.from(child.children).some((c) => c.tagName === "chord")) continue;
     const noteVoice = getVoiceText(child);
     if (noteVoice !== voice) continue;
     const duration = getDurationValue(child);
-    if (duration !== null) total += duration;
+    if (duration === null) continue;
+    const end = cursor + duration;
+    occupied = Math.max(occupied, end);
+    cursor = end;
   }
-  return total;
+  return occupied;
 };
 
 type TimingContext = {

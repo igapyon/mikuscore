@@ -148,12 +148,14 @@ export const validateBackupForwardBoundaryForStructuralEdit = (
   }
 
   if (command.type === "split_note") {
-    if (next && isBackupOrForward(next)) {
+    if (next && next.tagName === "forward") {
       return {
         code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
-        message: "Split point crosses a backup/forward boundary in MVP.",
+        message: "Split point crosses a forward boundary in MVP.",
       };
     }
+    // Allow split immediately before <backup>. This is common in grand-staff lanes
+    // where staff 1 content is followed by backup to start staff 2 at the same time.
     return null;
   }
 

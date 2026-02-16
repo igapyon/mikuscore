@@ -13,6 +13,8 @@ const load_flow_1 = require("./load-flow");
 const playback_flow_1 = require("./playback-flow");
 const preview_flow_1 = require("./preview-flow");
 const sampleXml_1 = require("./sampleXml");
+const sampleXml2_1 = require("./sampleXml2");
+const midi_io_1 = require("./midi-io");
 const DEFAULT_VOICE = "1";
 const q = (selector) => {
     const el = document.querySelector(selector);
@@ -29,6 +31,7 @@ const inputTypeNew = q("#inputTypeNew");
 const inputModeFile = q("#inputModeFile");
 const inputModeSource = q("#inputModeSource");
 const newInputBlock = q("#newInputBlock");
+const newTemplatePianoGrandStaff = q("#newTemplatePianoGrandStaff");
 const newPartCountInput = q("#newPartCount");
 const newKeyFifthsSelect = q("#newKeyFifths");
 const newTimeBeatsInput = q("#newTimeBeats");
@@ -42,7 +45,8 @@ const abcInput = q("#abcInput");
 const localDraftNotice = q("#localDraftNotice");
 const localDraftText = q("#localDraftText");
 const discardDraftExportBtn = q("#discardDraftExportBtn");
-const loadSampleBtn = q("#loadSampleBtn");
+const loadSampleBtn1 = q("#loadSampleBtn1");
+const loadSample2Btn = q("#loadSample2Btn");
 const fileSelectBtn = q("#fileSelectBtn");
 const fileInput = q("#fileInput");
 const fileNameText = q("#fileNameText");
@@ -63,8 +67,13 @@ const deleteBtn = q("#deleteBtn");
 const playBtn = q("#playBtn");
 const stopBtn = q("#stopBtn");
 const playbackWaveform = q("#playbackWaveform");
+const playbackUseMidiLike = q("#playbackUseMidiLike");
 const midiProgramSelect = q("#midiProgramSelect");
+const forceMidiProgramOverride = q("#forceMidiProgramOverride");
 const settingsAccordion = q("#settingsAccordion");
+const resetPlaybackSettingsBtn = q("#resetPlaybackSettingsBtn");
+const refreshMidiDebugBtn = q("#refreshMidiDebugBtn");
+const midiDebugText = q("#midiDebugText");
 const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
@@ -74,6 +83,7 @@ const outputXml = qo("#outputXml");
 const diagArea = qo("#diagArea");
 const debugScoreMeta = qo("#debugScoreMeta");
 const debugScoreArea = q("#debugScoreArea");
+const inputUiMessage = q("#inputUiMessage");
 const uiMessage = q("#uiMessage");
 const measurePartNameText = q("#measurePartNameText");
 const measureEmptyState = q("#measureEmptyState");
@@ -82,6 +92,11 @@ const measureEditorWrap = q("#measureEditorWrap");
 const measureEditorArea = q("#measureEditorArea");
 const measureApplyBtn = q("#measureApplyBtn");
 const measureDiscardBtn = q("#measureDiscardBtn");
+const measureNavLeftBtn = q("#measureNavLeftBtn");
+const measureNavDownBtn = q("#measureNavDownBtn");
+const measureNavUpBtn = q("#measureNavUpBtn");
+const measureNavRightBtn = q("#measureNavRightBtn");
+const appendMeasureBtn = q("#appendMeasureBtn");
 const playMeasureBtn = q("#playMeasureBtn");
 const topTabButtons = Array.from(document.querySelectorAll(".ms-top-tab"));
 const topTabPanels = Array.from(document.querySelectorAll(".ms-tab-panel"));
@@ -100,6 +115,8 @@ let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map();
 let nodeIdToLocation = new Map();
 let partIdToName = new Map();
+let partOrder = [];
+let measureNumbersByPart = new Map();
 let selectedMeasure = null;
 let draftCore = null;
 let draftNoteNodeIds = [];
@@ -113,15 +130,39 @@ const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
 const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
 const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
+const DEFAULT_MIDI_PROGRAM = "electric_piano_2";
+const DEFAULT_PLAYBACK_WAVEFORM = "sine";
+const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
+const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const normalizeMidiProgram = (value) => {
-    if (value === "acoustic_grand_piano" || value === "electric_piano_1")
-        return value;
-    return "electric_piano_2";
+    switch (value) {
+        case "acoustic_grand_piano":
+        case "electric_piano_1":
+        case "electric_piano_2":
+        case "honky_tonk_piano":
+        case "harpsichord":
+        case "clavinet":
+        case "drawbar_organ":
+        case "acoustic_guitar_nylon":
+        case "acoustic_bass":
+        case "violin":
+        case "string_ensemble_1":
+        case "synth_brass_1":
+            return value;
+        default:
+            return DEFAULT_MIDI_PROGRAM;
+    }
 };
 const normalizeWaveformSetting = (value) => {
     if (value === "triangle" || value === "square")
         return value;
-    return "sine";
+    return DEFAULT_PLAYBACK_WAVEFORM;
+};
+const normalizeForceMidiProgramOverride = (value) => {
+    return value === true;
+};
+const normalizeUseMidiLikePlayback = (value) => {
+    return value !== false;
 };
 const readPlaybackSettings = () => {
     var _a, _b;
@@ -133,6 +174,8 @@ const readPlaybackSettings = () => {
         return {
             midiProgram: normalizeMidiProgram(String((_a = parsed.midiProgram) !== null && _a !== void 0 ? _a : "")),
             waveform: normalizeWaveformSetting(String((_b = parsed.waveform) !== null && _b !== void 0 ? _b : "")),
+            useMidiLikePlayback: normalizeUseMidiLikePlayback(parsed.useMidiLikePlayback),
+            forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
             settingsExpanded: Boolean(parsed.settingsExpanded),
         };
     }
@@ -145,6 +188,8 @@ const writePlaybackSettings = () => {
         const payload = {
             midiProgram: normalizeMidiProgram(midiProgramSelect.value),
             waveform: normalizeWaveformSetting(playbackWaveform.value),
+            useMidiLikePlayback: playbackUseMidiLike.checked,
+            forceMidiProgramOverride: forceMidiProgramOverride.checked,
             settingsExpanded: settingsAccordion.open,
         };
         localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -154,11 +199,21 @@ const writePlaybackSettings = () => {
     }
 };
 const applyInitialPlaybackSettings = () => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const stored = readPlaybackSettings();
-    midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : "electric_piano_2";
-    playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : "sine";
-    settingsAccordion.open = (_c = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _c !== void 0 ? _c : false;
+    midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_PROGRAM;
+    playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : DEFAULT_PLAYBACK_WAVEFORM;
+    playbackUseMidiLike.checked = (_c = stored === null || stored === void 0 ? void 0 : stored.useMidiLikePlayback) !== null && _c !== void 0 ? _c : DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+    forceMidiProgramOverride.checked =
+        (_d = stored === null || stored === void 0 ? void 0 : stored.forceMidiProgramOverride) !== null && _d !== void 0 ? _d : DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+    settingsAccordion.open = (_e = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _e !== void 0 ? _e : false;
+};
+const onResetPlaybackSettings = () => {
+    midiProgramSelect.value = DEFAULT_MIDI_PROGRAM;
+    playbackWaveform.value = DEFAULT_PLAYBACK_WAVEFORM;
+    playbackUseMidiLike.checked = DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+    forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+    writePlaybackSettings();
 };
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
@@ -325,13 +380,15 @@ const renderInputMode = () => {
     abcInputBlock.classList.toggle("md-hidden", isNewType || fileMode || !isAbcType);
     inputModeFile.disabled = isNewType;
     inputModeSource.disabled = isNewType;
+    fileSelectBtn.classList.toggle("md-hidden", isNewType || !fileMode);
+    loadBtn.classList.toggle("md-hidden", !isNewType && fileMode);
     const loadLabel = loadBtn.querySelector("span");
     if (loadLabel) {
         loadLabel.textContent = isNewType ? "Create" : "Load";
     }
     fileInput.accept = isAbcType
         ? ".abc,text/plain"
-        : ".musicxml,.xml,text/xml,application/xml";
+        : ".musicxml,.xml,.mxl,text/xml,application/xml";
 };
 const normalizeNewPartCount = () => {
     const raw = Number(newPartCountInput.value);
@@ -363,6 +420,16 @@ const listCurrentNewPartClefs = () => {
 };
 const renderNewPartClefControls = () => {
     var _a;
+    const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
+    newPartCountInput.disabled = usePianoGrandStaffTemplate;
+    if (usePianoGrandStaffTemplate) {
+        newPartClefList.innerHTML = "";
+        const message = document.createElement("div");
+        message.className = "ms-field-label";
+        message.textContent = "Template: single part with 2 staves (staff 1: treble, staff 2: bass).";
+        newPartClefList.appendChild(message);
+        return;
+    }
     const count = normalizeNewPartCount();
     const previous = listCurrentNewPartClefs();
     newPartClefList.innerHTML = "";
@@ -717,7 +784,7 @@ const syncStepFromSelectedDraftNote = () => {
 const renderMeasureEditorState = () => {
     var _a;
     if (!selectedMeasure || !draftCore) {
-        measurePartNameText.textContent = "Track: -";
+        measurePartNameText.textContent = "";
         measurePartNameText.classList.add("md-hidden");
         measureEmptyState.classList.remove("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
@@ -726,13 +793,13 @@ const renderMeasureEditorState = () => {
         return;
     }
     const partName = (_a = partIdToName.get(selectedMeasure.partId)) !== null && _a !== void 0 ? _a : selectedMeasure.partId;
-    measurePartNameText.textContent =
-        `Track: ${partName} / Selected: track=${selectedMeasure.partId}  / measure=${selectedMeasure.measureNumber}`;
+    measurePartNameText.textContent = partName;
     measurePartNameText.classList.remove("md-hidden");
     measureEmptyState.classList.add("md-hidden");
     measureEditorWrap.classList.remove("md-hidden");
-    measureDiscardBtn.disabled = false;
-    measureApplyBtn.disabled = !draftCore.isDirty();
+    const hasDirtyDraft = draftCore.isDirty();
+    measureDiscardBtn.disabled = !hasDirtyDraft;
+    measureApplyBtn.disabled = !hasDirtyDraft;
 };
 const highlightSelectedDraftNoteInEditor = () => {
     measureEditorArea
@@ -813,34 +880,41 @@ const renderDiagnostics = () => {
     }
 };
 const renderUiMessage = () => {
-    uiMessage.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
-    uiMessage.textContent = "";
+    const messageTargets = [inputUiMessage, uiMessage];
+    for (const target of messageTargets) {
+        target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
+        target.textContent = "";
+    }
+    const showMessage = (kind, text) => {
+        const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
+        for (const target of messageTargets) {
+            target.textContent = text;
+            target.classList.add(className);
+            target.classList.remove("md-hidden");
+        }
+    };
     const dispatch = state.lastDispatchResult;
     if (dispatch) {
         if (!dispatch.ok && dispatch.diagnostics.length > 0) {
             const d = dispatch.diagnostics[0];
-            uiMessage.textContent = `Error: ${d.message} (${d.code})`;
-            uiMessage.classList.add("ms-ui-message--error");
-            uiMessage.classList.remove("md-hidden");
+            showMessage("error", `Error: ${d.message} (${d.code})`);
             return;
         }
         if (dispatch.warnings.length > 0) {
             const w = dispatch.warnings[0];
-            uiMessage.textContent = `Warning: ${w.message} (${w.code})`;
-            uiMessage.classList.add("ms-ui-message--warning");
-            uiMessage.classList.remove("md-hidden");
+            showMessage("warning", `Warning: ${w.message} (${w.code})`);
             return;
         }
     }
     const save = state.lastSaveResult;
     if (save && !save.ok && save.diagnostics.length > 0) {
         const d = save.diagnostics[0];
-        uiMessage.textContent = `Error: ${d.message} (${d.code})`;
-        uiMessage.classList.add("ms-ui-message--error");
-        uiMessage.classList.remove("md-hidden");
+        showMessage("error", `Error: ${d.message} (${d.code})`);
         return;
     }
-    uiMessage.classList.add("md-hidden");
+    for (const target of messageTargets) {
+        target.classList.add("md-hidden");
+    }
 };
 const renderOutput = () => {
     var _a, _b, _c, _d;
@@ -872,6 +946,16 @@ const renderControlState = () => {
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
     playbackWaveform.disabled = isPlaying;
+    playbackUseMidiLike.disabled = isPlaying;
+    appendMeasureBtn.disabled = !state.loaded || isPlaying;
+    const navLeftTarget = getMeasureNavigationTarget(selectedMeasure, "left");
+    const navRightTarget = getMeasureNavigationTarget(selectedMeasure, "right");
+    const navUpTarget = getMeasureNavigationTarget(selectedMeasure, "up");
+    const navDownTarget = getMeasureNavigationTarget(selectedMeasure, "down");
+    measureNavLeftBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navLeftTarget;
+    measureNavRightBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navRightTarget;
+    measureNavUpBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navUpTarget;
+    measureNavDownBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navDownTarget;
 };
 const renderAll = () => {
     renderInputMode();
@@ -932,6 +1016,74 @@ const rebuildPartNameMap = (doc) => {
             partId;
         partIdToName.set(partId, partName);
     }
+};
+const rebuildMeasureStructureMap = (doc) => {
+    var _a, _b;
+    partOrder = [];
+    measureNumbersByPart = new Map();
+    for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+        const partId = (_b = (_a = part.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+        if (!partId)
+            continue;
+        partOrder.push(partId);
+        const numbers = Array.from(part.querySelectorAll(":scope > measure"))
+            .map((measure) => { var _a, _b; return (_b = (_a = measure.getAttribute("number")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : ""; })
+            .filter((number) => number.length > 0);
+        measureNumbersByPart.set(partId, Array.from(new Set(numbers)));
+    }
+};
+const getMeasureNavigationTarget = (current, direction) => {
+    var _a, _b;
+    if (!current)
+        return null;
+    if (direction === "left" || direction === "right") {
+        const measures = (_a = measureNumbersByPart.get(current.partId)) !== null && _a !== void 0 ? _a : [];
+        const index = measures.indexOf(current.measureNumber);
+        if (index < 0)
+            return null;
+        const nextIndex = direction === "left" ? index - 1 : index + 1;
+        if (nextIndex < 0 || nextIndex >= measures.length)
+            return null;
+        return { partId: current.partId, measureNumber: measures[nextIndex] };
+    }
+    const partIndex = partOrder.indexOf(current.partId);
+    if (partIndex < 0)
+        return null;
+    const nextPartIndex = direction === "up" ? partIndex - 1 : partIndex + 1;
+    if (nextPartIndex < 0 || nextPartIndex >= partOrder.length)
+        return null;
+    const nextPartId = partOrder[nextPartIndex];
+    const nextMeasures = (_b = measureNumbersByPart.get(nextPartId)) !== null && _b !== void 0 ? _b : [];
+    if (!nextMeasures.includes(current.measureNumber))
+        return null;
+    return { partId: nextPartId, measureNumber: current.measureNumber };
+};
+const navigateSelectedMeasure = (direction) => {
+    if (!state.loaded || !selectedMeasure)
+        return;
+    if (draftCore && draftCore.isDirty()) {
+        state.lastDispatchResult = {
+            ok: false,
+            dirtyChanged: false,
+            changedNodeIds: [],
+            affectedMeasureNumbers: [],
+            diagnostics: [
+                {
+                    code: "MVP_COMMAND_EXECUTION_FAILED",
+                    message: "Apply or discard current measure edits before moving to another measure.",
+                },
+            ],
+            warnings: [],
+        };
+        renderAll();
+        return;
+    }
+    const next = getMeasureNavigationTarget(selectedMeasure, direction);
+    if (!next)
+        return;
+    initializeMeasureEditor(next);
+    // Keep Score-tab measure highlight synced even while navigating from Edit tab.
+    highlightSelectedMeasureInMainPreview();
 };
 const stripPartNamesInRenderDoc = (doc) => {
     const removableSelectors = [
@@ -1249,15 +1401,20 @@ const refreshNotesFromCore = () => {
         if (currentDoc) {
             rebuildNodeLocationMap(currentDoc);
             rebuildPartNameMap(currentDoc);
+            rebuildMeasureStructureMap(currentDoc);
         }
         else {
             nodeIdToLocation = new Map();
             partIdToName = new Map();
+            partOrder = [];
+            measureNumbersByPart = new Map();
         }
     }
     else {
         nodeIdToLocation = new Map();
         partIdToName = new Map();
+        partOrder = [];
+        measureNumbersByPart = new Map();
     }
 };
 const synthEngine = (0, playback_flow_1.createBasicWaveSynthEngine)({ ticksPerQuarter: playback_flow_1.PLAYBACK_TICKS_PER_QUARTER });
@@ -1285,6 +1442,7 @@ const playbackFlowOptions = {
     getPlaybackWaveform: () => {
         return normalizeWaveformSetting(playbackWaveform.value);
     },
+    getUseMidiLikePlayback: () => playbackUseMidiLike.checked,
     debugLog: DEBUG_LOG,
     getIsPlaying: () => isPlaying,
     setIsPlaying: (playing) => {
@@ -1522,7 +1680,8 @@ const onDiscardLocalDraft = () => {
     renderLocalDraftUi();
 };
 const createNewMusicXml = () => {
-    const partCount = normalizeNewPartCount();
+    const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
+    const partCount = usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount();
     const parsedFifths = Number(newKeyFifthsSelect.value);
     const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
     const beats = normalizeNewTimeBeats();
@@ -1530,16 +1689,18 @@ const createNewMusicXml = () => {
     const divisions = 960;
     const measureCount = 8;
     const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
-    const clefs = listCurrentNewPartClefs();
+    const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();
     const partListXml = Array.from({ length: partCount }, (_, i) => {
         const partId = `P${i + 1}`;
         const midiChannel = ((i % 16) + 1 === 10) ? 11 : ((i % 16) + 1);
+        const midiProgram = usePianoGrandStaffTemplate ? 1 : 6;
+        const partName = usePianoGrandStaffTemplate ? "Piano" : `Part ${i + 1}`;
         return [
             `<score-part id="${partId}">`,
-            `<part-name>Part ${i + 1}</part-name>`,
+            `<part-name>${partName}</part-name>`,
             `<midi-instrument id="${partId}-I1">`,
             `<midi-channel>${midiChannel}</midi-channel>`,
-            `<midi-program>6</midi-program>`,
+            `<midi-program>${midiProgram}</midi-program>`,
             "</midi-instrument>",
             "</score-part>",
         ].join("");
@@ -1557,14 +1718,19 @@ const createNewMusicXml = () => {
                     `<divisions>${divisions}</divisions>`,
                     `<key><fifths>${fifths}</fifths><mode>major</mode></key>`,
                     `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`,
-                    clefXml,
+                    usePianoGrandStaffTemplate
+                        ? "<staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef>"
+                        : clefXml,
                     "</attributes>",
                 ].join("")
                 : "";
+            const measureBody = usePianoGrandStaffTemplate
+                ? `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${measureDuration}</duration></backup><note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>2</staff></note>`
+                : `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`;
             return [
                 `<measure number="${number}">`,
                 attrs,
-                `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`,
+                measureBody,
                 "</measure>",
             ].join("");
         }).join("");
@@ -1708,6 +1874,144 @@ const replaceMeasureInMainXml = (sourceXml, partId, measureNumber, measureXml) =
         return null;
     return (0, musicxml_io_1.serializeMusicXmlDocument)(mergedDoc);
 };
+const toPositiveInteger = (value) => {
+    if (!Number.isFinite(value))
+        return null;
+    const rounded = Math.round(value);
+    return rounded > 0 ? rounded : null;
+};
+const resolveEffectiveStavesAtEnd = (part) => {
+    var _a, _b, _c;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    let staves = 1;
+    for (const measure of measures) {
+        const text = (_c = (_b = (_a = measure.querySelector(":scope > attributes > staves")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const parsed = Number(text);
+        if (Number.isInteger(parsed) && parsed > 0)
+            staves = parsed;
+    }
+    return staves;
+};
+const resolveHasTrebleBassGrandStaffAtEnd = (part) => {
+    var _a, _b, _c, _d, _e, _f;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    let clef1 = "";
+    let clef2 = "";
+    for (const measure of measures) {
+        const nextClef1 = (_c = (_b = (_a = measure.querySelector(':scope > attributes > clef[number="1"] > sign')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const nextClef2 = (_f = (_e = (_d = measure.querySelector(':scope > attributes > clef[number="2"] > sign')) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+        if (nextClef1)
+            clef1 = nextClef1;
+        if (nextClef2)
+            clef2 = nextClef2;
+    }
+    return clef1 === "G" && clef2 === "F";
+};
+const createMeasureRestNoteXml = (duration, voice, staff) => {
+    return [
+        "<note>",
+        '<rest measure="yes"/>',
+        `<duration>${duration}</duration>`,
+        `<voice>${voice}</voice>`,
+        staff ? `<staff>${staff}</staff>` : "",
+        "</note>",
+    ].join("");
+};
+const deriveNextMeasureNumber = (part) => {
+    var _a, _b, _c;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+    if (!lastMeasure)
+        return "1";
+    const raw = (_c = (_b = lastMeasure.getAttribute("number")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    const numeric = Number(raw);
+    if (Number.isInteger(numeric) && numeric >= 0)
+        return String(numeric + 1);
+    return String(measures.length + 1);
+};
+const appendMeasureToMainXml = (sourceXml) => {
+    var _a, _b, _c, _d, _e;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    if (!doc)
+        return null;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (!parts.length)
+        return null;
+    for (const part of parts) {
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+        if (!lastMeasure)
+            continue;
+        const capacity = (_b = toPositiveInteger((0, timeIndex_1.getMeasureCapacity)(lastMeasure))) !== null && _b !== void 0 ? _b : 3840;
+        const nextNumber = deriveNextMeasureNumber(part);
+        const staves = resolveEffectiveStavesAtEnd(part);
+        const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
+        const measure = doc.createElement("measure");
+        measure.setAttribute("number", nextNumber);
+        if (isGrandStaff) {
+            const lane1 = (_c = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "1"))) === null || _c === void 0 ? void 0 : _c.querySelector("note");
+            const backup = doc.createElement("backup");
+            const backupDur = doc.createElement("duration");
+            backupDur.textContent = String(capacity);
+            backup.appendChild(backupDur);
+            const lane2 = (_d = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "2"))) === null || _d === void 0 ? void 0 : _d.querySelector("note");
+            if (lane1)
+                measure.appendChild(doc.importNode(lane1, true));
+            measure.appendChild(backup);
+            if (lane2)
+                measure.appendChild(doc.importNode(lane2, true));
+        }
+        else {
+            const rest = (_e = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", null))) === null || _e === void 0 ? void 0 : _e.querySelector("note");
+            if (rest)
+                measure.appendChild(doc.importNode(rest, true));
+        }
+        part.appendChild(measure);
+    }
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+};
+const onAppendMeasureAtEnd = () => {
+    if (!state.loaded)
+        return;
+    if (draftCore && draftCore.isDirty()) {
+        state.lastDispatchResult = {
+            ok: false,
+            dirtyChanged: false,
+            changedNodeIds: [],
+            affectedMeasureNumbers: [],
+            diagnostics: [
+                {
+                    code: "MVP_COMMAND_EXECUTION_FAILED",
+                    message: "Apply or discard current measure edits before adding a new measure.",
+                },
+            ],
+            warnings: [],
+        };
+        renderAll();
+        return;
+    }
+    const mainXml = core.debugSerializeCurrentXml();
+    if (!mainXml)
+        return;
+    const nextXml = appendMeasureToMainXml(mainXml);
+    if (!nextXml) {
+        state.lastDispatchResult = {
+            ok: false,
+            dirtyChanged: false,
+            changedNodeIds: [],
+            affectedMeasureNumbers: [],
+            diagnostics: [{ code: "MVP_COMMAND_EXECUTION_FAILED", message: "Failed to append measure." }],
+            warnings: [],
+        };
+        renderAll();
+        return;
+    }
+    loadFromText(nextXml);
+    writeLocalDraft(nextXml);
+    if (selectedMeasure) {
+        initializeMeasureEditor(selectedMeasure);
+    }
+};
 const onMeasureApply = () => {
     if (!draftCore || !selectedMeasure)
         return;
@@ -1850,7 +2154,8 @@ const onDownload = () => {
 const onDownloadMidi = () => {
     if (!state.lastSuccessfulSaveXml)
         return;
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(state.lastSuccessfulSaveXml, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value));
+    refreshMidiDebugInfo();
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(state.lastSuccessfulSaveXml, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked);
     if (!payload)
         return;
     (0, download_flow_1.triggerFileDownload)(payload);
@@ -1862,6 +2167,64 @@ const onDownloadAbc = () => {
     if (!payload)
         return;
     (0, download_flow_1.triggerFileDownload)(payload);
+};
+const resolveMidiDebugXml = () => {
+    if (state.lastSuccessfulSaveXml.trim())
+        return state.lastSuccessfulSaveXml;
+    const coreXml = core.debugSerializeCurrentXml();
+    if ((coreXml !== null && coreXml !== void 0 ? coreXml : "").trim())
+        return coreXml !== null && coreXml !== void 0 ? coreXml : "";
+    return xmlInput.value;
+};
+const refreshMidiDebugInfo = () => {
+    const sourceXml = resolveMidiDebugXml().trim();
+    if (!sourceXml) {
+        midiDebugText.textContent = "MIDI debug: no source XML";
+        return;
+    }
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    if (!doc) {
+        midiDebugText.textContent = "MIDI debug: source XML parse failed";
+        return;
+    }
+    const tempoEvents = (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(doc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER);
+    const ccEvents = (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(doc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER);
+    const cc64Events = ccEvents.filter((event) => event.controllerNumber === 64);
+    const programOverrides = (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(doc);
+    const midiLikePlaybackEvents = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(doc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, {
+        mode: "midi",
+    }).events;
+    const plainPlaybackEvents = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(doc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, {
+        mode: "playback",
+    }).events;
+    const drumEvents = midiLikePlaybackEvents.filter((event) => event.channel === 10);
+    const uniqueDrumNotes = Array.from(new Set(drumEvents.map((event) => event.midiNumber))).sort((a, b) => a - b);
+    const lines = [];
+    lines.push(`Tempo events: ${tempoEvents.length}`);
+    lines.push(tempoEvents.length
+        ? `  ${tempoEvents.map((event) => `tick ${event.startTicks} -> ${event.bpm} bpm`).join(" | ")}`
+        : "  (none)");
+    const programPairs = Array.from(programOverrides.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    lines.push(`Program overrides from MusicXML: ${programPairs.length}`);
+    lines.push(programPairs.length
+        ? `  ${programPairs.map(([partId, program]) => `${partId}: program ${program}`).join(" | ")}`
+        : "  (none)");
+    lines.push(`CC64 pedal events: ${cc64Events.length}`);
+    lines.push(cc64Events.length
+        ? `  ${cc64Events
+            .slice(0, 16)
+            .map((event) => `${event.trackId}/ch${event.channel}@${event.startTicks}=${event.controllerValue}`)
+            .join(" | ")}${cc64Events.length > 16 ? " | ..." : ""}`
+        : "  (none)");
+    lines.push(`Drum-like note events (ch10): ${drumEvents.length}`);
+    lines.push(drumEvents.length
+        ? `  notes: ${uniqueDrumNotes.join(", ")}`
+        : "  (none)");
+    const deltaPlaybackEvents = midiLikePlaybackEvents.length - plainPlaybackEvents.length;
+    lines.push("Playback vs MIDI-like alignment:");
+    lines.push(`  plain=${plainPlaybackEvents.length} midi-like=${midiLikePlaybackEvents.length} delta=${deltaPlaybackEvents >= 0 ? `+${deltaPlaybackEvents}` : String(deltaPlaybackEvents)}`);
+    lines.push(`  tempoChanges=${Math.max(0, tempoEvents.length - 1)} cc64=${cc64Events.length} programOverrides=${programPairs.length}`);
+    midiDebugText.textContent = lines.join("\n");
 };
 const activateTopTab = (tabName) => {
     const activeIndex = topTabButtons.findIndex((button) => button.dataset.tab === tabName);
@@ -1900,26 +2263,51 @@ inputModeFile.addEventListener("change", renderInputMode);
 inputModeSource.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => fileInput.click());
+newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
+fileSelectBtn.addEventListener("click", () => {
+    // Clear selection so choosing the same file again still fires `change`.
+    fileInput.value = "";
+    fileInput.click();
+});
 fileInput.addEventListener("change", () => {
     var _a;
     const f = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
     fileNameText.textContent = f ? f.name : "No file selected";
+    fileNameText.classList.toggle("md-hidden", !f);
+    if (!f)
+        return;
+    const lowerName = f.name.toLowerCase();
+    const isAbcFile = lowerName.endsWith(".abc");
+    inputTypeAbc.checked = isAbcFile;
+    inputTypeXml.checked = !isAbcFile;
+    inputTypeNew.checked = false;
+    inputModeFile.checked = true;
+    inputModeSource.checked = false;
+    renderInputMode();
+    if (inputTypeNew.checked || !inputModeFile.checked)
+        return;
+    void onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
     void onLoadClick();
 });
 discardDraftExportBtn.addEventListener("click", onDiscardLocalDraft);
-loadSampleBtn.addEventListener("click", () => {
+const loadBuiltInSample = (xml) => {
     inputTypeXml.checked = true;
     inputTypeAbc.checked = false;
     inputTypeNew.checked = false;
     inputModeSource.checked = true;
     inputModeFile.checked = false;
-    xmlInput.value = sampleXml_1.sampleXml;
+    xmlInput.value = xml;
     renderInputMode();
     renderLocalDraftUi();
     void onLoadClick();
+};
+loadSampleBtn1.addEventListener("click", () => {
+    loadBuiltInSample(sampleXml_1.sampleXml);
+});
+loadSample2Btn.addEventListener("click", () => {
+    loadBuiltInSample(sampleXml2_1.sampleXml2);
 });
 if (noteSelect) {
     noteSelect.addEventListener("change", () => {
@@ -1960,13 +2348,22 @@ stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
+refreshMidiDebugBtn.addEventListener("click", refreshMidiDebugInfo);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
+forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
+playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
 measureDiscardBtn.addEventListener("click", onMeasureDiscard);
+measureNavLeftBtn.addEventListener("click", () => navigateSelectedMeasure("left"));
+measureNavRightBtn.addEventListener("click", () => navigateSelectedMeasure("right"));
+measureNavUpBtn.addEventListener("click", () => navigateSelectedMeasure("up"));
+measureNavDownBtn.addEventListener("click", () => navigateSelectedMeasure("down"));
+appendMeasureBtn.addEventListener("click", onAppendMeasureAtEnd);
 playMeasureBtn.addEventListener("click", () => {
     void startMeasurePlayback();
 });
@@ -1977,6 +2374,18525 @@ applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);
+refreshMidiDebugInfo();
+
+  },
+  "src/ts/midi-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.buildMidiBytesForPlayback = exports.collectMidiTempoEventsFromMusicXmlDoc = exports.collectMidiControlEventsFromMusicXmlDoc = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
+const instrumentByPreset = {
+    electric_piano_2: 5, // Existing default in this app.
+    acoustic_grand_piano: 1,
+    electric_piano_1: 4,
+    honky_tonk_piano: 3,
+    harpsichord: 6,
+    clavinet: 7,
+    drawbar_organ: 16,
+    acoustic_guitar_nylon: 24,
+    acoustic_bass: 32,
+    violin: 40,
+    string_ensemble_1: 48,
+    synth_brass_1: 62,
+};
+const clampTempo = (tempo) => {
+    if (!Number.isFinite(tempo))
+        return 120;
+    return Math.max(20, Math.min(300, Math.round(tempo)));
+};
+const clampVelocity = (velocity) => {
+    if (!Number.isFinite(velocity))
+        return 80;
+    return Math.max(1, Math.min(127, Math.round(velocity)));
+};
+const DRUM_NAME_HINT_TO_GM_NOTE = [
+    { pattern: /kick|bass drum|bd/i, midi: 36 },
+    { pattern: /snare|sd/i, midi: 38 },
+    { pattern: /rim/i, midi: 37 },
+    { pattern: /clap/i, midi: 39 },
+    { pattern: /closed hihat|closed hi-hat|chh|hh closed/i, midi: 42 },
+    { pattern: /pedal hihat|pedal hi-hat/i, midi: 44 },
+    { pattern: /open hihat|open hi-hat|ohh|hh open/i, midi: 46 },
+    { pattern: /low tom|floor tom/i, midi: 45 },
+    { pattern: /mid tom|middle tom/i, midi: 47 },
+    { pattern: /high tom/i, midi: 50 },
+    { pattern: /crash/i, midi: 49 },
+    { pattern: /ride/i, midi: 51 },
+    { pattern: /cowbell/i, midi: 56 },
+    { pattern: /tambourine/i, midi: 54 },
+    { pattern: /shaker|maracas/i, midi: 70 },
+    { pattern: /conga/i, midi: 64 },
+    { pattern: /bongo/i, midi: 60 },
+    { pattern: /timbale/i, midi: 65 },
+    { pattern: /agogo/i, midi: 67 },
+    { pattern: /triangle/i, midi: 81 },
+];
+const DYNAMICS_TO_VELOCITY = {
+    pppp: 20,
+    ppp: 28,
+    pp: 38,
+    p: 50,
+    mp: 64,
+    mf: 80,
+    f: 96,
+    ff: 112,
+    fff: 120,
+    ffff: 126,
+    sfz: 110,
+    sf: 108,
+    rfz: 106,
+};
+const readDirectionVelocity = (directionNode, fallback) => {
+    var _a, _b, _c;
+    const soundDynamicsText = (_c = (_b = (_a = directionNode.querySelector(":scope > sound")) === null || _a === void 0 ? void 0 : _a.getAttribute("dynamics")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    if (soundDynamicsText) {
+        const parsed = Number(soundDynamicsText);
+        if (Number.isFinite(parsed) && parsed > 0)
+            return clampVelocity((parsed / 100) * 127);
+    }
+    const dynamicsNode = directionNode.querySelector("direction-type > dynamics");
+    if (!dynamicsNode)
+        return fallback;
+    for (const child of Array.from(dynamicsNode.children)) {
+        const tag = child.tagName.toLowerCase();
+        if (DYNAMICS_TO_VELOCITY[tag] !== undefined) {
+            return DYNAMICS_TO_VELOCITY[tag];
+        }
+    }
+    return fallback;
+};
+const getNoteArticulationAdjustments = (noteNode) => {
+    let velocityDelta = 0;
+    let durationRatio = 1;
+    let hasTenuto = false;
+    const articulations = Array.from(noteNode.querySelectorAll("notations > articulations > *"));
+    for (const articulation of articulations) {
+        const tag = articulation.tagName.toLowerCase();
+        if (tag === "strong-accent")
+            velocityDelta += 24;
+        if (tag === "accent")
+            velocityDelta += 14;
+        if (tag === "staccatissimo")
+            durationRatio = Math.min(durationRatio, 0.35);
+        if (tag === "staccato")
+            durationRatio = Math.min(durationRatio, 0.55);
+        if (tag === "tenuto") {
+            hasTenuto = true;
+            durationRatio = Math.max(durationRatio, 1);
+        }
+    }
+    return { velocityDelta, durationRatio, hasTenuto };
+};
+const getTieFlags = (noteNode) => {
+    var _a;
+    const directTieNodes = Array.from(noteNode.children).filter((child) => child.tagName === "tie");
+    const notationTieNodes = Array.from(noteNode.querySelectorAll("notations > tied"));
+    const allTieNodes = [...directTieNodes, ...notationTieNodes];
+    let start = false;
+    let stop = false;
+    for (const tieNode of allTieNodes) {
+        const tieType = (_a = tieNode.getAttribute("type")) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase();
+        if (tieType === "start")
+            start = true;
+        if (tieType === "stop")
+            stop = true;
+    }
+    return { start, stop };
+};
+const getSlurNumbers = (noteNode) => {
+    var _a, _b, _c;
+    const starts = [];
+    const stops = [];
+    const slurNodes = Array.from(noteNode.querySelectorAll("notations > slur"));
+    for (const slurNode of slurNodes) {
+        const slurType = (_b = (_a = slurNode.getAttribute("type")) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase()) !== null && _b !== void 0 ? _b : "";
+        const slurNumber = ((_c = slurNode.getAttribute("number")) === null || _c === void 0 ? void 0 : _c.trim()) || "1";
+        if (slurType === "start")
+            starts.push(slurNumber);
+        if (slurType === "stop")
+            stops.push(slurNumber);
+    }
+    return { starts, stops };
+};
+const getTemporalExpressionAdjustments = (noteNode, baseDurTicks, ticksPerQuarter) => {
+    const hasFermata = Boolean(noteNode.querySelector("notations > fermata"));
+    const hasCaesura = Boolean(noteNode.querySelector("notations > articulations > caesura")) ||
+        Boolean(noteNode.querySelector("notations > caesura"));
+    if (!hasFermata && !hasCaesura) {
+        return { durationExtraTicks: 0, postPauseTicks: 0 };
+    }
+    let durationExtraTicks = 0;
+    let postPauseTicks = 0;
+    if (hasFermata) {
+        durationExtraTicks += Math.max(Math.round(baseDurTicks * 0.35), Math.max(1, Math.round(ticksPerQuarter / 8)));
+        postPauseTicks += Math.max(1, Math.round(ticksPerQuarter / 6));
+    }
+    if (hasCaesura) {
+        durationExtraTicks += Math.max(0, Math.round(baseDurTicks * 0.12));
+        postPauseTicks += Math.max(1, Math.round(ticksPerQuarter / 4));
+    }
+    return { durationExtraTicks, postPauseTicks };
+};
+const readDirectionWedgeDirective = (directionNode) => {
+    var _a, _b, _c;
+    const starts = [];
+    const stops = new Set();
+    const wedgeNodes = Array.from(directionNode.querySelectorAll("direction-type > wedge"));
+    for (const wedgeNode of wedgeNodes) {
+        const wedgeType = (_b = (_a = wedgeNode.getAttribute("type")) === null || _a === void 0 ? void 0 : _a.trim().toLowerCase()) !== null && _b !== void 0 ? _b : "";
+        const wedgeNumber = ((_c = wedgeNode.getAttribute("number")) === null || _c === void 0 ? void 0 : _c.trim()) || "1";
+        if (wedgeType === "crescendo" || wedgeType === "diminuendo") {
+            starts.push({ number: wedgeNumber, kind: wedgeType });
+        }
+        if (wedgeType === "stop") {
+            stops.add(wedgeNumber);
+        }
+    }
+    return { starts, stops };
+};
+const splitTicks = (totalTicks, parts) => {
+    const safeParts = Math.max(1, Math.round(parts));
+    const base = Math.floor(totalTicks / safeParts);
+    const rest = totalTicks - base * safeParts;
+    return Array.from({ length: safeParts }, (_, i) => base + (i < rest ? 1 : 0));
+};
+const splitTicksWeighted = (totalTicks, rawWeights) => {
+    const weights = rawWeights.map((w) => (Number.isFinite(w) && w > 0 ? w : 1));
+    const count = weights.length;
+    if (count === 0)
+        return [];
+    const safeTotal = Math.max(count, Math.round(totalTicks));
+    const weightSum = weights.reduce((sum, w) => sum + w, 0) || count;
+    const provisional = weights.map((w) => (safeTotal * w) / weightSum);
+    const floors = provisional.map((v) => Math.max(1, Math.floor(v)));
+    let assigned = floors.reduce((sum, n) => sum + n, 0);
+    if (assigned > safeTotal) {
+        let overflow = assigned - safeTotal;
+        for (let i = count - 1; i >= 0 && overflow > 0; i -= 1) {
+            const canRemove = Math.max(0, floors[i] - 1);
+            const take = Math.min(canRemove, overflow);
+            floors[i] -= take;
+            overflow -= take;
+        }
+        return floors;
+    }
+    let remaining = safeTotal - assigned;
+    const order = provisional
+        .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+        .sort((a, b) => (b.frac === a.frac ? a.i - b.i : b.frac - a.frac));
+    let index = 0;
+    while (remaining > 0) {
+        floors[order[index % order.length].i] += 1;
+        remaining -= 1;
+        index += 1;
+    }
+    return floors;
+};
+const stepOrder = ["C", "D", "E", "F", "G", "A", "B"];
+const resolveNeighborPitch = (direction, step, octave, keyAlterMap, measureAccidentalByStepOctave) => {
+    var _a, _b;
+    const currentIndex = stepOrder.indexOf(step);
+    if (currentIndex < 0)
+        return null;
+    const delta = direction === "up" ? 1 : -1;
+    const rawIndex = currentIndex + delta;
+    const wrappedIndex = (rawIndex + stepOrder.length) % stepOrder.length;
+    const neighborStep = stepOrder[wrappedIndex];
+    let neighborOctave = octave;
+    if (direction === "up" && step === "B")
+        neighborOctave += 1;
+    if (direction === "down" && step === "C")
+        neighborOctave -= 1;
+    const stepOctaveKey = `${neighborStep}${neighborOctave}`;
+    const alter = measureAccidentalByStepOctave.has(stepOctaveKey)
+        ? (_a = measureAccidentalByStepOctave.get(stepOctaveKey)) !== null && _a !== void 0 ? _a : 0
+        : (_b = keyAlterMap[neighborStep]) !== null && _b !== void 0 ? _b : 0;
+    return { step: neighborStep, octave: neighborOctave, alter };
+};
+const buildOrnamentMidiSequence = (noteNode, baseMidi, durTicks, ticksPerQuarter, context) => {
+    var _a, _b;
+    if (durTicks < 2)
+        return [baseMidi];
+    const ornamentTags = new Set(Array.from(noteNode.querySelectorAll("notations > ornaments > *")).map((node) => node.tagName.toLowerCase()));
+    if (ornamentTags.size === 0)
+        return [baseMidi];
+    const upperNeighbor = resolveNeighborPitch("up", context.step, context.octave, context.keyAlterMap, context.measureAccidentalByStepOctave);
+    const lowerNeighbor = resolveNeighborPitch("down", context.step, context.octave, context.keyAlterMap, context.measureAccidentalByStepOctave);
+    const upperMidi = upperNeighbor
+        ? (_a = pitchToMidi(upperNeighbor.step, upperNeighbor.alter, upperNeighbor.octave)) !== null && _a !== void 0 ? _a : Math.min(127, baseMidi + 2)
+        : Math.min(127, baseMidi + 2);
+    const lowerMidi = lowerNeighbor
+        ? (_b = pitchToMidi(lowerNeighbor.step, lowerNeighbor.alter, lowerNeighbor.octave)) !== null && _b !== void 0 ? _b : Math.max(0, baseMidi - 2)
+        : Math.max(0, baseMidi - 2);
+    if (ornamentTags.has("trill-mark") || ornamentTags.has("shake")) {
+        const segmentTicks = Math.max(1, Math.round(ticksPerQuarter / 8));
+        const count = Math.max(2, Math.min(16, Math.floor(durTicks / segmentTicks)));
+        return Array.from({ length: count }, (_, i) => (i % 2 === 0 ? baseMidi : upperMidi));
+    }
+    if (ornamentTags.has("turn")) {
+        return [upperMidi, baseMidi, lowerMidi, baseMidi];
+    }
+    if (ornamentTags.has("inverted-turn")) {
+        return [lowerMidi, baseMidi, upperMidi, baseMidi];
+    }
+    if (ornamentTags.has("mordent")) {
+        return [baseMidi, lowerMidi, baseMidi];
+    }
+    if (ornamentTags.has("inverted-mordent")) {
+        return [baseMidi, upperMidi, baseMidi];
+    }
+    return [baseMidi];
+};
+const pitchToMidi = (step, alter, octave) => {
+    const semitoneMap = {
+        C: 0,
+        D: 2,
+        E: 4,
+        F: 5,
+        G: 7,
+        A: 9,
+        B: 11,
+    };
+    const base = semitoneMap[step];
+    if (base === undefined)
+        return null;
+    return (octave + 1) * 12 + base + alter;
+};
+const keySignatureAlterByStep = (fifths) => {
+    const map = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
+    const sharpOrder = ["F", "C", "G", "D", "A", "E", "B"];
+    const flatOrder = ["B", "E", "A", "D", "G", "C", "F"];
+    const safeFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+    if (safeFifths > 0) {
+        for (let i = 0; i < safeFifths; i += 1)
+            map[sharpOrder[i]] = 1;
+    }
+    else if (safeFifths < 0) {
+        for (let i = 0; i < Math.abs(safeFifths); i += 1)
+            map[flatOrder[i]] = -1;
+    }
+    return map;
+};
+const accidentalTextToAlter = (text) => {
+    const normalized = text.trim().toLowerCase();
+    if (!normalized)
+        return null;
+    if (normalized === "sharp")
+        return 1;
+    if (normalized === "flat")
+        return -1;
+    if (normalized === "natural")
+        return 0;
+    if (normalized === "double-sharp")
+        return 2;
+    if (normalized === "flat-flat")
+        return -2;
+    return null;
+};
+const getFirstNumber = (el, selector) => {
+    var _a, _b;
+    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
+    if (!text)
+        return null;
+    const n = Number(text);
+    return Number.isFinite(n) ? n : null;
+};
+const midiToPitchText = (midiNumber) => {
+    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+    const octave = Math.floor(n / 12) - 1;
+    return `${names[n % 12]}${octave}`;
+};
+const getMidiWriterRuntime = () => {
+    var _a;
+    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
+};
+const normalizeTicksPerQuarter = (ticksPerQuarter) => {
+    if (!Number.isFinite(ticksPerQuarter))
+        return 128;
+    return Math.max(1, Math.round(ticksPerQuarter));
+};
+const normalizeMidiProgramNumber = (value) => {
+    if (!Number.isFinite(value))
+        return null;
+    const rounded = Math.round(value);
+    if (rounded < 1 || rounded > 128)
+        return null;
+    return rounded;
+};
+const numberToVariableLength = (value) => {
+    let buffer = Math.max(0, Math.round(value)) & 0x0fffffff;
+    const bytes = [buffer & 0x7f];
+    buffer >>= 7;
+    while (buffer > 0) {
+        bytes.unshift((buffer & 0x7f) | 0x80);
+        buffer >>= 7;
+    }
+    return bytes;
+};
+const buildTempoMetaEventData = (deltaTicks, bpm) => {
+    const safeBpm = clampTempo(bpm);
+    const microsPerQuarter = Math.max(1, Math.round(60000000 / safeBpm));
+    return [
+        ...numberToVariableLength(deltaTicks),
+        0xff,
+        0x51,
+        0x03,
+        (microsPerQuarter >> 16) & 0xff,
+        (microsPerQuarter >> 8) & 0xff,
+        microsPerQuarter & 0xff,
+    ];
+};
+const normalizeMidiChannel = (value) => {
+    if (!Number.isFinite(value))
+        return 1;
+    return Math.max(1, Math.min(16, Math.round(value)));
+};
+const parseMidiNoteNumber = (value) => {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 127)
+        return null;
+    return parsed;
+};
+const resolveDrumMidiFromInstrumentName = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed)
+        return null;
+    for (const entry of DRUM_NAME_HINT_TO_GM_NOTE) {
+        if (entry.pattern.test(trimmed))
+            return entry.midi;
+    }
+    return null;
+};
+const buildDrumPartMapByPartId = (doc) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    const byPartId = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_b = (_a = scorePart.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+        if (!partId)
+            continue;
+        const instrumentNameById = new Map();
+        for (const scoreInstrument of Array.from(scorePart.querySelectorAll(":scope > score-instrument"))) {
+            const instrumentId = (_d = (_c = scoreInstrument.getAttribute("id")) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
+            if (!instrumentId)
+                continue;
+            const name = (_g = (_f = (_e = scoreInstrument.querySelector("instrument-name")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "";
+            if (name)
+                instrumentNameById.set(instrumentId, name);
+        }
+        const midiUnpitchedByInstrumentId = new Map();
+        let defaultMidiUnpitched = null;
+        for (const midiInstrument of Array.from(scorePart.querySelectorAll(":scope > midi-instrument"))) {
+            const midiUnpitchedText = (_k = (_j = (_h = midiInstrument.querySelector("midi-unpitched")) === null || _h === void 0 ? void 0 : _h.textContent) === null || _j === void 0 ? void 0 : _j.trim()) !== null && _k !== void 0 ? _k : "";
+            const midiUnpitched = parseMidiNoteNumber(midiUnpitchedText);
+            if (midiUnpitched === null)
+                continue;
+            const midiInstrumentId = (_m = (_l = midiInstrument.getAttribute("id")) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "";
+            if (midiInstrumentId) {
+                midiUnpitchedByInstrumentId.set(midiInstrumentId, midiUnpitched);
+            }
+            if (defaultMidiUnpitched === null) {
+                defaultMidiUnpitched = midiUnpitched;
+            }
+        }
+        byPartId.set(partId, {
+            midiUnpitchedByInstrumentId,
+            instrumentNameById,
+            defaultMidiUnpitched,
+        });
+    }
+    return byPartId;
+};
+const createControllerChangeEventForChannel = (midiWriter, channel, controllerNumber, controllerValue, deltaTicks) => {
+    const event = new midiWriter.ControllerChangeEvent({
+        controllerNumber: Math.max(0, Math.min(127, Math.round(controllerNumber))),
+        controllerValue: Math.max(0, Math.min(127, Math.round(controllerValue))),
+        delta: Math.max(0, Math.round(deltaTicks)),
+    });
+    if (Array.isArray(event.data) && event.data.length >= 3) {
+        const statusIndex = event.data.length - 3;
+        event.data[statusIndex] = 0xb0 + normalizeMidiChannel(channel) - 1;
+    }
+    return event;
+};
+const collectMidiProgramOverridesFromMusicXmlDoc = (doc) => {
+    var _a, _b, _c, _d;
+    const byPartId = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_b = (_a = scorePart.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+        if (!partId)
+            continue;
+        const midiProgramNodes = Array.from(scorePart.querySelectorAll("midi-instrument > midi-program"));
+        for (const midiProgramNode of midiProgramNodes) {
+            const midiProgramText = (_d = (_c = midiProgramNode.textContent) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
+            if (!midiProgramText)
+                continue;
+            const parsed = Number.parseInt(midiProgramText, 10);
+            const normalized = normalizeMidiProgramNumber(parsed);
+            if (normalized === null)
+                continue;
+            byPartId.set(partId, normalized);
+            break;
+        }
+    }
+    return byPartId;
+};
+exports.collectMidiProgramOverridesFromMusicXmlDoc = collectMidiProgramOverridesFromMusicXmlDoc;
+const collectMidiControlEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (partNodes.length === 0)
+        return [];
+    const channelMap = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        if (!partId)
+            continue;
+        const midiChannelText = (_c = (_b = scorePart.querySelector("midi-instrument > midi-channel")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim();
+        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
+        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
+            channelMap.set(partId, midiChannel);
+        }
+    }
+    const partNameById = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_d = scorePart.getAttribute("id")) !== null && _d !== void 0 ? _d : "";
+        if (!partId)
+            continue;
+        const rawName = (_g = (_f = (_e = scorePart.querySelector("part-name")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "";
+        partNameById.set(partId, rawName || partId);
+    }
+    const controlEvents = [];
+    partNodes.forEach((part, partIndex) => {
+        var _a, _b, _c, _d, _e, _f, _g;
+        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        const fallbackChannel = (partIndex % 16) + 1 === 10 ? 11 : (partIndex % 16) + 1;
+        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
+        const trackId = partId || `part-${partIndex + 1}`;
+        const trackName = (_c = partNameById.get(partId)) !== null && _c !== void 0 ? _c : trackId;
+        let currentDivisions = 1;
+        let timelineDiv = 0;
+        let lastPedalValue = null;
+        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+            const divisions = getFirstNumber(measure, "attributes > divisions");
+            if (divisions && divisions > 0)
+                currentDivisions = divisions;
+            let cursorDiv = 0;
+            let measureMaxDiv = 0;
+            for (const child of Array.from(measure.children)) {
+                if (child.tagName === "backup" || child.tagName === "forward") {
+                    const dur = getFirstNumber(child, "duration");
+                    if (!dur || dur <= 0)
+                        continue;
+                    if (child.tagName === "backup") {
+                        cursorDiv = Math.max(0, cursorDiv - dur);
+                    }
+                    else {
+                        cursorDiv += dur;
+                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+                    }
+                    continue;
+                }
+                if (child.tagName !== "direction")
+                    continue;
+                const pedalNodes = Array.from(child.querySelectorAll("direction-type > pedal"));
+                if (!pedalNodes.length)
+                    continue;
+                const startTicks = Math.max(0, Math.round(((timelineDiv + cursorDiv) / currentDivisions) * normalizedTicksPerQuarter));
+                for (const pedalNode of pedalNodes) {
+                    const pedalType = (_e = (_d = pedalNode.getAttribute("type")) === null || _d === void 0 ? void 0 : _d.trim().toLowerCase()) !== null && _e !== void 0 ? _e : "start";
+                    if (pedalType === "stop") {
+                        if (lastPedalValue !== 0) {
+                            controlEvents.push({
+                                trackId,
+                                trackName,
+                                startTicks,
+                                channel,
+                                controllerNumber: 64,
+                                controllerValue: 0,
+                            });
+                            lastPedalValue = 0;
+                        }
+                        continue;
+                    }
+                    if (pedalType === "change") {
+                        if (lastPedalValue !== 0) {
+                            controlEvents.push({
+                                trackId,
+                                trackName,
+                                startTicks,
+                                channel,
+                                controllerNumber: 64,
+                                controllerValue: 0,
+                            });
+                        }
+                        controlEvents.push({
+                            trackId,
+                            trackName,
+                            startTicks,
+                            channel,
+                            controllerNumber: 64,
+                            controllerValue: 127,
+                        });
+                        lastPedalValue = 127;
+                        continue;
+                    }
+                    if (pedalType === "start" || pedalType === "continue" || pedalType === "resume") {
+                        if (lastPedalValue !== 127) {
+                            controlEvents.push({
+                                trackId,
+                                trackName,
+                                startTicks,
+                                channel,
+                                controllerNumber: 64,
+                                controllerValue: 127,
+                            });
+                            lastPedalValue = 127;
+                        }
+                    }
+                }
+            }
+            if (measureMaxDiv <= 0) {
+                const beats = (_f = getFirstNumber(measure, "attributes > time > beats")) !== null && _f !== void 0 ? _f : 4;
+                const beatType = (_g = getFirstNumber(measure, "attributes > time > beat-type")) !== null && _g !== void 0 ? _g : 4;
+                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
+            }
+            timelineDiv += measureMaxDiv;
+        }
+    });
+    return controlEvents;
+};
+exports.collectMidiControlEventsFromMusicXmlDoc = collectMidiControlEventsFromMusicXmlDoc;
+const collectMidiTempoEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+    const firstPart = doc.querySelector("score-partwise > part");
+    if (!firstPart)
+        return [{ startTicks: 0, bpm: 120 }];
+    let currentDivisions = 1;
+    let timelineDiv = 0;
+    let currentTempo = clampTempo((_a = getFirstNumber(doc, "sound[tempo]")) !== null && _a !== void 0 ? _a : 120);
+    const events = [{ startTicks: 0, bpm: currentTempo }];
+    for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+        const divisions = getFirstNumber(measure, "attributes > divisions");
+        if (divisions && divisions > 0)
+            currentDivisions = divisions;
+        let cursorDiv = 0;
+        let measureMaxDiv = 0;
+        const lastStartByVoice = new Map();
+        for (const child of Array.from(measure.children)) {
+            if (child.tagName === "backup" || child.tagName === "forward") {
+                const dur = getFirstNumber(child, "duration");
+                if (!dur || dur <= 0)
+                    continue;
+                if (child.tagName === "backup") {
+                    cursorDiv = Math.max(0, cursorDiv - dur);
+                }
+                else {
+                    cursorDiv += dur;
+                    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+                }
+                continue;
+            }
+            if (child.tagName === "direction") {
+                const soundTempo = Number((_c = (_b = child.querySelector(":scope > sound")) === null || _b === void 0 ? void 0 : _b.getAttribute("tempo")) !== null && _c !== void 0 ? _c : "");
+                const metronomeTempo = Number((_f = (_e = (_d = child.querySelector("direction-type > metronome > per-minute")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "");
+                const rawTempo = Number.isFinite(soundTempo) && soundTempo > 0 ? soundTempo : metronomeTempo;
+                if (Number.isFinite(rawTempo) && rawTempo > 0) {
+                    const offsetDiv = (_g = getFirstNumber(child, ":scope > offset")) !== null && _g !== void 0 ? _g : 0;
+                    const eventDiv = Math.max(0, timelineDiv + cursorDiv + offsetDiv);
+                    const eventTick = Math.max(0, Math.round((eventDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter));
+                    const normalizedTempo = clampTempo(rawTempo);
+                    if (normalizedTempo !== currentTempo) {
+                        events.push({ startTicks: eventTick, bpm: normalizedTempo });
+                        currentTempo = normalizedTempo;
+                    }
+                }
+            }
+            if (child.tagName !== "note")
+                continue;
+            const durationDiv = getFirstNumber(child, "duration");
+            if (!durationDiv || durationDiv <= 0)
+                continue;
+            const voice = (_k = (_j = (_h = child.querySelector("voice")) === null || _h === void 0 ? void 0 : _h.textContent) === null || _j === void 0 ? void 0 : _j.trim()) !== null && _k !== void 0 ? _k : "1";
+            const isChord = Boolean(child.querySelector("chord"));
+            const startDiv = isChord ? ((_l = lastStartByVoice.get(voice)) !== null && _l !== void 0 ? _l : cursorDiv) : cursorDiv;
+            if (!isChord) {
+                lastStartByVoice.set(voice, startDiv);
+                cursorDiv += durationDiv;
+            }
+            measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+        }
+        if (measureMaxDiv <= 0) {
+            const beats = (_m = getFirstNumber(measure, "attributes > time > beats")) !== null && _m !== void 0 ? _m : 4;
+            const beatType = (_o = getFirstNumber(measure, "attributes > time > beat-type")) !== null && _o !== void 0 ? _o : 4;
+            measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
+        }
+        timelineDiv += measureMaxDiv;
+    }
+    const byTick = new Map();
+    for (const event of events) {
+        byTick.set(Math.max(0, Math.round(event.startTicks)), clampTempo(event.bpm));
+    }
+    const sortedTicks = Array.from(byTick.keys()).sort((a, b) => a - b);
+    if (!sortedTicks.length || sortedTicks[0] !== 0) {
+        sortedTicks.unshift(0);
+        byTick.set(0, clampTempo((_p = getFirstNumber(doc, "sound[tempo]")) !== null && _p !== void 0 ? _p : 120));
+    }
+    return sortedTicks.map((tick) => { var _a; return ({ startTicks: tick, bpm: (_a = byTick.get(tick)) !== null && _a !== void 0 ? _a : 120 }); });
+};
+exports.collectMidiTempoEventsFromMusicXmlDoc = collectMidiTempoEventsFromMusicXmlDoc;
+const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_piano_2", trackProgramOverrides = new Map(), controlEvents = [], tempoEvents = []) => {
+    var _a, _b, _c;
+    const midiWriter = getMidiWriterRuntime();
+    if (!midiWriter) {
+        throw new Error("midi-writer.js is not loaded.");
+    }
+    const tracksById = new Map();
+    for (const event of events) {
+        const key = event.trackId || "__default__";
+        const bucket = (_a = tracksById.get(key)) !== null && _a !== void 0 ? _a : [];
+        bucket.push(event);
+        tracksById.set(key, bucket);
+    }
+    const midiTracks = [];
+    const normalizedTempoEvents = (tempoEvents.length ? tempoEvents : [{ startTicks: 0, bpm: tempo }])
+        .map((event) => ({
+        startTicks: Math.max(0, Math.round(event.startTicks)),
+        bpm: clampTempo(event.bpm),
+    }))
+        .sort((a, b) => a.startTicks - b.startTicks);
+    const dedupedTempoEvents = [];
+    for (const event of normalizedTempoEvents) {
+        const prev = dedupedTempoEvents[dedupedTempoEvents.length - 1];
+        if (prev && prev.startTicks === event.startTicks) {
+            prev.bpm = event.bpm;
+            continue;
+        }
+        dedupedTempoEvents.push({ ...event });
+    }
+    if (!dedupedTempoEvents.length || dedupedTempoEvents[0].startTicks !== 0) {
+        dedupedTempoEvents.unshift({ startTicks: 0, bpm: clampTempo(tempo) });
+    }
+    const tempoTrack = new midiWriter.Track();
+    tempoTrack.addTrackName("Tempo Map");
+    tempoTrack.addInstrumentName("Tempo Map");
+    let prevTempoTick = 0;
+    for (const tempoEvent of dedupedTempoEvents) {
+        const currentTick = Math.max(0, Math.round(tempoEvent.startTicks));
+        const deltaTicks = Math.max(0, currentTick - prevTempoTick);
+        tempoTrack.addEvent({ data: buildTempoMetaEventData(deltaTicks, tempoEvent.bpm) });
+        prevTempoTick = currentTick;
+    }
+    midiTracks.push(tempoTrack);
+    const normalizedProgramPreset = instrumentByPreset[programPreset] !== undefined ? programPreset : "electric_piano_2";
+    const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
+    sortedTrackIds.forEach((trackId, index) => {
+        var _a, _b, _c;
+        const trackEvents = ((_a = tracksById.get(trackId)) !== null && _a !== void 0 ? _a : [])
+            .slice()
+            .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+        if (!trackEvents.length)
+            return;
+        const track = new midiWriter.Track();
+        const first = trackEvents[0];
+        const trackName = ((_b = first.trackName) === null || _b === void 0 ? void 0 : _b.trim()) || trackId || `Track ${index + 1}`;
+        track.addTrackName(trackName);
+        track.addInstrumentName(trackName);
+        const channels = Array.from(new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))).sort((a, b) => a - b);
+        const overrideProgram = normalizeMidiProgramNumber((_c = trackProgramOverrides.get(trackId)) !== null && _c !== void 0 ? _c : NaN);
+        const selectedInstrumentProgram = overrideProgram !== null && overrideProgram !== void 0 ? overrideProgram : instrumentByPreset[normalizedProgramPreset];
+        for (const channel of channels) {
+            if (channel === 10)
+                continue;
+            track.addEvent(new midiWriter.ProgramChangeEvent({
+                channel,
+                instrument: selectedInstrumentProgram,
+                delta: 0,
+            }));
+        }
+        for (const event of trackEvents) {
+            const fields = {
+                pitch: [midiToPitchText(event.midiNumber)],
+                duration: `T${event.durTicks}`,
+                startTick: Math.max(0, Math.round(event.startTicks)),
+                velocity: clampVelocity(event.velocity),
+                channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+            };
+            track.addEvent(new midiWriter.NoteEvent(fields));
+        }
+        midiTracks.push(track);
+    });
+    const groupedControlEvents = new Map();
+    for (const controlEvent of controlEvents) {
+        const key = `${controlEvent.trackId}::${normalizeMidiChannel(controlEvent.channel)}`;
+        const bucket = (_b = groupedControlEvents.get(key)) !== null && _b !== void 0 ? _b : [];
+        bucket.push(controlEvent);
+        groupedControlEvents.set(key, bucket);
+    }
+    const sortedControlKeys = Array.from(groupedControlEvents.keys()).sort((a, b) => a.localeCompare(b));
+    for (const controlKey of sortedControlKeys) {
+        const channelEvents = ((_c = groupedControlEvents.get(controlKey)) !== null && _c !== void 0 ? _c : [])
+            .slice()
+            .sort((a, b) => a.startTicks === b.startTicks
+            ? a.controllerNumber === b.controllerNumber
+                ? a.controllerValue - b.controllerValue
+                : a.controllerNumber - b.controllerNumber
+            : a.startTicks - b.startTicks);
+        if (!channelEvents.length)
+            continue;
+        const first = channelEvents[0];
+        const ccTrack = new midiWriter.Track();
+        ccTrack.addTrackName(`${first.trackName} Pedal`);
+        ccTrack.addInstrumentName(`${first.trackName} Pedal`);
+        let prevTick = 0;
+        for (const controlEvent of channelEvents) {
+            const currentTick = Math.max(0, Math.round(controlEvent.startTicks));
+            const deltaTicks = Math.max(0, currentTick - prevTick);
+            ccTrack.addEvent(createControllerChangeEventForChannel(midiWriter, controlEvent.channel, controlEvent.controllerNumber, controlEvent.controllerValue, deltaTicks));
+            prevTick = currentTick;
+        }
+        midiTracks.push(ccTrack);
+    }
+    if (!midiTracks.length) {
+        throw new Error("No notes available for MIDI conversion.");
+    }
+    const writer = new midiWriter.Writer(midiTracks);
+    const built = writer.buildFile();
+    return built instanceof Uint8Array ? built : Uint8Array.from(built);
+};
+exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
+const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+    const mode = (_a = options.mode) !== null && _a !== void 0 ? _a : "playback";
+    const applyMidiNuance = mode === "midi";
+    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (partNodes.length === 0)
+        return { tempo: 120, events: [] };
+    const channelMap = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_b = scorePart.getAttribute("id")) !== null && _b !== void 0 ? _b : "";
+        if (!partId)
+            continue;
+        const midiChannelText = (_d = (_c = scorePart.querySelector("midi-instrument > midi-channel")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim();
+        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
+        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
+            channelMap.set(partId, midiChannel);
+        }
+    }
+    const partNameById = new Map();
+    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
+        const partId = (_e = scorePart.getAttribute("id")) !== null && _e !== void 0 ? _e : "";
+        if (!partId)
+            continue;
+        const rawName = (_h = (_g = (_f = scorePart.querySelector("part-name")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : "";
+        partNameById.set(partId, rawName || partId);
+    }
+    const drumPartMapByPartId = buildDrumPartMapByPartId(doc);
+    const defaultTempo = 120;
+    const tempo = clampTempo((_j = getFirstNumber(doc, "sound[tempo]")) !== null && _j !== void 0 ? _j : defaultTempo);
+    const events = [];
+    partNodes.forEach((part, partIndex) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16;
+        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
+        const fallbackChannel = (partIndex % 16) + 1 === 10 ? 11 : (partIndex % 16) + 1;
+        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
+        let currentDivisions = 1;
+        let currentBeats = 4;
+        let currentBeatType = 4;
+        let currentFifths = 0;
+        let currentTransposeSemitones = 0;
+        let currentVelocity = 80;
+        let timelineDiv = 0;
+        const tieChainByKey = new Map();
+        const activeWedgeByNumber = new Map();
+        const pendingGraceByVoice = new Map();
+        const activeSlurByVoice = new Map();
+        const voiceTimeShiftTicks = new Map();
+        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+            const divisions = getFirstNumber(measure, "attributes > divisions");
+            if (divisions && divisions > 0) {
+                currentDivisions = divisions;
+            }
+            const beats = getFirstNumber(measure, "attributes > time > beats");
+            const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+            if (beats && beats > 0 && beatType && beatType > 0) {
+                currentBeats = beats;
+                currentBeatType = beatType;
+            }
+            const fifths = getFirstNumber(measure, "attributes > key > fifths");
+            if (fifths !== null) {
+                currentFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+            }
+            const hasTranspose = Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
+                Boolean(measure.querySelector("attributes > transpose > octave-change"));
+            if (hasTranspose) {
+                const chromatic = (_c = getFirstNumber(measure, "attributes > transpose > chromatic")) !== null && _c !== void 0 ? _c : 0;
+                const octaveChange = (_d = getFirstNumber(measure, "attributes > transpose > octave-change")) !== null && _d !== void 0 ? _d : 0;
+                currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
+            }
+            let cursorDiv = 0;
+            let measureMaxDiv = 0;
+            const lastStartByVoice = new Map();
+            const measureAccidentalByStepOctave = new Map();
+            const keyAlterMap = keySignatureAlterByStep(currentFifths);
+            for (const child of Array.from(measure.children)) {
+                if (child.tagName === "backup" || child.tagName === "forward") {
+                    const dur = getFirstNumber(child, "duration");
+                    if (!dur || dur <= 0)
+                        continue;
+                    if (child.tagName === "backup") {
+                        cursorDiv = Math.max(0, cursorDiv - dur);
+                    }
+                    else {
+                        cursorDiv += dur;
+                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+                    }
+                    continue;
+                }
+                if (applyMidiNuance && child.tagName === "direction") {
+                    currentVelocity = readDirectionVelocity(child, currentVelocity);
+                    const wedgeDirective = readDirectionWedgeDirective(child);
+                    for (const wedgeNumber of wedgeDirective.stops) {
+                        activeWedgeByNumber.delete(wedgeNumber);
+                    }
+                    for (const start of wedgeDirective.starts) {
+                        activeWedgeByNumber.set(start.number, start.kind);
+                    }
+                    continue;
+                }
+                if (child.tagName !== "note")
+                    continue;
+                const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
+                const isChord = Boolean(child.querySelector("chord"));
+                const isRest = Boolean(child.querySelector("rest"));
+                const isGrace = Boolean(child.querySelector("grace"));
+                const durationDiv = getFirstNumber(child, "duration");
+                if (!isGrace && (!durationDiv || durationDiv <= 0))
+                    continue;
+                const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
+                if (!isChord) {
+                    lastStartByVoice.set(voice, startDiv);
+                }
+                if (!isRest) {
+                    const partDrumMap = drumPartMapByPartId.get(partId);
+                    const noteInstrumentId = (_l = (_k = (_j = child.querySelector(":scope > instrument")) === null || _j === void 0 ? void 0 : _j.getAttribute("id")) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+                    const hasUnpitched = Boolean(child.querySelector("unpitched"));
+                    const pitchStep = (_p = (_o = (_m = child.querySelector("pitch > step")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
+                    const pitchOctave = getFirstNumber(child, "pitch > octave");
+                    const explicitAlter = getFirstNumber(child, "pitch > alter");
+                    const accidentalAlter = accidentalTextToAlter((_s = (_r = (_q = child.querySelector("accidental")) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : "");
+                    const drumByInstrumentId = noteInstrumentId && partDrumMap
+                        ? partDrumMap.midiUnpitchedByInstrumentId.get(noteInstrumentId)
+                        : undefined;
+                    const isDrumContext = channel === 10 || hasUnpitched || drumByInstrumentId !== undefined;
+                    let melodicStep = pitchStep;
+                    let melodicOctave = pitchOctave;
+                    let soundingMidi = null;
+                    if (isDrumContext) {
+                        if (drumByInstrumentId !== undefined) {
+                            soundingMidi = drumByInstrumentId;
+                        }
+                        if (soundingMidi === null && hasUnpitched) {
+                            const displayStep = (_y = (_v = (_u = (_t = child.querySelector("unpitched > display-step")) === null || _t === void 0 ? void 0 : _t.textContent) === null || _u === void 0 ? void 0 : _u.trim()) !== null && _v !== void 0 ? _v : (_x = (_w = child.querySelector("unpitched > step")) === null || _w === void 0 ? void 0 : _w.textContent) === null || _x === void 0 ? void 0 : _x.trim()) !== null && _y !== void 0 ? _y : "";
+                            const displayOctave = (_z = getFirstNumber(child, "unpitched > display-octave")) !== null && _z !== void 0 ? _z : getFirstNumber(child, "unpitched > octave");
+                            const displayAlter = (_1 = (_0 = getFirstNumber(child, "unpitched > display-alter")) !== null && _0 !== void 0 ? _0 : getFirstNumber(child, "unpitched > alter")) !== null && _1 !== void 0 ? _1 : 0;
+                            if (displayOctave !== null) {
+                                melodicStep = displayStep || melodicStep;
+                                melodicOctave = displayOctave;
+                                soundingMidi = pitchToMidi(displayStep, Math.round(displayAlter), displayOctave);
+                            }
+                        }
+                        if (soundingMidi === null && noteInstrumentId && partDrumMap) {
+                            const instrumentName = (_2 = partDrumMap.instrumentNameById.get(noteInstrumentId)) !== null && _2 !== void 0 ? _2 : "";
+                            soundingMidi = resolveDrumMidiFromInstrumentName(instrumentName);
+                        }
+                        if (soundingMidi === null && partDrumMap && partDrumMap.defaultMidiUnpitched !== null) {
+                            soundingMidi = partDrumMap.defaultMidiUnpitched;
+                        }
+                        if (soundingMidi === null && pitchOctave !== null) {
+                            const stepOctaveKey = `${pitchStep}${pitchOctave}`;
+                            let drumAlter = 0;
+                            if (explicitAlter !== null) {
+                                drumAlter = Math.round(explicitAlter);
+                                measureAccidentalByStepOctave.set(stepOctaveKey, drumAlter);
+                            }
+                            else if (accidentalAlter !== null) {
+                                drumAlter = accidentalAlter;
+                                measureAccidentalByStepOctave.set(stepOctaveKey, drumAlter);
+                            }
+                            else if (measureAccidentalByStepOctave.has(stepOctaveKey)) {
+                                drumAlter = (_3 = measureAccidentalByStepOctave.get(stepOctaveKey)) !== null && _3 !== void 0 ? _3 : 0;
+                            }
+                            soundingMidi = pitchToMidi(pitchStep, drumAlter, pitchOctave);
+                        }
+                    }
+                    else if (pitchOctave !== null) {
+                        const stepOctaveKey = `${pitchStep}${pitchOctave}`;
+                        let effectiveAlter = 0;
+                        if (explicitAlter !== null) {
+                            effectiveAlter = Math.round(explicitAlter);
+                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
+                        }
+                        else if (accidentalAlter !== null) {
+                            effectiveAlter = accidentalAlter;
+                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
+                        }
+                        else if (measureAccidentalByStepOctave.has(stepOctaveKey)) {
+                            effectiveAlter = (_4 = measureAccidentalByStepOctave.get(stepOctaveKey)) !== null && _4 !== void 0 ? _4 : 0;
+                        }
+                        else {
+                            effectiveAlter = (_5 = keyAlterMap[pitchStep]) !== null && _5 !== void 0 ? _5 : 0;
+                        }
+                        const midi = pitchToMidi(pitchStep, effectiveAlter, pitchOctave);
+                        if (midi !== null) {
+                            soundingMidi = midi + currentTransposeSemitones;
+                        }
+                    }
+                    if (soundingMidi !== null) {
+                        if (soundingMidi < 0 || soundingMidi > 127) {
+                            continue;
+                        }
+                        const articulation = applyMidiNuance
+                            ? getNoteArticulationAdjustments(child)
+                            : { velocityDelta: 0, durationRatio: 1, hasTenuto: false };
+                        const velocity = clampVelocity(currentVelocity + articulation.velocityDelta);
+                        const voiceShiftTicks = applyMidiNuance ? (_6 = voiceTimeShiftTicks.get(voice)) !== null && _6 !== void 0 ? _6 : 0 : 0;
+                        const startTicks = Math.max(0, Math.round(((timelineDiv + startDiv) / currentDivisions) * normalizedTicksPerQuarter) + voiceShiftTicks);
+                        const baseDurTicks = Math.max(1, Math.round(((durationDiv !== null && durationDiv !== void 0 ? durationDiv : 1) / currentDivisions) * normalizedTicksPerQuarter));
+                        const slurNumbers = applyMidiNuance
+                            ? getSlurNumbers(child)
+                            : { starts: [], stops: [] };
+                        const activeSlurSet = (_7 = activeSlurByVoice.get(voice)) !== null && _7 !== void 0 ? _7 : new Set();
+                        const noteUnderSlur = applyMidiNuance &&
+                            (activeSlurSet.size > 0 || slurNumbers.starts.length > 0 || slurNumbers.stops.length > 0);
+                        if (applyMidiNuance && isGrace) {
+                            const graceNode = child.querySelector("grace");
+                            const hasSlash = ((_9 = (_8 = graceNode === null || graceNode === void 0 ? void 0 : graceNode.getAttribute("slash")) === null || _8 === void 0 ? void 0 : _8.trim().toLowerCase()) !== null && _9 !== void 0 ? _9 : "") === "yes" ||
+                                Boolean(graceNode === null || graceNode === void 0 ? void 0 : graceNode.querySelector("slash"));
+                            const weight = hasSlash ? 1 : 2;
+                            const pending = (_10 = pendingGraceByVoice.get(voice)) !== null && _10 !== void 0 ? _10 : [];
+                            pending.push({
+                                midiNumber: soundingMidi,
+                                velocity,
+                                weight,
+                            });
+                            pendingGraceByVoice.set(voice, pending);
+                            continue;
+                        }
+                        const legatoOverlapTicks = applyMidiNuance && !isChord && (noteUnderSlur || articulation.hasTenuto)
+                            ? Math.max(1, Math.round(normalizedTicksPerQuarter / 32))
+                            : 0;
+                        const temporalAdjustments = applyMidiNuance && !isGrace
+                            ? getTemporalExpressionAdjustments(child, baseDurTicks, normalizedTicksPerQuarter)
+                            : { durationExtraTicks: 0, postPauseTicks: 0 };
+                        const durTicks = Math.max(1, Math.round(baseDurTicks * articulation.durationRatio) +
+                            legatoOverlapTicks +
+                            temporalAdjustments.durationExtraTicks);
+                        const tieFlags = applyMidiNuance ? getTieFlags(child) : { start: false, stop: false };
+                        const canExpandOrnament = applyMidiNuance && !isDrumContext && !tieFlags.start && !tieFlags.stop;
+                        const ornamentMidiSequence = canExpandOrnament
+                            ? buildOrnamentMidiSequence(child, soundingMidi, durTicks, normalizedTicksPerQuarter, {
+                                step: melodicStep,
+                                octave: melodicOctave !== null && melodicOctave !== void 0 ? melodicOctave : 4,
+                                keyAlterMap,
+                                measureAccidentalByStepOctave,
+                            })
+                            : [soundingMidi];
+                        const ornamentDurations = splitTicks(durTicks, ornamentMidiSequence.length);
+                        const generatedEvents = [];
+                        let eventStartTick = startTicks;
+                        const pendingGrace = applyMidiNuance ? (_11 = pendingGraceByVoice.get(voice)) !== null && _11 !== void 0 ? _11 : [] : [];
+                        if (applyMidiNuance && pendingGrace.length > 0) {
+                            const maxLeadByPrincipal = Math.max(pendingGrace.length, Math.round(baseDurTicks * 0.45));
+                            const maxLeadByTempo = Math.max(pendingGrace.length, Math.round(normalizedTicksPerQuarter / 2));
+                            const totalGraceTicks = Math.max(pendingGrace.length, Math.min(maxLeadByPrincipal, maxLeadByTempo));
+                            const graceDurations = splitTicksWeighted(totalGraceTicks, pendingGrace.map((g) => g.weight));
+                            const graceStartTick = Math.max(0, startTicks - totalGraceTicks);
+                            let graceTick = graceStartTick;
+                            for (let i = 0; i < pendingGrace.length; i += 1) {
+                                const grace = pendingGrace[i];
+                                const graceDur = Math.max(1, (_12 = graceDurations[i]) !== null && _12 !== void 0 ? _12 : 1);
+                                generatedEvents.push({
+                                    midiNumber: grace.midiNumber,
+                                    startTicks: graceTick,
+                                    durTicks: graceDur,
+                                    channel,
+                                    velocity: grace.velocity,
+                                    trackId: partId || `part-${partIndex + 1}`,
+                                    trackName: (_13 = partNameById.get(partId)) !== null && _13 !== void 0 ? _13 : (partId || `part-${partIndex + 1}`),
+                                });
+                                graceTick += graceDur;
+                            }
+                            eventStartTick = Math.max(eventStartTick, graceTick);
+                            pendingGraceByVoice.delete(voice);
+                        }
+                        for (let i = 0; i < ornamentMidiSequence.length; i += 1) {
+                            const ornamentMidi = ornamentMidiSequence[i];
+                            const ornamentDurTicks = Math.max(1, (_14 = ornamentDurations[i]) !== null && _14 !== void 0 ? _14 : 1);
+                            generatedEvents.push({
+                                midiNumber: ornamentMidi,
+                                startTicks: eventStartTick,
+                                durTicks: ornamentDurTicks,
+                                channel,
+                                velocity,
+                                trackId: partId || `part-${partIndex + 1}`,
+                                trackName: (_15 = partNameById.get(partId)) !== null && _15 !== void 0 ? _15 : (partId || `part-${partIndex + 1}`),
+                            });
+                            eventStartTick += ornamentDurTicks;
+                        }
+                        const primaryEvent = generatedEvents[0];
+                        if (!primaryEvent)
+                            continue;
+                        for (const wedgeKind of activeWedgeByNumber.values()) {
+                            currentVelocity = clampVelocity(currentVelocity + (wedgeKind === "crescendo" ? 4 : -4));
+                        }
+                        if (applyMidiNuance) {
+                            const tieKey = `${voice}|${channel}|${soundingMidi}`;
+                            if (tieFlags.stop) {
+                                const chained = tieChainByKey.get(tieKey);
+                                if (chained) {
+                                    chained.durTicks += primaryEvent.durTicks;
+                                    chained.velocity = Math.max(chained.velocity, velocity);
+                                }
+                                else {
+                                    events.push(primaryEvent);
+                                }
+                                if (!tieFlags.start) {
+                                    tieChainByKey.delete(tieKey);
+                                }
+                                else {
+                                    tieChainByKey.set(tieKey, chained !== null && chained !== void 0 ? chained : primaryEvent);
+                                }
+                            }
+                            else {
+                                events.push(...generatedEvents);
+                                if (tieFlags.start) {
+                                    tieChainByKey.set(tieKey, primaryEvent);
+                                }
+                                else {
+                                    tieChainByKey.delete(tieKey);
+                                }
+                            }
+                        }
+                        else {
+                            events.push(...generatedEvents);
+                        }
+                        if (applyMidiNuance) {
+                            const nextSlurSet = new Set(activeSlurSet);
+                            for (const slurStart of slurNumbers.starts)
+                                nextSlurSet.add(slurStart);
+                            for (const slurStop of slurNumbers.stops)
+                                nextSlurSet.delete(slurStop);
+                            if (nextSlurSet.size > 0) {
+                                activeSlurByVoice.set(voice, nextSlurSet);
+                            }
+                            else {
+                                activeSlurByVoice.delete(voice);
+                            }
+                            if (!isChord && temporalAdjustments.postPauseTicks > 0) {
+                                const shiftedTicks = ((_16 = voiceTimeShiftTicks.get(voice)) !== null && _16 !== void 0 ? _16 : 0) + temporalAdjustments.postPauseTicks;
+                                voiceTimeShiftTicks.set(voice, shiftedTicks);
+                            }
+                        }
+                    }
+                }
+                if (!isChord && !isGrace && durationDiv) {
+                    cursorDiv += durationDiv;
+                }
+                if (!isGrace && durationDiv) {
+                    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+                }
+            }
+            if (measureMaxDiv <= 0) {
+                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
+            }
+            timelineDiv += measureMaxDiv;
+        }
+    });
+    return { tempo, events };
+};
+exports.buildPlaybackEventsFromMusicXmlDoc = buildPlaybackEventsFromMusicXmlDoc;
+const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
+    const doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.querySelector("parsererror"))
+        return { tempo: 120, events: [] };
+    return (0, exports.buildPlaybackEventsFromMusicXmlDoc)(doc, ticksPerQuarter);
+};
+exports.buildPlaybackEventsFromXml = buildPlaybackEventsFromXml;
+
+  },
+  "src/ts/sampleXml2.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.sampleXml2 = void 0;
+exports.sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN"
+  "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <work><work-title>Beethoven Sym5 Mov1</work-title></work>
+  <identification><creator type="composer">Unknown</creator></identification>
+  <part-list>
+    <score-part id="P1"><part-name>Beethoven Sym5 Mov1 Treble L1</part-name></score-part>
+    <score-part id="P2"><part-name>Beethoven Sym5 Mov1 Treble L2</part-name></score-part>
+    <score-part id="P3"><part-name>Beethoven Sym5 Mov1 Treble L3</part-name></score-part>
+    <score-part id="P4"><part-name>Beethoven Sym5 Mov1 Treble L4</part-name></score-part>
+    <score-part id="P5"><part-name>Beethoven Sym5 Mov1 Treble L5</part-name></score-part>
+    <score-part id="P6"><part-name>Beethoven Sym5 Mov1 Treble L6</part-name></score-part>
+    <score-part id="P7"><part-name>Beethoven Sym5 Mov1 Bass L1</part-name></score-part>
+    <score-part id="P8"><part-name>Beethoven Sym5 Mov1 Bass L2</part-name></score-part>
+    <score-part id="P9"><part-name>Beethoven Sym5 Mov1 Bass L3</part-name></score-part>
+    <score-part id="P10"><part-name>Beethoven Sym5 Mov1 Bass L4</part-name></score-part>
+    <score-part id="P11"><part-name>Beethoven Sym5 Mov1 Bass L5</part-name></score-part>
+    <score-part id="P12"><part-name>Beethoven Sym5 Mov1 Bass L6</part-name></score-part>
+    <score-part id="P13"><part-name>Beethoven Sym5 Mov1 Bass L7</part-name></score-part>
+    <score-part id="P14"><part-name>Beethoven Sym5 Mov1 Bass L8</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="121">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="121">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P3">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="121">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P4">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="121">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P5">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P6">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P7">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>1440</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="121">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P8">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>flat</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <pitch>
+          <step>B</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="116">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="117">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="118">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="119">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="120">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P9">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="58">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="59">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="60">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="61">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="62">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="63">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="64">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="65">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="66">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="67">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="68">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="69">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="70">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="71">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="72">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="73">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="74">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="75">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="76">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="77">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="78">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="79">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="80">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="81">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="82">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="83">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="93">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="94">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="96">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="97">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="98">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="99">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="100">
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="101">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="102">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="104">
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="105">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="106">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="107">
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="108">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>B</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="109">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="110">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="111">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="112">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="113">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="114">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="115">
+      <note>
+        <pitch>
+          <step>E</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P10">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="56">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="57">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P11">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>-1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="51">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="52">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="53">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="54">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="55">
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P12">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P13">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="49">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <rest/>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="50">
+      <note>
+        <rest/>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+  <part id="P14">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>-3</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="3">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="5">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="6">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="7">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="8">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="9">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="10">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="11">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="12">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="13">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="14">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="15">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="16">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="17">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="18">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="19">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="20">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="21">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="22">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="23">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="24">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="25">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="26">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="27">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="28">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="29">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="30">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="31">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="32">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="33">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="34">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="35">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="36">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="38">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="39">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="40">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="41">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="42">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="43">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="44">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="45">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="46">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="47">
+      <note>
+        <rest/>
+        <duration>1920</duration>
+        <type>half</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+    <measure number="48">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
 
   },
   "src/ts/sampleXml.js": function (require, module, exports) {
@@ -16776,6 +35692,25 @@ exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = ex
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
 exports.PLAYBACK_TICKS_PER_QUARTER = 128;
+const summarizeDiagnostics = (diagnostics) => {
+    if (!diagnostics.length)
+        return "unknown reason";
+    const first = diagnostics[0];
+    const firstText = `[${first.code}] ${first.message}`;
+    if (diagnostics.length === 1)
+        return firstText;
+    return `${firstText} (+${diagnostics.length - 1} more)`;
+};
+const logPlaybackFailureDiagnostics = (label, diagnostics) => {
+    if (!diagnostics.length) {
+        console.warn(`[mikuscore][playback] ${label}: no diagnostics.`);
+        return;
+    }
+    console.error(`[mikuscore][playback] ${label}:`);
+    for (const d of diagnostics) {
+        console.error(`- [${d.code}] ${d.message}`);
+    }
+};
 const midiToHz = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
 const normalizeWaveform = (value) => {
     if (value === "square" || value === "triangle")
@@ -16811,12 +35746,13 @@ const createBasicWaveSynthEngine = (options) => {
         }
         return context;
     };
-    const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform) => {
+    const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform, sustainHoldSeconds = 0) => {
         if (!audioContext)
             return startAt;
         const attack = 0.005;
         const release = 0.03;
         const endAt = startAt + bodyDuration;
+        const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
         const oscillator = audioContext.createOscillator();
         oscillator.type = waveform;
         oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
@@ -16824,12 +35760,12 @@ const createBasicWaveSynthEngine = (options) => {
         const gainLevel = event.channel === 10 ? 0.06 : 0.1;
         gainNode.gain.setValueAtTime(0.0001, startAt);
         gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
-        gainNode.gain.setValueAtTime(gainLevel, endAt);
-        gainNode.gain.linearRampToValueAtTime(0.0001, endAt + release);
+        gainNode.gain.setValueAtTime(gainLevel, heldEndAt);
+        gainNode.gain.linearRampToValueAtTime(0.0001, heldEndAt + release);
         oscillator.connect(gainNode);
         gainNode.connect(audioContext.destination);
         oscillator.start(startAt);
-        oscillator.stop(endAt + release + 0.01);
+        oscillator.stop(heldEndAt + release + 0.01);
         oscillator.onended = () => {
             try {
                 oscillator.disconnect();
@@ -16840,7 +35776,7 @@ const createBasicWaveSynthEngine = (options) => {
             }
         };
         activeSynthNodes.push({ oscillator, gainNode });
-        return endAt + release + 0.02;
+        return heldEndAt + release + 0.02;
     };
     const stop = () => {
         if (synthStopTimer !== null) {
@@ -16897,19 +35833,71 @@ const createBasicWaveSynthEngine = (options) => {
         }
     };
     const playSchedule = async (schedule, waveform, onEnded) => {
+        var _a, _b;
         if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
             throw new Error("Please convert first.");
         }
         const runningContext = await ensureAudioContextRunning();
         stop();
         const normalizedWaveform = normalizeWaveform(waveform);
-        const secPerTick = 60 / (Math.max(1, Number(schedule.tempo) || 120) * ticksPerQuarter);
+        const normalizedTempoEvents = (((_a = schedule.tempoEvents) === null || _a === void 0 ? void 0 : _a.length)
+            ? schedule.tempoEvents
+            : [{ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) }])
+            .map((event) => ({
+            startTick: Math.max(0, Math.round(event.startTick)),
+            bpm: Math.max(1, Math.round(event.bpm || 120)),
+        }))
+            .sort((a, b) => a.startTick - b.startTick);
+        const mergedTempoEvents = [];
+        for (const event of normalizedTempoEvents) {
+            const prev = mergedTempoEvents[mergedTempoEvents.length - 1];
+            if (prev && prev.startTick === event.startTick) {
+                prev.bpm = event.bpm;
+            }
+            else {
+                mergedTempoEvents.push({ ...event });
+            }
+        }
+        if (!mergedTempoEvents.length || mergedTempoEvents[0].startTick !== 0) {
+            mergedTempoEvents.unshift({ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) });
+        }
+        const tickToSeconds = (targetTick) => {
+            var _a, _b;
+            let seconds = 0;
+            let cursorTick = 0;
+            for (let i = 0; i < mergedTempoEvents.length; i += 1) {
+                const current = mergedTempoEvents[i];
+                const nextStart = (_b = (_a = mergedTempoEvents[i + 1]) === null || _a === void 0 ? void 0 : _a.startTick) !== null && _b !== void 0 ? _b : Number.POSITIVE_INFINITY;
+                const segStart = Math.max(cursorTick, current.startTick);
+                if (targetTick <= segStart)
+                    break;
+                const segEnd = Math.min(targetTick, nextStart);
+                if (segEnd <= segStart)
+                    continue;
+                const secPerTick = 60 / (current.bpm * ticksPerQuarter);
+                seconds += (segEnd - segStart) * secPerTick;
+                cursorTick = segEnd;
+                if (segEnd >= targetTick)
+                    break;
+            }
+            return seconds;
+        };
         const baseTime = runningContext.currentTime + 0.04;
         let latestEndTime = baseTime;
+        const pedalRanges = ((_b = schedule.pedalRanges) !== null && _b !== void 0 ? _b : []).map((range) => ({
+            channel: Math.max(1, Math.min(16, Math.round(range.channel || 1))),
+            startTick: Math.max(0, Math.round(range.startTick)),
+            endTick: Math.max(0, Math.round(range.endTick)),
+        }));
+        const isPedalHeldAt = (channel, tick) => {
+            return pedalRanges.some((range) => range.channel === channel && tick >= range.startTick && tick < range.endTick);
+        };
         for (const event of schedule.events) {
-            const startAt = baseTime + event.start * secPerTick;
-            const bodyDuration = Math.max(0.04, event.ticks * secPerTick);
-            latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform));
+            const startAt = baseTime + tickToSeconds(event.start);
+            const endAt = baseTime + tickToSeconds(event.start + event.ticks);
+            const bodyDuration = Math.max(0.04, endAt - startAt);
+            const sustainHoldSeconds = isPedalHeldAt(event.channel, event.start) ? 0.18 : 0;
+            latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds));
         }
         const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
         synthStopTimer = window.setTimeout(() => {
@@ -16922,9 +35910,49 @@ const createBasicWaveSynthEngine = (options) => {
     return { unlockFromUserGesture, playSchedule, stop };
 };
 exports.createBasicWaveSynthEngine = createBasicWaveSynthEngine;
-const toSynthSchedule = (tempo, events) => {
+const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) => {
+    const normalizedTempoEvents = tempoEvents
+        .map((event) => ({
+        startTick: Math.max(0, Math.round(event.startTicks)),
+        bpm: Math.max(1, Math.round(event.bpm || 120)),
+    }))
+        .sort((a, b) => a.startTick - b.startTick);
+    const cc64Events = controlEvents
+        .filter((event) => event.controllerNumber === 64)
+        .map((event) => ({
+        channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
+        startTick: Math.max(0, Math.round(event.startTicks)),
+        value: Math.max(0, Math.min(127, Math.round(event.controllerValue))),
+    }))
+        .sort((a, b) => (a.channel === b.channel ? a.startTick - b.startTick : a.channel - b.channel));
+    const pedalRanges = [];
+    const rangeStartByChannel = new Map();
+    for (const event of cc64Events) {
+        const pedalOn = event.value >= 64;
+        if (pedalOn) {
+            if (!rangeStartByChannel.has(event.channel)) {
+                rangeStartByChannel.set(event.channel, event.startTick);
+            }
+            continue;
+        }
+        const start = rangeStartByChannel.get(event.channel);
+        if (start !== undefined) {
+            pedalRanges.push({ channel: event.channel, startTick: start, endTick: event.startTick });
+            rangeStartByChannel.delete(event.channel);
+        }
+    }
+    const latestNoteTick = events.reduce((max, event) => Math.max(max, Math.max(0, Math.round(event.startTicks + event.durTicks))), 0);
+    for (const [channel, startTick] of rangeStartByChannel.entries()) {
+        pedalRanges.push({
+            channel,
+            startTick,
+            endTick: Math.max(startTick + 1, latestNoteTick + 1),
+        });
+    }
     return {
         tempo,
+        tempoEvents: normalizedTempoEvents,
+        pedalRanges,
         events: events
             .slice()
             .sort((a, b) => a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks)
@@ -16950,6 +35978,7 @@ const startPlayback = async (options, params) => {
     options.onFullSaveResult(saveResult);
     if (!saveResult.ok) {
         options.logDiagnostics("playback", saveResult.diagnostics);
+        logPlaybackFailureDiagnostics("save failed", saveResult.diagnostics);
         if (saveResult.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
             const debugXml = params.core.debugSerializeCurrentXml();
             if (debugXml) {
@@ -16960,7 +35989,7 @@ const startPlayback = async (options, params) => {
             }
         }
         options.renderAll();
-        options.setPlaybackText("Playback: save failed");
+        options.setPlaybackText(`Playback: save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
         return;
     }
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
@@ -16969,17 +35998,27 @@ const startPlayback = async (options, params) => {
         options.renderControlState();
         return;
     }
-    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter);
+    const useMidiLikePlayback = options.getUseMidiLikePlayback();
+    const playbackMode = useMidiLikePlayback ? "midi" : "playback";
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter, {
+        mode: playbackMode,
+    });
     const events = parsedPlayback.events;
     if (events.length === 0) {
         options.setPlaybackText("Playback: no playable notes");
         options.renderControlState();
         return;
     }
+    const tempoEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
+    const controlEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
     const waveform = options.getPlaybackWaveform();
     let midiBytes;
     try {
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc));
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), controlEvents, tempoEvents);
     }
     catch (error) {
         options.setPlaybackText("Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")");
@@ -16987,7 +36026,7 @@ const startPlayback = async (options, params) => {
         return;
     }
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), waveform, () => {
+        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, () => {
             options.setIsPlaying(false);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
@@ -16999,7 +36038,7 @@ const startPlayback = async (options, params) => {
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: ${events.length} notes / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
+    options.setPlaybackText(`Playing: ${events.length} notes / mode ${playbackMode} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
     options.renderControlState();
     options.renderAll();
 };
@@ -17011,7 +36050,8 @@ const startMeasurePlayback = async (options, params) => {
     if (!saveResult.ok) {
         options.onMeasureSaveDiagnostics(saveResult.diagnostics);
         options.logDiagnostics("playback", saveResult.diagnostics);
-        options.setPlaybackText("Playback: measure save failed");
+        logPlaybackFailureDiagnostics("measure save failed", saveResult.diagnostics);
+        options.setPlaybackText(`Playback: measure save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
         options.renderAll();
         return;
     }
@@ -17021,16 +36061,26 @@ const startMeasurePlayback = async (options, params) => {
         options.renderControlState();
         return;
     }
-    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter);
+    const useMidiLikePlayback = options.getUseMidiLikePlayback();
+    const playbackMode = useMidiLikePlayback ? "midi" : "playback";
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter, {
+        mode: playbackMode,
+    });
     const events = parsedPlayback.events;
     if (events.length === 0) {
         options.setPlaybackText("Playback: no playable notes in this measure");
         options.renderControlState();
         return;
     }
+    const tempoEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
+    const controlEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
     const waveform = options.getPlaybackWaveform();
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events), waveform, () => {
+        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, () => {
             options.setIsPlaying(false);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
@@ -17042,343 +36092,10 @@ const startMeasurePlayback = async (options, params) => {
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / waveform ${waveform}`);
+    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / mode ${playbackMode} / waveform ${waveform}`);
     options.renderControlState();
 };
 exports.startMeasurePlayback = startMeasurePlayback;
-
-  },
-  "src/ts/midi-io.js": function (require, module, exports) {
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.buildMidiBytesForPlayback = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
-const clampTempo = (tempo) => {
-    if (!Number.isFinite(tempo))
-        return 120;
-    return Math.max(20, Math.min(300, Math.round(tempo)));
-};
-const pitchToMidi = (step, alter, octave) => {
-    const semitoneMap = {
-        C: 0,
-        D: 2,
-        E: 4,
-        F: 5,
-        G: 7,
-        A: 9,
-        B: 11,
-    };
-    const base = semitoneMap[step];
-    if (base === undefined)
-        return null;
-    return (octave + 1) * 12 + base + alter;
-};
-const keySignatureAlterByStep = (fifths) => {
-    const map = { C: 0, D: 0, E: 0, F: 0, G: 0, A: 0, B: 0 };
-    const sharpOrder = ["F", "C", "G", "D", "A", "E", "B"];
-    const flatOrder = ["B", "E", "A", "D", "G", "C", "F"];
-    const safeFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
-    if (safeFifths > 0) {
-        for (let i = 0; i < safeFifths; i += 1)
-            map[sharpOrder[i]] = 1;
-    }
-    else if (safeFifths < 0) {
-        for (let i = 0; i < Math.abs(safeFifths); i += 1)
-            map[flatOrder[i]] = -1;
-    }
-    return map;
-};
-const accidentalTextToAlter = (text) => {
-    const normalized = text.trim().toLowerCase();
-    if (!normalized)
-        return null;
-    if (normalized === "sharp")
-        return 1;
-    if (normalized === "flat")
-        return -1;
-    if (normalized === "natural")
-        return 0;
-    if (normalized === "double-sharp")
-        return 2;
-    if (normalized === "flat-flat")
-        return -2;
-    return null;
-};
-const getFirstNumber = (el, selector) => {
-    var _a, _b;
-    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
-    if (!text)
-        return null;
-    const n = Number(text);
-    return Number.isFinite(n) ? n : null;
-};
-const midiToPitchText = (midiNumber) => {
-    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
-    const octave = Math.floor(n / 12) - 1;
-    return `${names[n % 12]}${octave}`;
-};
-const getMidiWriterRuntime = () => {
-    var _a;
-    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
-};
-const normalizeTicksPerQuarter = (ticksPerQuarter) => {
-    if (!Number.isFinite(ticksPerQuarter))
-        return 128;
-    return Math.max(1, Math.round(ticksPerQuarter));
-};
-const normalizeMidiProgramNumber = (value) => {
-    if (!Number.isFinite(value))
-        return null;
-    const rounded = Math.round(value);
-    if (rounded < 1 || rounded > 128)
-        return null;
-    return rounded;
-};
-const collectMidiProgramOverridesFromMusicXmlDoc = (doc) => {
-    var _a, _b, _c, _d;
-    const byPartId = new Map();
-    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-        const partId = (_b = (_a = scorePart.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
-        if (!partId)
-            continue;
-        const midiProgramNodes = Array.from(scorePart.querySelectorAll("midi-instrument > midi-program"));
-        for (const midiProgramNode of midiProgramNodes) {
-            const midiProgramText = (_d = (_c = midiProgramNode.textContent) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
-            if (!midiProgramText)
-                continue;
-            const parsed = Number.parseInt(midiProgramText, 10);
-            const normalized = normalizeMidiProgramNumber(parsed);
-            if (normalized === null)
-                continue;
-            byPartId.set(partId, normalized);
-            break;
-        }
-    }
-    return byPartId;
-};
-exports.collectMidiProgramOverridesFromMusicXmlDoc = collectMidiProgramOverridesFromMusicXmlDoc;
-const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_piano_2", trackProgramOverrides = new Map()) => {
-    var _a;
-    const midiWriter = getMidiWriterRuntime();
-    if (!midiWriter) {
-        throw new Error("midi-writer.js is not loaded.");
-    }
-    const tracksById = new Map();
-    for (const event of events) {
-        const key = event.trackId || "__default__";
-        const bucket = (_a = tracksById.get(key)) !== null && _a !== void 0 ? _a : [];
-        bucket.push(event);
-        tracksById.set(key, bucket);
-    }
-    const midiTracks = [];
-    const normalizedProgramPreset = programPreset === "acoustic_grand_piano" || programPreset === "electric_piano_1"
-        ? programPreset
-        : "electric_piano_2";
-    const instrumentByPreset = {
-        electric_piano_2: 5, // Existing default in this app.
-        acoustic_grand_piano: 1,
-        electric_piano_1: 4,
-    };
-    const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
-    sortedTrackIds.forEach((trackId, index) => {
-        var _a, _b, _c;
-        const trackEvents = ((_a = tracksById.get(trackId)) !== null && _a !== void 0 ? _a : [])
-            .slice()
-            .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
-        if (!trackEvents.length)
-            return;
-        const track = new midiWriter.Track();
-        track.setTempo(clampTempo(tempo));
-        const first = trackEvents[0];
-        const trackName = ((_b = first.trackName) === null || _b === void 0 ? void 0 : _b.trim()) || trackId || `Track ${index + 1}`;
-        track.addTrackName(trackName);
-        track.addInstrumentName(trackName);
-        const channels = Array.from(new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))).sort((a, b) => a - b);
-        const overrideProgram = normalizeMidiProgramNumber((_c = trackProgramOverrides.get(trackId)) !== null && _c !== void 0 ? _c : NaN);
-        const selectedInstrumentProgram = overrideProgram !== null && overrideProgram !== void 0 ? overrideProgram : instrumentByPreset[normalizedProgramPreset];
-        for (const channel of channels) {
-            if (channel === 10)
-                continue;
-            track.addEvent(new midiWriter.ProgramChangeEvent({
-                channel,
-                instrument: selectedInstrumentProgram,
-                delta: 0,
-            }));
-        }
-        for (const event of trackEvents) {
-            const fields = {
-                pitch: [midiToPitchText(event.midiNumber)],
-                duration: `T${event.durTicks}`,
-                startTick: Math.max(0, Math.round(event.startTicks)),
-                velocity: 80,
-                channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
-            };
-            track.addEvent(new midiWriter.NoteEvent(fields));
-        }
-        midiTracks.push(track);
-    });
-    if (!midiTracks.length) {
-        throw new Error("No notes available for MIDI conversion.");
-    }
-    const writer = new midiWriter.Writer(midiTracks);
-    const built = writer.buildFile();
-    return built instanceof Uint8Array ? built : Uint8Array.from(built);
-};
-exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
-const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
-    const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
-    if (partNodes.length === 0)
-        return { tempo: 120, events: [] };
-    const channelMap = new Map();
-    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-        const partId = (_a = scorePart.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
-        if (!partId)
-            continue;
-        const midiChannelText = (_c = (_b = scorePart.querySelector("midi-instrument > midi-channel")) === null || _b === void 0 ? void 0 : _b.textContent) === null || _c === void 0 ? void 0 : _c.trim();
-        const midiChannel = midiChannelText ? Number.parseInt(midiChannelText, 10) : NaN;
-        if (Number.isFinite(midiChannel) && midiChannel >= 1 && midiChannel <= 16) {
-            channelMap.set(partId, midiChannel);
-        }
-    }
-    const partNameById = new Map();
-    for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-        const partId = (_d = scorePart.getAttribute("id")) !== null && _d !== void 0 ? _d : "";
-        if (!partId)
-            continue;
-        const rawName = (_g = (_f = (_e = scorePart.querySelector("part-name")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "";
-        partNameById.set(partId, rawName || partId);
-    }
-    const defaultTempo = 120;
-    const tempo = clampTempo((_h = getFirstNumber(doc, "sound[tempo]")) !== null && _h !== void 0 ? _h : defaultTempo);
-    const events = [];
-    partNodes.forEach((part, partIndex) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
-        const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
-        const fallbackChannel = (partIndex % 16) + 1 === 10 ? 11 : (partIndex % 16) + 1;
-        const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
-        let currentDivisions = 1;
-        let currentBeats = 4;
-        let currentBeatType = 4;
-        let currentFifths = 0;
-        let currentTransposeSemitones = 0;
-        let timelineDiv = 0;
-        for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-            const divisions = getFirstNumber(measure, "attributes > divisions");
-            if (divisions && divisions > 0) {
-                currentDivisions = divisions;
-            }
-            const beats = getFirstNumber(measure, "attributes > time > beats");
-            const beatType = getFirstNumber(measure, "attributes > time > beat-type");
-            if (beats && beats > 0 && beatType && beatType > 0) {
-                currentBeats = beats;
-                currentBeatType = beatType;
-            }
-            const fifths = getFirstNumber(measure, "attributes > key > fifths");
-            if (fifths !== null) {
-                currentFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
-            }
-            const hasTranspose = Boolean(measure.querySelector("attributes > transpose > chromatic")) ||
-                Boolean(measure.querySelector("attributes > transpose > octave-change"));
-            if (hasTranspose) {
-                const chromatic = (_c = getFirstNumber(measure, "attributes > transpose > chromatic")) !== null && _c !== void 0 ? _c : 0;
-                const octaveChange = (_d = getFirstNumber(measure, "attributes > transpose > octave-change")) !== null && _d !== void 0 ? _d : 0;
-                currentTransposeSemitones = Math.round(chromatic + octaveChange * 12);
-            }
-            let cursorDiv = 0;
-            let measureMaxDiv = 0;
-            const lastStartByVoice = new Map();
-            const measureAccidentalByStepOctave = new Map();
-            const keyAlterMap = keySignatureAlterByStep(currentFifths);
-            for (const child of Array.from(measure.children)) {
-                if (child.tagName === "backup" || child.tagName === "forward") {
-                    const dur = getFirstNumber(child, "duration");
-                    if (!dur || dur <= 0)
-                        continue;
-                    if (child.tagName === "backup") {
-                        cursorDiv = Math.max(0, cursorDiv - dur);
-                    }
-                    else {
-                        cursorDiv += dur;
-                        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
-                    }
-                    continue;
-                }
-                if (child.tagName !== "note")
-                    continue;
-                const durationDiv = getFirstNumber(child, "duration");
-                if (!durationDiv || durationDiv <= 0)
-                    continue;
-                const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
-                const isChord = Boolean(child.querySelector("chord"));
-                const isRest = Boolean(child.querySelector("rest"));
-                const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
-                if (!isChord) {
-                    lastStartByVoice.set(voice, startDiv);
-                }
-                if (!isRest) {
-                    const step = (_l = (_k = (_j = child.querySelector("pitch > step")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
-                    const octave = getFirstNumber(child, "pitch > octave");
-                    const explicitAlter = getFirstNumber(child, "pitch > alter");
-                    const accidentalAlter = accidentalTextToAlter((_p = (_o = (_m = child.querySelector("accidental")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "");
-                    if (octave !== null) {
-                        const stepOctaveKey = `${step}${octave}`;
-                        let effectiveAlter = 0;
-                        if (explicitAlter !== null) {
-                            effectiveAlter = Math.round(explicitAlter);
-                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
-                        }
-                        else if (accidentalAlter !== null) {
-                            effectiveAlter = accidentalAlter;
-                            measureAccidentalByStepOctave.set(stepOctaveKey, effectiveAlter);
-                        }
-                        else if (measureAccidentalByStepOctave.has(stepOctaveKey)) {
-                            effectiveAlter = (_q = measureAccidentalByStepOctave.get(stepOctaveKey)) !== null && _q !== void 0 ? _q : 0;
-                        }
-                        else {
-                            effectiveAlter = (_r = keyAlterMap[step]) !== null && _r !== void 0 ? _r : 0;
-                        }
-                        const midi = pitchToMidi(step, effectiveAlter, octave);
-                        if (midi !== null) {
-                            const soundingMidi = midi + currentTransposeSemitones;
-                            if (soundingMidi < 0 || soundingMidi > 127) {
-                                continue;
-                            }
-                            const startTicks = Math.max(0, Math.round(((timelineDiv + startDiv) / currentDivisions) * normalizedTicksPerQuarter));
-                            const durTicks = Math.max(1, Math.round((durationDiv / currentDivisions) * normalizedTicksPerQuarter));
-                            events.push({
-                                midiNumber: soundingMidi,
-                                startTicks,
-                                durTicks,
-                                channel,
-                                trackId: partId || `part-${partIndex + 1}`,
-                                trackName: (_s = partNameById.get(partId)) !== null && _s !== void 0 ? _s : (partId || `part-${partIndex + 1}`),
-                            });
-                        }
-                    }
-                }
-                if (!isChord) {
-                    cursorDiv += durationDiv;
-                }
-                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
-            }
-            if (measureMaxDiv <= 0) {
-                measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
-            }
-            timelineDiv += measureMaxDiv;
-        }
-    });
-    return { tempo, events };
-};
-exports.buildPlaybackEventsFromMusicXmlDoc = buildPlaybackEventsFromMusicXmlDoc;
-const buildPlaybackEventsFromXml = (xml, ticksPerQuarter) => {
-    const doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return { tempo: 120, events: [] };
-    return (0, exports.buildPlaybackEventsFromMusicXmlDoc)(doc, ticksPerQuarter);
-};
-exports.buildPlaybackEventsFromXml = buildPlaybackEventsFromXml;
 
   },
   "core/interfaces.js": function (require, module, exports) {
@@ -17390,6 +36107,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveLoadFlow = void 0;
+const mxl_io_1 = require("./mxl-io");
 const resolveLoadFlow = async (params) => {
     if (params.isNewType) {
         const sourceText = params.createNewMusicXml();
@@ -17411,7 +36129,23 @@ const resolveLoadFlow = async (params) => {
                 diagnosticMessage: "Please select a file.",
             };
         }
-        sourceText = await selected.text();
+        const lowerName = selected.name.toLowerCase();
+        const isMxl = !treatAsAbc && lowerName.endsWith(".mxl");
+        if (isMxl) {
+            try {
+                sourceText = await (0, mxl_io_1.extractMusicXmlTextFromMxl)(await selected.arrayBuffer());
+            }
+            catch (error) {
+                return {
+                    ok: false,
+                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+                    diagnosticMessage: `Failed to parse MXL: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+        }
+        else {
+            sourceText = await selected.text();
+        }
         if (!treatAsAbc) {
             return {
                 ok: true,
@@ -17466,6 +36200,177 @@ const resolveLoadFlow = async (params) => {
 exports.resolveLoadFlow = resolveLoadFlow;
 
   },
+  "src/ts/mxl-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractMusicXmlTextFromMxl = void 0;
+const ZIP_EOCD_SIG = 0x06054b50;
+const ZIP_CDFH_SIG = 0x02014b50;
+const ZIP_LFH_SIG = 0x04034b50;
+const readU16 = (bytes, offset) => {
+    return bytes[offset] | (bytes[offset + 1] << 8);
+};
+const readU32 = (bytes, offset) => {
+    return (bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24)) >>> 0;
+};
+const normalizeZipPath = (value) => {
+    return value.replace(/\\/g, "/").replace(/^\.?\//, "");
+};
+const decodeZipFileName = (bytes, utf8Flag) => {
+    if (utf8Flag)
+        return new TextDecoder("utf-8").decode(bytes);
+    let out = "";
+    for (const b of bytes)
+        out += String.fromCharCode(b);
+    return out;
+};
+const findEndOfCentralDirectoryOffset = (bytes) => {
+    // EOCD is within the last 65,557 bytes by ZIP spec.
+    const minOffset = Math.max(0, bytes.length - 65557);
+    for (let offset = bytes.length - 22; offset >= minOffset; offset -= 1) {
+        if (readU32(bytes, offset) === ZIP_EOCD_SIG)
+            return offset;
+    }
+    return -1;
+};
+const readZipEntries = (bytes) => {
+    const eocdOffset = findEndOfCentralDirectoryOffset(bytes);
+    if (eocdOffset < 0)
+        throw new Error("Invalid ZIP: end of central directory was not found.");
+    const centralDirectorySize = readU32(bytes, eocdOffset + 12);
+    const centralDirectoryOffset = readU32(bytes, eocdOffset + 16);
+    const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
+    if (centralDirectoryEnd > bytes.length) {
+        throw new Error("Invalid ZIP: central directory is out of range.");
+    }
+    const entries = [];
+    let offset = centralDirectoryOffset;
+    while (offset < centralDirectoryEnd) {
+        if (readU32(bytes, offset) !== ZIP_CDFH_SIG) {
+            throw new Error("Invalid ZIP: central directory entry is malformed.");
+        }
+        const flags = readU16(bytes, offset + 8);
+        const compressionMethod = readU16(bytes, offset + 10);
+        const compressedSize = readU32(bytes, offset + 20);
+        const uncompressedSize = readU32(bytes, offset + 24);
+        const fileNameLength = readU16(bytes, offset + 28);
+        const extraLength = readU16(bytes, offset + 30);
+        const commentLength = readU16(bytes, offset + 32);
+        const localHeaderOffset = readU32(bytes, offset + 42);
+        const fileNameStart = offset + 46;
+        const fileNameEnd = fileNameStart + fileNameLength;
+        if (fileNameEnd > bytes.length) {
+            throw new Error("Invalid ZIP: entry filename is out of range.");
+        }
+        const fileName = decodeZipFileName(bytes.slice(fileNameStart, fileNameEnd), (flags & 0x0800) !== 0);
+        const normalizedPath = normalizeZipPath(fileName);
+        if (localHeaderOffset + 30 > bytes.length || readU32(bytes, localHeaderOffset) !== ZIP_LFH_SIG) {
+            throw new Error(`Invalid ZIP: local header is missing for "${normalizedPath}".`);
+        }
+        const localNameLength = readU16(bytes, localHeaderOffset + 26);
+        const localExtraLength = readU16(bytes, localHeaderOffset + 28);
+        const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
+        if (dataOffset + compressedSize > bytes.length) {
+            throw new Error(`Invalid ZIP: data is out of range for "${normalizedPath}".`);
+        }
+        if (normalizedPath && !normalizedPath.endsWith("/")) {
+            entries.push({
+                path: normalizedPath,
+                compressionMethod,
+                compressedSize,
+                uncompressedSize,
+                dataOffset,
+            });
+        }
+        offset = fileNameEnd + extraLength + commentLength;
+    }
+    return entries;
+};
+const inflateDeflateRaw = async (compressed) => {
+    const DS = globalThis.DecompressionStream;
+    if (!DS) {
+        throw new Error("DecompressionStream is not available in this browser.");
+    }
+    const copied = new Uint8Array(compressed.length);
+    copied.set(compressed);
+    const stream = new Blob([copied.buffer]).stream().pipeThrough(new DS("deflate-raw"));
+    const arrayBuffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+};
+const extractEntryBytes = async (archiveBytes, entry) => {
+    const compressed = archiveBytes.slice(entry.dataOffset, entry.dataOffset + entry.compressedSize);
+    if (entry.compressionMethod === 0) {
+        return compressed;
+    }
+    if (entry.compressionMethod === 8) {
+        const inflated = await inflateDeflateRaw(compressed);
+        if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
+            // Keep going: some archives are inconsistent here, but data is often still valid.
+        }
+        return inflated;
+    }
+    throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}.`);
+};
+const findEntryByPath = (entries, path) => {
+    var _a;
+    const normalized = normalizeZipPath(path);
+    return (_a = entries.find((entry) => entry.path === normalized)) !== null && _a !== void 0 ? _a : null;
+};
+const findLikelyMusicXmlEntry = (entries) => {
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (p.endsWith(".musicxml"))
+            return entry;
+    }
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (p.endsWith(".xml") && p !== "meta-inf/container.xml")
+            return entry;
+    }
+    return null;
+};
+const parseContainerRootFilePath = (containerXmlText) => {
+    var _a, _b;
+    const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
+    if (doc.querySelector("parsererror"))
+        return null;
+    const rootFileNode = doc.querySelector("rootfile[full-path]");
+    const fullPath = (_b = (_a = rootFileNode === null || rootFileNode === void 0 ? void 0 : rootFileNode.getAttribute("full-path")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+    return fullPath || null;
+};
+const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (entries.length === 0) {
+        throw new Error("The MXL archive is empty.");
+    }
+    const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
+    if (containerEntry) {
+        const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
+        const containerText = new TextDecoder("utf-8").decode(containerBytes);
+        const rootPath = parseContainerRootFilePath(containerText);
+        if (rootPath) {
+            const rootEntry = findEntryByPath(entries, rootPath);
+            if (!rootEntry) {
+                throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
+            }
+            const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
+            return new TextDecoder("utf-8").decode(xmlBytes);
+        }
+    }
+    const fallbackEntry = findLikelyMusicXmlEntry(entries);
+    if (!fallbackEntry) {
+        throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
+    }
+    const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
+    return new TextDecoder("utf-8").decode(xmlBytes);
+};
+exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
+
+  },
   "src/ts/download-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -17500,17 +36405,21 @@ const createMusicXmlDownloadPayload = (xmlText) => {
     };
 };
 exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
-const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2") => {
+const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false) => {
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!playbackDoc)
         return null;
-    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, ticksPerQuarter);
+    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, ticksPerQuarter, { mode: "midi" });
     if (parsedPlayback.events.length === 0)
         return null;
-    const midiProgramOverrides = (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
+    const midiProgramOverrides = forceProgramPreset
+        ? new Map()
+        : (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
+    const midiControlEvents = (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, ticksPerQuarter);
+    const midiTempoEvents = (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, ticksPerQuarter);
     let midiBytes;
     try {
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides, midiControlEvents, midiTempoEvents);
     }
     catch (_a) {
         return null;
@@ -18765,8 +37674,16 @@ const getMeasureCapacity = (measure) => {
 exports.getMeasureCapacity = getMeasureCapacity;
 const getOccupiedTime = (measure, voice) => {
     const directChildren = Array.from(measure.children);
-    let total = 0;
+    let cursor = 0;
+    let occupied = 0;
     for (const child of directChildren) {
+        if (child.tagName === "backup" || child.tagName === "forward") {
+            const shift = (0, xmlUtils_1.getDurationValue)(child);
+            if (shift === null)
+                continue;
+            cursor = child.tagName === "backup" ? Math.max(0, cursor - shift) : cursor + shift;
+            continue;
+        }
         if (child.tagName !== "note")
             continue;
         // Chord notes share onset with the previous note and must not advance time.
@@ -18776,10 +37693,13 @@ const getOccupiedTime = (measure, voice) => {
         if (noteVoice !== voice)
             continue;
         const duration = (0, xmlUtils_1.getDurationValue)(child);
-        if (duration !== null)
-            total += duration;
+        if (duration === null)
+            continue;
+        const end = cursor + duration;
+        occupied = Math.max(occupied, end);
+        cursor = end;
     }
-    return total;
+    return occupied;
 };
 exports.getOccupiedTime = getOccupiedTime;
 const resolveTimingContext = (measure) => {
@@ -19199,6 +38119,7 @@ class ScoreCore {
         try {
             if (command.type === "change_to_pitch") {
                 (0, xmlUtils_1.setPitch)(target, command.pitch);
+                autoAssignGrandStaffByPitch(target);
             }
             else if (command.type === "change_duration") {
                 const durationNotation = (0, xmlUtils_1.getDurationNotationHint)(target, command.duration);
@@ -19250,6 +38171,7 @@ class ScoreCore {
                 }
             }
             else if (command.type === "split_note") {
+                const timingBeforeSplit = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
                 const currentDuration = (0, xmlUtils_1.getDurationValue)(target);
                 if (!Number.isInteger(currentDuration) || (currentDuration !== null && currentDuration !== void 0 ? currentDuration : 0) <= 1) {
                     return this.fail("MVP_INVALID_COMMAND_PAYLOAD", "split_note requires duration >= 2.");
@@ -19264,6 +38186,22 @@ class ScoreCore {
                 (0, xmlUtils_1.setDurationValue)(target, half);
                 (0, xmlUtils_1.setDurationValue)(duplicated, half);
                 insertedNode = duplicated;
+                if (timingBeforeSplit) {
+                    const timingAfterSplit = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
+                    if (!timingAfterSplit) {
+                        this.restoreFrom(snapshot);
+                        return this.fail("MVP_COMMAND_EXECUTION_FAILED", "Failed to validate split timing.");
+                    }
+                    if (timingAfterSplit.occupied !== timingBeforeSplit.occupied) {
+                        this.restoreFrom(snapshot);
+                        return this.fail("MVP_COMMAND_EXECUTION_FAILED", "Split changed lane timing unexpectedly near backup/forward boundary.");
+                    }
+                    const timingValidation = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, timingAfterSplit.occupied);
+                    if (timingValidation.diagnostic) {
+                        this.restoreFrom(snapshot);
+                        return this.failWith(timingValidation.diagnostic);
+                    }
+                }
             }
             else if (command.type === "insert_note_after") {
                 const timing = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
@@ -19416,10 +38354,16 @@ class ScoreCore {
                 };
             }
             const duration = (0, xmlUtils_1.getDurationValue)(note);
-            if (duration === null || duration <= 0) {
+            const hasGrace = Array.from(note.children).some((c) => c.tagName === "grace");
+            if (!hasGrace && (duration === null || duration <= 0)) {
+                const context = this.describeNoteContext(note);
+                const noteXml = this.compactNodeXml(note);
+                if (typeof console !== "undefined") {
+                    console.error("[mikuscore][save][invalid-duration]", context, noteXml);
+                }
                 return {
                     code: "MVP_INVALID_NOTE_DURATION",
-                    message: "Note is missing a valid positive <duration> value.",
+                    message: `Note is missing a valid positive <duration> value. ${context}`,
                 };
             }
             const pitchDiagnostic = this.validateNotePitch(note);
@@ -19430,6 +38374,27 @@ class ScoreCore {
     }
     fail(code, message) {
         return this.failWith({ code, message });
+    }
+    describeNoteContext(note) {
+        var _a, _b, _c;
+        const measure = (0, xmlUtils_1.findAncestorMeasure)(note);
+        const part = note.closest("part");
+        const partId = ((_a = part === null || part === void 0 ? void 0 : part.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) || "(unknown-part)";
+        const measureNo = ((_b = measure === null || measure === void 0 ? void 0 : measure.getAttribute("number")) === null || _b === void 0 ? void 0 : _b.trim()) || "(unknown-measure)";
+        const voice = (0, xmlUtils_1.getVoiceText)(note) || "(missing-voice)";
+        const nodeId = (_c = this.nodeToId.get(note)) !== null && _c !== void 0 ? _c : "(no-node-id)";
+        const hasGrace = Array.from(note.children).some((c) => c.tagName === "grace");
+        const hasCue = Array.from(note.children).some((c) => c.tagName === "cue");
+        const hasChord = Array.from(note.children).some((c) => c.tagName === "chord");
+        const hasRest = Array.from(note.children).some((c) => c.tagName === "rest");
+        return `part=${partId} measure=${measureNo} voice=${voice} nodeId=${nodeId} grace=${hasGrace} cue=${hasCue} rest=${hasRest} chord=${hasChord}`;
+    }
+    compactNodeXml(node) {
+        const raw = node.outerHTML || "";
+        const compact = raw.replace(/\s+/g, " ").trim();
+        if (compact.length <= 280)
+            return compact;
+        return `${compact.slice(0, 280)}...`;
     }
     failWith(diagnostic) {
         return {
@@ -19650,6 +38615,82 @@ const measureVoiceHasTupletContext = (target, voice) => {
     }
     return false;
 };
+const autoAssignGrandStaffByPitch = (note) => {
+    const context = resolveGrandStaffContext(note);
+    if (!context)
+        return;
+    const midi = notePitchToMidi(note);
+    if (midi === null)
+        return;
+    const desiredStaff = midi < 60 ? "2" : "1";
+    let staffNode = note.querySelector(":scope > staff");
+    if (!staffNode) {
+        staffNode = note.ownerDocument.createElement("staff");
+        note.appendChild(staffNode);
+    }
+    staffNode.textContent = desiredStaff;
+};
+const resolveGrandStaffContext = (note) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    const measure = (0, xmlUtils_1.findAncestorMeasure)(note);
+    if (!measure)
+        return null;
+    const part = measure.parentElement;
+    if (!part || part.tagName !== "part")
+        return null;
+    const measures = Array.from(part.children).filter((child) => child.tagName === "measure");
+    const targetIndex = measures.indexOf(measure);
+    if (targetIndex < 0)
+        return null;
+    let staves = 1;
+    let clef1 = "";
+    let clef2 = "";
+    for (let i = 0; i <= targetIndex; i += 1) {
+        const attrs = measures[i].querySelector(":scope > attributes");
+        if (!attrs)
+            continue;
+        const stavesText = (_c = (_b = (_a = attrs.querySelector(":scope > staves")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const parsedStaves = Number(stavesText);
+        if (Number.isInteger(parsedStaves) && parsedStaves > 0) {
+            staves = parsedStaves;
+        }
+        const nextClef1 = (_f = (_e = (_d = attrs.querySelector(':scope > clef[number="1"] > sign')) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+        const nextClef2 = (_j = (_h = (_g = attrs.querySelector(':scope > clef[number="2"] > sign')) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
+        if (nextClef1)
+            clef1 = nextClef1;
+        if (nextClef2)
+            clef2 = nextClef2;
+    }
+    if (staves < 2)
+        return null;
+    if (clef1 !== "G" || clef2 !== "F")
+        return null;
+    return { part, measure };
+};
+const notePitchToMidi = (note) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    const pitch = note.querySelector(":scope > pitch");
+    if (!pitch)
+        return null;
+    const step = (_c = (_b = (_a = pitch.querySelector(":scope > step")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    const octaveText = (_f = (_e = (_d = pitch.querySelector(":scope > octave")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+    const alterText = (_j = (_h = (_g = pitch.querySelector(":scope > alter")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "0";
+    const semitoneByStep = {
+        C: 0,
+        D: 2,
+        E: 4,
+        F: 5,
+        G: 7,
+        A: 9,
+        B: 11,
+    };
+    const base = semitoneByStep[step];
+    const octave = Number(octaveText);
+    const alter = Number(alterText);
+    if (base === undefined || !Number.isInteger(octave) || !Number.isFinite(alter))
+        return null;
+    return (octave + 1) * 12 + base + Math.round(alter);
+};
 
   },
   "core/validators.js": function (require, module, exports) {
@@ -19785,12 +38826,14 @@ const validateBackupForwardBoundaryForStructuralEdit = (command, anchorOrTarget)
         return null;
     }
     if (command.type === "split_note") {
-        if (next && isBackupOrForward(next)) {
+        if (next && next.tagName === "forward") {
             return {
                 code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",
-                message: "Split point crosses a backup/forward boundary in MVP.",
+                message: "Split point crosses a forward boundary in MVP.",
             };
         }
+        // Allow split immediately before <backup>. This is common in grand-staff lanes
+        // where staff 1 content is followed by backup to start staff 2 at the same time.
         return null;
     }
     // delete_note

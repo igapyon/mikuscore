@@ -36,6 +36,7 @@
 #### P3: Feature expansion
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
 - [ ] Reconfirm in-session `xml:id` strategy and operation rules.
+- [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
 
 ### Resume Checklist
 1. `npm run build`
@@ -81,6 +82,7 @@
 #### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。
 - [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
+- [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。
 
 ### 次回の再開手順
 1. `npm run build`

@@ -1,3 +1,5 @@
+import { extractMusicXmlTextFromMxl } from "./mxl-io";
+
 export type LoadFlowParams = {
   isNewType: boolean;
   isAbcType: boolean;
@@ -48,7 +50,23 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
         diagnosticMessage: "Please select a file.",
       };
     }
-    sourceText = await selected.text();
+    const lowerName = selected.name.toLowerCase();
+    const isMxl = !treatAsAbc && lowerName.endsWith(".mxl");
+    if (isMxl) {
+      try {
+        sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse MXL: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    } else {
+      sourceText = await selected.text();
+    }
     if (!treatAsAbc) {
       return {
         ok: true,
