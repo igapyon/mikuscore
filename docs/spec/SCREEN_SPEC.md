@@ -21,6 +21,10 @@ Define the current screen specification for `mikuscore`.
 - `is-complete` indicates completion state.
 
 ## Panel: Input
+### Header tooltip `(i)`
+- First step is to load score data here (file/source) or create a new score.
+- After this step is completed, user proceeds to `Score` / `Edit` / `Export`.
+
 ### Input format radio
 - `MusicXML input`
 - `ABC input`
@@ -51,7 +55,11 @@ Define the current screen specification for `mikuscore`.
 ## Panel: Score
 ### Header
 - Title: `Score`
-- `(i)` tooltip explains note-click selection.
+- `(i)` tooltip explains:
+  - check loaded score
+  - try quick playback
+  - select target measure for editing
+  - click note here first, then go to `Edit` to apply note changes in that selected measure
 
 ### Controls
 - `Play`
@@ -62,6 +70,13 @@ Define the current screen specification for `mikuscore`.
 - Note click -> SVG id -> `nodeId` mapping.
 
 ## Panel: Edit
+### Header tooltip `(i)`
+- Editing starts from converting a rest to a note, then adjusts notes in the selected measure.
+- Supported actions in this flow: split notes, change pitch, add accidentals, change duration, and quick playback.
+- `Apply` reflects current measure edits back to `Score`; `Discard` cancels current measure edits.
+- Arrow buttons are used for measure navigation.
+- Editing scope is intentionally limited to reduce MusicXML structure breakage risk; complex editing is out of scope.
+
 ### Empty state
 - Card with:
   - title: `No measure selected`
@@ -91,6 +106,12 @@ Define the current screen specification for `mikuscore`.
   - `Play`
 
 ## Panel: Export
+### Header tooltip `(i)`
+- Export is the place to take work out of `mikuscore`.
+- Main path is exporting edited result as MusicXML.
+- `ABC` and lightweight `MIDI` export are available for quick checks.
+- Complex production/export workflows are expected to be done in dedicated software.
+
 ### Buttons
 - `MusicXML Export` (primary)
 - `ABC Export`
@@ -134,6 +155,10 @@ Use timestamp suffix to reduce conflicts:
 - `is-complete` は完了状態の表示。
 
 ## パネル: 入力
+### ヘッダツールチップ `(i)`
+- 最初にここで譜面データを読み込み（file/source）または新規作成する。
+- このステップ完了後に `譜面` / `編集` / `出力` へ進む。
+
 ### 入力形式ラジオ
 - `MusicXML入力`
 - `ABC入力`
@@ -164,7 +189,11 @@ Use timestamp suffix to reduce conflicts:
 ## パネル: 譜面
 ### ヘッダ
 - タイトル: `譜面`
-- `(i)` ツールチップ: 音符クリック選択の説明。
+- `(i)` ツールチップ:
+  - 読み込み済み譜面の確認
+  - 簡易再生の試行
+  - 編集対象小節の選択
+  - ここで音符を選択してから `編集` で実際のノート変更を行う
 
 ### コントロール
 - `再生`
@@ -175,6 +204,13 @@ Use timestamp suffix to reduce conflicts:
 - ノートクリック -> SVG id -> `nodeId` マッピング。
 
 ## パネル: 編集
+### ヘッダツールチップ `(i)`
+- 編集は「休符を音符化」から始め、選択中小節内で音符調整を行う。
+- このフローで扱う操作: 音符分割、音高変更、臨時記号付与、音価変更、簡易再生。
+- `確定` で譜面へ反映し、`破棄` で当該小節の編集中変更を取り消す。
+- 小節移動は矢印ボタンで行う。
+- MusicXML 構造破壊リスクを避けるため編集範囲は意図的に制限し、複雑編集は対象外とする。
+
 ### 未選択状態
 - カード表示:
   - タイトル: `小節が未選択です`
@@ -204,6 +240,12 @@ Use timestamp suffix to reduce conflicts:
   - `再生`
 
 ## パネル: 出力
+### ヘッダツールチップ `(i)`
+- `mikuscore` から成果物を持ち出す場所。
+- 主経路は編集結果の MusicXML 出力。
+- `ABC` と軽量 `MIDI` 出力はクイック確認向けに提供。
+- 本格的な制作/書き出しは専用ソフトで行う想定。
+
 ### ボタン
 - `MusicXML出力`（primary）
 - `ABC出力`
