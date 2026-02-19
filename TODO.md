@@ -32,6 +32,8 @@
 #### P2: Spec and tests sync
 - [ ] Add save-XML/re-render consistency checks in `docs/spec`.
 - [ ] Document and test selection retention rules across re-render.
+- [ ] Add ABC roundtrip golden tests (`MusicXML -> ABC -> MusicXML`) for representative orchestral/piano scores.
+- [ ] Define acceptable roundtrip delta policy for ABC path (what may change vs must be preserved).
 
 #### P3: Feature expansion
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
@@ -41,6 +43,8 @@
 - [ ] Add measure-level copy/paste feature.
 - [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
 - [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
+- [ ] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
+- [ ] Add ABC import compatibility mode for overfull legacy exports and surface warning summary in UI.
 
 ### Resume Checklist
 1. `npm run build`
@@ -82,6 +86,8 @@
 #### P2: 仕様とテストの同期
 - [ ] 保存 XML と再レンダリング結果の整合チェック手順を `docs/spec` に追記。
 - [ ] レンダリング更新時の選択維持ルールを明文化しテスト化。
+- [ ] 代表的なオーケストラ譜/ピアノ譜で `MusicXML -> ABC -> MusicXML` のゴールデン往復テストを追加。
+- [ ] ABC経由での往復差分ポリシー（許容差分/非許容差分）を明文化。
 
 #### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。
@@ -91,6 +97,8 @@
 - [ ] 小節単位のコピー/ペースト機能を追加。
 - [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
 - [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
+- [ ] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
+- [ ] 旧ABC由来の小節過充填に対する互換モードを整備し、UIに警告サマリを表示。
 
 ### 次回の再開手順
 1. `npm run build`
