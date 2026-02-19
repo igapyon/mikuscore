@@ -21,6 +21,16 @@ export type MidiTempoEvent = {
   startTicks: number;
   bpm: number;
 };
+export type MidiTimeSignatureEvent = {
+  startTicks: number;
+  beats: number;
+  beatType: number;
+};
+export type MidiKeySignatureEvent = {
+  startTicks: number;
+  fifths: number;
+  mode: "major" | "minor";
+};
 
 export type MidiProgramPreset =
   | "electric_piano_2"
@@ -182,6 +192,7 @@ type SmfImportedNote = {
   midi: number;
   startTick: number;
   endTick: number;
+  velocity: number;
 };
 
 type TrackChannelKey = `${number}:${number}`;
@@ -190,6 +201,7 @@ type SmfParseSummary = {
   notes: SmfImportedNote[];
   channels: Set<number>;
   programByTrackChannel: Map<TrackChannelKey, number>;
+  controllerEvents: Array<{ tick: number; channel: number; controllerNumber: number; controllerValue: number }>;
   timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
   keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }>;
   tempoEvents: Array<{ tick: number; bpm: number }>;
@@ -697,11 +709,17 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   const notes: SmfImportedNote[] = [];
   const channels = new Set<number>();
   const programByTrackChannel = new Map<TrackChannelKey, number>();
+  const controllerEvents: Array<{
+    tick: number;
+    channel: number;
+    controllerNumber: number;
+    controllerValue: number;
+  }> = [];
   const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoEvents: Array<{ tick: number; bpm: number }> = [];
   const parseWarnings: MidiImportDiagnostic[] = [];
-  const activeNoteStartTicks = new Map<string, number[]>();
+  const activeNoteStartTicks = new Map<string, Array<{ startTick: number; velocity: number }>>();
   let cursor = 0;
   let absTick = 0;
   let runningStatus: number | null = null;
@@ -810,28 +828,39 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
       continue;
     }
 
+    if (messageType === 0xb0 && (data1 === 7 || data1 === 11)) {
+      controllerEvents.push({
+        tick: absTick,
+        channel,
+        controllerNumber: data1,
+        controllerValue: Math.max(0, Math.min(127, Math.round(data2))),
+      });
+      continue;
+    }
+
     if (messageType !== 0x80 && messageType !== 0x90) continue;
     const key = `${channel}:${data1}`;
     if (messageType === 0x90 && data2 > 0) {
       const bucket = activeNoteStartTicks.get(key) ?? [];
-      bucket.push(absTick);
+      bucket.push({ startTick: absTick, velocity: clampVelocity(data2) });
       activeNoteStartTicks.set(key, bucket);
       continue;
     }
     const bucket = activeNoteStartTicks.get(key) ?? [];
-    const startTick = bucket.pop();
+    const started = bucket.pop();
     if (bucket.length > 0) {
       activeNoteStartTicks.set(key, bucket);
     } else {
       activeNoteStartTicks.delete(key);
     }
-    if (startTick === undefined) {
+    if (!started) {
       parseWarnings.push({
         code: "MIDI_NOTE_PAIR_BROKEN",
         message: `Note off without matching note on (ch ${channel}, note ${data1}).`,
       });
       continue;
     }
+    const startTick = started.startTick;
     const endTick = Math.max(startTick + 1, absTick);
     notes.push({
       trackIndex,
@@ -839,6 +868,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
       midi: data1,
       startTick,
       endTick,
+      velocity: started.velocity,
     });
   }
 
@@ -846,10 +876,10 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     const [channelText, noteText] = key.split(":");
     const channel = Number(channelText);
     const note = Number(noteText);
-    for (const startTick of starts) {
+    for (const started of starts) {
       parseWarnings.push({
         code: "MIDI_NOTE_PAIR_BROKEN",
-        message: `Note on without matching note off (ch ${channel}, note ${note}, start ${startTick}).`,
+        message: `Note on without matching note off (ch ${channel}, note ${note}, start ${started.startTick}).`,
       });
     }
   }
@@ -858,6 +888,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     notes,
     channels,
     programByTrackChannel,
+    controllerEvents,
     timeSignatureEvents,
     keySignatureEvents,
     tempoEvents,
@@ -880,6 +911,7 @@ type ImportedQuantizedNote = {
   midi: number;
   startTick: number;
   endTick: number;
+  velocity: number;
 };
 
 type ImportedVoiceCluster = {
@@ -896,6 +928,32 @@ type ImportedVoiceNoteSegment = {
   startDiv: number;
   durDiv: number;
   midi: number;
+  velocity: number;
+};
+
+type DynamicMark = "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
+
+const velocityToDynamicMark = (velocity: number): DynamicMark => {
+  const v = clampVelocity(velocity);
+  if (v <= 15) return "ppp";
+  if (v <= 31) return "pp";
+  if (v <= 47) return "p";
+  if (v <= 63) return "mp";
+  if (v <= 79) return "mf";
+  if (v <= 95) return "f";
+  if (v <= 111) return "ff";
+  return "fff";
+};
+
+const buildDynamicsDirectionXml = (dynamicMark: DynamicMark, offsetDiv: number, staff: number): string => {
+  let xml = "<direction>";
+  xml += `<direction-type><dynamics><${dynamicMark}/></dynamics></direction-type>`;
+  if (offsetDiv > 0) {
+    xml += `<offset>${offsetDiv}</offset>`;
+  }
+  xml += `<staff>${Math.max(1, Math.round(staff))}</staff>`;
+  xml += "</direction>";
+  return xml;
 };
 
 const midiToPitchComponents = (midiNumber: number): { step: string; alter: number; octave: number } => {
@@ -999,9 +1057,57 @@ const quantizeImportedNotes = (
       midi: note.midi,
       startTick,
       endTick,
+      velocity: note.velocity,
     });
   }
   return { notes: quantized, warnings, qTick };
+};
+
+const applyImportedControllerVelocityScale = (
+  notes: ImportedQuantizedNote[],
+  controllerEvents: Array<{
+    trackIndex: number;
+    channel: number;
+    tick: number;
+    controllerNumber: number;
+    controllerValue: number;
+  }>
+): ImportedQuantizedNote[] => {
+  if (!notes.length || !controllerEvents.length) return notes;
+  const controlByTrackChannel = new Map<
+    TrackChannelKey,
+    { cc7: Array<{ tick: number; value: number }>; cc11: Array<{ tick: number; value: number }> }
+  >();
+  for (const event of controllerEvents) {
+    const key: TrackChannelKey = `${event.trackIndex}:${event.channel}`;
+    const bucket = controlByTrackChannel.get(key) ?? { cc7: [], cc11: [] };
+    const target = event.controllerNumber === 7 ? bucket.cc7 : bucket.cc11;
+    target.push({ tick: Math.max(0, Math.round(event.tick)), value: Math.max(0, Math.min(127, event.controllerValue)) });
+    controlByTrackChannel.set(key, bucket);
+  }
+  for (const bucket of controlByTrackChannel.values()) {
+    bucket.cc7.sort((a, b) => a.tick - b.tick);
+    bucket.cc11.sort((a, b) => a.tick - b.tick);
+  }
+
+  const resolveCcValueAtTick = (events: Array<{ tick: number; value: number }>, tick: number): number => {
+    let current = 127;
+    for (const event of events) {
+      if (event.tick > tick) break;
+      current = event.value;
+    }
+    return current;
+  };
+
+  return notes.map((note) => {
+    const key: TrackChannelKey = `${note.trackIndex}:${note.channel}`;
+    const bucket = controlByTrackChannel.get(key);
+    if (!bucket) return note;
+    const cc7 = resolveCcValueAtTick(bucket.cc7, note.startTick);
+    const cc11 = resolveCcValueAtTick(bucket.cc11, note.startTick);
+    const scaled = Math.round(note.velocity * (cc7 / 127) * (cc11 / 127));
+    return { ...note, velocity: clampVelocity(Math.max(1, scaled)) };
+  });
 };
 
 const allocateAutoVoices = (
@@ -1095,6 +1201,7 @@ const splitClustersToMeasureSegments = (params: {
           startDiv,
           durDiv,
           midi: note.midi,
+          velocity: note.velocity,
         });
         segmentStart = segmentEnd;
       }
@@ -1305,6 +1412,7 @@ const buildPartMusicXml = (params: {
   const laneCount = Math.max(1, laneDefs.length);
 
   let partXml = `<part id="${partId}">`;
+  let previousDynamicMark: DynamicMark | null = null;
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
     const measureNumber = measureIndex + 1;
     const measureSegments = voiceSegmentsByMeasure.get(measureIndex) ?? [];
@@ -1340,6 +1448,23 @@ const buildPartMusicXml = (params: {
         }
         partXml += `<sound tempo="${event.bpm}"/>`;
         partXml += "</direction>";
+      }
+    }
+    if (measureSegments.length > 0) {
+      const dynamicVelocityByOffset = new Map<number, number>();
+      for (const segment of measureSegments) {
+        const previousVelocity = dynamicVelocityByOffset.get(segment.startDiv);
+        if (previousVelocity === undefined || segment.velocity > previousVelocity) {
+          dynamicVelocityByOffset.set(segment.startDiv, segment.velocity);
+        }
+      }
+      const offsets = Array.from(dynamicVelocityByOffset.keys()).sort((a, b) => a - b);
+      for (const offset of offsets) {
+        const velocity = dynamicVelocityByOffset.get(offset) ?? 80;
+        const dynamicMark = velocityToDynamicMark(velocity);
+        if (dynamicMark === previousDynamicMark) continue;
+        partXml += buildDynamicsDirectionXml(dynamicMark, offset, 1);
+        previousDynamicMark = dynamicMark;
       }
     }
     for (let laneIndex = 0; laneIndex < laneDefs.length; laneIndex += 1) {
@@ -1496,6 +1621,40 @@ const buildTempoMetaEventData = (deltaTicks: number, bpm: number): number[] => {
     (microsPerQuarter >> 16) & 0xff,
     (microsPerQuarter >> 8) & 0xff,
     microsPerQuarter & 0xff,
+  ];
+};
+
+const buildTimeSignatureMetaEventData = (deltaTicks: number, beats: number, beatType: number): number[] => {
+  const safeBeats = Math.max(1, Math.min(255, Math.round(beats)));
+  const safeBeatType = Math.max(1, Math.round(beatType));
+  const dd = Math.max(0, Math.min(7, Math.round(Math.log2(safeBeatType))));
+  return [
+    ...numberToVariableLength(deltaTicks),
+    0xff,
+    0x58,
+    0x04,
+    safeBeats & 0xff,
+    dd & 0xff,
+    24,
+    8,
+  ];
+};
+
+const buildKeySignatureMetaEventData = (
+  deltaTicks: number,
+  fifths: number,
+  mode: "major" | "minor"
+): number[] => {
+  const safeFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+  const sf = safeFifths < 0 ? safeFifths + 256 : safeFifths;
+  const mi = mode === "minor" ? 1 : 0;
+  return [
+    ...numberToVariableLength(deltaTicks),
+    0xff,
+    0x59,
+    0x02,
+    sf & 0xff,
+    mi,
   ];
 };
 
@@ -1818,13 +1977,180 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
   return sortedTicks.map((tick) => ({ startTicks: tick, bpm: byTick.get(tick) ?? 120 }));
 };
 
+export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
+  doc: Document,
+  ticksPerQuarter: number
+): MidiTimeSignatureEvent[] => {
+  const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstPart = doc.querySelector("score-partwise > part");
+  if (!firstPart) return [{ startTicks: 0, beats: 4, beatType: 4 }];
+
+  let currentDivisions = 1;
+  let tickCursor = 0;
+  let currentBeats = 4;
+  let currentBeatType = 4;
+  const events: MidiTimeSignatureEvent[] = [{ startTicks: 0, beats: currentBeats, beatType: currentBeatType }];
+
+  for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+    const divisions = getFirstNumber(measure, "attributes > divisions");
+    if (divisions && divisions > 0) currentDivisions = divisions;
+
+    const beats = getFirstNumber(measure, "attributes > time > beats");
+    const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+    if (
+      beats !== null &&
+      beatType !== null &&
+      (Math.round(beats) !== currentBeats || Math.round(beatType) !== currentBeatType)
+    ) {
+      currentBeats = Math.max(1, Math.round(beats));
+      currentBeatType = Math.max(1, Math.round(beatType));
+      events.push({ startTicks: tickCursor, beats: currentBeats, beatType: currentBeatType });
+    }
+
+    let cursorDiv = 0;
+    let measureMaxDiv = 0;
+    for (const child of Array.from(measure.children)) {
+      if (child.tagName === "backup" || child.tagName === "forward") {
+        const dur = getFirstNumber(child, "duration");
+        if (!dur || dur <= 0) continue;
+        if (child.tagName === "backup") {
+          cursorDiv = Math.max(0, cursorDiv - dur);
+        } else {
+          cursorDiv += dur;
+          measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+        }
+        continue;
+      }
+      if (child.tagName !== "note") continue;
+      const durationDiv = getFirstNumber(child, "duration");
+      if (!durationDiv || durationDiv <= 0) continue;
+      if (!child.querySelector("chord")) {
+        cursorDiv += durationDiv;
+      }
+      measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+    }
+    if (measureMaxDiv <= 0) {
+      measureMaxDiv = Math.max(
+        1,
+        Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType))
+      );
+    }
+    tickCursor += Math.max(
+      1,
+      Math.round((measureMaxDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+    );
+  }
+
+  const byTick = new Map<number, { beats: number; beatType: number }>();
+  for (const event of events) {
+    byTick.set(Math.max(0, Math.round(event.startTicks)), {
+      beats: Math.max(1, Math.round(event.beats)),
+      beatType: Math.max(1, Math.round(event.beatType)),
+    });
+  }
+  const sortedTicks = Array.from(byTick.keys()).sort((a, b) => a - b);
+  return sortedTicks.map((tick) => ({
+    startTicks: tick,
+    beats: byTick.get(tick)?.beats ?? 4,
+    beatType: byTick.get(tick)?.beatType ?? 4,
+  }));
+};
+
+export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
+  doc: Document,
+  ticksPerQuarter: number
+): MidiKeySignatureEvent[] => {
+  const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstPart = doc.querySelector("score-partwise > part");
+  if (!firstPart) return [{ startTicks: 0, fifths: 0, mode: "major" }];
+
+  let currentDivisions = 1;
+  let tickCursor = 0;
+  let currentFifths = 0;
+  let currentMode: "major" | "minor" = "major";
+  const events: MidiKeySignatureEvent[] = [
+    { startTicks: 0, fifths: currentFifths, mode: currentMode },
+  ];
+  let hasInitialKey = false;
+
+  for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+    const divisions = getFirstNumber(measure, "attributes > divisions");
+    if (divisions && divisions > 0) currentDivisions = divisions;
+
+    const fifths = getFirstNumber(measure, "attributes > key > fifths");
+    const modeText = measure.querySelector("attributes > key > mode")?.textContent?.trim().toLowerCase() ?? "";
+    const mode: "major" | "minor" = modeText === "minor" ? "minor" : "major";
+    if (Number.isFinite(fifths)) {
+      const roundedFifths = Math.max(-7, Math.min(7, Math.round(fifths!)));
+      if (!hasInitialKey || roundedFifths !== currentFifths || mode !== currentMode) {
+        if (!hasInitialKey) {
+          events[0] = { startTicks: 0, fifths: roundedFifths, mode };
+          hasInitialKey = true;
+        } else {
+          events.push({ startTicks: tickCursor, fifths: roundedFifths, mode });
+        }
+        currentFifths = roundedFifths;
+        currentMode = mode;
+      }
+    }
+
+    let cursorDiv = 0;
+    let measureMaxDiv = 0;
+    for (const child of Array.from(measure.children)) {
+      if (child.tagName === "backup" || child.tagName === "forward") {
+        const dur = getFirstNumber(child, "duration");
+        if (!dur || dur <= 0) continue;
+        if (child.tagName === "backup") {
+          cursorDiv = Math.max(0, cursorDiv - dur);
+        } else {
+          cursorDiv += dur;
+          measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+        }
+        continue;
+      }
+      if (child.tagName !== "note") continue;
+      const durationDiv = getFirstNumber(child, "duration");
+      if (!durationDiv || durationDiv <= 0) continue;
+      if (!child.querySelector("chord")) {
+        cursorDiv += durationDiv;
+      }
+      measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+    }
+    if (measureMaxDiv <= 0) {
+      const beats = getFirstNumber(measure, "attributes > time > beats") ?? 4;
+      const beatType = getFirstNumber(measure, "attributes > time > beat-type") ?? 4;
+      measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
+    }
+    tickCursor += Math.max(
+      1,
+      Math.round((measureMaxDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+    );
+  }
+
+  const byTick = new Map<number, { fifths: number; mode: "major" | "minor" }>();
+  for (const event of events) {
+    byTick.set(Math.max(0, Math.round(event.startTicks)), {
+      fifths: Math.max(-7, Math.min(7, Math.round(event.fifths))),
+      mode: event.mode === "minor" ? "minor" : "major",
+    });
+  }
+  const sortedTicks = Array.from(byTick.keys()).sort((a, b) => a - b);
+  return sortedTicks.map((tick) => ({
+    startTicks: tick,
+    fifths: byTick.get(tick)?.fifths ?? 0,
+    mode: byTick.get(tick)?.mode ?? "major",
+  }));
+};
+
 export const buildMidiBytesForPlayback = (
   events: PlaybackEvent[],
   tempo: number,
   programPreset: MidiProgramPreset = "electric_piano_2",
   trackProgramOverrides: MidiProgramOverrideMap = new Map<string, number>(),
   controlEvents: MidiControlEvent[] = [],
-  tempoEvents: MidiTempoEvent[] = []
+  tempoEvents: MidiTempoEvent[] = [],
+  timeSignatureEvents: MidiTimeSignatureEvent[] = [],
+  keySignatureEvents: MidiKeySignatureEvent[] = []
 ): Uint8Array => {
   const midiWriter = getMidiWriterRuntime();
   if (!midiWriter) {
@@ -1857,14 +2183,74 @@ export const buildMidiBytesForPlayback = (
   if (!dedupedTempoEvents.length || dedupedTempoEvents[0].startTicks !== 0) {
     dedupedTempoEvents.unshift({ startTicks: 0, bpm: clampTempo(tempo) });
   }
+  const dedupedTimeSignatureEvents: MidiTimeSignatureEvent[] = [];
+  for (const event of timeSignatureEvents
+    .map((e) => ({
+      startTicks: Math.max(0, Math.round(e.startTicks)),
+      beats: Math.max(1, Math.round(e.beats)),
+      beatType: Math.max(1, Math.round(e.beatType)),
+    }))
+    .sort((a, b) => a.startTicks - b.startTicks)) {
+    const prev = dedupedTimeSignatureEvents[dedupedTimeSignatureEvents.length - 1];
+    if (prev && prev.startTicks === event.startTicks) {
+      prev.beats = event.beats;
+      prev.beatType = event.beatType;
+      continue;
+    }
+    dedupedTimeSignatureEvents.push({ ...event });
+  }
+  if (!dedupedTimeSignatureEvents.length || dedupedTimeSignatureEvents[0].startTicks !== 0) {
+    dedupedTimeSignatureEvents.unshift({ startTicks: 0, beats: 4, beatType: 4 });
+  }
+  const dedupedKeySignatureEvents: MidiKeySignatureEvent[] = [];
+  for (const event of keySignatureEvents
+    .map((e) => ({
+      startTicks: Math.max(0, Math.round(e.startTicks)),
+      fifths: Math.max(-7, Math.min(7, Math.round(e.fifths))),
+      mode: (e.mode === "minor" ? "minor" : "major") as "major" | "minor",
+    }))
+    .sort((a, b) => a.startTicks - b.startTicks)) {
+    const prev = dedupedKeySignatureEvents[dedupedKeySignatureEvents.length - 1];
+    if (prev && prev.startTicks === event.startTicks) {
+      prev.fifths = event.fifths;
+      prev.mode = event.mode;
+      continue;
+    }
+    dedupedKeySignatureEvents.push({ ...event });
+  }
+  if (!dedupedKeySignatureEvents.length || dedupedKeySignatureEvents[0].startTicks !== 0) {
+    dedupedKeySignatureEvents.unshift({ startTicks: 0, fifths: 0, mode: "major" });
+  }
   const tempoTrack = new midiWriter.Track();
   tempoTrack.addTrackName("Tempo Map");
   tempoTrack.addInstrumentName("Tempo Map");
+  const metaTimeline: Array<
+    | ({ kind: "tempo" } & MidiTempoEvent)
+    | ({ kind: "time" } & MidiTimeSignatureEvent)
+    | ({ kind: "key" } & MidiKeySignatureEvent)
+  > = [];
+  metaTimeline.push(...dedupedTempoEvents.map((e) => ({ kind: "tempo" as const, ...e })));
+  metaTimeline.push(...dedupedTimeSignatureEvents.map((e) => ({ kind: "time" as const, ...e })));
+  metaTimeline.push(...dedupedKeySignatureEvents.map((e) => ({ kind: "key" as const, ...e })));
+  const kindPriority: Record<"time" | "key" | "tempo", number> = { time: 0, key: 1, tempo: 2 };
+  metaTimeline.sort((a, b) =>
+    a.startTicks === b.startTicks ? kindPriority[a.kind] - kindPriority[b.kind] : a.startTicks - b.startTicks
+  );
   let prevTempoTick = 0;
-  for (const tempoEvent of dedupedTempoEvents) {
-    const currentTick = Math.max(0, Math.round(tempoEvent.startTicks));
+  for (const metaEvent of metaTimeline) {
+    const currentTick = Math.max(0, Math.round(metaEvent.startTicks));
     const deltaTicks = Math.max(0, currentTick - prevTempoTick);
-    tempoTrack.addEvent({ data: buildTempoMetaEventData(deltaTicks, tempoEvent.bpm) });
+    if (metaEvent.kind === "tempo") {
+      tempoTrack.addEvent({ data: buildTempoMetaEventData(deltaTicks, metaEvent.bpm) });
+    } else if (metaEvent.kind === "time") {
+      tempoTrack.addEvent({
+        data: buildTimeSignatureMetaEventData(deltaTicks, metaEvent.beats, metaEvent.beatType),
+      });
+    } else {
+      tempoTrack.addEvent({
+        data: buildKeySignatureMetaEventData(deltaTicks, metaEvent.fifths, metaEvent.mode),
+      });
+    }
     prevTempoTick = currentTick;
   }
   midiTracks.push(tempoTrack);
@@ -1991,6 +2377,13 @@ export const convertMidiToMusicXml = (
   const trackChannelSet = new Set<TrackChannelKey>();
   const programByTrackChannel = new Map<TrackChannelKey, number>();
   const collectedNotes: SmfImportedNote[] = [];
+  const controllerEvents: Array<{
+    trackIndex: number;
+    channel: number;
+    tick: number;
+    controllerNumber: number;
+    controllerValue: number;
+  }> = [];
   const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
@@ -2021,10 +2414,13 @@ export const convertMidiToMusicXml = (
     const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
     const summary = parseTrackSummary(trackData, i);
     collectedNotes.push(...summary.notes);
+    controllerEvents.push(
+      ...summary.controllerEvents.map((event) => ({ ...event, trackIndex: i }))
+    );
     timeSignatureEvents.push(...summary.timeSignatureEvents);
     keySignatureEvents.push(...summary.keySignatureEvents);
     tempoMetaEvents.push(...summary.tempoEvents);
-    for (const channel of summary.channels) trackChannelSet.add(`${i}:${channel}`);
+    for (const note of summary.notes) trackChannelSet.add(`${i}:${note.channel}`);
     for (const [trackChannel, program] of summary.programByTrackChannel.entries()) {
       if (!programByTrackChannel.has(trackChannel)) {
         programByTrackChannel.set(trackChannel, program);
@@ -2036,8 +2432,9 @@ export const convertMidiToMusicXml = (
 
   const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid);
   warnings.push(...quantized.warnings);
+  const velocityScaledNotes = applyImportedControllerVelocityScale(quantized.notes, controllerEvents);
   const notesByTrackChannel = new Map<TrackChannelKey, ImportedQuantizedNote[]>();
-  for (const note of quantized.notes) {
+  for (const note of velocityScaledNotes) {
     const key: TrackChannelKey = `${note.trackIndex}:${note.channel}`;
     const bucket = notesByTrackChannel.get(key) ?? [];
     bucket.push(note);
