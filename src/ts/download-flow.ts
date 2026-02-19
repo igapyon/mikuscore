@@ -4,6 +4,7 @@ import {
   collectMidiTempoEventsFromMusicXmlDoc,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
+  type GraceTimingMode,
   type MidiProgramPreset,
 } from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
@@ -47,12 +48,16 @@ export const createMidiDownloadPayload = (
   xmlText: string,
   ticksPerQuarter: number,
   programPreset: MidiProgramPreset = "electric_piano_2",
-  forceProgramPreset = false
+  forceProgramPreset = false,
+  graceTimingMode: GraceTimingMode = "before_beat"
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
 
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter, { mode: "midi" });
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter, {
+    mode: "midi",
+    graceTimingMode,
+  });
   if (parsedPlayback.events.length === 0) return null;
   const midiProgramOverrides = forceProgramPreset
     ? new Map<string, number>()

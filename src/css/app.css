@@ -422,7 +422,9 @@ body {
 }
 
 .ms-settings-block + .ms-settings-block {
-  margin-top: 0.8rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #d9d3e5;
 }
 
 .ms-settings-actions {
@@ -431,11 +433,17 @@ body {
   justify-content: flex-end;
 }
 
+.ms-settings-actions--section-divider {
+  padding-top: 0.8rem;
+  border-top: 1px solid #d9d3e5;
+}
+
 .ms-settings-subtitle {
-  margin: 0 0 0.45rem;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #666074;
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #4e495d;
+  letter-spacing: 0.01em;
 }
 
 .ms-settings-grid {
@@ -552,6 +560,32 @@ body {
   display: none;
 }
 
+.ms-settings-card .ms-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1.2;
+  color: #4f495a;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ms-settings-card .ms-field-label .md-info-chip {
+  margin-left: 0;
+}
+
+.ms-settings-card .ms-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.ms-settings-card .ms-field .md-select {
+  flex: 0 1 300px;
+  min-width: 180px;
+}
+
 .ms-check-field {
   margin-top: 0.45rem;
   display: flex;
@@ -571,6 +605,20 @@ body {
   margin-top: 0.45rem;
   font-size: 0.86rem;
   color: #4f495a;
+}
+
+.ms-settings-card .ms-field--switch .ms-switch-field {
+  margin-top: 0;
+}
+
+.ms-settings-card .ms-field--switch {
+  margin: 0.65rem 0 0.45rem;
+}
+
+.ms-settings-card .ms-switch-field--control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .ms-midi-debug-text {
@@ -813,6 +861,14 @@ body {
   .md-card.ms-app {
     padding: 14px;
     border-radius: 14px;
+  }
+
+  .ms-settings-card .ms-field {
+    flex-wrap: wrap;
+  }
+
+  .ms-settings-card .ms-field .md-select {
+    flex: 1 1 100%;
   }
 
   .ms-app {

@@ -36,6 +36,7 @@ export type MidiProgramPreset =
   | "string_ensemble_1"
   | "synth_brass_1";
 export type MidiProgramOverrideMap = ReadonlyMap<string, number>;
+export type GraceTimingMode = "before_beat" | "on_beat" | "classical_equal";
 
 const instrumentByPreset: Record<MidiProgramPreset, number> = {
   electric_piano_2: 5, // Existing default in this app.
@@ -130,6 +131,9 @@ const DYNAMICS_TO_VELOCITY: Record<string, number> = {
   sf: 108,
   rfz: 106,
 };
+
+const DEFAULT_DETACHE_DURATION_RATIO = 0.93;
+const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 
 const readDirectionVelocity = (directionNode: Element, fallback: number): number => {
   const soundDynamicsText = directionNode.querySelector(":scope > sound")?.getAttribute("dynamics")?.trim() ?? "";
@@ -938,11 +942,12 @@ export const buildMidiBytesForPlayback = (
 export const buildPlaybackEventsFromMusicXmlDoc = (
   doc: Document,
   ticksPerQuarter: number,
-  options: { mode?: "playback" | "midi" } = {}
+  options: { mode?: "playback" | "midi"; graceTimingMode?: GraceTimingMode } = {}
 ): { tempo: number; events: PlaybackEvent[] } => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
   const mode = options.mode ?? "playback";
   const applyMidiNuance = mode === "midi";
+  const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return { tempo: 120, events: [] };
 
@@ -1158,6 +1163,19 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             const noteUnderSlur =
               applyMidiNuance &&
               (activeSlurSet.size > 0 || slurNumbers.starts.length > 0 || slurNumbers.stops.length > 0);
+            const tieFlags = applyMidiNuance ? getTieFlags(child) : { start: false, stop: false };
+            const shouldApplyDefaultDetache =
+              applyMidiNuance &&
+              !isGrace &&
+              !isChord &&
+              articulation.durationRatio >= 1 &&
+              !articulation.hasTenuto &&
+              !tieFlags.start &&
+              !tieFlags.stop &&
+              !noteUnderSlur;
+            const effectiveDurationRatio = shouldApplyDefaultDetache
+              ? DEFAULT_DETACHE_DURATION_RATIO
+              : articulation.durationRatio;
             if (applyMidiNuance && isGrace) {
               const graceNode = child.querySelector("grace");
               const hasSlash =
@@ -1183,11 +1201,10 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                 : { durationExtraTicks: 0, postPauseTicks: 0 };
             const durTicks = Math.max(
               1,
-              Math.round(baseDurTicks * articulation.durationRatio) +
+              Math.round(baseDurTicks * effectiveDurationRatio) +
                 legatoOverlapTicks +
                 temporalAdjustments.durationExtraTicks
             );
-            const tieFlags = applyMidiNuance ? getTieFlags(child) : { start: false, stop: false };
             const canExpandOrnament = applyMidiNuance && !isDrumContext && !tieFlags.start && !tieFlags.stop;
             const ornamentMidiSequence = canExpandOrnament
               ? buildOrnamentMidiSequence(child, soundingMidi, durTicks, normalizedTicksPerQuarter, {
@@ -1197,10 +1214,10 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                   measureAccidentalByStepOctave,
                 })
               : [soundingMidi];
-            const ornamentDurations = splitTicks(durTicks, ornamentMidiSequence.length);
             const generatedEvents: PlaybackEvent[] = [];
-            let eventStartTick = startTicks;
             const pendingGrace = applyMidiNuance ? pendingGraceByVoice.get(voice) ?? [] : [];
+            let eventStartTick = startTicks;
+            let effectiveDurTicks = durTicks;
             if (applyMidiNuance && pendingGrace.length > 0) {
               const maxLeadByPrincipal = Math.max(pendingGrace.length, Math.round(baseDurTicks * 0.45));
               const maxLeadByTempo = Math.max(pendingGrace.length, Math.round(normalizedTicksPerQuarter / 2));
@@ -1208,11 +1225,18 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                 pendingGrace.length,
                 Math.min(maxLeadByPrincipal, maxLeadByTempo)
               );
-              const graceDurations = splitTicksWeighted(
-                totalGraceTicks,
-                pendingGrace.map((g) => g.weight)
-              );
-              const graceStartTick = Math.max(0, startTicks - totalGraceTicks);
+              const graceDurations =
+                graceTimingMode === "classical_equal"
+                  ? splitTicks(
+                      Math.max(durTicks, pendingGrace.length + 1),
+                      pendingGrace.length + 1
+                    ).slice(0, pendingGrace.length)
+                  : splitTicksWeighted(
+                      totalGraceTicks,
+                      pendingGrace.map((g) => g.weight)
+                    );
+              const graceStartTick =
+                graceTimingMode === "before_beat" ? Math.max(0, startTicks - totalGraceTicks) : startTicks;
               let graceTick = graceStartTick;
               for (let i = 0; i < pendingGrace.length; i += 1) {
                 const grace = pendingGrace[i];
@@ -1230,9 +1254,22 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                 });
                 graceTick += graceDur;
               }
-              eventStartTick = Math.max(eventStartTick, graceTick);
+              if (graceTimingMode === "before_beat") {
+                eventStartTick = Math.max(eventStartTick, graceTick);
+              } else if (graceTimingMode === "on_beat") {
+                eventStartTick = graceTick;
+                effectiveDurTicks = Math.max(1, durTicks - (graceTick - startTicks));
+              } else {
+                const equalDurations = splitTicks(
+                  Math.max(durTicks, pendingGrace.length + 1),
+                  pendingGrace.length + 1
+                );
+                eventStartTick = graceTick;
+                effectiveDurTicks = Math.max(1, equalDurations[pendingGrace.length] ?? 1);
+              }
               pendingGraceByVoice.delete(voice);
             }
+            const ornamentDurations = splitTicks(effectiveDurTicks, ornamentMidiSequence.length);
             for (let i = 0; i < ornamentMidiSequence.length; i += 1) {
               const ornamentMidi = ornamentMidiSequence[i];
               const ornamentDurTicks = Math.max(1, ornamentDurations[i] ?? 1);
