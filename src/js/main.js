@@ -2988,11 +2988,11 @@ const parseSmfHeader = (midiBytes) => {
         diagnostics,
     };
 };
-const parseTrackSummary = (trackData) => {
+const parseTrackSummary = (trackData, trackIndex) => {
     var _a, _b;
     const notes = [];
     const channels = new Set();
-    const programByChannel = new Map();
+    const programByTrackChannel = new Map();
     const timeSignatureEvents = [];
     const keySignatureEvents = [];
     const tempoEvents = [];
@@ -3103,7 +3103,7 @@ const parseTrackSummary = (trackData) => {
         const data2 = dataLen === 2 ? trackData[cursor + 1] : 0;
         cursor += dataLen;
         if (messageType === 0xc0) {
-            programByChannel.set(channel, data1 + 1);
+            programByTrackChannel.set(`${trackIndex}:${channel}`, data1 + 1);
             continue;
         }
         if (messageType !== 0x80 && messageType !== 0x90)
@@ -3132,6 +3132,7 @@ const parseTrackSummary = (trackData) => {
         }
         const endTick = Math.max(startTick + 1, absTick);
         notes.push({
+            trackIndex,
             channel,
             midi: data1,
             startTick,
@@ -3152,7 +3153,7 @@ const parseTrackSummary = (trackData) => {
     return {
         notes,
         channels,
-        programByChannel,
+        programByTrackChannel,
         timeSignatureEvents,
         keySignatureEvents,
         tempoEvents,
@@ -3259,6 +3260,7 @@ const quantizeImportedNotes = (notes, ticksPerQuarter, grid) => {
             });
         }
         quantized.push({
+            trackIndex: note.trackIndex,
             channel: note.channel,
             midi: note.midi,
             startTick,
@@ -3399,14 +3401,14 @@ const buildTypeXml = (durDiv, divisions) => {
     }
     return xml;
 };
-const buildMeasureVoiceXml = (segments, voice, staff, measureDiv, isDrum, divisions, keyFifths) => {
+const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measureDiv, isDrum, divisions, keyFifths) => {
     var _a, _b, _c, _d;
     const voiceSegments = segments
-        .filter((segment) => segment.voice === voice && segment.staff === staff)
+        .filter((segment) => segment.voice === voice && segment.staff === sourceStaff)
         .slice()
         .sort((a, b) => (a.startDiv === b.startDiv ? a.midi - b.midi : a.startDiv - b.startDiv));
     if (!voiceSegments.length) {
-        return `<note><rest/><duration>${measureDiv}</duration>${buildTypeXml(measureDiv, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+        return `<note><rest/><duration>${measureDiv}</duration>${buildTypeXml(measureDiv, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
     }
     const groupsByStart = new Map();
     for (const segment of voiceSegments) {
@@ -3423,7 +3425,7 @@ const buildMeasureVoiceXml = (segments, voice, staff, measureDiv, isDrum, divisi
         const group = ((_b = groupsByStart.get(start)) !== null && _b !== void 0 ? _b : []).slice().sort((a, b) => a.midi - b.midi);
         if (start > cursor) {
             const restDur = start - cursor;
-            xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+            xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
         }
         const groupDur = Math.max(...group.map((segment) => segment.durDiv));
         const typeXml = buildTypeXml(groupDur, divisions);
@@ -3435,7 +3437,7 @@ const buildMeasureVoiceXml = (segments, voice, staff, measureDiv, isDrum, divisi
                 if (i > 0)
                     xml += "<chord/>";
                 xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
-                xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${staff}</staff><notehead>x</notehead>`;
+                xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff><notehead>x</notehead>`;
                 xml += "</note>";
             }
             else {
@@ -3453,7 +3455,7 @@ const buildMeasureVoiceXml = (segments, voice, staff, measureDiv, isDrum, divisi
                 if (accidentalText) {
                     xml += `<accidental>${accidentalText}</accidental>`;
                 }
-                xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${staff}</staff>`;
+                xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff>`;
                 xml += "</note>";
                 accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
             }
@@ -3462,7 +3464,7 @@ const buildMeasureVoiceXml = (segments, voice, staff, measureDiv, isDrum, divisi
     }
     if (cursor < measureDiv) {
         const restDur = measureDiv - cursor;
-        xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+        xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
     }
     return xml;
 };
@@ -3487,21 +3489,30 @@ const buildPartMusicXml = (params) => {
         bucket.push(segment);
         voiceSegmentsByMeasure.set(segment.measureIndex, bucket);
     }
-    const maxVoice = Math.max(1, ...clusters.map((cluster) => cluster.voice));
-    const lanes = [];
+    const laneDefs = [];
     if (isDrum) {
-        for (let voice = 1; voice <= maxVoice; voice += 1) {
-            lanes.push({ voice, staff: 1 });
+        const voices = Array.from(new Set(splitSegments.map((segment) => segment.voice))).sort((a, b) => a - b);
+        const resolvedVoices = voices.length ? voices : [1];
+        for (let i = 0; i < resolvedVoices.length; i += 1) {
+            laneDefs.push({ sourceStaff: 1, voice: resolvedVoices[i], outputStaff: i + 1 });
         }
     }
     else {
-        for (let voice = 1; voice <= maxVoice; voice += 1) {
-            lanes.push({ voice, staff: 1 });
+        const trebleVoices = Array.from(new Set(splitSegments.filter((segment) => segment.staff === 1).map((segment) => segment.voice))).sort((a, b) => a - b);
+        const bassVoices = Array.from(new Set(splitSegments.filter((segment) => segment.staff === 2).map((segment) => segment.voice))).sort((a, b) => a - b);
+        const resolvedTrebleVoices = trebleVoices.length ? trebleVoices : [1];
+        const resolvedBassVoices = bassVoices.length ? bassVoices : [1];
+        let outputStaff = 1;
+        for (const voice of resolvedTrebleVoices) {
+            laneDefs.push({ sourceStaff: 1, voice, outputStaff });
+            outputStaff += 1;
         }
-        for (let voice = 1; voice <= maxVoice; voice += 1) {
-            lanes.push({ voice, staff: 2 });
+        for (const voice of resolvedBassVoices) {
+            laneDefs.push({ sourceStaff: 2, voice, outputStaff });
+            outputStaff += 1;
         }
     }
+    const laneCount = Math.max(1, laneDefs.length);
     let partXml = `<part id="${partId}">`;
     for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
         const measureNumber = measureIndex + 1;
@@ -3516,9 +3527,15 @@ const buildPartMusicXml = (params) => {
                 partXml += "<clef><sign>percussion</sign><line>2</line></clef>";
             }
             else {
-                partXml += "<staves>2</staves>";
-                partXml += "<clef number=\"1\"><sign>G</sign><line>2</line></clef>";
-                partXml += "<clef number=\"2\"><sign>F</sign><line>4</line></clef>";
+                partXml += `<staves>${laneCount}</staves>`;
+                for (const lane of laneDefs) {
+                    if (lane.sourceStaff === 1) {
+                        partXml += `<clef number="${lane.outputStaff}"><sign>G</sign><line>2</line></clef>`;
+                    }
+                    else {
+                        partXml += `<clef number="${lane.outputStaff}"><sign>F</sign><line>4</line></clef>`;
+                    }
+                }
             }
             partXml += "</attributes>";
         }
@@ -3536,12 +3553,12 @@ const buildPartMusicXml = (params) => {
                 partXml += "</direction>";
             }
         }
-        for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {
-            const lane = lanes[laneIndex];
+        for (let laneIndex = 0; laneIndex < laneDefs.length; laneIndex += 1) {
+            const lane = laneDefs[laneIndex];
             if (laneIndex > 0) {
                 partXml += `<backup><duration>${measureDiv}</duration></backup>`;
             }
-            partXml += buildMeasureVoiceXml(measureSegments, lane.voice, lane.staff, measureDiv, isDrum, divisions, keyFifths);
+            partXml += buildMeasureVoiceXml(measureSegments, lane.voice, lane.sourceStaff, lane.outputStaff, measureDiv, isDrum, divisions, keyFifths);
         }
         partXml += "</measure>";
     }
@@ -3550,27 +3567,24 @@ const buildPartMusicXml = (params) => {
 };
 const buildImportSkeletonMusicXml = (params) => {
     var _a, _b, _c;
-    const { title, quantizeGrid, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, melodicChannels, hasDrumChannel, notesByChannel, programByChannel, warnings, } = params;
+    const { title, quantizeGrid, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, partGroups, notesByTrackChannel, programByTrackChannel, warnings, } = params;
     const divisions = quantizeGridToDivisions(quantizeGrid);
     const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
     const partDefs = [];
     let index = 1;
-    for (const channel of melodicChannels) {
+    for (const group of partGroups) {
+        const key = `${group.trackIndex}:${group.channel}`;
+        const isDrum = group.channel === 10;
         partDefs.push({
             partId: `P${index}`,
-            name: `MIDI Ch ${channel}`,
-            channel,
-            program: (_b = normalizeMidiProgramNumber((_a = programByChannel.get(channel)) !== null && _a !== void 0 ? _a : NaN)) !== null && _b !== void 0 ? _b : 1,
+            name: isDrum
+                ? `Drums (Track ${group.trackIndex + 1})`
+                : `Track ${group.trackIndex + 1} Ch ${group.channel}`,
+            channel: group.channel,
+            program: (_b = normalizeMidiProgramNumber((_a = programByTrackChannel.get(key)) !== null && _a !== void 0 ? _a : NaN)) !== null && _b !== void 0 ? _b : 1,
+            key,
         });
         index += 1;
-    }
-    if (hasDrumChannel) {
-        partDefs.push({
-            partId: `P${index}`,
-            name: "Drums",
-            channel: 10,
-            program: 1,
-        });
     }
     if (!partDefs.length) {
         partDefs.push({
@@ -3578,6 +3592,7 @@ const buildImportSkeletonMusicXml = (params) => {
             name: "Part 1",
             channel: 1,
             program: 1,
+            key: "0:1",
         });
     }
     const partList = partDefs
@@ -3618,7 +3633,7 @@ const buildImportSkeletonMusicXml = (params) => {
             keyFifths,
             keyMode,
             isDrum: part.channel === 10,
-            notes: (_a = notesByChannel.get(part.channel)) !== null && _a !== void 0 ? _a : [],
+            notes: (_a = notesByTrackChannel.get(part.key)) !== null && _a !== void 0 ? _a : [],
             tempoEventsByMeasure,
             includeTempoEvents: partIndex === 0,
             ticksPerQuarter,
@@ -4091,8 +4106,8 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     }
     const header = headerResult.header;
     let offset = header.nextOffset;
-    const channelSet = new Set();
-    const programByChannel = new Map();
+    const trackChannelSet = new Set();
+    const programByTrackChannel = new Map();
     const collectedNotes = [];
     const timeSignatureEvents = [];
     const keySignatureEvents = [];
@@ -4121,16 +4136,16 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
             return { ok: false, xml: "", diagnostics, warnings };
         }
         const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
-        const summary = parseTrackSummary(trackData);
+        const summary = parseTrackSummary(trackData, i);
         collectedNotes.push(...summary.notes);
         timeSignatureEvents.push(...summary.timeSignatureEvents);
         keySignatureEvents.push(...summary.keySignatureEvents);
         tempoMetaEvents.push(...summary.tempoEvents);
         for (const channel of summary.channels)
-            channelSet.add(channel);
-        for (const [channel, program] of summary.programByChannel.entries()) {
-            if (!programByChannel.has(channel)) {
-                programByChannel.set(channel, program);
+            trackChannelSet.add(`${i}:${channel}`);
+        for (const [trackChannel, program] of summary.programByTrackChannel.entries()) {
+            if (!programByTrackChannel.has(trackChannel)) {
+                programByTrackChannel.set(trackChannel, program);
             }
         }
         warnings.push(...summary.parseWarnings);
@@ -4138,11 +4153,12 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     }
     const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid);
     warnings.push(...quantized.warnings);
-    const notesByChannel = new Map();
+    const notesByTrackChannel = new Map();
     for (const note of quantized.notes) {
-        const bucket = (_b = notesByChannel.get(note.channel)) !== null && _b !== void 0 ? _b : [];
+        const key = `${note.trackIndex}:${note.channel}`;
+        const bucket = (_b = notesByTrackChannel.get(key)) !== null && _b !== void 0 ? _b : [];
         bucket.push(note);
-        notesByChannel.set(note.channel, bucket);
+        notesByTrackChannel.set(key, bucket);
     }
     const firstTimeSignature = (_c = timeSignatureEvents
         .slice()
@@ -4167,8 +4183,16 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
             tempoEvents.push({ tick, bpm });
         }
     }
-    const melodicChannels = Array.from(channelSet).filter((channel) => channel !== 10).sort((a, b) => a - b);
-    const hadDrumChannel = channelSet.has(10);
+    const partGroups = Array.from(trackChannelSet)
+        .map((entry) => {
+        const [trackText, channelText] = entry.split(":");
+        return {
+            trackIndex: Math.max(0, Number.parseInt(trackText, 10) || 0),
+            channel: Math.max(1, Math.min(16, Number.parseInt(channelText, 10) || 1)),
+        };
+    })
+        .sort((a, b) => a.trackIndex === b.trackIndex ? a.channel - b.channel : a.trackIndex - b.trackIndex);
+    const hadDrumChannel = partGroups.some((group) => group.channel === 10);
     const xml = buildImportSkeletonMusicXml({
         title,
         quantizeGrid,
@@ -4178,10 +4202,9 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         keyFifths,
         keyMode,
         tempoEvents,
-        melodicChannels,
-        hasDrumChannel: hadDrumChannel,
-        notesByChannel,
-        programByChannel,
+        partGroups,
+        notesByTrackChannel,
+        programByTrackChannel,
         warnings,
     });
     if (hadDrumChannel) {
