@@ -144,6 +144,127 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(Math.abs(grace.durTicks - principal.durTicks)).toBeLessThanOrEqual(1);
   });
 
+  it("applies metric beat accents in 4/4 when enabled", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const enabled = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi", metricAccentEnabled: true });
+    const disabled = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi", metricAccentEnabled: false });
+    expect(enabled.events.map((e) => e.velocity)).toEqual([82, 80, 81, 80]);
+    expect(disabled.events.map((e) => e.velocity)).toEqual([80, 80, 80, 80]);
+  });
+
+  it("applies metric beat accents in 6/8 and 5-beat signatures", () => {
+    const sixEightXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>6</beats><beat-type>8</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const fiveFourXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>5</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const sixEightDoc = parseDoc(sixEightXml);
+    const fiveFourDoc = parseDoc(fiveFourXml);
+    const sixEight = buildPlaybackEventsFromMusicXmlDoc(sixEightDoc, 128, { mode: "midi", metricAccentEnabled: true });
+    const fiveFour = buildPlaybackEventsFromMusicXmlDoc(fiveFourDoc, 128, { mode: "midi", metricAccentEnabled: true });
+    expect(sixEight.events.map((e) => e.velocity)).toEqual([82, 80, 80, 81, 80, 80]);
+    expect(fiveFour.events.map((e) => e.velocity)).toEqual([82, 80, 81, 80, 80]);
+  });
+
+  it("applies 3-beat and fallback patterns as specified", () => {
+    const threeThreeXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>3</beats><beat-type>3</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>640</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const sevenEightXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>7</beats><beat-type>8</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const threeThreeDoc = parseDoc(threeThreeXml);
+    const sevenEightDoc = parseDoc(sevenEightXml);
+    const threeThree = buildPlaybackEventsFromMusicXmlDoc(threeThreeDoc, 128, { mode: "midi", metricAccentEnabled: true });
+    const sevenEight = buildPlaybackEventsFromMusicXmlDoc(sevenEightDoc, 128, { mode: "midi", metricAccentEnabled: true });
+    expect(threeThree.events.map((e) => e.velocity)).toEqual([82, 80, 80]);
+    expect(sevenEight.events.map((e) => e.velocity)).toEqual([82, 80, 80, 80, 80, 80, 80]);
+  });
+
   it("collects in-score tempo changes with tick positions", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">

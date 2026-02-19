@@ -49,7 +49,8 @@ export const createMidiDownloadPayload = (
   ticksPerQuarter: number,
   programPreset: MidiProgramPreset = "electric_piano_2",
   forceProgramPreset = false,
-  graceTimingMode: GraceTimingMode = "before_beat"
+  graceTimingMode: GraceTimingMode = "before_beat",
+  metricAccentEnabled = false
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
@@ -57,6 +58,7 @@ export const createMidiDownloadPayload = (
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter, {
     mode: "midi",
     graceTimingMode,
+    metricAccentEnabled,
   });
   if (parsedPlayback.events.length === 0) return null;
   const midiProgramOverrides = forceProgramPreset

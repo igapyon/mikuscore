@@ -469,6 +469,36 @@
                       <option value="classical_equal">Classical equal split</option>
                     </select>
                   </label>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Use metric beat accents</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Metric beat accents help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Adds subtle beat emphasis in MIDI-like playback and MIDI export.
+                          4/4: strong-weak-medium-weak, 6/8: strong-weak-weak-medium-weak-weak,
+                          3-beat: strong-weak-weak, 5-beat: strong-weak-medium-weak-weak,
+                          others: strong-weak-weak-...
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="metricAccentEnabled">
+                      <input
+                        id="metricAccentEnabled"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Use metric beat accents"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
                 </div>
                 <div class="ms-settings-block">
                   <h4 class="ms-settings-subtitle">MIDI Settings</h4>

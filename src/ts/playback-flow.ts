@@ -339,6 +339,7 @@ export type PlaybackFlowOptions = {
   getPlaybackWaveform: () => OscillatorType;
   getUseMidiLikePlayback: () => boolean;
   getGraceTimingMode: () => GraceTimingMode;
+  getMetricAccentEnabled: () => boolean;
   debugLog: boolean;
   getIsPlaying: () => boolean;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -402,6 +403,7 @@ export const startPlayback = async (
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter, {
     mode: playbackMode,
     graceTimingMode: options.getGraceTimingMode(),
+    metricAccentEnabled: options.getMetricAccentEnabled(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
@@ -492,6 +494,7 @@ export const startMeasurePlayback = async (
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter, {
     mode: playbackMode,
     graceTimingMode: options.getGraceTimingMode(),
+    metricAccentEnabled: options.getMetricAccentEnabled(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {

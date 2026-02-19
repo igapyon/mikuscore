@@ -134,6 +134,8 @@ const DYNAMICS_TO_VELOCITY: Record<string, number> = {
 
 const DEFAULT_DETACHE_DURATION_RATIO = 0.93;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
+const METRIC_ACCENT_STRONG_DELTA = 2;
+const METRIC_ACCENT_MEDIUM_DELTA = 1;
 
 const readDirectionVelocity = (directionNode: Element, fallback: number): number => {
   const soundDynamicsText = directionNode.querySelector(":scope > sound")?.getAttribute("dynamics")?.trim() ?? "";
@@ -230,6 +232,43 @@ const getTemporalExpressionAdjustments = (
     postPauseTicks += Math.max(1, Math.round(ticksPerQuarter / 4));
   }
   return { durationExtraTicks, postPauseTicks };
+};
+
+const buildMetricAccentPattern = (beats: number, beatType: number): number[] => {
+  if (beats === 4 && beatType === 4) {
+    return [METRIC_ACCENT_STRONG_DELTA, 0, METRIC_ACCENT_MEDIUM_DELTA, 0];
+  }
+  if (beats === 6 && beatType === 8) {
+    return [METRIC_ACCENT_STRONG_DELTA, 0, 0, METRIC_ACCENT_MEDIUM_DELTA, 0, 0];
+  }
+  if (beats === 3) {
+    return [METRIC_ACCENT_STRONG_DELTA, 0, 0];
+  }
+  if (beats === 5) {
+    return [METRIC_ACCENT_STRONG_DELTA, 0, METRIC_ACCENT_MEDIUM_DELTA, 0, 0];
+  }
+  return [METRIC_ACCENT_STRONG_DELTA, ...Array.from({ length: Math.max(0, beats - 1) }, () => 0)];
+};
+
+const getMetricAccentVelocityDelta = (
+  startDiv: number,
+  divisions: number,
+  beats: number,
+  beatType: number
+): number => {
+  if (!Number.isFinite(startDiv) || !Number.isFinite(divisions) || !Number.isFinite(beats) || !Number.isFinite(beatType)) {
+    return 0;
+  }
+  if (divisions <= 0 || beats <= 0 || beatType <= 0) return 0;
+  const beatUnitDiv = (divisions * 4) / beatType;
+  if (!Number.isFinite(beatUnitDiv) || beatUnitDiv <= 0) return 0;
+  const measureDiv = beatUnitDiv * beats;
+  if (!Number.isFinite(measureDiv) || measureDiv <= 0) return 0;
+  const normalizedStartDiv = ((startDiv % measureDiv) + measureDiv) % measureDiv;
+  const beatIndex = Math.max(0, Math.min(beats - 1, Math.floor(normalizedStartDiv / beatUnitDiv)));
+  const pattern = buildMetricAccentPattern(Math.round(beats), Math.round(beatType));
+  if (pattern.length === 0) return 0;
+  return pattern[beatIndex % pattern.length] ?? 0;
 };
 
 type WedgeKind = "crescendo" | "diminuendo";
@@ -942,12 +981,13 @@ export const buildMidiBytesForPlayback = (
 export const buildPlaybackEventsFromMusicXmlDoc = (
   doc: Document,
   ticksPerQuarter: number,
-  options: { mode?: "playback" | "midi"; graceTimingMode?: GraceTimingMode } = {}
+  options: { mode?: "playback" | "midi"; graceTimingMode?: GraceTimingMode; metricAccentEnabled?: boolean } = {}
 ): { tempo: number; events: PlaybackEvent[] } => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
   const mode = options.mode ?? "playback";
   const applyMidiNuance = mode === "midi";
   const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
+  const metricAccentEnabled = options.metricAccentEnabled === true;
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return { tempo: 120, events: [] };
 
@@ -1146,7 +1186,11 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             const articulation = applyMidiNuance
               ? getNoteArticulationAdjustments(child)
               : { velocityDelta: 0, durationRatio: 1, hasTenuto: false };
-            const velocity = clampVelocity(currentVelocity + articulation.velocityDelta);
+            const metricAccentDelta =
+              applyMidiNuance && metricAccentEnabled
+                ? getMetricAccentVelocityDelta(startDiv, currentDivisions, currentBeats, currentBeatType)
+                : 0;
+            const velocity = clampVelocity(currentVelocity + articulation.velocityDelta + metricAccentDelta);
             const voiceShiftTicks = applyMidiNuance ? voiceTimeShiftTicks.get(voice) ?? 0 : 0;
             const startTicks = Math.max(
               0,
