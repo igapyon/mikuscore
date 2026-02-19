@@ -38,6 +38,32 @@ export type MidiProgramPreset =
 export type MidiProgramOverrideMap = ReadonlyMap<string, number>;
 export type GraceTimingMode = "before_beat" | "on_beat" | "classical_equal";
 export type MetricAccentProfile = "subtle" | "balanced" | "strong";
+export type MidiImportQuantizeGrid = "1/8" | "1/16" | "1/32";
+export type MidiImportDiagnosticCode =
+  | "MIDI_UNSUPPORTED_DIVISION"
+  | "MIDI_NOTE_PAIR_BROKEN"
+  | "MIDI_QUANTIZE_CLAMPED"
+  | "MIDI_EVENT_DROPPED"
+  | "MIDI_POLYPHONY_VOICE_ASSIGNED"
+  | "MIDI_POLYPHONY_VOICE_OVERFLOW"
+  | "MIDI_DRUM_CHANNEL_SEPARATED"
+  | "MIDI_DRUM_NOTE_UNMAPPED"
+  | "MIDI_INVALID_FILE"
+  | "MIDI_UNSUPPORTED_FORMAT";
+export type MidiImportDiagnostic = {
+  code: MidiImportDiagnosticCode;
+  message: string;
+};
+export type MidiImportOptions = {
+  quantizeGrid?: MidiImportQuantizeGrid;
+  title?: string;
+};
+export type MidiImportResult = {
+  ok: boolean;
+  xml: string;
+  diagnostics: MidiImportDiagnostic[];
+  warnings: MidiImportDiagnostic[];
+};
 
 const instrumentByPreset: Record<MidiProgramPreset, number> = {
   electric_piano_2: 5, // Existing default in this app.
@@ -136,10 +162,35 @@ const DYNAMICS_TO_VELOCITY: Record<string, number> = {
 const DEFAULT_DETACHE_DURATION_RATIO = 0.93;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
+const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID: MidiImportQuantizeGrid = "1/16";
 const METRIC_ACCENT_PROFILE_DELTAS: Record<MetricAccentProfile, { strong: number; medium: number }> = {
   subtle: { strong: 2, medium: 1 },
   balanced: { strong: 4, medium: 2 },
   strong: { strong: 6, medium: 3 },
+};
+
+type ParsedSmfHeader = {
+  format: number;
+  trackCount: number;
+  ticksPerQuarter: number;
+  nextOffset: number;
+};
+
+type SmfImportedNote = {
+  channel: number;
+  midi: number;
+  startTick: number;
+  endTick: number;
+};
+
+type SmfParseSummary = {
+  notes: SmfImportedNote[];
+  channels: Set<number>;
+  programByChannel: Map<number, number>;
+  timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
+  keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }>;
+  tempoEvents: Array<{ tick: number; bpm: number }>;
+  parseWarnings: MidiImportDiagnostic[];
 };
 
 const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
@@ -509,6 +560,895 @@ const normalizeMidiProgramNumber = (value: number): number | null => {
   const rounded = Math.round(value);
   if (rounded < 1 || rounded > 128) return null;
   return rounded;
+};
+
+const normalizeMidiImportQuantizeGrid = (value: unknown): MidiImportQuantizeGrid => {
+  if (value === "1/8" || value === "1/32") return value;
+  return DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+};
+
+const quantizeGridToDivisions = (grid: MidiImportQuantizeGrid): number => {
+  if (grid === "1/8") return 2;
+  if (grid === "1/32") return 8;
+  return 4;
+};
+
+const readAscii = (bytes: Uint8Array, start: number, length: number): string => {
+  if (start < 0 || length < 0 || start + length > bytes.length) return "";
+  let out = "";
+  for (let i = 0; i < length; i += 1) {
+    out += String.fromCharCode(bytes[start + i]);
+  }
+  return out;
+};
+
+const readUint32Be = (bytes: Uint8Array, start: number): number | null => {
+  if (start < 0 || start + 4 > bytes.length) return null;
+  return (
+    (bytes[start] << 24) |
+    (bytes[start + 1] << 16) |
+    (bytes[start + 2] << 8) |
+    bytes[start + 3]
+  ) >>> 0;
+};
+
+const readUint16Be = (bytes: Uint8Array, start: number): number | null => {
+  if (start < 0 || start + 2 > bytes.length) return null;
+  return (bytes[start] << 8) | bytes[start + 1];
+};
+
+const readVariableLengthAt = (
+  bytes: Uint8Array,
+  start: number
+): { value: number; next: number } | null => {
+  let value = 0;
+  let cursor = start;
+  for (let i = 0; i < 4; i += 1) {
+    if (cursor >= bytes.length) return null;
+    const current = bytes[cursor];
+    value = (value << 7) | (current & 0x7f);
+    cursor += 1;
+    if ((current & 0x80) === 0) return { value, next: cursor };
+  }
+  return null;
+};
+
+const parseSmfHeader = (midiBytes: Uint8Array): {
+  header: ParsedSmfHeader | null;
+  diagnostics: MidiImportDiagnostic[];
+} => {
+  const diagnostics: MidiImportDiagnostic[] = [];
+  if (midiBytes.length < 14) {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "SMF header is too short.",
+    });
+    return { header: null, diagnostics };
+  }
+  if (readAscii(midiBytes, 0, 4) !== "MThd") {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "Missing MThd header chunk.",
+    });
+    return { header: null, diagnostics };
+  }
+  const headerLength = readUint32Be(midiBytes, 4);
+  const format = readUint16Be(midiBytes, 8);
+  const trackCount = readUint16Be(midiBytes, 10);
+  const division = readUint16Be(midiBytes, 12);
+  if (
+    headerLength === null ||
+    format === null ||
+    trackCount === null ||
+    division === null ||
+    headerLength < 6
+  ) {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "Invalid SMF header fields.",
+    });
+    return { header: null, diagnostics };
+  }
+  const nextOffset = 8 + headerLength;
+  if (nextOffset > midiBytes.length) {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "Header chunk length exceeds file size.",
+    });
+    return { header: null, diagnostics };
+  }
+  if (format !== 0 && format !== 1) {
+    diagnostics.push({
+      code: "MIDI_UNSUPPORTED_FORMAT",
+      message: `Unsupported SMF format ${format}. Supported formats are 0 and 1.`,
+    });
+    return { header: null, diagnostics };
+  }
+  if ((division & 0x8000) !== 0) {
+    diagnostics.push({
+      code: "MIDI_UNSUPPORTED_DIVISION",
+      message: "SMPTE time division is unsupported. Use PPQ-based MIDI files.",
+    });
+    return { header: null, diagnostics };
+  }
+  const ticksPerQuarter = division & 0x7fff;
+  if (ticksPerQuarter <= 0) {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "PPQ must be a positive integer.",
+    });
+    return { header: null, diagnostics };
+  }
+  return {
+    header: {
+      format,
+      trackCount,
+      ticksPerQuarter,
+      nextOffset,
+    },
+    diagnostics,
+  };
+};
+
+const parseTrackSummary = (trackData: Uint8Array): SmfParseSummary => {
+  const notes: SmfImportedNote[] = [];
+  const channels = new Set<number>();
+  const programByChannel = new Map<number, number>();
+  const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
+  const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
+  const tempoEvents: Array<{ tick: number; bpm: number }> = [];
+  const parseWarnings: MidiImportDiagnostic[] = [];
+  const activeNoteStartTicks = new Map<string, number[]>();
+  let cursor = 0;
+  let absTick = 0;
+  let runningStatus: number | null = null;
+
+  while (cursor < trackData.length) {
+    const delta = readVariableLengthAt(trackData, cursor);
+    if (!delta) {
+      parseWarnings.push({
+        code: "MIDI_EVENT_DROPPED",
+        message: "Invalid variable-length delta time in track; remaining events were dropped.",
+      });
+      break;
+    }
+    cursor = delta.next;
+    absTick += Math.max(0, delta.value);
+    if (cursor >= trackData.length) break;
+
+    let statusByte = trackData[cursor];
+    if (statusByte < 0x80) {
+      if (runningStatus === null) {
+        parseWarnings.push({
+          code: "MIDI_EVENT_DROPPED",
+          message: "Running status without previous status; event dropped.",
+        });
+        break;
+      }
+      statusByte = runningStatus;
+    } else {
+      cursor += 1;
+      runningStatus = statusByte < 0xf0 ? statusByte : null;
+    }
+
+    if (statusByte === 0xff) {
+      if (cursor >= trackData.length) break;
+      const metaType = trackData[cursor];
+      cursor += 1;
+      const metaLen = readVariableLengthAt(trackData, cursor);
+      if (!metaLen) break;
+      const payloadStart = metaLen.next;
+      const payloadEnd = payloadStart + metaLen.value;
+      if (payloadEnd > trackData.length) {
+        parseWarnings.push({
+          code: "MIDI_EVENT_DROPPED",
+          message: "Meta event length overflow; remaining events were dropped.",
+        });
+        break;
+      }
+      if (metaType === 0x58 && metaLen.value >= 2) {
+        const beats = trackData[payloadStart];
+        const beatTypePow = trackData[payloadStart + 1];
+        const beatType = Math.pow(2, beatTypePow);
+        if (beats > 0 && Number.isFinite(beatType) && beatType > 0) {
+          timeSignatureEvents.push({ tick: absTick, beats, beatType });
+        }
+      } else if (metaType === 0x59 && metaLen.value >= 2) {
+        const sfRaw = trackData[payloadStart];
+        const sf = sfRaw >= 0x80 ? sfRaw - 0x100 : sfRaw;
+        const mi = trackData[payloadStart + 1];
+        const fifths = Math.max(-7, Math.min(7, sf));
+        const mode: "major" | "minor" = mi === 1 ? "minor" : "major";
+        keySignatureEvents.push({ tick: absTick, fifths, mode });
+      } else if (metaType === 0x51 && metaLen.value >= 3) {
+        const microsPerQuarter =
+          (trackData[payloadStart] << 16) |
+          (trackData[payloadStart + 1] << 8) |
+          trackData[payloadStart + 2];
+        if (microsPerQuarter > 0) {
+          const bpm = clampTempo(60000000 / microsPerQuarter);
+          tempoEvents.push({ tick: absTick, bpm });
+        }
+      }
+      cursor = payloadEnd;
+      continue;
+    }
+    if (statusByte === 0xf0 || statusByte === 0xf7) {
+      const sysExLen = readVariableLengthAt(trackData, cursor);
+      if (!sysExLen) break;
+      cursor = sysExLen.next + sysExLen.value;
+      if (cursor > trackData.length) {
+        parseWarnings.push({
+          code: "MIDI_EVENT_DROPPED",
+          message: "SysEx event length overflow; remaining events were dropped.",
+        });
+        break;
+      }
+      continue;
+    }
+
+    const messageType = statusByte & 0xf0;
+    const channel = (statusByte & 0x0f) + 1;
+    channels.add(channel);
+    const dataLen = messageType === 0xc0 || messageType === 0xd0 ? 1 : 2;
+    if (cursor + dataLen > trackData.length) {
+      parseWarnings.push({
+        code: "MIDI_EVENT_DROPPED",
+        message: "Channel event data is truncated; remaining events were dropped.",
+      });
+      break;
+    }
+    const data1 = trackData[cursor];
+    const data2 = dataLen === 2 ? trackData[cursor + 1] : 0;
+    cursor += dataLen;
+
+    if (messageType === 0xc0) {
+      programByChannel.set(channel, data1 + 1);
+      continue;
+    }
+
+    if (messageType !== 0x80 && messageType !== 0x90) continue;
+    const key = `${channel}:${data1}`;
+    if (messageType === 0x90 && data2 > 0) {
+      const bucket = activeNoteStartTicks.get(key) ?? [];
+      bucket.push(absTick);
+      activeNoteStartTicks.set(key, bucket);
+      continue;
+    }
+    const bucket = activeNoteStartTicks.get(key) ?? [];
+    const startTick = bucket.pop();
+    if (bucket.length > 0) {
+      activeNoteStartTicks.set(key, bucket);
+    } else {
+      activeNoteStartTicks.delete(key);
+    }
+    if (startTick === undefined) {
+      parseWarnings.push({
+        code: "MIDI_NOTE_PAIR_BROKEN",
+        message: `Note off without matching note on (ch ${channel}, note ${data1}).`,
+      });
+      continue;
+    }
+    const endTick = Math.max(startTick + 1, absTick);
+    notes.push({
+      channel,
+      midi: data1,
+      startTick,
+      endTick,
+    });
+  }
+
+  for (const [key, starts] of activeNoteStartTicks.entries()) {
+    const [channelText, noteText] = key.split(":");
+    const channel = Number(channelText);
+    const note = Number(noteText);
+    for (const startTick of starts) {
+      parseWarnings.push({
+        code: "MIDI_NOTE_PAIR_BROKEN",
+        message: `Note on without matching note off (ch ${channel}, note ${note}, start ${startTick}).`,
+      });
+    }
+  }
+
+  return {
+    notes,
+    channels,
+    programByChannel,
+    timeSignatureEvents,
+    keySignatureEvents,
+    tempoEvents,
+    parseWarnings,
+  };
+};
+
+const xmlEscape = (raw: string): string => {
+  return raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+};
+
+type ImportedQuantizedNote = {
+  channel: number;
+  midi: number;
+  startTick: number;
+  endTick: number;
+};
+
+type ImportedVoiceCluster = {
+  voice: number;
+  startTick: number;
+  endTick: number;
+  notes: ImportedQuantizedNote[];
+};
+
+type ImportedVoiceNoteSegment = {
+  measureIndex: number;
+  voice: number;
+  staff: 1 | 2;
+  startDiv: number;
+  durDiv: number;
+  midi: number;
+};
+
+const midiToPitchComponents = (midiNumber: number): { step: string; alter: number; octave: number } => {
+  const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+  const octave = Math.floor(n / 12) - 1;
+  const semitone = n % 12;
+  const table: Array<{ step: string; alter: number }> = [
+    { step: "C", alter: 0 },
+    { step: "C", alter: 1 },
+    { step: "D", alter: 0 },
+    { step: "D", alter: 1 },
+    { step: "E", alter: 0 },
+    { step: "F", alter: 0 },
+    { step: "F", alter: 1 },
+    { step: "G", alter: 0 },
+    { step: "G", alter: 1 },
+    { step: "A", alter: 0 },
+    { step: "A", alter: 1 },
+    { step: "B", alter: 0 },
+  ];
+  const mapped = table[semitone] ?? { step: "C", alter: 0 };
+  return { step: mapped.step, alter: mapped.alter, octave };
+};
+
+const midiToPitchComponentsByKey = (
+  midiNumber: number,
+  keyFifths: number
+): { step: string; alter: number; octave: number } => {
+  const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+  const octave = Math.floor(n / 12) - 1;
+  const semitone = n % 12;
+  const useFlatSpelling = keyFifths < 0;
+  const sharpTable: Array<{ step: string; alter: number }> = [
+    { step: "C", alter: 0 },
+    { step: "C", alter: 1 },
+    { step: "D", alter: 0 },
+    { step: "D", alter: 1 },
+    { step: "E", alter: 0 },
+    { step: "F", alter: 0 },
+    { step: "F", alter: 1 },
+    { step: "G", alter: 0 },
+    { step: "G", alter: 1 },
+    { step: "A", alter: 0 },
+    { step: "A", alter: 1 },
+    { step: "B", alter: 0 },
+  ];
+  const flatTable: Array<{ step: string; alter: number }> = [
+    { step: "C", alter: 0 },
+    { step: "D", alter: -1 },
+    { step: "D", alter: 0 },
+    { step: "E", alter: -1 },
+    { step: "E", alter: 0 },
+    { step: "F", alter: 0 },
+    { step: "G", alter: -1 },
+    { step: "G", alter: 0 },
+    { step: "A", alter: -1 },
+    { step: "A", alter: 0 },
+    { step: "B", alter: -1 },
+    { step: "B", alter: 0 },
+  ];
+  const mapped = (useFlatSpelling ? flatTable : sharpTable)[semitone] ?? { step: "C", alter: 0 };
+  return { step: mapped.step, alter: mapped.alter, octave };
+};
+
+const accidentalTextFromAlter = (alter: number): string | null => {
+  if (alter === -2) return "flat-flat";
+  if (alter === -1) return "flat";
+  if (alter === 0) return "natural";
+  if (alter === 1) return "sharp";
+  if (alter === 2) return "double-sharp";
+  return null;
+};
+
+const midiToDrumDisplay = (midiNumber: number): { step: string; octave: number } => {
+  const p = midiToPitchComponents(midiNumber);
+  return { step: p.step, octave: p.octave };
+};
+
+const quantizeImportedNotes = (
+  notes: SmfImportedNote[],
+  ticksPerQuarter: number,
+  grid: MidiImportQuantizeGrid
+): { notes: ImportedQuantizedNote[]; warnings: MidiImportDiagnostic[]; qTick: number } => {
+  const warnings: MidiImportDiagnostic[] = [];
+  const subdivision = quantizeGridToDivisions(grid);
+  const qTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+  const quantized: ImportedQuantizedNote[] = [];
+  for (const note of notes) {
+    const startTick = Math.max(0, Math.round(note.startTick / qTick) * qTick);
+    let endTick = Math.max(startTick + qTick, Math.round(note.endTick / qTick) * qTick);
+    if (endTick <= startTick) {
+      endTick = startTick + qTick;
+      warnings.push({
+        code: "MIDI_QUANTIZE_CLAMPED",
+        message: `Quantized note duration was clamped (ch ${note.channel}, note ${note.midi}).`,
+      });
+    }
+    quantized.push({
+      channel: note.channel,
+      midi: note.midi,
+      startTick,
+      endTick,
+    });
+  }
+  return { notes: quantized, warnings, qTick };
+};
+
+const allocateAutoVoices = (
+  notes: ImportedQuantizedNote[],
+  warnings: MidiImportDiagnostic[]
+): ImportedVoiceCluster[] => {
+  if (!notes.length) return [];
+  const clustersByStart = new Map<number, ImportedQuantizedNote[]>();
+  for (const note of notes) {
+    const bucket = clustersByStart.get(note.startTick) ?? [];
+    bucket.push(note);
+    clustersByStart.set(note.startTick, bucket);
+  }
+  const starts = Array.from(clustersByStart.keys()).sort((a, b) => a - b);
+  const voices: Array<{ lastEnd: number; lastPitch: number }> = [];
+  const out: ImportedVoiceCluster[] = [];
+
+  for (const start of starts) {
+    const clusterNotes = (clustersByStart.get(start) ?? []).slice().sort((a, b) => a.midi - b.midi);
+    if (!clusterNotes.length) continue;
+    const clusterEnd = Math.max(...clusterNotes.map((note) => note.endTick));
+    const representativePitch = clusterNotes[Math.floor(clusterNotes.length / 2)].midi;
+
+    let bestVoice = -1;
+    let bestGap = Number.POSITIVE_INFINITY;
+    let bestPitchJump = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < voices.length; i += 1) {
+      if (voices[i].lastEnd > start) continue;
+      const gap = start - voices[i].lastEnd;
+      const pitchJump = Math.abs(representativePitch - voices[i].lastPitch);
+      if (gap < bestGap || (gap === bestGap && pitchJump < bestPitchJump)) {
+        bestVoice = i;
+        bestGap = gap;
+        bestPitchJump = pitchJump;
+      }
+    }
+    if (bestVoice < 0) {
+      bestVoice = voices.length;
+      voices.push({ lastEnd: clusterEnd, lastPitch: representativePitch });
+    } else {
+      voices[bestVoice] = { lastEnd: clusterEnd, lastPitch: representativePitch };
+    }
+    out.push({
+      voice: bestVoice + 1,
+      startTick: start,
+      endTick: clusterEnd,
+      notes: clusterNotes,
+    });
+  }
+
+  if (voices.length > 1) {
+    warnings.push({
+      code: "MIDI_POLYPHONY_VOICE_ASSIGNED",
+      message: `Auto voice split assigned ${voices.length} voices.`,
+    });
+  }
+  if (voices.length > 8) {
+    warnings.push({
+      code: "MIDI_POLYPHONY_VOICE_OVERFLOW",
+      message: `Auto voice split generated ${voices.length} voices (high density).`,
+    });
+  }
+  return out;
+};
+
+const splitClustersToMeasureSegments = (params: {
+  clusters: ImportedVoiceCluster[];
+  ticksPerQuarter: number;
+  divisions: number;
+  measureTicks: number;
+  isDrum: boolean;
+}): ImportedVoiceNoteSegment[] => {
+  const out: ImportedVoiceNoteSegment[] = [];
+  const { clusters, ticksPerQuarter, divisions, measureTicks, isDrum } = params;
+  const toDiv = (ticks: number): number => Math.max(0, Math.round((ticks * divisions) / ticksPerQuarter));
+
+  for (const cluster of clusters) {
+    for (const note of cluster.notes) {
+      let segmentStart = note.startTick;
+      while (segmentStart < note.endTick) {
+        const measureIndex = Math.floor(segmentStart / measureTicks);
+        const measureEndTick = (measureIndex + 1) * measureTicks;
+        const segmentEnd = Math.min(note.endTick, measureEndTick);
+        const startInMeasureTick = segmentStart - measureIndex * measureTicks;
+        const startDiv = toDiv(startInMeasureTick);
+        const durDiv = Math.max(1, toDiv(segmentEnd - segmentStart));
+        out.push({
+          measureIndex,
+          voice: cluster.voice,
+          staff: isDrum ? 1 : note.midi >= 60 ? 1 : 2,
+          startDiv,
+          durDiv,
+          midi: note.midi,
+        });
+        segmentStart = segmentEnd;
+      }
+    }
+  }
+  return out;
+};
+
+const resolveDurationNotation = (
+  durDiv: number,
+  divisions: number
+): { type: "whole" | "half" | "quarter" | "eighth" | "16th" | "32nd" | "64th"; dots: 0 | 1 | 2 } | null => {
+  if (!Number.isFinite(durDiv) || !Number.isFinite(divisions) || durDiv <= 0 || divisions <= 0) return null;
+  const qDur = durDiv / divisions;
+  const candidates: Array<{
+    type: "whole" | "half" | "quarter" | "eighth" | "16th" | "32nd" | "64th";
+    q: number;
+    dots: 0 | 1 | 2;
+  }> = [
+    { type: "whole", q: 4, dots: 0 },
+    { type: "whole", q: 6, dots: 1 },
+    { type: "whole", q: 7, dots: 2 },
+    { type: "half", q: 2, dots: 0 },
+    { type: "half", q: 3, dots: 1 },
+    { type: "half", q: 3.5, dots: 2 },
+    { type: "quarter", q: 1, dots: 0 },
+    { type: "quarter", q: 1.5, dots: 1 },
+    { type: "quarter", q: 1.75, dots: 2 },
+    { type: "eighth", q: 0.5, dots: 0 },
+    { type: "eighth", q: 0.75, dots: 1 },
+    { type: "eighth", q: 0.875, dots: 2 },
+    { type: "16th", q: 0.25, dots: 0 },
+    { type: "16th", q: 0.375, dots: 1 },
+    { type: "16th", q: 0.4375, dots: 2 },
+    { type: "32nd", q: 0.125, dots: 0 },
+    { type: "32nd", q: 0.1875, dots: 1 },
+    { type: "32nd", q: 0.21875, dots: 2 },
+    { type: "64th", q: 0.0625, dots: 0 },
+    { type: "64th", q: 0.09375, dots: 1 },
+    { type: "64th", q: 0.109375, dots: 2 },
+  ];
+  const tolerance = 1e-6;
+  const matched = candidates.find((candidate) => Math.abs(candidate.q - qDur) <= tolerance);
+  if (!matched) return null;
+  return { type: matched.type, dots: matched.dots };
+};
+
+const buildTypeXml = (durDiv: number, divisions: number): string => {
+  const notation = resolveDurationNotation(durDiv, divisions);
+  if (!notation) return "";
+  let xml = `<type>${notation.type}</type>`;
+  for (let i = 0; i < notation.dots; i += 1) {
+    xml += "<dot/>";
+  }
+  return xml;
+};
+
+const buildMeasureVoiceXml = (
+  segments: ImportedVoiceNoteSegment[],
+  voice: number,
+  staff: 1 | 2,
+  measureDiv: number,
+  isDrum: boolean,
+  divisions: number,
+  keyFifths: number
+): string => {
+  const voiceSegments = segments
+    .filter((segment) => segment.voice === voice && segment.staff === staff)
+    .slice()
+    .sort((a, b) => (a.startDiv === b.startDiv ? a.midi - b.midi : a.startDiv - b.startDiv));
+
+  if (!voiceSegments.length) {
+    return `<note><rest/><duration>${measureDiv}</duration>${buildTypeXml(measureDiv, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+  }
+
+  const groupsByStart = new Map<number, ImportedVoiceNoteSegment[]>();
+  for (const segment of voiceSegments) {
+    const bucket = groupsByStart.get(segment.startDiv) ?? [];
+    bucket.push(segment);
+    groupsByStart.set(segment.startDiv, bucket);
+  }
+  const starts = Array.from(groupsByStart.keys()).sort((a, b) => a - b);
+  const keyAlterMap = keySignatureAlterByStep(keyFifths);
+  const accidentalByStepOctave = new Map<string, number>();
+
+  let cursor = 0;
+  let xml = "";
+  for (const start of starts) {
+    const group = (groupsByStart.get(start) ?? []).slice().sort((a, b) => a.midi - b.midi);
+    if (start > cursor) {
+      const restDur = start - cursor;
+      xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+    }
+    const groupDur = Math.max(...group.map((segment) => segment.durDiv));
+    const typeXml = buildTypeXml(groupDur, divisions);
+    for (let i = 0; i < group.length; i += 1) {
+      const segment = group[i];
+      if (isDrum) {
+        const display = midiToDrumDisplay(segment.midi);
+        xml += "<note>";
+        if (i > 0) xml += "<chord/>";
+        xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
+        xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${staff}</staff><notehead>x</notehead>`;
+        xml += "</note>";
+      } else {
+        const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
+        const stepOctaveKey = `${pitch.step}${pitch.octave}`;
+        const defaultAlter = accidentalByStepOctave.has(stepOctaveKey)
+          ? accidentalByStepOctave.get(stepOctaveKey) ?? 0
+          : keyAlterMap[pitch.step] ?? 0;
+        const requiresAccidental = pitch.alter !== defaultAlter;
+        const accidentalText = requiresAccidental ? accidentalTextFromAlter(pitch.alter) : null;
+        xml += "<note>";
+        if (i > 0) xml += "<chord/>";
+        xml += `<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>`;
+        if (accidentalText) {
+          xml += `<accidental>${accidentalText}</accidental>`;
+        }
+        xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${staff}</staff>`;
+        xml += "</note>";
+        accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
+      }
+    }
+    cursor = Math.max(cursor, start + groupDur);
+  }
+  if (cursor < measureDiv) {
+    const restDur = measureDiv - cursor;
+    xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${staff}</staff></note>`;
+  }
+  return xml;
+};
+
+const buildPartMusicXml = (params: {
+  partId: string;
+  divisions: number;
+  beats: number;
+  beatType: number;
+  keyFifths: number;
+  keyMode: "major" | "minor";
+  isDrum: boolean;
+  notes: ImportedQuantizedNote[];
+  tempoEventsByMeasure: Map<number, Array<{ offsetDiv: number; bpm: number }>>;
+  includeTempoEvents: boolean;
+  ticksPerQuarter: number;
+  warnings: MidiImportDiagnostic[];
+}): string => {
+  const {
+    partId,
+    divisions,
+    beats,
+    beatType,
+    keyFifths,
+    keyMode,
+    isDrum,
+    notes,
+    tempoEventsByMeasure,
+    includeTempoEvents,
+    ticksPerQuarter,
+    warnings,
+  } = params;
+  const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
+  const measureDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+  const maxEndTick = notes.length ? Math.max(...notes.map((note) => note.endTick)) : measureTicks;
+  const measureCount = Math.max(1, Math.ceil(maxEndTick / measureTicks));
+
+  const clusters = allocateAutoVoices(notes, warnings);
+  const voiceSegmentsByMeasure = new Map<number, ImportedVoiceNoteSegment[]>();
+  const splitSegments = splitClustersToMeasureSegments({
+    clusters,
+    ticksPerQuarter,
+    divisions,
+    measureTicks,
+    isDrum,
+  });
+  for (const segment of splitSegments) {
+    const bucket = voiceSegmentsByMeasure.get(segment.measureIndex) ?? [];
+    bucket.push(segment);
+    voiceSegmentsByMeasure.set(segment.measureIndex, bucket);
+  }
+
+  const maxVoice = Math.max(1, ...clusters.map((cluster) => cluster.voice));
+  const lanes: Array<{ voice: number; staff: 1 | 2 }> = [];
+  if (isDrum) {
+    for (let voice = 1; voice <= maxVoice; voice += 1) {
+      lanes.push({ voice, staff: 1 });
+    }
+  } else {
+    for (let voice = 1; voice <= maxVoice; voice += 1) {
+      lanes.push({ voice, staff: 1 });
+    }
+    for (let voice = 1; voice <= maxVoice; voice += 1) {
+      lanes.push({ voice, staff: 2 });
+    }
+  }
+  let partXml = `<part id="${partId}">`;
+  for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
+    const measureNumber = measureIndex + 1;
+    const measureSegments = voiceSegmentsByMeasure.get(measureIndex) ?? [];
+    partXml += `<measure number="${measureNumber}">`;
+    if (measureIndex === 0) {
+      partXml += "<attributes>";
+      partXml += `<divisions>${divisions}</divisions>`;
+      partXml += `<key><fifths>${keyFifths}</fifths><mode>${keyMode}</mode></key>`;
+      partXml += `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`;
+      if (isDrum) {
+        partXml += "<clef><sign>percussion</sign><line>2</line></clef>";
+      } else {
+        partXml += "<staves>2</staves>";
+        partXml += "<clef number=\"1\"><sign>G</sign><line>2</line></clef>";
+        partXml += "<clef number=\"2\"><sign>F</sign><line>4</line></clef>";
+      }
+      partXml += "</attributes>";
+    }
+    if (includeTempoEvents) {
+      const tempoEvents = tempoEventsByMeasure.get(measureIndex) ?? [];
+      for (const event of tempoEvents) {
+        partXml += "<direction>";
+        partXml += "<direction-type><metronome><beat-unit>quarter</beat-unit>";
+        partXml += `<per-minute>${event.bpm}</per-minute>`;
+        partXml += "</metronome></direction-type>";
+        if (event.offsetDiv > 0) {
+          partXml += `<offset>${event.offsetDiv}</offset>`;
+        }
+        partXml += `<sound tempo="${event.bpm}"/>`;
+        partXml += "</direction>";
+      }
+    }
+    for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {
+      const lane = lanes[laneIndex];
+      if (laneIndex > 0) {
+        partXml += `<backup><duration>${measureDiv}</duration></backup>`;
+      }
+      partXml += buildMeasureVoiceXml(
+        measureSegments,
+        lane.voice,
+        lane.staff,
+        measureDiv,
+        isDrum,
+        divisions,
+        keyFifths
+      );
+    }
+    partXml += "</measure>";
+  }
+  partXml += "</part>";
+  return partXml;
+};
+
+const buildImportSkeletonMusicXml = (params: {
+  title: string;
+  quantizeGrid: MidiImportQuantizeGrid;
+  ticksPerQuarter: number;
+  beats: number;
+  beatType: number;
+  keyFifths: number;
+  keyMode: "major" | "minor";
+  tempoEvents: Array<{ tick: number; bpm: number }>;
+  melodicChannels: number[];
+  hasDrumChannel: boolean;
+  notesByChannel: Map<number, ImportedQuantizedNote[]>;
+  programByChannel: Map<number, number>;
+  warnings: MidiImportDiagnostic[];
+}): string => {
+  const {
+    title,
+    quantizeGrid,
+    ticksPerQuarter,
+    beats,
+    beatType,
+    keyFifths,
+    keyMode,
+    tempoEvents,
+    melodicChannels,
+    hasDrumChannel,
+    notesByChannel,
+    programByChannel,
+    warnings,
+  } = params;
+  const divisions = quantizeGridToDivisions(quantizeGrid);
+  const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
+  const partDefs: Array<{ partId: string; name: string; channel: number; program: number }> = [];
+
+  let index = 1;
+  for (const channel of melodicChannels) {
+    partDefs.push({
+      partId: `P${index}`,
+      name: `MIDI Ch ${channel}`,
+      channel,
+      program: normalizeMidiProgramNumber(programByChannel.get(channel) ?? NaN) ?? 1,
+    });
+    index += 1;
+  }
+  if (hasDrumChannel) {
+    partDefs.push({
+      partId: `P${index}`,
+      name: "Drums",
+      channel: 10,
+      program: 1,
+    });
+  }
+  if (!partDefs.length) {
+    partDefs.push({
+      partId: "P1",
+      name: "Part 1",
+      channel: 1,
+      program: 1,
+    });
+  }
+
+  const partList = partDefs
+    .map(
+      (part) =>
+        `<score-part id="${part.partId}"><part-name>${xmlEscape(part.name)}</part-name><midi-instrument id="${part.partId}-I1"><midi-channel>${part.channel}</midi-channel><midi-program>${part.program}</midi-program></midi-instrument></score-part>`
+    )
+    .join("");
+
+  const tempoEventsByMeasure = new Map<number, Array<{ offsetDiv: number; bpm: number }>>();
+  for (const tempoEvent of tempoEvents) {
+    const tick = Math.max(0, Math.round(tempoEvent.tick));
+    const measureIndex = Math.floor(tick / measureTicks);
+    const tickInMeasure = tick - measureIndex * measureTicks;
+    const offsetDiv = Math.max(0, Math.round((tickInMeasure * divisions) / ticksPerQuarter));
+    const bucket = tempoEventsByMeasure.get(measureIndex) ?? [];
+    bucket.push({ offsetDiv, bpm: clampTempo(tempoEvent.bpm) });
+    tempoEventsByMeasure.set(measureIndex, bucket);
+  }
+  for (const [measureIndex, events] of tempoEventsByMeasure.entries()) {
+    events.sort((a, b) => (a.offsetDiv === b.offsetDiv ? a.bpm - b.bpm : a.offsetDiv - b.offsetDiv));
+    const deduped: Array<{ offsetDiv: number; bpm: number }> = [];
+    for (const event of events) {
+      const prev = deduped[deduped.length - 1];
+      if (prev && prev.offsetDiv === event.offsetDiv) {
+        prev.bpm = event.bpm;
+      } else {
+        deduped.push({ ...event });
+      }
+    }
+    tempoEventsByMeasure.set(measureIndex, deduped);
+  }
+
+  const parts = partDefs
+    .map((part, partIndex) =>
+      buildPartMusicXml({
+        partId: part.partId,
+        divisions,
+        beats,
+        beatType,
+        keyFifths,
+        keyMode,
+        isDrum: part.channel === 10,
+        notes: notesByChannel.get(part.channel) ?? [],
+        tempoEventsByMeasure,
+        includeTempoEvents: partIndex === 0,
+        ticksPerQuarter,
+        warnings,
+      })
+    )
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(title)}</work-title></work><part-list>${partList}</part-list>${parts}</score-partwise>`;
 };
 
 const numberToVariableLength = (value: number): number[] => {
@@ -998,6 +1938,141 @@ export const buildMidiBytesForPlayback = (
   const writer = new midiWriter.Writer(midiTracks);
   const built = writer.buildFile();
   return built instanceof Uint8Array ? built : Uint8Array.from(built);
+};
+
+export const convertMidiToMusicXml = (
+  midiBytes: Uint8Array,
+  options: MidiImportOptions = {}
+): MidiImportResult => {
+  const diagnostics: MidiImportDiagnostic[] = [];
+  const warnings: MidiImportDiagnostic[] = [];
+  const quantizeGrid = normalizeMidiImportQuantizeGrid(options.quantizeGrid);
+  const title = String(options.title ?? "").trim() || "Imported MIDI";
+
+  if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
+    diagnostics.push({
+      code: "MIDI_INVALID_FILE",
+      message: "MIDI input is empty.",
+    });
+    return { ok: false, xml: "", diagnostics, warnings };
+  }
+
+  const headerResult = parseSmfHeader(midiBytes);
+  diagnostics.push(...headerResult.diagnostics);
+  if (!headerResult.header) {
+    return { ok: false, xml: "", diagnostics, warnings };
+  }
+  const header = headerResult.header;
+
+  let offset = header.nextOffset;
+  const channelSet = new Set<number>();
+  const programByChannel = new Map<number, number>();
+  const collectedNotes: SmfImportedNote[] = [];
+  const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
+  const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
+  const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
+
+  for (let i = 0; i < header.trackCount; i += 1) {
+    if (offset + 8 > midiBytes.length) {
+      diagnostics.push({
+        code: "MIDI_INVALID_FILE",
+        message: `Track chunk ${i + 1} header is truncated.`,
+      });
+      return { ok: false, xml: "", diagnostics, warnings };
+    }
+    if (readAscii(midiBytes, offset, 4) !== "MTrk") {
+      diagnostics.push({
+        code: "MIDI_INVALID_FILE",
+        message: `Track chunk ${i + 1} is missing MTrk signature.`,
+      });
+      return { ok: false, xml: "", diagnostics, warnings };
+    }
+    const trackLength = readUint32Be(midiBytes, offset + 4);
+    if (trackLength === null || offset + 8 + trackLength > midiBytes.length) {
+      diagnostics.push({
+        code: "MIDI_INVALID_FILE",
+        message: `Track chunk ${i + 1} has invalid length.`,
+      });
+      return { ok: false, xml: "", diagnostics, warnings };
+    }
+    const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
+    const summary = parseTrackSummary(trackData);
+    collectedNotes.push(...summary.notes);
+    timeSignatureEvents.push(...summary.timeSignatureEvents);
+    keySignatureEvents.push(...summary.keySignatureEvents);
+    tempoMetaEvents.push(...summary.tempoEvents);
+    for (const channel of summary.channels) channelSet.add(channel);
+    for (const [channel, program] of summary.programByChannel.entries()) {
+      if (!programByChannel.has(channel)) {
+        programByChannel.set(channel, program);
+      }
+    }
+    warnings.push(...summary.parseWarnings);
+    offset += 8 + trackLength;
+  }
+
+  const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid);
+  warnings.push(...quantized.warnings);
+  const notesByChannel = new Map<number, ImportedQuantizedNote[]>();
+  for (const note of quantized.notes) {
+    const bucket = notesByChannel.get(note.channel) ?? [];
+    bucket.push(note);
+    notesByChannel.set(note.channel, bucket);
+  }
+
+  const firstTimeSignature = timeSignatureEvents
+    .slice()
+    .sort((a, b) => a.tick - b.tick)[0] ?? { tick: 0, beats: 4, beatType: 4 };
+  const firstKeySignature = keySignatureEvents
+    .slice()
+    .sort((a, b) => a.tick - b.tick)[0] ?? { tick: 0, fifths: 0, mode: "major" as const };
+  const beats = Math.max(1, Math.round(firstTimeSignature.beats));
+  const beatType = Math.max(1, Math.round(firstTimeSignature.beatType));
+  const keyFifths = Math.max(-7, Math.min(7, Math.round(firstKeySignature.fifths)));
+  const keyMode: "major" | "minor" = firstKeySignature.mode === "minor" ? "minor" : "major";
+  const sortedTempoEvents = tempoMetaEvents.slice().sort((a, b) => a.tick - b.tick);
+  const tempoEvents: Array<{ tick: number; bpm: number }> = [];
+  for (const event of sortedTempoEvents) {
+    const tick = Math.max(0, Math.round(event.tick));
+    const bpm = clampTempo(event.bpm);
+    const prev = tempoEvents[tempoEvents.length - 1];
+    if (prev && prev.tick === tick) {
+      prev.bpm = bpm;
+    } else {
+      tempoEvents.push({ tick, bpm });
+    }
+  }
+  const melodicChannels = Array.from(channelSet).filter((channel) => channel !== 10).sort((a, b) => a - b);
+  const hadDrumChannel = channelSet.has(10);
+  const xml = buildImportSkeletonMusicXml({
+    title,
+    quantizeGrid,
+    ticksPerQuarter: header.ticksPerQuarter,
+    beats,
+    beatType,
+    keyFifths,
+    keyMode,
+    tempoEvents,
+    melodicChannels,
+    hasDrumChannel: hadDrumChannel,
+    notesByChannel,
+    programByChannel,
+    warnings,
+  });
+
+  if (hadDrumChannel) {
+    warnings.push({
+      code: "MIDI_DRUM_CHANNEL_SEPARATED",
+      message: "Channel 10 was mapped to a dedicated drum part.",
+    });
+  }
+
+  return {
+    ok: diagnostics.length === 0,
+    xml,
+    diagnostics,
+    warnings,
+  };
 };
 
 export const buildPlaybackEventsFromMusicXmlDoc = (

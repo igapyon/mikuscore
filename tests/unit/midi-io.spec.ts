@@ -4,6 +4,7 @@ import {
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
+  convertMidiToMusicXml,
 } from "../../src/ts/midi-io";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
@@ -12,6 +13,37 @@ const parseDoc = (xml: string): Document => {
   expect(doc).not.toBeNull();
   if (!doc) throw new Error("Invalid XML fixture.");
   return doc;
+};
+
+const vlq = (value: number): number[] => {
+  let buffer = Math.max(0, Math.round(value)) & 0x0fffffff;
+  const bytes = [buffer & 0x7f];
+  buffer >>= 7;
+  while (buffer > 0) {
+    bytes.unshift((buffer & 0x7f) | 0x80);
+    buffer >>= 7;
+  }
+  return bytes;
+};
+
+const buildSmfFormat0 = (trackEvents: number[], ticksPerQuarter = 480): Uint8Array => {
+  const track = [...trackEvents, 0x00, 0xff, 0x2f, 0x00];
+  const header = [
+    0x4d, 0x54, 0x68, 0x64, // MThd
+    0x00, 0x00, 0x00, 0x06, // header length
+    0x00, 0x00, // format 0
+    0x00, 0x01, // one track
+    (ticksPerQuarter >> 8) & 0xff,
+    ticksPerQuarter & 0xff,
+  ];
+  const trackHeader = [
+    0x4d, 0x54, 0x72, 0x6b, // MTrk
+    (track.length >>> 24) & 0xff,
+    (track.length >>> 16) & 0xff,
+    (track.length >>> 8) & 0xff,
+    track.length & 0xff,
+  ];
+  return Uint8Array.from([...header, ...trackHeader, ...track]);
 };
 
 describe("midi-io MIDI nuance regressions", () => {
@@ -389,5 +421,126 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(result.events[0]?.channel).toBe(10);
     expect(result.events[0]?.midiNumber).toBe(36);
     expect(result.events[1]?.midiNumber).toBe(38);
+  });
+});
+
+describe("midi-io MIDI import MVP", () => {
+  it("converts simple note MIDI into pitched MusicXML notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.length).toBe(0);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes.some((note) => note.querySelector("pitch > step")?.textContent === "C")).toBe(true);
+    expect(notes.some((note) => note.querySelector("type")?.textContent === "quarter")).toBe(true);
+  });
+
+  it("auto-splits overlapping notes into multiple voices", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x90, 64, 96,
+      ...vlq(360), 0x80, 60, 0,
+      ...vlq(120), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16" });
+    const doc = parseDoc(result.xml);
+    const voices = Array.from(doc.querySelectorAll("part > measure > note > voice"))
+      .map((voice) => Number(voice.textContent ?? "0"))
+      .filter((voice) => Number.isFinite(voice));
+    expect(new Set(voices).size).toBeGreaterThanOrEqual(2);
+    expect(result.warnings.some((warning) => warning.code === "MIDI_POLYPHONY_VOICE_ASSIGNED")).toBe(true);
+  });
+
+  it("separates channel 10 into dedicated drum part", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x99, 36, 100,
+      ...vlq(240), 0x89, 36, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    const doc = parseDoc(result.xml);
+    const drumPart = Array.from(doc.querySelectorAll("score-part")).find(
+      (scorePart) => scorePart.querySelector("part-name")?.textContent?.trim() === "Drums"
+    );
+    expect(drumPart).toBeDefined();
+    expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
+  });
+
+  it("reads MIDI key signature meta event into MusicXML key", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x59, 0x02, 0xfd, 0x01, // key: -3, minor
+      ...vlq(0), 0x90, 69, 96,
+      ...vlq(480), 0x80, 69, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const fifths = doc.querySelector("part > measure > attributes > key > fifths")?.textContent?.trim();
+    const mode = doc.querySelector("part > measure > attributes > key > mode")?.textContent?.trim();
+    expect(fifths).toBe("-3");
+    expect(mode).toBe("minor");
+  });
+
+  it("emits natural accidental when note contradicts key signature", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x59, 0x02, 0x01, 0x00, // key: +1 (G major, F#)
+      ...vlq(0), 0x90, 65, 100, // F natural
+      ...vlq(480), 0x80, 65, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const accidental = doc.querySelector("part > measure > note > accidental")?.textContent?.trim();
+    expect(accidental).toBe("natural");
+  });
+
+  it("splits melodic notes into grand staff by middle C threshold", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 100, // C4 -> treble (staff 1)
+      ...vlq(0), 0x90, 59, 100, // B3 -> bass (staff 2)
+      ...vlq(480), 0x80, 60, 0,
+      ...vlq(0), 0x80, 59, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const staves = doc.querySelector("part > measure > attributes > staves")?.textContent?.trim();
+    expect(staves).toBe("2");
+    const clef1 = doc.querySelector("part > measure > attributes > clef[number=\"1\"] > sign")?.textContent?.trim();
+    const clef2 = doc.querySelector("part > measure > attributes > clef[number=\"2\"] > sign")?.textContent?.trim();
+    expect(clef1).toBe("G");
+    expect(clef2).toBe("F");
+    const c4Note = Array.from(doc.querySelectorAll("part > measure > note"))
+      .find((note) => note.querySelector("pitch > step")?.textContent?.trim() === "C"
+        && note.querySelector("pitch > octave")?.textContent?.trim() === "4");
+    const b3Note = Array.from(doc.querySelectorAll("part > measure > note"))
+      .find((note) => note.querySelector("pitch > step")?.textContent?.trim() === "B"
+        && note.querySelector("pitch > octave")?.textContent?.trim() === "3");
+    expect(c4Note?.querySelector("staff")?.textContent?.trim()).toBe("1");
+    expect(b3Note?.querySelector("staff")?.textContent?.trim()).toBe("2");
+  });
+
+  it("reads MIDI tempo meta event into MusicXML direction/sound tempo", () => {
+    const microsPerQuarter = 600000; // 100 BPM
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x51, 0x03,
+      (microsPerQuarter >> 16) & 0xff,
+      (microsPerQuarter >> 8) & 0xff,
+      microsPerQuarter & 0xff,
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const soundTempo = Number(doc.querySelector("part > measure > direction > sound")?.getAttribute("tempo") ?? "");
+    const metronomeTempo = doc.querySelector("part > measure > direction > direction-type > metronome > per-minute")?.textContent?.trim();
+    expect(soundTempo).toBe(100);
+    expect(metronomeTempo).toBe("100");
+    const tempoEvents = collectMidiTempoEventsFromMusicXmlDoc(doc, 128);
+    expect(tempoEvents[0]?.bpm).toBe(100);
   });
 });
