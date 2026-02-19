@@ -5,6 +5,7 @@ import {
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
   type GraceTimingMode,
+  type MetricAccentProfile,
   type MidiProgramPreset,
 } from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
@@ -50,7 +51,8 @@ export const createMidiDownloadPayload = (
   programPreset: MidiProgramPreset = "electric_piano_2",
   forceProgramPreset = false,
   graceTimingMode: GraceTimingMode = "before_beat",
-  metricAccentEnabled = false
+  metricAccentEnabled = false,
+  metricAccentProfile: MetricAccentProfile = "subtle"
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
@@ -59,6 +61,7 @@ export const createMidiDownloadPayload = (
     mode: "midi",
     graceTimingMode,
     metricAccentEnabled,
+    metricAccentProfile,
   });
   if (parsedPlayback.events.length === 0) return null;
   const midiProgramOverrides = forceProgramPreset

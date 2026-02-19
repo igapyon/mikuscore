@@ -22,6 +22,7 @@ The module is responsible for:
 - `MidiProgramPreset`
 - `MidiProgramOverrideMap`
 - `GraceTimingMode = "before_beat" | "on_beat" | "classical_equal"`
+- `MetricAccentProfile = "subtle" | "balanced" | "strong"`
 
 ### Functions
 
@@ -41,6 +42,7 @@ The module is responsible for:
 - `mode?: "playback" | "midi"` (default: `"playback"`)
 - `graceTimingMode?: GraceTimingMode` (default: `"before_beat"`)
 - `metricAccentEnabled?: boolean` (default: `false`)
+- `metricAccentProfile?: MetricAccentProfile` (default: `"subtle"`)
 
 ### Mode policy
 
@@ -109,11 +111,11 @@ Enabled only when:
 - `mode="midi"`
 - `metricAccentEnabled=true`
 
-Velocity deltas are subtle and additive:
+Velocity deltas are additive and profile-dependent:
 
-- strong: `+2`
-- medium: `+1`
-- weak: `+0`
+- `subtle`: strong `+2`, medium `+1`, weak `+0`
+- `balanced`: strong `+4`, medium `+2`, weak `+0`
+- `strong`: strong `+6`, medium `+3`, weak `+0`
 
 Pattern table:
 
@@ -157,4 +159,3 @@ Pattern table:
 - returns `Uint8Array`
 
 If no playable note events exist, the function MUST throw an error.
-

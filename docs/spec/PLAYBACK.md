@@ -117,6 +117,7 @@ When flow invokes `buildPlaybackEventsFromMusicXmlDoc`, it forwards:
 - `mode`
 - `graceTimingMode`
 - `metricAccentEnabled`
+- `metricAccentProfile`
 
 Therefore quick playback in MIDI-like mode MUST reflect the same nuance policy as MIDI export for those options.
 
@@ -140,4 +141,3 @@ Current unit tests validate:
 - pedal-based release extension
 
 (See `tests/unit/playback-flow.spec.ts`.)
-

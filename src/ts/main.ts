@@ -45,6 +45,7 @@ import {
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
   type GraceTimingMode,
+  type MetricAccentProfile,
   type MidiProgramPreset,
 } from "./midi-io";
 
@@ -118,6 +119,7 @@ const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
 const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
 const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
 const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
+const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
@@ -188,6 +190,7 @@ const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
+const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
 
 type LocalDraft = {
   xml: string;
@@ -200,6 +203,7 @@ type PlaybackSettings = {
   useMidiLikePlayback: boolean;
   graceTimingMode: GraceTimingMode;
   metricAccentEnabled: boolean;
+  metricAccentProfile: MetricAccentProfile;
   forceMidiProgramOverride: boolean;
   settingsExpanded: boolean;
 };
@@ -246,6 +250,11 @@ const normalizeMetricAccentEnabled = (value: unknown): boolean => {
   return value === true;
 };
 
+const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
+  if (value === "balanced" || value === "strong") return value;
+  return DEFAULT_METRIC_ACCENT_PROFILE;
+};
+
 const readPlaybackSettings = (): PlaybackSettings | null => {
   try {
     const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
@@ -257,6 +266,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       useMidiLikePlayback: normalizeUseMidiLikePlayback(parsed.useMidiLikePlayback),
       graceTimingMode: normalizeGraceTimingMode(parsed.graceTimingMode),
       metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
+      metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       settingsExpanded: Boolean(parsed.settingsExpanded),
     };
@@ -273,6 +283,7 @@ const writePlaybackSettings = (): void => {
       useMidiLikePlayback: playbackUseMidiLike.checked,
       graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
       metricAccentEnabled: metricAccentEnabledInput.checked,
+      metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       settingsExpanded: settingsAccordion.open,
     };
@@ -289,6 +300,7 @@ const applyInitialPlaybackSettings = (): void => {
   playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
   graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
@@ -300,8 +312,10 @@ const onResetPlaybackSettings = (): void => {
   playbackUseMidiLike.checked = DEFAULT_PLAYBACK_USE_MIDI_LIKE;
   graceTimingModeSelect.value = DEFAULT_GRACE_TIMING_MODE;
   metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   writePlaybackSettings();
+  renderControlState();
 };
 
 const logDiagnostics = (
@@ -1072,6 +1086,7 @@ const renderControlState = (): void => {
   playbackWaveform.disabled = isPlaying;
   playbackUseMidiLike.disabled = isPlaying;
   metricAccentEnabledInput.disabled = isPlaying;
+  metricAccentProfileSelect.disabled = isPlaying || !metricAccentEnabledInput.checked;
   appendMeasureBtn.disabled = !state.loaded || isPlaying;
   const navLeftTarget = getMeasureNavigationTarget(selectedMeasure, "left");
   const navRightTarget = getMeasureNavigationTarget(selectedMeasure, "right");
@@ -1583,6 +1598,7 @@ const playbackFlowOptions: PlaybackFlowOptions = {
   getUseMidiLikePlayback: () => playbackUseMidiLike.checked,
   getGraceTimingMode: () => normalizeGraceTimingMode(graceTimingModeSelect.value),
   getMetricAccentEnabled: () => metricAccentEnabledInput.checked,
+  getMetricAccentProfile: () => normalizeMetricAccentProfile(metricAccentProfileSelect.value),
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -2291,31 +2307,88 @@ const onConvertRestToNote = (): void => {
   runCommand(command);
 };
 
+const failExport = (format: "MusicXML" | "MIDI" | "ABC", reason: string): void => {
+  const message = `${format} export failed: ${reason}`;
+  console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
+  state.lastDispatchResult = {
+    ok: false,
+    dirtyChanged: false,
+    changedNodeIds: [],
+    affectedMeasureNumbers: [],
+    diagnostics: [{ code: "MVP_COMMAND_EXECUTION_FAILED", message }],
+    warnings: [],
+  };
+  renderAll();
+};
+
 const onDownload = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
-  triggerFileDownload(createMusicXmlDownloadPayload(state.lastSuccessfulSaveXml));
+  if (!state.lastSuccessfulSaveXml) {
+    failExport("MusicXML", "No valid saved XML is available.");
+    return;
+  }
+  try {
+    triggerFileDownload(createMusicXmlDownloadPayload(state.lastSuccessfulSaveXml));
+  } catch (err) {
+    failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const onDownloadMidi = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
+  if (!state.lastSuccessfulSaveXml) {
+    failExport("MIDI", "No valid saved XML is available.");
+    return;
+  }
   refreshMidiDebugInfo();
+  const sourceDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
+  if (!sourceDoc) {
+    failExport("MIDI", "Current MusicXML could not be parsed.");
+    return;
+  }
+  const parsedForCheck = buildPlaybackEventsFromMusicXmlDoc(sourceDoc, PLAYBACK_TICKS_PER_QUARTER, {
+    mode: "midi",
+    graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabled: metricAccentEnabledInput.checked,
+    metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+  });
+  if (parsedForCheck.events.length === 0) {
+    failExport("MIDI", "No notes to export (MIDI events are empty).");
+    return;
+  }
   const payload = createMidiDownloadPayload(
     state.lastSuccessfulSaveXml,
     PLAYBACK_TICKS_PER_QUARTER,
     normalizeMidiProgram(midiProgramSelect.value),
     forceMidiProgramOverride.checked,
     normalizeGraceTimingMode(graceTimingModeSelect.value),
-    metricAccentEnabledInput.checked
+    metricAccentEnabledInput.checked,
+    normalizeMetricAccentProfile(metricAccentProfileSelect.value)
   );
-  if (!payload) return;
-  triggerFileDownload(payload);
+  if (!payload) {
+    failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const onDownloadAbc = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
+  if (!state.lastSuccessfulSaveXml) {
+    failExport("ABC", "No valid saved XML is available.");
+    return;
+  }
   const payload = createAbcDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToAbc);
-  if (!payload) return;
-  triggerFileDownload(payload);
+  if (!payload) {
+    failExport("ABC", "Could not build ABC payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const resolveMidiDebugXml = (): string => {
@@ -2345,6 +2418,7 @@ const refreshMidiDebugInfo = (): void => {
     mode: "midi",
     graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
     metricAccentEnabled: metricAccentEnabledInput.checked,
+    metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
   }).events;
   const plainPlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
     mode: "playback",
@@ -2526,7 +2600,11 @@ forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
 playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
 graceTimingModeSelect.addEventListener("change", writePlaybackSettings);
-metricAccentEnabledInput.addEventListener("change", writePlaybackSettings);
+metricAccentEnabledInput.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderControlState();
+});
+metricAccentProfileSelect.addEventListener("change", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
