@@ -6,6 +6,7 @@ import {
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
   type GraceTimingMode,
+  type MetricAccentProfile,
 } from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
 
@@ -340,6 +341,7 @@ export type PlaybackFlowOptions = {
   getUseMidiLikePlayback: () => boolean;
   getGraceTimingMode: () => GraceTimingMode;
   getMetricAccentEnabled: () => boolean;
+  getMetricAccentProfile: () => MetricAccentProfile;
   debugLog: boolean;
   getIsPlaying: () => boolean;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -404,6 +406,7 @@ export const startPlayback = async (
     mode: playbackMode,
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
+    metricAccentProfile: options.getMetricAccentProfile(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
@@ -495,6 +498,7 @@ export const startMeasurePlayback = async (
     mode: playbackMode,
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
+    metricAccentProfile: options.getMetricAccentProfile(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {

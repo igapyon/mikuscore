@@ -37,6 +37,7 @@ export type MidiProgramPreset =
   | "synth_brass_1";
 export type MidiProgramOverrideMap = ReadonlyMap<string, number>;
 export type GraceTimingMode = "before_beat" | "on_beat" | "classical_equal";
+export type MetricAccentProfile = "subtle" | "balanced" | "strong";
 
 const instrumentByPreset: Record<MidiProgramPreset, number> = {
   electric_piano_2: 5, // Existing default in this app.
@@ -134,8 +135,17 @@ const DYNAMICS_TO_VELOCITY: Record<string, number> = {
 
 const DEFAULT_DETACHE_DURATION_RATIO = 0.93;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
-const METRIC_ACCENT_STRONG_DELTA = 2;
-const METRIC_ACCENT_MEDIUM_DELTA = 1;
+const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
+const METRIC_ACCENT_PROFILE_DELTAS: Record<MetricAccentProfile, { strong: number; medium: number }> = {
+  subtle: { strong: 2, medium: 1 },
+  balanced: { strong: 4, medium: 2 },
+  strong: { strong: 6, medium: 3 },
+};
+
+const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
+  if (value === "balanced" || value === "strong") return value;
+  return DEFAULT_METRIC_ACCENT_PROFILE;
+};
 
 const readDirectionVelocity = (directionNode: Element, fallback: number): number => {
   const soundDynamicsText = directionNode.querySelector(":scope > sound")?.getAttribute("dynamics")?.trim() ?? "";
@@ -234,27 +244,35 @@ const getTemporalExpressionAdjustments = (
   return { durationExtraTicks, postPauseTicks };
 };
 
-const buildMetricAccentPattern = (beats: number, beatType: number): number[] => {
+const buildMetricAccentPattern = (
+  beats: number,
+  beatType: number,
+  profile: MetricAccentProfile
+): number[] => {
+  const deltas = METRIC_ACCENT_PROFILE_DELTAS[normalizeMetricAccentProfile(profile)];
+  const strong = deltas.strong;
+  const medium = deltas.medium;
   if (beats === 4 && beatType === 4) {
-    return [METRIC_ACCENT_STRONG_DELTA, 0, METRIC_ACCENT_MEDIUM_DELTA, 0];
+    return [strong, 0, medium, 0];
   }
   if (beats === 6 && beatType === 8) {
-    return [METRIC_ACCENT_STRONG_DELTA, 0, 0, METRIC_ACCENT_MEDIUM_DELTA, 0, 0];
+    return [strong, 0, 0, medium, 0, 0];
   }
   if (beats === 3) {
-    return [METRIC_ACCENT_STRONG_DELTA, 0, 0];
+    return [strong, 0, 0];
   }
   if (beats === 5) {
-    return [METRIC_ACCENT_STRONG_DELTA, 0, METRIC_ACCENT_MEDIUM_DELTA, 0, 0];
+    return [strong, 0, medium, 0, 0];
   }
-  return [METRIC_ACCENT_STRONG_DELTA, ...Array.from({ length: Math.max(0, beats - 1) }, () => 0)];
+  return [strong, ...Array.from({ length: Math.max(0, beats - 1) }, () => 0)];
 };
 
 const getMetricAccentVelocityDelta = (
   startDiv: number,
   divisions: number,
   beats: number,
-  beatType: number
+  beatType: number,
+  profile: MetricAccentProfile
 ): number => {
   if (!Number.isFinite(startDiv) || !Number.isFinite(divisions) || !Number.isFinite(beats) || !Number.isFinite(beatType)) {
     return 0;
@@ -266,7 +284,11 @@ const getMetricAccentVelocityDelta = (
   if (!Number.isFinite(measureDiv) || measureDiv <= 0) return 0;
   const normalizedStartDiv = ((startDiv % measureDiv) + measureDiv) % measureDiv;
   const beatIndex = Math.max(0, Math.min(beats - 1, Math.floor(normalizedStartDiv / beatUnitDiv)));
-  const pattern = buildMetricAccentPattern(Math.round(beats), Math.round(beatType));
+  const pattern = buildMetricAccentPattern(
+    Math.round(beats),
+    Math.round(beatType),
+    normalizeMetricAccentProfile(profile)
+  );
   if (pattern.length === 0) return 0;
   return pattern[beatIndex % pattern.length] ?? 0;
 };
@@ -981,13 +1003,19 @@ export const buildMidiBytesForPlayback = (
 export const buildPlaybackEventsFromMusicXmlDoc = (
   doc: Document,
   ticksPerQuarter: number,
-  options: { mode?: "playback" | "midi"; graceTimingMode?: GraceTimingMode; metricAccentEnabled?: boolean } = {}
+  options: {
+    mode?: "playback" | "midi";
+    graceTimingMode?: GraceTimingMode;
+    metricAccentEnabled?: boolean;
+    metricAccentProfile?: MetricAccentProfile;
+  } = {}
 ): { tempo: number; events: PlaybackEvent[] } => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
   const mode = options.mode ?? "playback";
   const applyMidiNuance = mode === "midi";
   const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   const metricAccentEnabled = options.metricAccentEnabled === true;
+  const metricAccentProfile = normalizeMetricAccentProfile(options.metricAccentProfile);
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return { tempo: 120, events: [] };
 
@@ -1188,7 +1216,13 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
               : { velocityDelta: 0, durationRatio: 1, hasTenuto: false };
             const metricAccentDelta =
               applyMidiNuance && metricAccentEnabled
-                ? getMetricAccentVelocityDelta(startDiv, currentDivisions, currentBeats, currentBeatType)
+                ? getMetricAccentVelocityDelta(
+                    startDiv,
+                    currentDivisions,
+                    currentBeats,
+                    currentBeatType,
+                    metricAccentProfile
+                  )
                 : 0;
             const velocity = clampVelocity(currentVelocity + articulation.velocityDelta + metricAccentDelta);
             const voiceShiftTicks = applyMidiNuance ? voiceTimeShiftTicks.get(voice) ?? 0 : 0;

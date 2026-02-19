@@ -265,6 +265,46 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(sevenEight.events.map((e) => e.velocity)).toEqual([82, 80, 80, 80, 80, 80, 80]);
   });
 
+  it("supports configurable metric accent amount profiles", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const subtle = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "midi",
+      metricAccentEnabled: true,
+      metricAccentProfile: "subtle",
+    });
+    const balanced = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "midi",
+      metricAccentEnabled: true,
+      metricAccentProfile: "balanced",
+    });
+    const strong = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "midi",
+      metricAccentEnabled: true,
+      metricAccentProfile: "strong",
+    });
+    expect(subtle.events.map((e) => e.velocity)).toEqual([82, 80, 81, 80]);
+    expect(balanced.events.map((e) => e.velocity)).toEqual([84, 80, 82, 80]);
+    expect(strong.events.map((e) => e.velocity)).toEqual([86, 80, 83, 80]);
+  });
+
   it("collects in-score tempo changes with tick positions", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
