@@ -448,6 +448,40 @@ V:1
     expect(abc).toContain("^F");
   });
 
+  it("MusicXML->ABC does not emit redundant natural in C major", () => {
+    const xmlWithRedundantNatural = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>960</duration>
+        <voice>1</voice><type>quarter</type>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <rest/><duration>2880</duration><voice>1</voice><type>half</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithRedundantNatural);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).not.toContain("=D");
+  });
+
   it("MusicXML->ABC stores trill accidental-mark in mikuscore comment and restores it", () => {
     const xmlWithTrillWidth = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -533,8 +567,10 @@ V:1
     if (!srcDoc) return;
 
     const abc = exportMusicXmlDomToAbc(srcDoc);
-    expect(abc).toContain("%@mks key voice=P1");
-    expect(abc).toContain("%@mks key voice=P2");
+    expect(abc).toContain("%@mks key voice=P1 measure=1 fifths=3");
+    expect(abc).toContain("%@mks key voice=P2 measure=1 fifths=0");
+    expect(abc).toContain("%@mks key voice=P1 measure=2 fifths=0");
+    expect(abc).toContain("%@mks key voice=P2 measure=2 fifths=3");
 
     const roundtripXml = convertAbcToMusicXml(abc);
     const outDoc = parseMusicXmlDocument(roundtripXml);
@@ -576,6 +612,203 @@ z6 |
     expect(parts.length).toBe(2);
     expect(parts[0].querySelector('measure[number="1"] > attributes > key > fifths')?.textContent?.trim()).toBe("0");
     expect(parts[1].querySelector('measure[number="1"] > attributes > key > fifths')?.textContent?.trim()).toBe("3");
+  });
+
+  it("MusicXML->ABC emits initial %@mks key hints for each lane with explicit measure key", () => {
+    const xmlWithSharedKey = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Upper</part-name></score-part>
+    <score-part id="P2"><part-name>Lower</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>1</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>3840</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>1</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>F</sign><line>4</line></clef>
+      </attributes>
+      <note><pitch><step>G</step><octave>2</octave></pitch><duration>3840</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithSharedKey);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("%@mks key voice=P1 measure=1 fifths=1");
+    expect(abc).toContain("%@mks key voice=P2 measure=1 fifths=1");
+    expect(abc).not.toContain("%@mks key voice=P1 measure=2 fifths=0");
+    expect(abc).not.toContain("%@mks key voice=P2 measure=2 fifths=0");
+  });
+
+  it("MusicXML->ABC emits natural against lane key signature (A major G->=G)", () => {
+    const xmlWithNaturalAgainstKey = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>3</fifths></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>2880</duration>
+        <voice>1</voice>
+        <type>half</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithNaturalAgainstKey);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("=G");
+  });
+
+  it("MusicXML->ABC uses per-part initial key for accidental emission", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+    <score-part id="P2"><part-name>Part 2</part-name></score-part>
+    <score-part id="P3"><part-name>Part 3</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>960</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><rest/><duration>2880</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <attributes><divisions>960</divisions><key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><rest/><duration>2880</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+  <part id="P3">
+    <measure number="1">
+      <attributes><divisions>960</divisions><key><fifths>3</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>half</type></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type><accidental>natural</accidental></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    const p3Block = abc
+      .split("\n")
+      .slice(abc.split("\n").findIndex((line) => line.trim() === "V:P3"))
+      .slice(0, 2)
+      .join("\n");
+    expect(p3Block).toContain("=G");
+  });
+
+  it("MusicXML->ABC emits mks metadata for measure/repeat/transpose and tuplet syntax", () => {
+    const xmlWithMeasureMeta = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Clarinet in A</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="0" implicit="yes">
+      <barline location="left"><repeat direction="forward"/></barline>
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+        <transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose>
+      </attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+    <measure number="1">
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start"/></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop"/></notations>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+      <barline location="right"><repeat direction="backward" times="2"/></barline>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithMeasureMeta);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("%@mks transpose voice=P1 chromatic=-3 diatonic=-2");
+    expect(abc).toContain("%@mks measure voice=P1 measure=1 number=0 implicit=1 repeat=forward");
+    expect(abc).toContain("%@mks measure voice=P1 measure=2 number=1 implicit=0 repeat=backward times=2");
+    expect(abc).toContain("(3:2:3");
+    expect(abc).toContain("(3:2:3d");
+    expect(abc).not.toContain("(3:2:3d2/3");
+  });
+
+  it("ABC->MusicXML restores measure/repeat/transpose metadata and tuplet tags", () => {
+    const abcWithMeta = `X:1
+T:Meta restore
+M:3/4
+L:1/8
+K:C
+V:P1 name="Clarinet in A" clef=treble
+V:P1
+c2 z4 | (3:2:3 d/2 e/2 f/2 z4 |
+%@mks transpose voice=P1 chromatic=-3 diatonic=-2
+%@mks measure voice=P1 measure=1 number=0 implicit=1 repeat=forward
+%@mks measure voice=P1 measure=2 number=1 implicit=0 repeat=backward times=2
+`;
+    const xml = convertAbcToMusicXml(abcWithMeta);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('part > measure[number="0"]')?.getAttribute("implicit")).toBe("yes");
+    expect(outDoc.querySelector('part > measure[number="0"] > barline[location="left"] > repeat')?.getAttribute("direction")).toBe("forward");
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="right"] > repeat')?.getAttribute("direction")).toBe("backward");
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="right"] > repeat')?.getAttribute("times")).toBe("2");
+    expect(outDoc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
+    expect(outDoc.querySelector("part > measure > attributes > transpose > diatonic")?.textContent?.trim()).toBe("-2");
+    expect(outDoc.querySelector('part > measure[number="1"] note > time-modification > actual-notes')?.textContent?.trim()).toBe("3");
+    expect(outDoc.querySelector('part > measure[number="1"] note > notations > tuplet[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('part > measure[number="1"] note > notations > tuplet[type="stop"]')).not.toBeNull();
   });
 
   it("MusicXML->ABC does not split a separate lane for grace notes missing voice", () => {

@@ -216,6 +216,8 @@ const abcCommon = AbcCommon;
     const lines = String(source || "").split("\n");
     const trillWidthHintByKey = new Map();
     const keyHintFifthsByKey = new Map();
+    const measureMetaByKey = new Map();
+    const transposeHintByVoiceId = new Map();
     const headers = {};
     const bodyEntries = [];
     const declaredVoiceIds = [];
@@ -261,6 +263,54 @@ const abcCommon = AbcCommon;
           const key = `${voiceId}#${measureNo}`;
           if (!keyHintFifthsByKey.has(key)) {
             keyHintFifthsByKey.set(key, Math.max(-7, Math.min(7, Math.round(fifths))));
+          }
+        }
+        continue;
+      }
+      const measureMetaMatch = rawTrimmed.match(/^%@mks\s+measure\s+(.+)$/i);
+      if (measureMetaMatch) {
+        const params = {};
+        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+        let kv;
+        while ((kv = kvRegex.exec(measureMetaMatch[1])) !== null) {
+          params[String(kv[1]).toLowerCase()] = String(kv[2]);
+        }
+        const voiceId = String(params.voice || "").trim();
+        const measureNo = Number.parseInt(String(params.measure || ""), 10);
+        if (voiceId && Number.isFinite(measureNo) && measureNo > 0) {
+          const measureNumberText = String(params.number || "").trim();
+          const implicitRaw = String(params.implicit || "").trim().toLowerCase();
+          const repeatRaw = String(params.repeat || "").trim().toLowerCase();
+          const repeatTimesRaw = Number.parseInt(String(params.times || ""), 10);
+          measureMetaByKey.set(`${voiceId}#${measureNo}`, {
+            number: measureNumberText || String(measureNo),
+            implicit: implicitRaw === "1" || implicitRaw === "true" || implicitRaw === "yes",
+            repeat:
+              repeatRaw === "forward" || repeatRaw === "backward"
+                ? repeatRaw
+                : "",
+            repeatTimes: Number.isFinite(repeatTimesRaw) && repeatTimesRaw > 1 ? repeatTimesRaw : null
+          });
+        }
+        continue;
+      }
+      const transposeMetaMatch = rawTrimmed.match(/^%@mks\s+transpose\s+(.+)$/i);
+      if (transposeMetaMatch) {
+        const params = {};
+        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+        let kv;
+        while ((kv = kvRegex.exec(transposeMetaMatch[1])) !== null) {
+          params[String(kv[1]).toLowerCase()] = String(kv[2]);
+        }
+        const voiceId = String(params.voice || "").trim();
+        const chromatic = Number.parseInt(String(params.chromatic || ""), 10);
+        const diatonic = Number.parseInt(String(params.diatonic || ""), 10);
+        if (voiceId && (Number.isFinite(chromatic) || Number.isFinite(diatonic))) {
+          const metaTranspose: { chromatic?: number; diatonic?: number } = {};
+          if (Number.isFinite(chromatic)) metaTranspose.chromatic = chromatic;
+          if (Number.isFinite(diatonic)) metaTranspose.diatonic = diatonic;
+          if (Object.keys(metaTranspose).length > 0) {
+            transposeHintByVoiceId.set(voiceId, metaTranspose);
           }
         }
         continue;
@@ -349,6 +399,7 @@ const abcCommon = AbcCommon;
       let pendingRhythmScale = null;
       let tupletRemaining = 0;
       let tupletScale = null;
+      let tupletSpec = null;
       let currentMeasureNo = Math.max(1, measures.length);
       let currentEventNo = 0;
       let idx = 0;
@@ -408,6 +459,7 @@ const abcCommon = AbcCommon;
             if (n > 0 && q > 0 && r > 0) {
               tupletScale = { num: q, den: n };
               tupletRemaining = r;
+              tupletSpec = { actual: n, normal: q, remaining: r };
             } else {
               warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tupletMatch[0]);
             }
@@ -511,11 +563,19 @@ const abcCommon = AbcCommon;
             absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
             pendingRhythmScale = null;
           }
+          const activeTuplet =
+            tupletRemaining > 0 && tupletScale && tupletSpec
+              ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
+              : null;
           if (tupletRemaining > 0 && tupletScale) {
             absoluteLength = multiplyFractions(absoluteLength, tupletScale);
             tupletRemaining -= 1;
+            if (tupletSpec) {
+              tupletSpec.remaining -= 1;
+            }
             if (tupletRemaining <= 0) {
               tupletScale = null;
+              tupletSpec = null;
             }
           }
           if (idx < text.length && (text[idx] === ">" || text[idx] === "<")) {
@@ -566,6 +626,15 @@ const abcCommon = AbcCommon;
             }
             if (chordIndex > 0) {
               note.chord = true;
+            }
+            if (chordIndex === 0 && activeTuplet) {
+              note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
+              if (activeTuplet.remaining === activeTuplet.actual) {
+                note.tupletStart = true;
+              }
+              if (activeTuplet.remaining === 1) {
+                note.tupletStop = true;
+              }
             }
             chordNotes.push(note);
           }
@@ -638,11 +707,19 @@ const abcCommon = AbcCommon;
           absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
           pendingRhythmScale = null;
         }
+        const activeTuplet =
+          tupletRemaining > 0 && tupletScale && tupletSpec
+            ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
+            : null;
         if (tupletRemaining > 0 && tupletScale) {
           absoluteLength = multiplyFractions(absoluteLength, tupletScale);
           tupletRemaining -= 1;
+          if (tupletSpec) {
+            tupletSpec.remaining -= 1;
+          }
           if (tupletRemaining <= 0) {
             tupletScale = null;
+            tupletSpec = null;
           }
         }
 
@@ -697,6 +774,15 @@ const abcCommon = AbcCommon;
           warnings.push("line " + entry.lineNo + ": tie(-) was followed by a rest; tie removed.");
           pendingTieToNext = false;
         }
+        if (activeTuplet) {
+          note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
+          if (activeTuplet.remaining === activeTuplet.actual) {
+            note.tupletStart = true;
+          }
+          if (activeTuplet.remaining === 1) {
+            note.tupletStop = true;
+          }
+        }
         note.voice = entry.voiceId;
         currentMeasure.push(note);
         lastNote = note;
@@ -724,14 +810,20 @@ const abcCommon = AbcCommon;
     const parts = orderedVoiceIds.map((voiceId, index) => {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
       const transpose =
+        transposeHintByVoiceId.get(voiceId) ||
         voiceTransposeById[voiceId] ||
         (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
       const normalizedMeasures = normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity);
       const keyByMeasure: Record<number, number> = {};
+      const measureMetaByIndex: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }> = {};
       for (let m = 1; m <= normalizedMeasures.length; m += 1) {
         const hinted = keyHintFifthsByKey.get(`${voiceId}#${m}`);
         if (Number.isFinite(hinted)) {
           keyByMeasure[m] = Number(hinted);
+        }
+        const meta = measureMetaByKey.get(`${voiceId}#${m}`);
+        if (meta) {
+          measureMetaByIndex[m] = meta;
         }
       }
       return {
@@ -741,6 +833,7 @@ const abcCommon = AbcCommon;
         transpose,
         voiceId,
         keyByMeasure,
+        measureMetaByIndex,
         measures: normalizedMeasures
       };
     });
@@ -1297,6 +1390,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
     if (normalized === "flat-flat") return -2;
     return null;
   };
+  const parseOptionalNumber = (text: string | null | undefined): number | null => {
+    const raw = String(text ?? "").trim();
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   const headerLines = [
     "X:1",
@@ -1382,31 +1481,75 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
       const abcClef = resolveLaneClef(lane.staff);
       const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
       headerLines.push(`V:${normalizedVoiceId} name="${laneName}"${clefSuffix}`);
+      for (const measure of measures) {
+        const transposeNode = measure.querySelector(":scope > attributes > transpose");
+        if (!transposeNode) continue;
+        const chromatic = Number(transposeNode.querySelector(":scope > chromatic")?.textContent?.trim() || "");
+        const diatonic = Number(transposeNode.querySelector(":scope > diatonic")?.textContent?.trim() || "");
+        if (Number.isFinite(chromatic) || Number.isFinite(diatonic)) {
+          const parts: string[] = [`%@mks transpose voice=${normalizedVoiceId}`];
+          if (Number.isFinite(chromatic)) parts.push(`chromatic=${Math.round(chromatic)}`);
+          if (Number.isFinite(diatonic)) parts.push(`diatonic=${Math.round(diatonic)}`);
+          metaLines.push(parts.join(" "));
+        }
+        break;
+      }
+
+      const partInitialFifthsRaw = parseOptionalNumber(
+        part.querySelector(":scope > measure > attributes > key > fifths")?.textContent
+      );
+      const partInitialFifths = partInitialFifthsRaw !== null
+        ? Math.round(partInitialFifthsRaw)
+        : (Number.isFinite(fifths) ? Math.round(fifths) : 0);
 
       let currentDivisions = 480;
-      let currentFifths = Number.isFinite(fifths) ? Math.round(fifths) : 0;
+      let currentFifths = partInitialFifths;
       let lastEmittedKeyFifths: number | null = null;
       let currentBeats = Number(meterBeats) || 4;
       let currentBeatType = Number(meterBeatType) || 4;
       const measureTexts: string[] = [];
       for (const measure of measures) {
+        let activeTuplet: { actual: number; normal: number; remaining: number } | null = null;
         let eventNo = 0;
-        const parsedDiv = Number(measure.querySelector("attributes > divisions")?.textContent?.trim() || "");
-        if (Number.isFinite(parsedDiv) && parsedDiv > 0) {
+        const parsedDiv = parseOptionalNumber(measure.querySelector("attributes > divisions")?.textContent);
+        if (parsedDiv !== null && parsedDiv > 0) {
           currentDivisions = parsedDiv;
         }
-        const parsedFifths = Number(measure.querySelector("attributes > key > fifths")?.textContent?.trim() || "");
-        if (Number.isFinite(parsedFifths)) {
+        const parsedFifths = parseOptionalNumber(measure.querySelector("attributes > key > fifths")?.textContent);
+        if (parsedFifths !== null) {
           currentFifths = Math.round(parsedFifths);
         }
-        const measureNumber = Number.parseInt(
-          measure.getAttribute("number") || String(measureTexts.length + 1),
-          10
-        );
-        const safeMeasureNumber = Number.isFinite(measureNumber) && measureNumber > 0
-          ? measureNumber
-          : (measureTexts.length + 1);
-        if (measureTexts.length === 0 || Number.isFinite(parsedFifths)) {
+        const safeMeasureNumber = measureTexts.length + 1;
+        const rawMeasureNumber = (measure.getAttribute("number") || "").trim() || String(safeMeasureNumber);
+        const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+        const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+        const leftRepeatNode = measure.querySelector(':scope > barline[location="left"] > repeat');
+        const rightRepeatNode = measure.querySelector(':scope > barline[location="right"] > repeat');
+        const leftRepeatDir = (leftRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
+        const rightRepeatDir = (rightRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
+        const repeatDir =
+          rightRepeatDir === "backward"
+            ? "backward"
+            : (leftRepeatDir === "forward" ? "forward" : "");
+        const repeatTimes = Number.parseInt(String(rightRepeatNode?.getAttribute("times") || ""), 10);
+        if (isImplicit || repeatDir || rawMeasureNumber !== String(safeMeasureNumber)) {
+          const metaChunks = [
+            `%@mks measure voice=${normalizedVoiceId} measure=${safeMeasureNumber}`,
+            `number=${rawMeasureNumber}`,
+            `implicit=${isImplicit ? 1 : 0}`,
+          ];
+          if (repeatDir) {
+            metaChunks.push(`repeat=${repeatDir}`);
+          }
+          if (repeatDir === "backward" && Number.isFinite(repeatTimes) && repeatTimes > 1) {
+            metaChunks.push(`times=${Math.round(repeatTimes)}`);
+          }
+          metaLines.push(metaChunks.join(" "));
+        }
+        const isFirstMeasureForLane = measureTexts.length === 0;
+        const hasExplicitKeyInMeasure = parsedFifths !== null;
+        const shouldEmitMeasureHint = hasExplicitKeyInMeasure || isFirstMeasureForLane;
+        if (shouldEmitMeasureHint) {
           if (lastEmittedKeyFifths === null || lastEmittedKeyFifths !== currentFifths) {
             const metaKey = `${normalizedVoiceId}#${safeMeasureNumber}`;
             if (!emittedKeyMetaByVoiceMeasure.has(metaKey)) {
@@ -1418,12 +1561,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             lastEmittedKeyFifths = currentFifths;
           }
         }
-        const parsedBeats = Number(measure.querySelector("attributes > time > beats")?.textContent?.trim() || "");
-        if (Number.isFinite(parsedBeats) && parsedBeats > 0) {
+        const parsedBeats = parseOptionalNumber(measure.querySelector("attributes > time > beats")?.textContent);
+        if (parsedBeats !== null && parsedBeats > 0) {
           currentBeats = parsedBeats;
         }
-        const parsedBeatType = Number(measure.querySelector("attributes > time > beat-type")?.textContent?.trim() || "");
-        if (Number.isFinite(parsedBeatType) && parsedBeatType > 0) {
+        const parsedBeatType = parseOptionalNumber(measure.querySelector("attributes > time > beat-type")?.textContent);
+        if (parsedBeatType !== null && parsedBeatType > 0) {
           currentBeatType = parsedBeatType;
         }
         const keyAlterMap = keySignatureAlterByStep(currentFifths);
@@ -1461,9 +1604,6 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             ? (Number.isFinite(duration) && duration > 0 ? duration : Math.round(currentDivisions / 2))
             : duration;
 
-          const wholeFraction = AbcCommon.reduceFraction(noteDuration, currentDivisions * 4, { num: 1, den: 4 });
-          const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
-          const len = AbcCommon.abcLengthTokenFromFraction(lenRatio);
           const hasTieStart = Boolean(child.querySelector(':scope > tie[type="start"]'));
           const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
           const hasWavyLineStart = Array.from(
@@ -1477,6 +1617,19 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const hasStaccato = Boolean(child.querySelector(":scope > notations > articulations > staccato"));
           const hasSlurStart = Boolean(child.querySelector(':scope > notations > slur[type="start"]'));
           const hasSlurStop = Boolean(child.querySelector(':scope > notations > slur[type="stop"]'));
+          const hasTupletStart = Boolean(child.querySelector(':scope > notations > tuplet[type="start"]'));
+          const tmActual = Number(child.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() || "");
+          const tmNormal = Number(child.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim() || "");
+          const hasTimeModification = Number.isFinite(tmActual) && tmActual > 0 && Number.isFinite(tmNormal) && tmNormal > 0;
+          const rawWholeFraction = AbcCommon.reduceFraction(noteDuration, currentDivisions * 4, { num: 1, den: 4 });
+          const abcBaseWholeFraction = hasTimeModification
+            ? AbcCommon.multiplyFractions(rawWholeFraction, {
+                num: Math.round(tmActual),
+                den: Math.round(tmNormal)
+              }, { num: 1, den: 4 })
+            : rawWholeFraction;
+          const lenRatio = AbcCommon.divideFractions(abcBaseWholeFraction, unitLength, { num: 1, den: 1 });
+          const len = AbcCommon.abcLengthTokenFromFraction(lenRatio);
 
           let pitchToken = "z";
           if (!child.querySelector(":scope > rest")) {
@@ -1497,14 +1650,17 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
               ? measureAccidentalByStepOctave.get(stepOctaveKey) ?? 0
               : keyAlter;
 
-            let targetAlter = currentAlter;
-            if (explicitAlter !== null) {
-              targetAlter = explicitAlter;
-            } else if (accidentalAlter !== null) {
+            // In MusicXML pitch, omitted <alter> means natural (0), not "follow key accidental".
+            // Key signature context is only used to decide whether an explicit accidental token is needed.
+            let targetAlter = explicitAlter !== null ? explicitAlter : 0;
+            if (accidentalAlter !== null) {
               targetAlter = accidentalAlter;
             }
 
-            const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
+            // Keep explicit non-natural accidentals (e.g. cautionary sharp/flat),
+            // but avoid emitting redundant naturals when pitch is already natural in context.
+            const shouldEmitAccidental =
+              targetAlter !== currentAlter || (accidentalAlter !== null && accidentalAlter !== 0);
             const accidental = shouldEmitAccidental
               ? (targetAlter === 0 ? "=" : AbcCommon.accidentalFromAlter(targetAlter))
               : "";
@@ -1526,10 +1682,23 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
           const gracePrefix =
             pendingGraceTokens.length > 0 ? `{${pendingGraceTokens.join("")}}` : "";
+          if (!isGrace && !isChord) {
+            if (hasTupletStart && hasTimeModification) {
+              activeTuplet = { actual: Math.round(tmActual), normal: Math.round(tmNormal), remaining: Math.round(tmActual) };
+            } else if (!activeTuplet && hasTimeModification) {
+              activeTuplet = { actual: Math.round(tmActual), normal: Math.round(tmNormal), remaining: Math.round(tmActual) };
+            }
+          }
+          const tupletPrefix =
+            !isGrace && !isChord && activeTuplet
+              ? (activeTuplet.remaining === activeTuplet.actual
+                  ? `(${activeTuplet.actual}:${activeTuplet.normal}:${activeTuplet.actual}`
+                  : "")
+              : "";
           const trillPrefix = hasTrill ? "!trill!" : "";
           const staccatoPrefix = hasStaccato ? "!staccato!" : "";
           const slurStartPrefix = hasSlurStart ? "(" : "";
-          const eventPrefix = `${slurStartPrefix}${gracePrefix}${trillPrefix}${staccatoPrefix}`;
+          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${staccatoPrefix}`;
           if (pendingGraceTokens.length > 0) {
             pendingGraceTokens.length = 0;
           }
@@ -1551,6 +1720,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             pending.pitches.push(pitchToken);
             pending.tie = pending.tie || hasTieStart;
             pending.slurStop = pending.slurStop || hasSlurStop;
+          }
+          if (!isGrace && !isChord && activeTuplet) {
+            activeTuplet.remaining -= 1;
+            if (activeTuplet.remaining <= 0) {
+              activeTuplet = null;
+            }
           }
         }
         if (pendingGraceTokens.length > 0) {
@@ -1645,6 +1820,9 @@ type AbcParsedNote = {
   trill?: boolean;
   trillAccidentalText?: string;
   staccato?: boolean;
+  timeModification?: { actual: number; normal: number };
+  tupletStart?: boolean;
+  tupletStop?: boolean;
   voice?: string;
 };
 
@@ -1652,9 +1830,10 @@ type AbcParsedPart = {
   partId: string;
   partName: string;
   clef?: string;
-  transpose?: { chromatic: number } | null;
+  transpose?: { chromatic?: number; diatonic?: number } | null;
   voiceId?: string;
   keyByMeasure?: Record<number, number>;
+  measureMetaByIndex?: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }>;
   measures: AbcParsedNote[][];
 };
 
@@ -1702,6 +1881,7 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
       for (let i = 0; i < measureCount; i += 1) {
         const measureNo = i + 1;
         const notes = part.measures[i] ?? [];
+        const measureMeta = part.measureMetaByIndex?.[measureNo] ?? null;
         const hintedFifths = Number.isFinite(part.keyByMeasure?.[measureNo])
           ? Math.max(-7, Math.min(7, Math.round(Number(part.keyByMeasure?.[measureNo]))))
           : null;
@@ -1715,8 +1895,17 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                 "<divisions>960</divisions>",
                 `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
                 `<time><beats>${Math.round(beats)}</beats><beat-type>${Math.round(beatType)}</beat-type></time>`,
-                part.transpose && Number.isFinite(part.transpose.chromatic)
-                  ? `<transpose><chromatic>${Math.round(part.transpose.chromatic)}</chromatic></transpose>`
+                part.transpose && (Number.isFinite(part.transpose.chromatic) || Number.isFinite(part.transpose.diatonic))
+                  ? [
+                      "<transpose>",
+                      Number.isFinite(part.transpose.diatonic)
+                        ? `<diatonic>${Math.round(Number(part.transpose.diatonic))}</diatonic>`
+                        : "",
+                      Number.isFinite(part.transpose.chromatic)
+                        ? `<chromatic>${Math.round(Number(part.transpose.chromatic))}</chromatic>`
+                        : "",
+                      "</transpose>",
+                    ].join("")
                   : "",
                 clefXmlFromAbcClef(part.clef),
                 "</attributes>",
@@ -1758,17 +1947,39 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                   }
                   chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
                   chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+                  if (
+                    note.timeModification &&
+                    Number.isFinite(note.timeModification.actual) &&
+                    Number.isFinite(note.timeModification.normal) &&
+                    Number(note.timeModification.actual) > 0 &&
+                    Number(note.timeModification.normal) > 0
+                  ) {
+                    chunks.push(
+                      `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`
+                    );
+                  }
                   if (note.accidentalText) {
                     chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);
                   }
                   if (note.tieStart) chunks.push('<tie type="start"/>');
                   if (note.tieStop) chunks.push('<tie type="stop"/>');
-                  if (note.tieStart || note.tieStop || note.slurStart || note.slurStop || note.trill || note.staccato) {
+                  if (
+                    note.tieStart ||
+                    note.tieStop ||
+                    note.slurStart ||
+                    note.slurStop ||
+                    note.trill ||
+                    note.staccato ||
+                    note.tupletStart ||
+                    note.tupletStop
+                  ) {
                     chunks.push("<notations>");
                     if (note.tieStart) chunks.push('<tied type="start"/>');
                     if (note.tieStop) chunks.push('<tied type="stop"/>');
                     if (note.slurStart) chunks.push('<slur type="start"/>');
                     if (note.slurStop) chunks.push('<slur type="stop"/>');
+                    if (note.tupletStart) chunks.push('<tuplet type="start"/>');
+                    if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
                     if (note.trill) {
                       const trillParts: string[] = [];
                       trillParts.push("<trill-mark/>");
@@ -1786,7 +1997,23 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                 .join("")
             : '<note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>';
 
-        measuresXml.push(`<measure number="${measureNo}">${header}${notesXml}</measure>`);
+        const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
+        const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";
+        const repeatStartXml =
+          measureMeta?.repeat === "forward"
+            ? '<barline location="left"><repeat direction="forward" winged="none"/></barline>'
+            : "";
+        const repeatEndXml =
+          measureMeta?.repeat === "backward"
+            ? `<barline location="right"><repeat direction="backward" winged="none"${
+                Number.isFinite(measureMeta.repeatTimes) && Number(measureMeta.repeatTimes) > 1
+                  ? ` times="${Math.round(Number(measureMeta.repeatTimes))}"`
+                  : ""
+              }/></barline>`
+            : "";
+        measuresXml.push(
+          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${notesXml}${repeatEndXml}</measure>`
+        );
       }
       return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
     })
