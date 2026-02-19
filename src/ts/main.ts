@@ -117,6 +117,7 @@ const stopBtn = q<HTMLButtonElement>("#stopBtn");
 const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
 const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
 const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
+const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
@@ -186,6 +187,7 @@ const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
+const DEFAULT_METRIC_ACCENT_ENABLED = true;
 
 type LocalDraft = {
   xml: string;
@@ -197,6 +199,7 @@ type PlaybackSettings = {
   waveform: "sine" | "triangle" | "square";
   useMidiLikePlayback: boolean;
   graceTimingMode: GraceTimingMode;
+  metricAccentEnabled: boolean;
   forceMidiProgramOverride: boolean;
   settingsExpanded: boolean;
 };
@@ -239,6 +242,10 @@ const normalizeGraceTimingMode = (value: unknown): GraceTimingMode => {
   return DEFAULT_GRACE_TIMING_MODE;
 };
 
+const normalizeMetricAccentEnabled = (value: unknown): boolean => {
+  return value === true;
+};
+
 const readPlaybackSettings = (): PlaybackSettings | null => {
   try {
     const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
@@ -249,6 +256,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       waveform: normalizeWaveformSetting(String(parsed.waveform ?? "")),
       useMidiLikePlayback: normalizeUseMidiLikePlayback(parsed.useMidiLikePlayback),
       graceTimingMode: normalizeGraceTimingMode(parsed.graceTimingMode),
+      metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       settingsExpanded: Boolean(parsed.settingsExpanded),
     };
@@ -264,6 +272,7 @@ const writePlaybackSettings = (): void => {
       waveform: normalizeWaveformSetting(playbackWaveform.value),
       useMidiLikePlayback: playbackUseMidiLike.checked,
       graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+      metricAccentEnabled: metricAccentEnabledInput.checked,
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       settingsExpanded: settingsAccordion.open,
     };
@@ -279,6 +288,7 @@ const applyInitialPlaybackSettings = (): void => {
   playbackWaveform.value = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
   playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
   graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
+  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
@@ -289,6 +299,7 @@ const onResetPlaybackSettings = (): void => {
   playbackWaveform.value = DEFAULT_PLAYBACK_WAVEFORM;
   playbackUseMidiLike.checked = DEFAULT_PLAYBACK_USE_MIDI_LIKE;
   graceTimingModeSelect.value = DEFAULT_GRACE_TIMING_MODE;
+  metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   writePlaybackSettings();
 };
@@ -1060,6 +1071,7 @@ const renderControlState = (): void => {
   stopBtn.disabled = !isPlaying;
   playbackWaveform.disabled = isPlaying;
   playbackUseMidiLike.disabled = isPlaying;
+  metricAccentEnabledInput.disabled = isPlaying;
   appendMeasureBtn.disabled = !state.loaded || isPlaying;
   const navLeftTarget = getMeasureNavigationTarget(selectedMeasure, "left");
   const navRightTarget = getMeasureNavigationTarget(selectedMeasure, "right");
@@ -1570,6 +1582,7 @@ const playbackFlowOptions: PlaybackFlowOptions = {
   },
   getUseMidiLikePlayback: () => playbackUseMidiLike.checked,
   getGraceTimingMode: () => normalizeGraceTimingMode(graceTimingModeSelect.value),
+  getMetricAccentEnabled: () => metricAccentEnabledInput.checked,
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -2291,7 +2304,8 @@ const onDownloadMidi = (): void => {
     PLAYBACK_TICKS_PER_QUARTER,
     normalizeMidiProgram(midiProgramSelect.value),
     forceMidiProgramOverride.checked,
-    normalizeGraceTimingMode(graceTimingModeSelect.value)
+    normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabledInput.checked
   );
   if (!payload) return;
   triggerFileDownload(payload);
@@ -2330,6 +2344,7 @@ const refreshMidiDebugInfo = (): void => {
   const midiLikePlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
     mode: "midi",
     graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabled: metricAccentEnabledInput.checked,
   }).events;
   const plainPlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
     mode: "playback",
@@ -2511,6 +2526,7 @@ forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
 playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
 graceTimingModeSelect.addEventListener("change", writePlaybackSettings);
+metricAccentEnabledInput.addEventListener("change", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
