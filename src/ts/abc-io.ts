@@ -174,6 +174,43 @@ if (typeof window !== "undefined") {
 
 const abcCommon = AbcCommon;
 
+  function parseTempoFromQ(rawQ, warnings) {
+    const raw = String(rawQ || "").trim();
+    if (!raw) {
+      return null;
+    }
+    const withoutQuoted = raw.replace(/"[^"]*"/g, " ").trim();
+    let m = withoutQuoted.match(/(\d+)\s*\/\s*(\d+)\s*=\s*(\d+(?:\.\d+)?)/);
+    if (m) {
+      const num = Number(m[1]);
+      const den = Number(m[2]);
+      const bpm = Number(m[3]);
+      if (num > 0 && den > 0 && Number.isFinite(bpm) && bpm > 0) {
+        const quarterBpm = bpm * ((4 * num) / den);
+        return Math.max(20, Math.min(300, Math.round(quarterBpm)));
+      }
+    }
+
+    m = withoutQuoted.match(/=\s*(\d+(?:\.\d+)?)/);
+    if (m) {
+      const bpm = Number(m[1]);
+      if (Number.isFinite(bpm) && bpm > 0) {
+        return Math.max(20, Math.min(300, Math.round(bpm)));
+      }
+    }
+
+    m = withoutQuoted.match(/^(\d+(?:\.\d+)?)$/);
+    if (m) {
+      const bpm = Number(m[1]);
+      if (Number.isFinite(bpm) && bpm > 0) {
+        return Math.max(20, Math.min(300, Math.round(bpm)));
+      }
+    }
+
+    warnings.push("Q: unsupported tempo format; ignored: " + rawQ);
+    return null;
+  }
+
   function parseForMusicXml(source, settings) {
     const warnings = [];
     const lines = String(source || "").split("\n");
@@ -248,6 +285,7 @@ const abcCommon = AbcCommon;
     const meter = parseMeter(headers.M || "4/4", warnings);
     const unitLength = parseFraction(headers.L || "1/8", "L", warnings);
     const keyInfo = parseKey(headers.K || "C", warnings);
+    const tempoBpm = parseTempoFromQ(headers.Q || "", warnings);
     const keySignatureAccidentals = keySignatureAlterByStep(keyInfo.fifths);
     const measuresByVoice = {};
     let noteCount = 0;
@@ -572,7 +610,8 @@ const abcCommon = AbcCommon;
         unitLength,
         unitLengthText: headers.L || "1/8",
         keyInfo,
-        keyText: headers.K || "C"
+        keyText: headers.K || "C",
+        tempoBpm
       },
       parts,
       measures: parts[0] ? parts[0].measures : [[]],
@@ -952,6 +991,13 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const fifths = Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() || "0");
   const mode = firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() || "major";
   const key = AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
+  const explicitTempo = Number(doc.querySelector("sound[tempo]")?.getAttribute("tempo") ?? "");
+  const metronomeTempo = Number(
+    doc.querySelector("direction-type > metronome > per-minute")?.textContent?.trim() ?? ""
+  );
+  const tempoBpm = Number.isFinite(explicitTempo) && explicitTempo > 0
+    ? explicitTempo
+    : (Number.isFinite(metronomeTempo) && metronomeTempo > 0 ? metronomeTempo : NaN);
 
   const partNameById = new Map<string, string>();
   for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
@@ -1002,6 +1048,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
     composer ? `C:${composer}` : "",
     `M:${meterBeats}/${meterBeatType}`,
     "L:1/8",
+    Number.isFinite(tempoBpm) ? `Q:1/4=${Math.round(tempoBpm)}` : "",
     `K:${key}`,
   ].filter(Boolean);
 
@@ -1009,101 +1056,153 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   parts.forEach((part, partIndex) => {
     const partId = part.getAttribute("id") || `P${partIndex + 1}`;
-    const voiceId = partId.replace(/[^A-Za-z0-9_.-]/g, "_");
-    const voiceName = partNameById.get(partId) || partId;
-    const abcClef = abcClefFromMusicXmlPart(part);
-    const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
-    headerLines.push(`V:${voiceId} name="${voiceName}"${clefSuffix}`);
+    const partName = partNameById.get(partId) || partId;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const staffSet = new Set<string>();
+    for (const note of Array.from(part.querySelectorAll(":scope > measure > note"))) {
+      const staff = note.querySelector(":scope > staff")?.textContent?.trim() ?? "";
+      if (staff) staffSet.add(staff);
+    }
+    const sortedStaffs = Array.from(staffSet).sort((a, b) => Number(a) - Number(b));
+    const laneDefs =
+      sortedStaffs.length > 1
+        ? sortedStaffs.map((staff) => ({ staff, voiceId: `${partId}_s${staff}` }))
+        : [{ staff: null as string | null, voiceId: partId }];
 
-    let currentDivisions = 480;
-    let currentFifths = Number.isFinite(fifths) ? Math.round(fifths) : 0;
-    const measureTexts: string[] = [];
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const parsedDiv = Number(measure.querySelector("attributes > divisions")?.textContent?.trim() || "");
-      if (Number.isFinite(parsedDiv) && parsedDiv > 0) {
-        currentDivisions = parsedDiv;
+    const resolveLaneClef = (staff: string | null): string => {
+      if (!staff) return abcClefFromMusicXmlPart(part);
+      for (const measure of measures) {
+        const clefNode = measure.querySelector(`:scope > attributes > clef[number="${staff}"]`);
+        if (!clefNode) continue;
+        const sign = clefNode.querySelector(":scope > sign")?.textContent?.trim().toUpperCase() ?? "";
+        const line = Number(clefNode.querySelector(":scope > line")?.textContent?.trim() ?? "");
+        if (sign === "F" && line === 4) return "bass";
+        if (sign === "G" && line === 2) return "treble";
+        if (sign === "C" && line === 3) return "alto";
+        if (sign === "C" && line === 4) return "tenor";
       }
-      const parsedFifths = Number(measure.querySelector("attributes > key > fifths")?.textContent?.trim() || "");
-      if (Number.isFinite(parsedFifths)) {
-        currentFifths = Math.round(parsedFifths);
-      }
-      const keyAlterMap = keySignatureAlterByStep(currentFifths);
-      const measureAccidentalByStepOctave = new Map<string, number>();
+      return abcClefFromMusicXmlPart(part);
+    };
 
-      let pending: { pitches: string[]; len: string; tie: boolean } | null = null;
-      const tokens: string[] = [];
-      const flush = (): void => {
-        if (!pending) return;
-        if (pending.pitches.length === 1) {
-          tokens.push(`${pending.pitches[0]}${pending.len}${pending.tie ? "-" : ""}`);
-        } else {
-          tokens.push(`[${pending.pitches.join("")}]${pending.len}${pending.tie ? "-" : ""}`);
+    for (const lane of laneDefs) {
+      const normalizedVoiceId = lane.voiceId.replace(/[^A-Za-z0-9_.-]/g, "_");
+      const laneName = lane.staff ? `${partName} (Staff ${lane.staff})` : partName;
+      const abcClef = resolveLaneClef(lane.staff);
+      const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
+      headerLines.push(`V:${normalizedVoiceId} name="${laneName}"${clefSuffix}`);
+
+      let currentDivisions = 480;
+      let currentFifths = Number.isFinite(fifths) ? Math.round(fifths) : 0;
+      let currentBeats = Number(meterBeats) || 4;
+      let currentBeatType = Number(meterBeatType) || 4;
+      const measureTexts: string[] = [];
+      for (const measure of measures) {
+        const parsedDiv = Number(measure.querySelector("attributes > divisions")?.textContent?.trim() || "");
+        if (Number.isFinite(parsedDiv) && parsedDiv > 0) {
+          currentDivisions = parsedDiv;
         }
-        pending = null;
-      };
+        const parsedFifths = Number(measure.querySelector("attributes > key > fifths")?.textContent?.trim() || "");
+        if (Number.isFinite(parsedFifths)) {
+          currentFifths = Math.round(parsedFifths);
+        }
+        const parsedBeats = Number(measure.querySelector("attributes > time > beats")?.textContent?.trim() || "");
+        if (Number.isFinite(parsedBeats) && parsedBeats > 0) {
+          currentBeats = parsedBeats;
+        }
+        const parsedBeatType = Number(measure.querySelector("attributes > time > beat-type")?.textContent?.trim() || "");
+        if (Number.isFinite(parsedBeatType) && parsedBeatType > 0) {
+          currentBeatType = parsedBeatType;
+        }
+        const keyAlterMap = keySignatureAlterByStep(currentFifths);
+        const measureAccidentalByStepOctave = new Map<string, number>();
 
-      for (const child of Array.from(measure.children)) {
-        if (child.tagName !== "note") continue;
-        const isChord = Boolean(child.querySelector("chord"));
-        const duration = Number(child.querySelector("duration")?.textContent?.trim() || "0");
-        if (!Number.isFinite(duration) || duration <= 0) continue;
+        let pending: { pitches: string[]; len: string; tie: boolean } | null = null;
+        const tokens: string[] = [];
+        const flush = (): void => {
+          if (!pending) return;
+          if (pending.pitches.length === 1) {
+            tokens.push(`${pending.pitches[0]}${pending.len}${pending.tie ? "-" : ""}`);
+          } else {
+            tokens.push(`[${pending.pitches.join("")}]${pending.len}${pending.tie ? "-" : ""}`);
+          }
+          pending = null;
+        };
 
-        const wholeFraction = AbcCommon.reduceFraction(duration, currentDivisions * 4, { num: 1, den: 4 });
-        const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
-        const len = AbcCommon.abcLengthTokenFromFraction(lenRatio);
-        const hasTieStart = Boolean(child.querySelector('tie[type="start"]'));
+        for (const child of Array.from(measure.children)) {
+          if (child.tagName !== "note") continue;
+          if (lane.staff) {
+            const noteStaff = child.querySelector(":scope > staff")?.textContent?.trim() ?? "";
+            if (noteStaff !== lane.staff) continue;
+          }
+          const isChord = Boolean(child.querySelector(":scope > chord"));
+          const duration = Number(child.querySelector(":scope > duration")?.textContent?.trim() || "0");
+          if (!Number.isFinite(duration) || duration <= 0) continue;
 
-        let pitchToken = "z";
-        if (!child.querySelector("rest")) {
-          const step = child.querySelector("pitch > step")?.textContent?.trim() || "C";
-          const octave = Number(child.querySelector("pitch > octave")?.textContent?.trim() || "4");
-          const upperStep = /^[A-G]$/.test(step.toUpperCase()) ? step.toUpperCase() : "C";
-          const safeOctave = Number.isFinite(octave) ? Math.max(0, Math.min(9, Math.round(octave))) : 4;
-          const stepOctaveKey = `${upperStep}${safeOctave}`;
+          const wholeFraction = AbcCommon.reduceFraction(duration, currentDivisions * 4, { num: 1, den: 4 });
+          const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
+          const len = AbcCommon.abcLengthTokenFromFraction(lenRatio);
+          const hasTieStart = Boolean(child.querySelector(':scope > tie[type="start"]'));
 
-          const alterRaw = child.querySelector("pitch > alter")?.textContent?.trim() ?? "";
-          const explicitAlter = alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
-          const accidentalText = child.querySelector("accidental")?.textContent?.trim() ?? "";
-          const accidentalAlter = accidentalTextToAlter(accidentalText);
+          let pitchToken = "z";
+          if (!child.querySelector(":scope > rest")) {
+            const step = child.querySelector(":scope > pitch > step")?.textContent?.trim() || "C";
+            const octave = Number(child.querySelector(":scope > pitch > octave")?.textContent?.trim() || "4");
+            const upperStep = /^[A-G]$/.test(step.toUpperCase()) ? step.toUpperCase() : "C";
+            const safeOctave = Number.isFinite(octave) ? Math.max(0, Math.min(9, Math.round(octave))) : 4;
+            const stepOctaveKey = `${upperStep}${safeOctave}`;
 
-          const keyAlter = keyAlterMap[upperStep] ?? 0;
-          const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
-            ? measureAccidentalByStepOctave.get(stepOctaveKey) ?? 0
-            : keyAlter;
+            const alterRaw = child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "";
+            const explicitAlter =
+              alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
+            const accidentalText = child.querySelector(":scope > accidental")?.textContent?.trim() ?? "";
+            const accidentalAlter = accidentalTextToAlter(accidentalText);
 
-          let targetAlter = currentAlter;
-          if (explicitAlter !== null) {
-            targetAlter = explicitAlter;
-          } else if (accidentalAlter !== null) {
-            targetAlter = accidentalAlter;
+            const keyAlter = keyAlterMap[upperStep] ?? 0;
+            const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
+              ? measureAccidentalByStepOctave.get(stepOctaveKey) ?? 0
+              : keyAlter;
+
+            let targetAlter = currentAlter;
+            if (explicitAlter !== null) {
+              targetAlter = explicitAlter;
+            } else if (accidentalAlter !== null) {
+              targetAlter = accidentalAlter;
+            }
+
+            const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
+            const accidental = shouldEmitAccidental
+              ? (targetAlter === 0 ? "=" : AbcCommon.accidentalFromAlter(targetAlter))
+              : "";
+            measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
+            pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
           }
 
-          const shouldEmitAccidental = accidentalAlter !== null || targetAlter !== currentAlter;
-          const accidental = shouldEmitAccidental
-            ? (targetAlter === 0 ? "=" : AbcCommon.accidentalFromAlter(targetAlter))
-            : "";
-          measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
-          pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
-        }
-
-        if (!isChord) {
-          flush();
-          pending = { pitches: [pitchToken], len, tie: hasTieStart };
-        } else {
-          if (!pending) {
+          if (!isChord) {
+            flush();
+            pending = { pitches: [pitchToken], len, tie: hasTieStart };
+          } else if (!pending) {
             pending = { pitches: [pitchToken], len, tie: hasTieStart };
           } else {
             pending.pitches.push(pitchToken);
             pending.tie = pending.tie || hasTieStart;
           }
         }
+        flush();
+        if (tokens.length === 0) {
+          const measureDuration = Math.max(
+            1,
+            Math.round(currentDivisions * Number(currentBeats) * (4 / Number(currentBeatType || 4)))
+          );
+          const wholeFraction = AbcCommon.reduceFraction(measureDuration, currentDivisions * 4, { num: 1, den: 4 });
+          const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
+          tokens.push(`z${AbcCommon.abcLengthTokenFromFraction(lenRatio)}`);
+        }
+        measureTexts.push(tokens.join(" "));
       }
-      flush();
-      measureTexts.push(tokens.join(" "));
-    }
 
-    bodyLines.push(`V:${voiceId}`);
-    bodyLines.push(`${measureTexts.join(" | ")} |`);
+      bodyLines.push(`V:${normalizedVoiceId}`);
+      bodyLines.push(`${measureTexts.join(" | ")} |`);
+    }
   });
 
   return `${headerLines.join("\n")}\n\n${bodyLines.join("\n")}\n`;
@@ -1155,6 +1254,7 @@ type AbcParsedMeta = {
   composer: string;
   meter: { beats: number; beatType: number };
   keyInfo: { fifths: number };
+  tempoBpm?: number | null;
 };
 
 type AbcParsedNote = {
@@ -1196,6 +1296,10 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
   const beats = parsed.meta?.meter?.beats || 4;
   const beatType = parsed.meta?.meter?.beatType || 4;
   const fifths = Number.isFinite(parsed.meta?.keyInfo?.fifths) ? parsed.meta.keyInfo.fifths : 0;
+  const tempoBpm =
+    Number.isFinite(parsed.meta?.tempoBpm as number) && Number(parsed.meta?.tempoBpm) > 0
+      ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
+      : null;
 
   const partListXml = parts
     .map((part, index) => {
@@ -1213,7 +1317,7 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
     .join("");
 
   const partBodyXml = parts
-    .map((part) => {
+    .map((part, partIndex) => {
       const measuresXml: string[] = [];
       for (let i = 0; i < measureCount; i += 1) {
         const measureNo = i + 1;
@@ -1230,6 +1334,9 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                   : "",
                 clefXmlFromAbcClef(part.clef),
                 "</attributes>",
+                tempoBpm !== null && partIndex === 0
+                  ? `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${tempoBpm}</per-minute></metronome></direction-type><sound tempo="${tempoBpm}"/></direction>`
+                  : "",
               ].join("")
             : "";
 

@@ -51,7 +51,10 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       };
     }
     const lowerName = selected.name.toLowerCase();
-    const isMxl = !treatAsAbc && lowerName.endsWith(".mxl");
+    const isAbcFile = lowerName.endsWith(".abc");
+    const isMxl = lowerName.endsWith(".mxl");
+    const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
+
     if (isMxl) {
       try {
         sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
@@ -64,10 +67,6 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
           }`,
         };
       }
-    } else {
-      sourceText = await selected.text();
-    }
-    if (!treatAsAbc) {
       return {
         ok: true,
         xmlToLoad: sourceText,
@@ -75,24 +74,45 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
         nextXmlInputText: sourceText,
       };
     }
-    try {
-      const convertedXml = params.convertAbcToMusicXml(sourceText);
+
+    if (isMusicXmlLike) {
+      sourceText = await selected.text();
       return {
         ok: true,
-        xmlToLoad: convertedXml,
+        xmlToLoad: sourceText,
         collapseInputSection: true,
-        nextXmlInputText: convertedXml,
-        nextAbcInputText: sourceText,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-        diagnosticMessage: `Failed to parse ABC: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        nextXmlInputText: sourceText,
       };
     }
+
+    if (isAbcFile) {
+      sourceText = await selected.text();
+      try {
+        const convertedXml = params.convertAbcToMusicXml(sourceText);
+        return {
+          ok: true,
+          xmlToLoad: convertedXml,
+          collapseInputSection: true,
+          nextXmlInputText: convertedXml,
+          nextAbcInputText: sourceText,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse ABC: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
+    return {
+      ok: false,
+      diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+      diagnosticMessage:
+        "Unsupported file extension. Use .musicxml, .xml, .mxl, or .abc.",
+    };
   }
 
   if (!treatAsAbc) {

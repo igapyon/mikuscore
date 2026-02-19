@@ -38,6 +38,9 @@
 - [ ] Reconfirm in-session `xml:id` strategy and operation rules.
 - [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
 - [ ] Add WAV export support (aligned with current quick-playback synth path).
+- [ ] Add measure-level copy/paste feature.
+- [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
+- [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
 
 ### Resume Checklist
 1. `npm run build`
@@ -85,6 +88,9 @@
 - [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
 - [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。
 - [ ] WAV 出力対応を追加（現行の簡易再生シンセ経路に沿う形）。
+- [ ] 小節単位のコピー/ペースト機能を追加。
+- [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
+- [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
 
 ### 次回の再開手順
 1. `npm run build`
