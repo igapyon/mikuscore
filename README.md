@@ -1,9 +1,16 @@
 # mikuscore
 
 ## English
-mikuscore is a browser-only MusicXML sheet editor.
+mikuscore is a browser-based local score editor.
 
 Its primary goal is reliability, not feature volume: edit while preserving existing MusicXML as much as possible.
+
+### Product Positioning
+- Focus on the following two smartphone-centered workflows (PC use is also supported):
+  - Quick and easy entry for simple scores on a smartphone.
+  - Execute part of a large score workflow (prepared on PC) on a smartphone.
+- Keep an intentionally small feature set and optimize for mobile usability and editing speed.
+- Use MusicXML as the core data structure and avoid unnecessary transformations.
 
 ### Core Principles
 - Prioritize preserving existing MusicXML with minimal patch editing.
@@ -11,7 +18,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - Preserve `<backup>`, `<forward>`, and existing `<beam>` nodes.
 - Roll back atomically on failure.
 - Keep Core/UI separated so UI can be replaced later.
-- Support smartphones.
+- Keep smartphone-centered workflows practical, with PC use also supported.
 
 ### MVP Highlights
 - If `dirty === false`, save returns original XML text (`original_noop`).
@@ -63,6 +70,13 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ブラウザ上で完結する MusicXML 譜面エディタです。
 
 このアプリの主眼は「多機能化」ではなく、極力既存 MusicXML を壊さずに編集する信頼性です。
+
+### プロダクトの位置づけ
+- 利用シーンは次の2つを中心に据えます（スマホ中心ですが、PC利用も可能です）。
+  - 簡単な譜面入力をスマホ上で手軽に行う。
+  - PCで進めている大規模な譜面作業の一部を切り出し、スマホで一部実施する。
+- 機能は意図的に絞り、スマホ上での使いやすさと入力スピードを優先します。
+- MusicXML を基軸データ構造として扱い、不要な変換を避けます。
 
 ### 基本方針
 - 既存 MusicXML の保全を最優先に最小パッチ編集を実現。

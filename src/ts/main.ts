@@ -44,6 +44,7 @@ import {
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
+  type GraceTimingMode,
   type MidiProgramPreset,
 } from "./midi-io";
 
@@ -115,6 +116,7 @@ const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
 const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
 const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
+const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
@@ -180,9 +182,10 @@ const MAX_NEW_PARTS = 16;
 const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
 const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
 const DEFAULT_MIDI_PROGRAM: MidiProgramPreset = "electric_piano_2";
-const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "sine";
+const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
+const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 
 type LocalDraft = {
   xml: string;
@@ -193,6 +196,7 @@ type PlaybackSettings = {
   midiProgram: MidiProgramPreset;
   waveform: "sine" | "triangle" | "square";
   useMidiLikePlayback: boolean;
+  graceTimingMode: GraceTimingMode;
   forceMidiProgramOverride: boolean;
   settingsExpanded: boolean;
 };
@@ -230,6 +234,11 @@ const normalizeUseMidiLikePlayback = (value: unknown): boolean => {
   return value !== false;
 };
 
+const normalizeGraceTimingMode = (value: unknown): GraceTimingMode => {
+  if (value === "on_beat" || value === "classical_equal") return value;
+  return DEFAULT_GRACE_TIMING_MODE;
+};
+
 const readPlaybackSettings = (): PlaybackSettings | null => {
   try {
     const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
@@ -239,6 +248,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       midiProgram: normalizeMidiProgram(String(parsed.midiProgram ?? "")),
       waveform: normalizeWaveformSetting(String(parsed.waveform ?? "")),
       useMidiLikePlayback: normalizeUseMidiLikePlayback(parsed.useMidiLikePlayback),
+      graceTimingMode: normalizeGraceTimingMode(parsed.graceTimingMode),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       settingsExpanded: Boolean(parsed.settingsExpanded),
     };
@@ -253,6 +263,7 @@ const writePlaybackSettings = (): void => {
       midiProgram: normalizeMidiProgram(midiProgramSelect.value),
       waveform: normalizeWaveformSetting(playbackWaveform.value),
       useMidiLikePlayback: playbackUseMidiLike.checked,
+      graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       settingsExpanded: settingsAccordion.open,
     };
@@ -267,6 +278,7 @@ const applyInitialPlaybackSettings = (): void => {
   midiProgramSelect.value = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
   playbackWaveform.value = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
   playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
@@ -276,6 +288,7 @@ const onResetPlaybackSettings = (): void => {
   midiProgramSelect.value = DEFAULT_MIDI_PROGRAM;
   playbackWaveform.value = DEFAULT_PLAYBACK_WAVEFORM;
   playbackUseMidiLike.checked = DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = DEFAULT_GRACE_TIMING_MODE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   writePlaybackSettings();
 };
@@ -1556,6 +1569,7 @@ const playbackFlowOptions: PlaybackFlowOptions = {
     return normalizeWaveformSetting(playbackWaveform.value);
   },
   getUseMidiLikePlayback: () => playbackUseMidiLike.checked,
+  getGraceTimingMode: () => normalizeGraceTimingMode(graceTimingModeSelect.value),
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -2276,7 +2290,8 @@ const onDownloadMidi = (): void => {
     state.lastSuccessfulSaveXml,
     PLAYBACK_TICKS_PER_QUARTER,
     normalizeMidiProgram(midiProgramSelect.value),
-    forceMidiProgramOverride.checked
+    forceMidiProgramOverride.checked,
+    normalizeGraceTimingMode(graceTimingModeSelect.value)
   );
   if (!payload) return;
   triggerFileDownload(payload);
@@ -2314,6 +2329,7 @@ const refreshMidiDebugInfo = (): void => {
   const programOverrides = collectMidiProgramOverridesFromMusicXmlDoc(doc);
   const midiLikePlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
     mode: "midi",
+    graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
   }).events;
   const plainPlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
     mode: "playback",
@@ -2494,6 +2510,7 @@ midiProgramSelect.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
 playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
+graceTimingModeSelect.addEventListener("change", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);

@@ -35,11 +35,13 @@
               </svg>
             </span>
             <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-              mikuscore is a local editor focused on preserving existing MusicXML structure while editing.
-              From input (file/source), score preview, note editing, playback, and export/download are handled in one screen.
+              mikuscore is a browser-based local score editor focused on preserving existing MusicXML structure while editing.
+              It supports loading MusicXML/ABC, score preview, note editing, playback, and export/download as MusicXML/ABC/MIDI in one screen.
+              mikuscore intentionally keeps the feature set small to make score editing practical and fast, especially on smartphones.
+              It is smartphone-centered, but it can also be used on PCs.
               Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
               After loading, click notes in the score to select targets, then adjust pitch and duration.
-              Use tools like MuseScore for complex work. mikuscore aims to be practical on mobile devices.
+              Use tools like MuseScore for large-scale or complex work, and use mikuscore for quick input or focused partial tasks.
             </span>
           </span>
           <a
@@ -444,9 +446,48 @@
               <summary class="ms-settings-summary">MIDI &amp; Playback Settings</summary>
               <div class="ms-settings-body">
                 <div class="ms-settings-block">
-                  <h4 class="ms-settings-subtitle">MIDI Settings (when unspecified)</h4>
+                  <h4 class="ms-settings-subtitle">MIDI &amp; Playback Shared Settings</h4>
+                  <label class="ms-field" for="graceTimingMode">
+                    <span class="ms-field-label">
+                      <span>Grace Timing Mode</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Grace timing mode help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Applies to MIDI-like playback and MIDI export.
+                        </span>
+                      </span>
+                    </span>
+                    <select id="graceTimingMode" class="md-select">
+                      <option value="before_beat" selected>Before beat (appoggiatura-like)</option>
+                      <option value="on_beat">On beat (principal delayed)</option>
+                      <option value="classical_equal">Classical equal split</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">MIDI Settings</h4>
                   <label class="ms-field" for="midiProgramSelect">
-                    <span class="ms-field-label">MIDI Export Instrument (when unspecified in MusicXML)</span>
+                    <span class="ms-field-label">
+                      <span>MIDI Export Instrument</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MIDI export instrument help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Used when MusicXML does not specify an instrument for the part.
+                        </span>
+                      </span>
+                    </span>
                     <select id="midiProgramSelect" class="md-select">
                       <option value="acoustic_grand_piano">Acoustic Grand Piano</option>
                       <option value="acoustic_guitar_nylon">Acoustic Guitar (nylon)</option>
@@ -462,29 +503,72 @@
                       <option value="violin">Violin</option>
                     </select>
                   </label>
-                  <label class="md-switch-label ms-switch-field" for="forceMidiProgramOverride">
-                    <input id="forceMidiProgramOverride" type="checkbox" class="md-switch-input" />
-                    <span class="md-switch" aria-hidden="true"></span>
-                    <span>Always override MusicXML instrument with selected export instrument</span>
-                  </label>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Always override instrument</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Always override instrument help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Always override MusicXML instrument with selected export instrument.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="forceMidiProgramOverride">
+                      <input
+                        id="forceMidiProgramOverride"
+                        type="checkbox"
+                        class="md-switch-input"
+                        aria-label="Always override instrument"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
                 </div>
                 <div class="ms-settings-block">
                   <h4 class="ms-settings-subtitle">Playback Settings</h4>
-                  <label class="md-switch-label ms-switch-field" for="playbackUseMidiLike">
-                    <input id="playbackUseMidiLike" type="checkbox" class="md-switch-input" checked />
-                    <span class="md-switch" aria-hidden="true"></span>
-                    <span>Use MIDI-like playback timing/expression</span>
-                  </label>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Use MIDI-like playback</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MIDI-like playback help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Uses MIDI-style timing and expression (articulation, grace placement, and related nuance) in quick playback.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="playbackUseMidiLike">
+                      <input
+                        id="playbackUseMidiLike"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Use MIDI-like playback"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
                   <label class="ms-field" for="playbackWaveform">
                     <span class="ms-field-label">Quick Playback Tone</span>
                     <select id="playbackWaveform" class="md-select">
-                      <option value="sine" selected>Sine</option>
-                      <option value="triangle">Triangle</option>
+                      <option value="sine">Sine</option>
+                      <option value="triangle" selected>Triangle</option>
                       <option value="square">Square</option>
                     </select>
                   </label>
                 </div>
-                <div class="ms-settings-actions">
+                <div class="ms-settings-actions ms-settings-actions--section-divider">
                   <button id="resetPlaybackSettingsBtn" type="button" class="md-button md-button--surface">
                     Reset to defaults
                   </button>

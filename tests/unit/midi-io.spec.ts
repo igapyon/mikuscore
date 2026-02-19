@@ -52,6 +52,98 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(grace.startTicks).toBeLessThan(principal.startTicks);
   });
 
+  it("supports on-beat grace timing mode (grace starts on beat, principal delayed)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>G</step><octave>5</octave></pitch>
+        <voice>1</voice>
+        <type>16th</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi", graceTimingMode: "on_beat" });
+    const grace = result.events.find((e) => e.midiNumber === 79);
+    const principal = result.events.find((e) => e.midiNumber === 62);
+    expect(grace).toBeDefined();
+    expect(principal).toBeDefined();
+    if (!grace || !principal) return;
+    expect(grace.startTicks).toBe(128);
+    expect(principal.startTicks).toBeGreaterThan(grace.startTicks);
+  });
+
+  it("supports classical-equal grace timing mode (grace/principal split beat equally)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+      <note>
+        <grace/>
+        <pitch><step>G</step><octave>5</octave></pitch>
+        <voice>1</voice>
+        <type>16th</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration>
+        <voice>1</voice>
+        <type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "midi",
+      graceTimingMode: "classical_equal",
+    });
+    const grace = result.events.find((e) => e.midiNumber === 79);
+    const principal = result.events.find((e) => e.midiNumber === 62);
+    expect(grace).toBeDefined();
+    expect(principal).toBeDefined();
+    if (!grace || !principal) return;
+    expect(grace.startTicks).toBe(128);
+    expect(principal.startTicks).toBe(grace.startTicks + grace.durTicks);
+    expect(Math.abs(grace.durTicks - principal.durTicks)).toBeLessThanOrEqual(1);
+  });
+
   it("collects in-score tempo changes with tick positions", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -138,4 +230,3 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(result.events[1]?.midiNumber).toBe(38);
   });
 });
-

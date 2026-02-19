@@ -5,6 +5,7 @@ import {
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
+  type GraceTimingMode,
 } from "./midi-io";
 import { parseMusicXmlDocument } from "./musicxml-io";
 
@@ -337,6 +338,7 @@ export type PlaybackFlowOptions = {
   editableVoice: string;
   getPlaybackWaveform: () => OscillatorType;
   getUseMidiLikePlayback: () => boolean;
+  getGraceTimingMode: () => GraceTimingMode;
   debugLog: boolean;
   getIsPlaying: () => boolean;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -399,6 +401,7 @@ export const startPlayback = async (
   const playbackMode = useMidiLikePlayback ? "midi" : "playback";
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter, {
     mode: playbackMode,
+    graceTimingMode: options.getGraceTimingMode(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
@@ -488,6 +491,7 @@ export const startMeasurePlayback = async (
   const playbackMode = useMidiLikePlayback ? "midi" : "playback";
   const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter, {
     mode: playbackMode,
+    graceTimingMode: options.getGraceTimingMode(),
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
