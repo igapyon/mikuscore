@@ -42,6 +42,7 @@ Define the current screen specification for `mikuscore` based on the actual UI t
 
 ### Header Tooltip `(i)` (`Input help`)
 - Load score data first (from file/source) or create a new score.
+- Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`).
 - Move to `Score`/`Edit`/`Export` after this step.
 
 ### Input Type Radio

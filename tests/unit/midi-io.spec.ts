@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiControlEventsFromMusicXmlDoc,
+  collectMidiKeySignatureEventsFromMusicXmlDoc,
+  collectMidiTimeSignatureEventsFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
 } from "../../src/ts/midi-io";
@@ -516,6 +518,37 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
   });
 
+  it("does not create empty parts from channels without note events", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xc0, 0x00,   // ch1 program
+      ...vlq(0), 0xc1, 0x28,   // ch2 program only (no notes)
+      ...vlq(0), 0x90, 60, 96, // ch1 note
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelectorAll("score-partwise > part").length).toBe(1);
+    expect(doc.querySelectorAll("part-list > score-part").length).toBe(1);
+  });
+
+  it("reflects CC11 expression in imported dynamics estimation", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(480), 0x80, 60, 0,
+      ...vlq(0), 0xb0, 11, 20, // CC11 expression down
+      ...vlq(0), 0x90, 62, 100,
+      ...vlq(480), 0x80, 62, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const dynamics = Array.from(doc.querySelectorAll("part > measure > direction > direction-type > dynamics > *"))
+      .map((node) => node.tagName.toLowerCase());
+    expect(dynamics).toContain("ff");
+    expect(dynamics).toContain("pp");
+  });
+
   it("reads MIDI key signature meta event into MusicXML key", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0xff, 0x59, 0x02, 0xfd, 0x01, // key: -3, minor
@@ -604,5 +637,74 @@ describe("midi-io MIDI import MVP", () => {
     expect(metronomeTempo).toBe("100");
     const tempoEvents = collectMidiTempoEventsFromMusicXmlDoc(doc, 128);
     expect(tempoEvents[0]?.bpm).toBe(100);
+  });
+
+  it("maps note velocity to fixed dynamics marks (ppp..fff) and suppresses repeats", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 20,   // pp
+      ...vlq(480), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 20,   // pp (same -> no extra direction)
+      ...vlq(480), 0x80, 62, 0,
+      ...vlq(0), 0x90, 64, 100,  // ff
+      ...vlq(480), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const dynamics = Array.from(doc.querySelectorAll("part > measure > direction > direction-type > dynamics > *"))
+      .map((node) => node.tagName.toLowerCase());
+    expect(dynamics).toContain("pp");
+    expect(dynamics).toContain("ff");
+    expect(dynamics.filter((tag) => tag === "pp").length).toBe(1);
+  });
+
+  it("collects key signature events from MusicXML for MIDI FF59 export", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>4</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>E</step><alter>1</alter><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>-1</fifths><mode>minor</mode></key></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const ticksPerQuarter = 128;
+    const keyEvents = collectMidiKeySignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter);
+    expect(keyEvents[0]).toEqual({ startTicks: 0, fifths: 4, mode: "major" });
+    expect(keyEvents[1]?.fifths).toBe(-1);
+    expect(keyEvents[1]?.mode).toBe("minor");
+  });
+
+  it("collects time signature events from MusicXML for MIDI FF58 export", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>3</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+    <measure number="2">
+      <attributes><time><beats>6</beats><beat-type>8</beat-type></time></attributes>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const ticksPerQuarter = 128;
+    const timeEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter);
+    expect(timeEvents[0]).toEqual({ startTicks: 0, beats: 3, beatType: 4 });
+    expect(timeEvents[1]?.beats).toBe(6);
+    expect(timeEvents[1]?.beatType).toBe(8);
   });
 });

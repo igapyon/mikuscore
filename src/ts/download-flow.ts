@@ -1,6 +1,8 @@
 import {
   buildMidiBytesForPlayback,
   collectMidiControlEventsFromMusicXmlDoc,
+  collectMidiKeySignatureEventsFromMusicXmlDoc,
+  collectMidiTimeSignatureEventsFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
@@ -69,6 +71,8 @@ export const createMidiDownloadPayload = (
     : collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
   const midiControlEvents = collectMidiControlEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
   const midiTempoEvents = collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
+  const midiTimeSignatureEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
+  const midiKeySignatureEvents = collectMidiKeySignatureEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
 
   let midiBytes: Uint8Array;
   try {
@@ -78,7 +82,9 @@ export const createMidiDownloadPayload = (
       programPreset,
       midiProgramOverrides,
       midiControlEvents,
-      midiTempoEvents
+      midiTempoEvents,
+      midiTimeSignatureEvents,
+      midiKeySignatureEvents
     );
   } catch {
     return null;

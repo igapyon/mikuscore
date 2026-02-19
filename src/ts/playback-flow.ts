@@ -3,7 +3,9 @@ import {
   buildMidiBytesForPlayback,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiControlEventsFromMusicXmlDoc,
+  collectMidiKeySignatureEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
+  collectMidiTimeSignatureEventsFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
   type GraceTimingMode,
   type MetricAccentProfile,
@@ -420,6 +422,12 @@ export const startPlayback = async (
   const controlEvents = useMidiLikePlayback
     ? collectMidiControlEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
     : [];
+  const timeSignatureEvents = useMidiLikePlayback
+    ? collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
+    : [];
+  const keySignatureEvents = useMidiLikePlayback
+    ? collectMidiKeySignatureEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
+    : [];
 
   const waveform = options.getPlaybackWaveform();
 
@@ -431,7 +439,9 @@ export const startPlayback = async (
       "electric_piano_2",
       collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc),
       controlEvents,
-      tempoEvents
+      tempoEvents,
+      timeSignatureEvents,
+      keySignatureEvents
     );
   } catch (error) {
     options.setPlaybackText(
