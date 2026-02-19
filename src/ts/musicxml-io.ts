@@ -13,6 +13,23 @@ export const serializeMusicXmlDocument = (doc: Document): string => {
   return new XMLSerializer().serializeToString(doc);
 };
 
+export const prettyPrintMusicXmlText = (xml: string): string => {
+  const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indent = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
+    lines.push(`${" ".repeat(indent)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indent += 1;
+  }
+  return lines.join("\n");
+};
+
 const cloneXmlDocument = (doc: Document): Document => {
   const cloned = document.implementation.createDocument("", "", null);
   const root = cloned.importNode(doc.documentElement, true);

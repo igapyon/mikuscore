@@ -658,6 +658,77 @@ describe("midi-io MIDI import MVP", () => {
     expect(dynamics.filter((tag) => tag === "pp").length).toBe(1);
   });
 
+  it("splits non-notatable imported durations into tied notes with valid type tags", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(1200), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const pitchNotes = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("pitch") !== null);
+    expect(pitchNotes.length).toBeGreaterThan(1);
+    expect(pitchNotes.every((note) => note.querySelector("type") !== null)).toBe(true);
+    expect(pitchNotes.some((note) => note.querySelector('tie[type="start"]') !== null)).toBe(true);
+    expect(pitchNotes.some((note) => note.querySelector('tie[type="stop"]') !== null)).toBe(true);
+    expect(
+      pitchNotes.some((note) => note.querySelector("duration")?.textContent?.trim() === "10")
+    ).toBe(false);
+  });
+
+  it("writes MIDI debug metadata into miscellaneous-field by default", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const debugFields = Array.from(
+      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-debug"]')
+    );
+    expect(debugFields.length).toBeGreaterThan(0);
+    const firstPayload = debugFields.find((node) =>
+      /^mks:midi-debug-\d{4}$/.test(node.getAttribute("name") ?? "")
+    )?.textContent;
+    expect(firstPayload ?? "").toContain("key=0x3C");
+    expect(firstPayload ?? "").toContain("vel=0x60");
+  });
+
+  it("pretty-prints imported MusicXML by default when debug metadata is enabled", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { debugMetadata: true });
+    expect(result.ok).toBe(true);
+    expect(result.xml.includes("\n")).toBe(true);
+  });
+
+  it("can disable pretty-print output even when debug metadata is enabled", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { debugMetadata: true, debugPrettyPrint: false });
+    expect(result.ok).toBe(true);
+    expect(result.xml.includes("\n")).toBe(false);
+  });
+
+  it("can disable MIDI debug metadata output", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { debugMetadata: false });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-debug"]')
+    ).toBeNull();
+  });
+
   it("collects key signature events from MusicXML for MIDI FF59 export", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

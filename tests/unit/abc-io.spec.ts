@@ -39,6 +39,53 @@ describe("ABC I/O compatibility", () => {
     expect(voices.every((v) => /^[1-9]\d*$/.test(v))).toBe(true);
   });
 
+  it("ABC->MusicXML writes mks:abc-debug miscellaneous fields by default", () => {
+    const abc = `X:1
+T:Debug test
+M:4/4
+L:1/4
+K:C
+C D E F |`;
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const fields = Array.from(
+      outDoc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-debug"]')
+    );
+    expect(fields.length).toBeGreaterThan(0);
+    expect(fields.some((field) => (field.textContent || "").includes("st=C"))).toBe(true);
+  });
+
+  it("ABC->MusicXML can disable mks:abc-debug miscellaneous fields", () => {
+    const abc = `X:1
+T:Debug test
+M:4/4
+L:1/4
+K:C
+C D E F |`;
+    const xml = convertAbcToMusicXml(abc, { debugMetadata: false });
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-debug"]')
+    ).toBeNull();
+  });
+
+  it("ABC->MusicXML pretty-prints output in debug mode like MIDI import", () => {
+    const abc = `X:1
+T:Pretty test
+M:4/4
+L:1/4
+K:C
+C D E F |`;
+    const xmlPretty = convertAbcToMusicXml(abc, { debugMetadata: true });
+    const xmlCompact = convertAbcToMusicXml(abc, { debugMetadata: true, debugPrettyPrint: false });
+    expect(xmlPretty.includes("\n")).toBe(true);
+    expect(xmlCompact.includes("\n")).toBe(false);
+  });
+
   it("roundtrip of grand staff score should not trigger MEASURE_OVERFULL", () => {
     const grandStaffXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
