@@ -46,6 +46,31 @@ const buildSmfFormat0 = (trackEvents: number[], ticksPerQuarter = 480): Uint8Arr
   return Uint8Array.from([...header, ...trackHeader, ...track]);
 };
 
+const buildSmfFormat1 = (tracks: number[][], ticksPerQuarter = 480): Uint8Array => {
+  const header = [
+    0x4d, 0x54, 0x68, 0x64, // MThd
+    0x00, 0x00, 0x00, 0x06, // header length
+    0x00, 0x01, // format 1
+    (tracks.length >> 8) & 0xff,
+    tracks.length & 0xff,
+    (ticksPerQuarter >> 8) & 0xff,
+    ticksPerQuarter & 0xff,
+  ];
+  const chunks: number[] = [];
+  for (const trackEvents of tracks) {
+    const track = [...trackEvents, 0x00, 0xff, 0x2f, 0x00];
+    const trackHeader = [
+      0x4d, 0x54, 0x72, 0x6b, // MTrk
+      (track.length >>> 24) & 0xff,
+      (track.length >>> 16) & 0xff,
+      (track.length >>> 8) & 0xff,
+      track.length & 0xff,
+    ];
+    chunks.push(...trackHeader, ...track);
+  }
+  return Uint8Array.from([...header, ...chunks]);
+};
+
 describe("midi-io MIDI nuance regressions", () => {
   it("expands grace notes before principal notes in MIDI mode", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -455,6 +480,28 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.warnings.some((warning) => warning.code === "MIDI_POLYPHONY_VOICE_ASSIGNED")).toBe(true);
   });
 
+  it("separates same MIDI channel across different tracks into separate parts", () => {
+    const midi = buildSmfFormat1([
+      [
+        ...vlq(0), 0x90, 60, 96,
+        ...vlq(480), 0x80, 60, 0,
+      ],
+      [
+        ...vlq(0), 0x90, 64, 96,
+        ...vlq(480), 0x80, 64, 0,
+      ],
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const partNames = Array.from(doc.querySelectorAll("part-list > score-part > part-name"))
+      .map((node) => node.textContent?.trim() ?? "")
+      .filter(Boolean);
+    expect(partNames).toContain("Track 1 Ch 1");
+    expect(partNames).toContain("Track 2 Ch 1");
+    expect(doc.querySelectorAll("score-partwise > part").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("separates channel 10 into dedicated drum part", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x99, 36, 100,
@@ -463,7 +510,7 @@ describe("midi-io MIDI import MVP", () => {
     const result = convertMidiToMusicXml(midi);
     const doc = parseDoc(result.xml);
     const drumPart = Array.from(doc.querySelectorAll("score-part")).find(
-      (scorePart) => scorePart.querySelector("part-name")?.textContent?.trim() === "Drums"
+      (scorePart) => (scorePart.querySelector("part-name")?.textContent?.trim() ?? "").startsWith("Drums")
     );
     expect(drumPart).toBeDefined();
     expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
@@ -521,6 +568,21 @@ describe("midi-io MIDI import MVP", () => {
         && note.querySelector("pitch > octave")?.textContent?.trim() === "3");
     expect(c4Note?.querySelector("staff")?.textContent?.trim()).toBe("1");
     expect(b3Note?.querySelector("staff")?.textContent?.trim()).toBe("2");
+  });
+
+  it("fills empty staff with a full-measure rest in grand staff mode", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 72, 100, // C5 only (treble side)
+      ...vlq(480), 0x80, 72, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const bassRests = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("staff")?.textContent?.trim() === "2")
+      .filter((note) => note.querySelector("rest") !== null);
+    expect(bassRests.length).toBeGreaterThan(0);
+    expect(bassRests.some((note) => note.querySelector("type")?.textContent?.trim() === "whole")).toBe(true);
   });
 
   it("reads MIDI tempo meta event into MusicXML direction/sound tempo", () => {
