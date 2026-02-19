@@ -44,6 +44,7 @@ import {
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
+  convertMidiToMusicXml,
   type GraceTimingMode,
   type MetricAccentProfile,
   type MidiProgramPreset,
@@ -506,7 +507,7 @@ const renderInputMode = (): void => {
     loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
-  fileInput.accept = ".musicxml,.xml,.mxl,.abc,text/plain,text/xml,application/xml";
+  fileInput.accept = ".musicxml,.xml,.mxl,.abc,.mid,.midi,text/plain,text/xml,application/xml";
 };
 
 const normalizeNewPartCount = (): number => {
@@ -1811,6 +1812,7 @@ const onLoadClick = async (): Promise<void> => {
     abcSourceText: abcInput.value,
     createNewMusicXml,
     convertAbcToMusicXml,
+    convertMidiToMusicXml: (midiBytes) => convertMidiToMusicXml(midiBytes),
   });
 
   if (!result.ok) {

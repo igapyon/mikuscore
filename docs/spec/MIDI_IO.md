@@ -9,6 +9,7 @@ The module is responsible for:
 - building playback events from MusicXML
 - collecting tempo/control/program metadata from MusicXML
 - building MIDI bytes from normalized playback events
+- converting MIDI binary input (SMF) into MusicXML (MVP import path)
 
 ---
 
@@ -32,6 +33,7 @@ The module is responsible for:
 - `buildMidiBytesForPlayback(events, tempo, programPreset, trackProgramOverrides, controlEvents, tempoEvents)`
 - `buildPlaybackEventsFromMusicXmlDoc(doc, ticksPerQuarter, options)`
 - `buildPlaybackEventsFromXml(xml, ticksPerQuarter)`
+- `convertMidiToMusicXml(midiBytes, options)` (planned/import path)
 
 ---
 
@@ -159,3 +161,85 @@ Pattern table:
 - returns `Uint8Array`
 
 If no playable note events exist, the function MUST throw an error.
+
+---
+
+## MIDI binary import to MusicXML (MVP)
+
+### Scope
+
+The import target is Standard MIDI File (SMF) binary input:
+
+- supported SMF formats: `0` and `1`
+- supported time division: PPQ only (`ticks per quarter note`)
+- SMPTE time division is unsupported in MVP
+
+Output format:
+
+- MusicXML `score-partwise` (MusicXML 4.0)
+
+### Quantization policy
+
+- default quantization grid is `1/16`
+- quantization grid options: `1/8 | 1/16 | 1/32`
+- default option value MUST be `1/16`
+
+For `TPQ` (ticks-per-quarter), quantization tick is:
+
+- `qTick = TPQ / subdivision`
+- subdivision: `2` for `1/8`, `4` for `1/16`, `8` for `1/32`
+
+Start/end quantization:
+
+- `startQ = round(start / qTick) * qTick`
+- `endQ = round(end / qTick) * qTick`
+- `durationQ = max(qTick, endQ - startQ)`
+
+### Part/channel mapping
+
+- non-drum channels are mapped by MIDI channel
+- `MIDI channel 10` is ALWAYS mapped to a dedicated drum part
+- drum part is never merged with melodic parts
+- drum part MUST preserve `midi-channel=10` in `midi-instrument`
+
+### Polyphony policy (auto voice split)
+
+The MVP import uses `auto voice split` (high-quality path), not simplify-first mode.
+
+Rules:
+
+1. work per part (channel-grouped; drum part handled separately)
+2. treat each quantized note as an interval `[startTick, endTick)`
+3. same-start notes form a chord cluster
+4. assign each cluster to the smallest available voice index without overlap
+5. when multiple voices are available, prefer continuity (smaller start-gap, then smaller pitch jump)
+6. renumber voices to contiguous `1..N` for output
+7. emit measure content with valid MusicXML timing structure (`backup` / `forward` as needed)
+
+### Musical metadata mapping
+
+- `program_change` -> `part-list/score-part/midi-instrument/midi-program`
+- tempo meta -> direction/sound tempo (measure-aligned)
+- time signature meta -> `attributes/time`
+- key signature meta (when available) -> `attributes/key`
+
+### Drum note rendering
+
+For channel 10 output:
+
+- use unpitched-oriented representation
+- preserve pitch number as the sounding MIDI note basis
+- if display pitch is required, use best-effort fallback mapping
+
+### Diagnostics (planned)
+
+MVP import path SHOULD expose diagnostics for loss/normalization decisions:
+
+- `MIDI_UNSUPPORTED_DIVISION`
+- `MIDI_NOTE_PAIR_BROKEN`
+- `MIDI_QUANTIZE_CLAMPED`
+- `MIDI_EVENT_DROPPED`
+- `MIDI_POLYPHONY_VOICE_ASSIGNED`
+- `MIDI_POLYPHONY_VOICE_OVERFLOW`
+- `MIDI_DRUM_CHANNEL_SEPARATED`
+- `MIDI_DRUM_NOTE_UNMAPPED`

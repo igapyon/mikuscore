@@ -5,29 +5,164 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
   <work><work-title>Beethoven Sym5 Mov1</work-title></work>
   <identification><creator type="composer">Unknown</creator></identification>
   <part-list>
-    <score-part id="P1"><part-name>Beethoven Sym5 Mov1 Treble L1</part-name></score-part>
-    <score-part id="P2"><part-name>Beethoven Sym5 Mov1 Treble L2</part-name></score-part>
-    <score-part id="P3"><part-name>Beethoven Sym5 Mov1 Treble L3</part-name></score-part>
-    <score-part id="P4"><part-name>Beethoven Sym5 Mov1 Treble L4</part-name></score-part>
-    <score-part id="P5"><part-name>Beethoven Sym5 Mov1 Treble L5</part-name></score-part>
-    <score-part id="P6"><part-name>Beethoven Sym5 Mov1 Treble L6</part-name></score-part>
-    <score-part id="P7"><part-name>Beethoven Sym5 Mov1 Bass L1</part-name></score-part>
-    <score-part id="P8"><part-name>Beethoven Sym5 Mov1 Bass L2</part-name></score-part>
-    <score-part id="P9"><part-name>Beethoven Sym5 Mov1 Bass L3</part-name></score-part>
-    <score-part id="P10"><part-name>Beethoven Sym5 Mov1 Bass L4</part-name></score-part>
-    <score-part id="P11"><part-name>Beethoven Sym5 Mov1 Bass L5</part-name></score-part>
-    <score-part id="P12"><part-name>Beethoven Sym5 Mov1 Bass L6</part-name></score-part>
-    <score-part id="P13"><part-name>Beethoven Sym5 Mov1 Bass L7</part-name></score-part>
-    <score-part id="P14"><part-name>Beethoven Sym5 Mov1 Bass L8</part-name></score-part>
+    <score-part id="P1">
+      <part-name>Beethoven Sym5 Mov1 Treble L1</part-name>
+      <score-instrument id="P1-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L1</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P1-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P2">
+      <part-name>Beethoven Sym5 Mov1 Treble L2</part-name>
+      <score-instrument id="P2-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L2</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P2-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P3">
+      <part-name>Beethoven Sym5 Mov1 Treble L3</part-name>
+      <score-instrument id="P3-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L3</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P3-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P4">
+      <part-name>Beethoven Sym5 Mov1 Treble L4</part-name>
+      <score-instrument id="P4-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L4</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P4-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P5">
+      <part-name>Beethoven Sym5 Mov1 Treble L5</part-name>
+      <score-instrument id="P5-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L5</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P5-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P6">
+      <part-name>Beethoven Sym5 Mov1 Treble L6</part-name>
+      <score-instrument id="P6-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Treble L6</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P6-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P7">
+      <part-name>Beethoven Sym5 Mov1 Bass L1</part-name>
+      <score-instrument id="P7-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L1</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P7-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P8">
+      <part-name>Beethoven Sym5 Mov1 Bass L2</part-name>
+      <score-instrument id="P8-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L2</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P8-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P9">
+      <part-name>Beethoven Sym5 Mov1 Bass L3</part-name>
+      <score-instrument id="P9-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L3</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P9-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P10">
+      <part-name>Beethoven Sym5 Mov1 Bass L4</part-name>
+      <score-instrument id="P10-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L4</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P10-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P11">
+      <part-name>Beethoven Sym5 Mov1 Bass L5</part-name>
+      <score-instrument id="P11-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L5</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P11-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P12">
+      <part-name>Beethoven Sym5 Mov1 Bass L6</part-name>
+      <score-instrument id="P12-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L6</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P12-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P13">
+      <part-name>Beethoven Sym5 Mov1 Bass L7</part-name>
+      <score-instrument id="P13-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L7</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P13-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
+    <score-part id="P14">
+      <part-name>Beethoven Sym5 Mov1 Bass L8</part-name>
+      <score-instrument id="P14-I1">
+        <instrument-name>Beethoven Sym5 Mov1 Bass L8</instrument-name>
+      </score-instrument>
+      <midi-instrument id="P14-I1">
+        <midi-channel>1</midi-channel>
+        <midi-program>9</midi-program>
+      </midi-instrument>
+    </score-part>
   </part-list>
   <part id="P1">
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
+      <direction placement="above">
+        <direction-type>
+          <metronome>
+            <beat-unit>quarter</beat-unit>
+            <per-minute>201</per-minute>
+          </metronome>
+        </direction-type>
+        <sound tempo="201"/>
+      </direction>
       <note>
         <rest/>
         <duration>1920</duration>
@@ -36,6 +171,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="2">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <rest/>
         <duration>480</duration>
@@ -73,37 +215,40 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="3">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="4">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="5">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="6">
@@ -188,13 +333,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="11">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="12">
@@ -233,18 +379,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="13">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="14">
@@ -283,18 +431,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="15">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -312,6 +462,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -356,8 +507,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -366,18 +528,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -394,6 +546,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="22">
@@ -405,6 +558,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="23">
@@ -416,6 +570,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="24">
@@ -427,8 +582,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -437,18 +603,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -465,6 +621,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="26">
@@ -476,6 +633,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="27">
@@ -487,13 +645,36 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="28">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -502,28 +683,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -540,6 +701,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="30">
@@ -551,6 +713,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="31">
@@ -562,18 +725,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="32">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -592,6 +757,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -612,6 +778,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="34">
@@ -623,7 +790,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -673,6 +839,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -686,28 +853,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       <note>
         <pitch>
           <step>C</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="37">
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -717,11 +862,36 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       <note>
         <pitch>
           <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+    </measure>
+    <measure number="37">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -740,6 +910,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="38">
@@ -751,6 +922,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -760,7 +932,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -799,6 +970,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -811,80 +983,86 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="40">
       <note>
         <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
           <step>A</step>
-          <alter>-1</alter>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="41">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -899,6 +1077,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="42">
@@ -910,6 +1089,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -919,7 +1099,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -949,11 +1128,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>6</octave>
         </pitch>
         <duration>480</duration>
@@ -962,18 +1153,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>6</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>6</octave>
         </pitch>
         <duration>480</duration>
@@ -990,6 +1171,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1022,13 +1204,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="45">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -1038,6 +1221,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1067,6 +1251,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1105,7 +1290,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1115,6 +1299,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1144,7 +1329,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1163,6 +1347,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1192,7 +1377,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1211,6 +1395,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="50">
@@ -1237,6 +1422,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1257,11 +1443,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>6</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>6</octave>
         </pitch>
         <duration>480</duration>
@@ -1270,18 +1468,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>6</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>6</octave>
         </pitch>
         <duration>480</duration>
@@ -1298,6 +1486,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1307,7 +1496,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1331,19 +1519,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="53">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -1352,8 +1529,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -1362,8 +1550,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -1380,6 +1568,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1389,7 +1578,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1419,7 +1607,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -1439,13 +1626,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="57">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -1463,8 +1651,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -1473,18 +1672,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -1495,13 +1684,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="59">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="60">
@@ -1513,6 +1703,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="61">
@@ -1526,23 +1717,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="62">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="63">
@@ -1557,13 +1750,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="64">
@@ -1575,6 +1769,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1584,6 +1779,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="65">
@@ -1595,16 +1791,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="66">
@@ -1621,25 +1819,27 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="67">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="68">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="69">
@@ -1656,23 +1856,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="70">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="71">
@@ -1687,13 +1889,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="72">
@@ -1705,6 +1908,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -1714,6 +1918,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="73">
@@ -1725,28 +1930,31 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="74">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -1756,19 +1964,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="75">
       <note>
         <pitch>
-          <step>D</step>
-          <alter>-1</alter>
+          <step>C</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -1778,18 +1986,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="76">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -1799,51 +2009,54 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="77">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="78">
       <note>
         <pitch>
-          <step>D</step>
-          <alter>-1</alter>
+          <step>C</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="79">
@@ -1855,52 +2068,53 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="80">
       <note>
         <pitch>
-          <step>D</step>
-          <alter>-1</alter>
+          <step>C</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="81">
       <note>
         <pitch>
-          <step>D</step>
-          <alter>-1</alter>
+          <step>C</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -1910,18 +2124,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="82">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -1931,19 +2147,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="83">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -1953,18 +2169,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="84">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -1974,19 +2192,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="85">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -1996,18 +2214,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="86">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2017,19 +2237,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="87">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -2039,18 +2259,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="88">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2060,19 +2282,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="89">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -2082,18 +2304,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="90">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2103,19 +2327,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="91">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -2125,19 +2349,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="92">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -2147,31 +2371,32 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="93">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="94">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2181,33 +2406,12 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
           <step>A</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="95">
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2217,11 +2421,36 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       <note>
         <pitch>
           <step>G</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+    </measure>
+    <measure number="95">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2231,28 +2460,31 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="96">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2262,6 +2494,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2271,6 +2504,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2291,26 +2525,29 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2340,16 +2577,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2359,6 +2598,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="99">
@@ -2370,16 +2610,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2392,13 +2634,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="100">
@@ -2416,17 +2659,17 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2436,18 +2679,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="101">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2461,13 +2706,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2477,18 +2723,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="102">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2498,33 +2746,12 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
           <step>A</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="103">
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2534,11 +2761,36 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       <note>
         <pitch>
           <step>G</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+    </measure>
+    <measure number="103">
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2548,28 +2800,31 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="104">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2579,6 +2834,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2588,6 +2844,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2608,26 +2865,29 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2657,16 +2917,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2676,6 +2938,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="107">
@@ -2687,16 +2950,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2709,13 +2974,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="108">
@@ -2727,28 +2993,30 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2759,49 +3027,53 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="109">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="110">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="111">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="112">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -2811,6 +3083,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -2876,8 +3149,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2886,18 +3170,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2908,13 +3182,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="117">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -2932,8 +3207,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2942,18 +3228,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -2964,13 +3240,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="119">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -3017,13 +3294,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="121">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>6</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
   </part>
@@ -3031,7 +3309,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
@@ -3051,6 +3329,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="3">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>C</step>
@@ -3059,6 +3344,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="4">
@@ -3070,6 +3356,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="5">
@@ -3081,6 +3368,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="6">
@@ -3092,6 +3380,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="7">
@@ -3103,8 +3392,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3113,18 +3413,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3187,6 +3477,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="11">
@@ -3198,6 +3489,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="12">
@@ -3223,18 +3515,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3249,6 +3542,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="14">
@@ -3274,13 +3568,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="15">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -3298,6 +3593,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -3315,7 +3611,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="18">
@@ -3434,6 +3729,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -3502,16 +3798,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -3524,8 +3822,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3542,6 +3840,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="34">
@@ -3553,21 +3852,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3625,20 +3926,32 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="37">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3647,18 +3960,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3673,13 +3976,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="38">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3688,18 +4003,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3725,6 +4030,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3734,6 +4040,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3760,7 +4067,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3796,6 +4102,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3823,13 +4130,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="42">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3838,18 +4157,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3864,6 +4173,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="43">
@@ -3884,6 +4194,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3913,6 +4224,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -3951,16 +4263,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -3984,8 +4298,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="46">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -3994,8 +4319,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -4004,18 +4329,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -4041,6 +4356,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -4070,7 +4386,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -4089,6 +4404,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -4134,8 +4450,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -4144,18 +4471,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -4168,15 +4485,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <pitch>
           <step>C</step>
           <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
@@ -4201,23 +4509,21 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <type>eighth</type>
         <voice>1</voice>
       </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
     </measure>
     <measure number="53">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -4226,8 +4532,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -4236,8 +4553,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -4254,6 +4571,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -4287,6 +4605,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -4341,25 +4660,27 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="63">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="64">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="65">
@@ -4376,18 +4697,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="66">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
@@ -4404,6 +4726,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="68">
@@ -4415,6 +4738,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -4424,18 +4748,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="69">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="70">
@@ -4452,25 +4778,27 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="71">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="72">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="73">
@@ -4526,286 +4854,76 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="78">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="79">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="80">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="81">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="82">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
           <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="83">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="84">
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="85">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="86">
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="87">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="88">
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="89">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="90">
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="91">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>F</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-      </note>
-    </measure>
-    <measure number="92">
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>960</duration>
-        <type>quarter</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
@@ -4814,28 +4932,253 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <accidental>natural</accidental>
       </note>
     </measure>
+    <measure number="83">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="84">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="85">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="86">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="87">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="88">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="89">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="90">
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="91">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+        <accidental>natural</accidental>
+      </note>
+    </measure>
+    <measure number="92">
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>960</duration>
+        <type>quarter</type>
+        <voice>1</voice>
+      </note>
+    </measure>
     <measure number="93">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="94">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -4899,17 +5242,17 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -4919,18 +5262,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="101">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -4944,13 +5289,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -4960,18 +5306,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="102">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -4981,26 +5329,28 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
           <step>A</step>
-          <alter>-1</alter>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="103">
@@ -5026,6 +5376,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5046,16 +5397,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -5082,6 +5435,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5102,6 +5456,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -5134,6 +5489,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5148,49 +5504,53 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="109">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="110">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="111">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="112">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -5200,6 +5560,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5223,49 +5584,53 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="113">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="114">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="115">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="116">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -5298,13 +5663,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="117">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -5351,13 +5717,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="119">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -5381,6 +5748,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5417,7 +5785,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
@@ -5437,6 +5805,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="3">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <rest/>
         <duration>480</duration>
@@ -5445,8 +5820,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -5455,18 +5841,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -5571,13 +5947,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="15">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -5589,14 +5966,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="16">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <rest/>
@@ -5743,13 +6119,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -5759,6 +6136,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="33">
@@ -5787,6 +6165,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5810,20 +6189,32 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="35">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="36">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -5832,18 +6223,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -5858,6 +6239,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="37">
@@ -5869,6 +6251,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -5933,13 +6316,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="39">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -5965,6 +6349,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6000,6 +6385,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6032,8 +6418,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="43">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6042,8 +6439,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6052,18 +6449,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6074,8 +6461,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="44">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6084,8 +6482,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6094,18 +6492,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6116,13 +6504,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="45">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -6132,8 +6521,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6142,8 +6531,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6166,6 +6555,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6309,13 +6699,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="62">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="63">
@@ -6327,6 +6718,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="64">
@@ -6343,13 +6735,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="65">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="66">
@@ -6372,13 +6765,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="68">
@@ -6401,6 +6795,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -6412,13 +6807,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="70">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="71">
@@ -6430,6 +6826,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="72">
@@ -6446,25 +6843,27 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="73">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="74">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="75">
@@ -6476,7 +6875,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="76">
@@ -6488,7 +6886,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="77">
@@ -6500,6 +6897,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="78">
@@ -6511,6 +6909,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="79">
@@ -6538,13 +6937,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="81">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="82">
@@ -6618,6 +7018,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6647,6 +7048,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -6670,6 +7072,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6699,6 +7102,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -6915,8 +7319,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6925,18 +7340,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6947,13 +7352,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="117">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -6971,8 +7377,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -6981,18 +7398,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -7003,13 +7410,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="119">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -7027,8 +7435,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>4</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -7037,18 +7456,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -7059,13 +7468,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="121">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
   </part>
@@ -7073,7 +7483,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
@@ -7101,6 +7511,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="4">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <rest/>
         <duration>480</duration>
@@ -7109,8 +7526,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>5</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -7119,18 +7547,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>5</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>5</octave>
         </pitch>
         <duration>480</duration>
@@ -7147,6 +7565,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="6">
@@ -7158,6 +7577,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="7">
@@ -7183,6 +7603,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -7231,18 +7652,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>480</duration>
@@ -7257,6 +7679,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="12">
@@ -7276,6 +7699,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="14">
@@ -7333,14 +7757,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="16">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <rest/>
@@ -8156,6 +8579,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -8208,6 +8632,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -8256,13 +8681,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="121">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>4</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
   </part>
@@ -8270,7 +8696,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
@@ -8386,6 +8812,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="15">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>C</step>
@@ -8394,6 +8827,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
   </part>
@@ -8401,7 +8835,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
       </attributes>
@@ -8517,6 +8951,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="15">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>C</step>
@@ -8525,6 +8966,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
   </part>
@@ -8532,7 +8974,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -8584,6 +9026,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="7">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>B</step>
@@ -8592,7 +9041,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="8">
@@ -8604,7 +9052,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="9">
@@ -8616,7 +9063,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="10">
@@ -8644,7 +9090,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="13">
@@ -8664,7 +9109,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -8703,6 +9147,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -8714,13 +9159,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="16">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -8771,8 +9217,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -8781,18 +9238,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -8809,6 +9256,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="22">
@@ -8820,6 +9268,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="23">
@@ -8831,6 +9280,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="24">
@@ -8858,7 +9308,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="27">
@@ -8870,7 +9319,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="28">
@@ -8882,6 +9330,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -8907,7 +9356,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="31">
@@ -8919,7 +9367,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="32">
@@ -8931,6 +9378,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -8954,6 +9402,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -8983,6 +9432,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9006,6 +9456,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9035,6 +9486,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9052,6 +9504,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9067,7 +9520,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="38">
@@ -9079,7 +9531,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9097,8 +9548,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9107,18 +9569,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9129,8 +9581,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="40">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9139,8 +9602,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9149,18 +9612,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9177,6 +9630,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9186,13 +9640,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="42">
@@ -9204,6 +9659,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9221,11 +9677,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9234,18 +9702,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9256,8 +9714,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="44">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9266,8 +9735,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9276,18 +9745,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9298,8 +9757,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="45">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9308,8 +9778,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9318,18 +9788,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9340,8 +9800,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="46">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9350,8 +9821,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9360,18 +9831,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9388,7 +9849,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9398,6 +9858,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9427,6 +9888,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9465,6 +9927,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9474,7 +9937,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9504,6 +9966,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9513,22 +9976,22 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9539,8 +10002,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="51">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9549,19 +10023,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9570,8 +10033,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9582,19 +10045,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="52">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9603,8 +10055,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9613,8 +10065,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9625,19 +10087,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="53">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9646,8 +10097,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9656,8 +10107,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9668,14 +10129,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="54">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <pitch>
@@ -9685,7 +10145,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -9715,7 +10174,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9735,13 +10193,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="57">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -9759,8 +10218,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9769,18 +10239,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -9791,13 +10251,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="59">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -9815,6 +10276,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -9826,13 +10288,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="61">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="62">
@@ -9860,8 +10323,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -9870,18 +10344,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -9892,13 +10356,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="65">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -9910,13 +10375,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="66">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -9942,8 +10408,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -9952,18 +10429,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -9974,23 +10441,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="69">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="70">
@@ -10018,8 +10487,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -10028,18 +10508,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -10050,13 +10520,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="73">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10096,6 +10567,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10125,6 +10597,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -10158,8 +10631,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10168,18 +10652,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10190,13 +10664,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="81">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10228,7 +10703,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10258,7 +10732,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -10276,8 +10749,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10286,18 +10770,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10308,13 +10782,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="86">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10338,7 +10813,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10368,7 +10842,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -10392,6 +10865,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10421,6 +10895,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -10444,6 +10919,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10473,6 +10949,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10524,13 +11001,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="95">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10548,6 +11026,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -10576,13 +11055,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="98">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10594,13 +11074,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="99">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10612,13 +11093,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="100">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -10636,6 +11118,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10648,18 +11131,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10676,6 +11160,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -10688,18 +11173,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10728,18 +11214,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10750,8 +11237,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="104">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10760,18 +11258,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
@@ -10791,13 +11279,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -10812,18 +11301,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="106">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10838,33 +11328,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="107">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
           <step>A</step>
-          <alter>-1</alter>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10873,35 +11355,49 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="108">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -10911,6 +11407,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="109">
@@ -10955,8 +11452,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10965,18 +11473,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -10987,37 +11485,40 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="113">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="114">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="115">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="116">
@@ -11029,28 +11530,30 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11061,13 +11564,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="117">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -11085,8 +11589,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11095,18 +11610,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11117,13 +11622,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="119">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -11141,8 +11647,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11151,18 +11668,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11173,13 +11680,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="121">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
   </part>
@@ -11187,7 +11695,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -11295,6 +11803,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="14">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <rest/>
         <duration>480</duration>
@@ -11309,7 +11824,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -11341,13 +11855,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="16">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -11398,8 +11913,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -11408,18 +11934,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -11436,6 +11952,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="22">
@@ -11447,6 +11964,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="23">
@@ -11458,6 +11976,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="24">
@@ -11485,8 +12004,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11495,18 +12025,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11559,8 +12079,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11569,18 +12100,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -11631,6 +12152,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -11660,6 +12182,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11683,6 +12206,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -11712,6 +12236,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11729,6 +12254,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11746,6 +12272,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11755,13 +12282,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="39">
@@ -11773,6 +12301,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11788,6 +12317,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="40">
@@ -11799,6 +12329,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11825,6 +12356,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11842,6 +12374,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -11859,6 +12392,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="44">
@@ -11870,6 +12404,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="45">
@@ -11881,6 +12416,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="46">
@@ -11892,6 +12428,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="47">
@@ -11903,6 +12440,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -11941,6 +12479,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -11988,6 +12527,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12026,6 +12566,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12035,6 +12576,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12055,11 +12597,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12068,18 +12622,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12090,8 +12634,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="52">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12100,8 +12655,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12110,18 +12665,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12132,8 +12677,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="53">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12142,8 +12698,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12152,18 +12708,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12174,8 +12720,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="54">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12184,19 +12741,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-        <accidental>flat</accidental>
-      </note>
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12205,8 +12751,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -12217,14 +12763,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="55">
       <note>
         <pitch>
-          <step>G</step>
-          <alter>-1</alter>
+          <step>F</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>flat</accidental>
       </note>
       <note>
         <rest/>
@@ -12250,6 +12795,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -12285,13 +12831,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="61">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12427,6 +12974,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12456,6 +13004,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -12489,8 +13038,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -12499,18 +13059,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -12521,13 +13071,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="81">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12559,7 +13110,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12589,7 +13139,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -12607,8 +13156,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -12617,18 +13177,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -12639,13 +13189,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="86">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12669,7 +13220,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -12699,7 +13249,6 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
-        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -12768,13 +13317,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="95">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12792,6 +13342,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -12820,13 +13371,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="98">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12838,13 +13390,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="99">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12856,13 +13409,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="100">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -12889,6 +13443,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="102">
@@ -12909,18 +13464,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="103">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -12941,16 +13498,18 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="105">
@@ -12965,25 +13524,27 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="106">
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -12993,23 +13554,25 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="107">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
@@ -13020,18 +13583,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="108">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
@@ -13042,37 +13606,40 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="109">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="110">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="111">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="112">
@@ -13084,8 +13651,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13094,18 +13672,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13116,74 +13684,80 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="113">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="114">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="115">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="116">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13194,13 +13768,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="117">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -13218,8 +13793,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13228,18 +13814,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13250,13 +13826,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="119">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -13274,8 +13851,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
+          <octave>2</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13284,18 +13872,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
-          <octave>2</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>480</duration>
@@ -13308,7 +13886,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -13432,15 +14010,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="16">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -13491,8 +14077,19 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
+          <octave>1</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>480</duration>
@@ -13501,18 +14098,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
-          <octave>1</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>480</duration>
@@ -13529,6 +14116,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="22">
@@ -13540,6 +14128,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="23">
@@ -13551,6 +14140,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="24">
@@ -13621,6 +14211,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -13689,6 +14280,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -13746,6 +14338,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -13763,6 +14356,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -13780,6 +14374,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -13819,6 +14414,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -13848,6 +14444,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -13886,6 +14483,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -13924,6 +14522,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -13988,6 +14587,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14020,6 +14620,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14061,6 +14662,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14081,6 +14683,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14090,6 +14693,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14119,6 +14723,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14157,6 +14762,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -14195,11 +14801,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
+          <octave>3</octave>
+        </pitch>
+        <duration>480</duration>
+        <type>eighth</type>
+        <voice>1</voice>
+        <accidental>sharp</accidental>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -14208,18 +14826,8 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
-          <octave>3</octave>
-        </pitch>
-        <duration>480</duration>
-        <type>eighth</type>
-        <voice>1</voice>
-      </note>
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>480</duration>
@@ -14230,13 +14838,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="55">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>3</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -14609,13 +15218,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="100">
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -14642,6 +15252,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="102">
@@ -14662,18 +15273,20 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
     <measure number="103">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <pitch>
@@ -14694,6 +15307,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -14727,13 +15341,14 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="108">
@@ -14751,52 +15366,57 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
-          <step>B</step>
-          <alter>-1</alter>
+          <step>A</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="109">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="110">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="111">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="112">
@@ -14810,37 +15430,40 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="113">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="114">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
     <measure number="115">
       <note>
         <pitch>
-          <step>E</step>
-          <alter>-1</alter>
+          <step>D</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>1920</duration>
         <type>half</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
     </measure>
   </part>
@@ -14848,7 +15471,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -14972,15 +15595,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="16">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>2</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -15334,6 +15965,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -15357,6 +15989,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -15386,6 +16019,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -15424,6 +16058,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -15462,6 +16097,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -15471,6 +16107,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -15500,6 +16137,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <rest/>
@@ -15532,7 +16170,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -15656,15 +16294,23 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="16">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
-          <step>A</step>
-          <alter>-1</alter>
+          <step>G</step>
+          <alter>1</alter>
           <octave>1</octave>
         </pitch>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>sharp</accidental>
       </note>
       <note>
         <rest/>
@@ -16011,6 +16657,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>480</duration>
         <type>eighth</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
       <note>
         <pitch>
@@ -16040,6 +16687,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
         <duration>960</duration>
         <type>quarter</type>
         <voice>1</voice>
+        <accidental>natural</accidental>
       </note>
     </measure>
   </part>
@@ -16047,7 +16695,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -16419,6 +17067,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="47">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <rest/>
         <duration>480</duration>
@@ -16512,7 +17167,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -16892,6 +17547,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="48">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>D</step>
@@ -16962,7 +17624,7 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
     <measure number="1">
       <attributes>
         <divisions>960</divisions>
-        <key><fifths>-3</fifths><mode>major</mode></key>
+        <key><fifths>2</fifths><mode>minor</mode></key>
         <time><beats>2</beats><beat-type>4</beat-type></time>
         <clef><sign>F</sign><line>4</line></clef>
       </attributes>
@@ -17342,6 +18004,13 @@ export const sampleXml2 = `<?xml version="1.0" encoding="UTF-8"?>
       </note>
     </measure>
     <measure number="48">
+      <direction placement="below">
+        <direction-type>
+          <dynamics>
+            <f/>
+          </dynamics>
+        </direction-type>
+      </direction>
       <note>
         <pitch>
           <step>D</step>
