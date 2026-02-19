@@ -223,6 +223,25 @@ Rules:
 - time signature meta -> `attributes/time`
 - key signature meta (when available) -> `attributes/key`
 
+### Debug metadata default policy
+
+- `convertMidiToMusicXml` option `debugMetadata` default is `true`.
+- this default MUST be kept `true` until the next major version upgrade.
+- changing this default before the next major version is not allowed.
+
+### Incident analysis using `miscellaneous-field`
+
+When analyzing rendering/import issues, inspect:
+
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-debug-count"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-debug-"]`
+
+Recommended flow:
+
+1. identify the problematic measure and note on screen.
+2. open the same measure in MusicXML and read `mks:midi-debug-*`.
+3. compare note duration/type and debug payload (`key`, `vel`, `sd`, `dd`, `tk0`, `tk1`) to detect where conversion diverged.
+
 ### Drum note rendering
 
 For channel 10 output:

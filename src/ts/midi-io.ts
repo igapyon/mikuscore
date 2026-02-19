@@ -67,6 +67,8 @@ export type MidiImportDiagnostic = {
 export type MidiImportOptions = {
   quantizeGrid?: MidiImportQuantizeGrid;
   title?: string;
+  debugMetadata?: boolean;
+  debugPrettyPrint?: boolean;
 };
 export type MidiImportResult = {
   ok: boolean;
@@ -929,6 +931,10 @@ type ImportedVoiceNoteSegment = {
   durDiv: number;
   midi: number;
   velocity: number;
+  trackIndex: number;
+  channel: number;
+  startTick: number;
+  endTick: number;
 };
 
 type DynamicMark = "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
@@ -1202,6 +1208,10 @@ const splitClustersToMeasureSegments = (params: {
           durDiv,
           midi: note.midi,
           velocity: note.velocity,
+          trackIndex: note.trackIndex,
+          channel: note.channel,
+          startTick: segmentStart,
+          endTick: segmentEnd,
         });
         segmentStart = segmentEnd;
       }
@@ -1210,13 +1220,15 @@ const splitClustersToMeasureSegments = (params: {
   return out;
 };
 
-const resolveDurationNotation = (
-  durDiv: number,
-  divisions: number
-): { type: "whole" | "half" | "quarter" | "eighth" | "16th" | "32nd" | "64th"; dots: 0 | 1 | 2 } | null => {
-  if (!Number.isFinite(durDiv) || !Number.isFinite(divisions) || durDiv <= 0 || divisions <= 0) return null;
-  const qDur = durDiv / divisions;
-  const candidates: Array<{
+type DurationNotation = {
+  type: "whole" | "half" | "quarter" | "eighth" | "16th" | "32nd" | "64th";
+  dots: 0 | 1 | 2;
+  q: number;
+  durDiv: number;
+};
+
+const durationNotationCandidates = (divisions: number): DurationNotation[] => {
+  const base: Array<{
     type: "whole" | "half" | "quarter" | "eighth" | "16th" | "32nd" | "64th";
     q: number;
     dots: 0 | 1 | 2;
@@ -1243,19 +1255,134 @@ const resolveDurationNotation = (
     { type: "64th", q: 0.09375, dots: 1 },
     { type: "64th", q: 0.109375, dots: 2 },
   ];
-  const tolerance = 1e-6;
-  const matched = candidates.find((candidate) => Math.abs(candidate.q - qDur) <= tolerance);
-  if (!matched) return null;
-  return { type: matched.type, dots: matched.dots };
+  return base.map((candidate) => ({
+    ...candidate,
+    durDiv: candidate.q * divisions,
+  }));
 };
 
-const buildTypeXml = (durDiv: number, divisions: number): string => {
-  const notation = resolveDurationNotation(durDiv, divisions);
-  if (!notation) return "";
+const resolveDurationNotation = (durDiv: number, divisions: number): DurationNotation | null => {
+  if (!Number.isFinite(durDiv) || !Number.isFinite(divisions) || durDiv <= 0 || divisions <= 0) return null;
+  const tolerance = 1e-6;
+  const candidates = durationNotationCandidates(divisions);
+  const matched = candidates.find((candidate) => Math.abs(candidate.durDiv - durDiv) <= tolerance);
+  if (!matched) return null;
+  return matched;
+};
+
+const splitDurationNotations = (durDiv: number, divisions: number): DurationNotation[] => {
+  const single = resolveDurationNotation(durDiv, divisions);
+  if (single) return [single];
+  if (!Number.isFinite(durDiv) || !Number.isFinite(divisions) || durDiv <= 0 || divisions <= 0) return [];
+  const roundedDur = Math.round(durDiv);
+  if (Math.abs(durDiv - roundedDur) > 1e-6) return [];
+  const candidates = durationNotationCandidates(divisions)
+    .filter((candidate) => Math.abs(candidate.durDiv - Math.round(candidate.durDiv)) <= 1e-6)
+    .map((candidate) => ({ ...candidate, durDiv: Math.round(candidate.durDiv) }))
+    .filter((candidate) => candidate.durDiv > 0)
+    .sort((a, b) => b.durDiv - a.durDiv);
+  const best: Array<DurationNotation[] | null> = Array.from({ length: roundedDur + 1 }, () => null);
+  best[0] = [];
+  for (let target = 1; target <= roundedDur; target += 1) {
+    for (const candidate of candidates) {
+      if (candidate.durDiv > target) continue;
+      const prev = best[target - candidate.durDiv];
+      if (!prev) continue;
+      const composed = [...prev, candidate];
+      if (!best[target] || composed.length < (best[target]?.length ?? Number.POSITIVE_INFINITY)) {
+        best[target] = composed;
+      }
+    }
+  }
+  return best[roundedDur] ?? [];
+};
+
+const buildTypeXmlFromNotation = (notation: DurationNotation): string => {
   let xml = `<type>${notation.type}</type>`;
   for (let i = 0; i < notation.dots; i += 1) {
     xml += "<dot/>";
   }
+  return xml;
+};
+
+const buildTieXml = (tieStart: boolean, tieStop: boolean): string => {
+  if (!tieStart && !tieStop) return "";
+  let xml = "";
+  if (tieStop) xml += '<tie type="stop"/>';
+  if (tieStart) xml += '<tie type="start"/>';
+  xml += "<notations>";
+  if (tieStop) xml += '<tied type="stop"/>';
+  if (tieStart) xml += '<tied type="start"/>';
+  xml += "</notations>";
+  return xml;
+};
+
+const buildRestXml = (durDiv: number, voice: number, outputStaff: number, divisions: number): string => {
+  const chunks = splitDurationNotations(durDiv, divisions);
+  if (!chunks.length) {
+    return `<note><rest/><duration>${durDiv}</duration><voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
+  }
+  let xml = "";
+  for (const chunk of chunks) {
+    xml += `<note><rest/><duration>${chunk.durDiv}</duration>${buildTypeXmlFromNotation(chunk)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
+  }
+  return xml;
+};
+
+const prettyPrintXml = (xml: string): string => {
+  const compact = xml.replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indent = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
+    const pad = "  ".repeat(indent);
+    lines.push(`${pad}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indent += 1;
+  }
+  return lines.join("\n");
+};
+
+const toHex = (value: number, width = 2): string => {
+  const safe = Math.max(0, Math.round(value));
+  return `0x${safe.toString(16).toUpperCase().padStart(width, "0")}`;
+};
+
+const buildMeasureMidiDebugMiscXml = (measureSegments: ImportedVoiceNoteSegment[]): string => {
+  if (!measureSegments.length) return "";
+  const sorted = measureSegments
+    .slice()
+    .sort((a, b) =>
+      a.startDiv === b.startDiv
+        ? a.midi === b.midi
+          ? a.voice - b.voice
+          : a.midi - b.midi
+        : a.startDiv - b.startDiv
+    );
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="mks:midi-debug-count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
+  for (let i = 0; i < sorted.length; i += 1) {
+    const seg = sorted[i];
+    const payload = [
+      `idx=${toHex(i, 4)}`,
+      `tr=${toHex(seg.trackIndex, 2)}`,
+      `ch=${toHex(seg.channel, 2)}`,
+      `v=${toHex(seg.voice, 2)}`,
+      `stf=${toHex(seg.staff, 2)}`,
+      `key=${toHex(seg.midi, 2)}`,
+      `vel=${toHex(seg.velocity, 2)}`,
+      `sd=${toHex(seg.startDiv, 4)}`,
+      `dd=${toHex(seg.durDiv, 4)}`,
+      `tk0=${toHex(seg.startTick, 6)}`,
+      `tk1=${toHex(seg.endTick, 6)}`,
+    ].join(";");
+    xml += `<miscellaneous-field name="mks:midi-debug-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
   return xml;
 };
 
@@ -1275,7 +1402,7 @@ const buildMeasureVoiceXml = (
     .sort((a, b) => (a.startDiv === b.startDiv ? a.midi - b.midi : a.startDiv - b.startDiv));
 
   if (!voiceSegments.length) {
-    return `<note><rest/><duration>${measureDiv}</duration>${buildTypeXml(measureDiv, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
+    return buildRestXml(measureDiv, voice, outputStaff, divisions);
   }
 
   const groupsByStart = new Map<number, ImportedVoiceNoteSegment[]>();
@@ -1294,43 +1421,61 @@ const buildMeasureVoiceXml = (
     const group = (groupsByStart.get(start) ?? []).slice().sort((a, b) => a.midi - b.midi);
     if (start > cursor) {
       const restDur = start - cursor;
-      xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
+      xml += buildRestXml(restDur, voice, outputStaff, divisions);
     }
     const groupDur = Math.max(...group.map((segment) => segment.durDiv));
-    const typeXml = buildTypeXml(groupDur, divisions);
-    for (let i = 0; i < group.length; i += 1) {
-      const segment = group[i];
-      if (isDrum) {
-        const display = midiToDrumDisplay(segment.midi);
-        xml += "<note>";
-        if (i > 0) xml += "<chord/>";
-        xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
-        xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff><notehead>x</notehead>`;
-        xml += "</note>";
-      } else {
-        const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
-        const stepOctaveKey = `${pitch.step}${pitch.octave}`;
-        const defaultAlter = accidentalByStepOctave.has(stepOctaveKey)
-          ? accidentalByStepOctave.get(stepOctaveKey) ?? 0
-          : keyAlterMap[pitch.step] ?? 0;
-        const requiresAccidental = pitch.alter !== defaultAlter;
-        const accidentalText = requiresAccidental ? accidentalTextFromAlter(pitch.alter) : null;
-        xml += "<note>";
-        if (i > 0) xml += "<chord/>";
-        xml += `<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>`;
-        if (accidentalText) {
-          xml += `<accidental>${accidentalText}</accidental>`;
+    const notationChunks = splitDurationNotations(groupDur, divisions);
+    const fallbackChunk = notationChunks.length
+      ? null
+      : {
+          type: "quarter" as const,
+          dots: 0 as const,
+          q: groupDur / Math.max(1, divisions),
+          durDiv: groupDur,
+        };
+    const chunks = notationChunks.length ? notationChunks : [fallbackChunk];
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+      const chunk = chunks[chunkIndex];
+      if (!chunk) continue;
+      const tieStart = chunks.length > 1 && chunkIndex < chunks.length - 1;
+      const tieStop = chunks.length > 1 && chunkIndex > 0;
+      const typeXml = buildTypeXmlFromNotation(chunk);
+      for (let i = 0; i < group.length; i += 1) {
+        const segment = group[i];
+        if (isDrum) {
+          const display = midiToDrumDisplay(segment.midi);
+          xml += "<note>";
+          if (i > 0) xml += "<chord/>";
+          xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
+          xml += `<duration>${chunk.durDiv}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff><notehead>x</notehead>`;
+          xml += buildTieXml(tieStart, tieStop);
+          xml += "</note>";
+        } else {
+          const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
+          const stepOctaveKey = `${pitch.step}${pitch.octave}`;
+          const defaultAlter = accidentalByStepOctave.has(stepOctaveKey)
+            ? accidentalByStepOctave.get(stepOctaveKey) ?? 0
+            : keyAlterMap[pitch.step] ?? 0;
+          const requiresAccidental = pitch.alter !== defaultAlter;
+          const accidentalText = requiresAccidental ? accidentalTextFromAlter(pitch.alter) : null;
+          xml += "<note>";
+          if (i > 0) xml += "<chord/>";
+          xml += `<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>`;
+          if (accidentalText) {
+            xml += `<accidental>${accidentalText}</accidental>`;
+          }
+          xml += `<duration>${chunk.durDiv}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff>`;
+          xml += buildTieXml(tieStart, tieStop);
+          xml += "</note>";
+          accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
         }
-        xml += `<duration>${groupDur}</duration>${typeXml}<voice>${voice}</voice><staff>${outputStaff}</staff>`;
-        xml += "</note>";
-        accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
       }
     }
     cursor = Math.max(cursor, start + groupDur);
   }
   if (cursor < measureDiv) {
     const restDur = measureDiv - cursor;
-    xml += `<note><rest/><duration>${restDur}</duration>${buildTypeXml(restDur, divisions)}<voice>${voice}</voice><staff>${outputStaff}</staff></note>`;
+    xml += buildRestXml(restDur, voice, outputStaff, divisions);
   }
   return xml;
 };
@@ -1348,6 +1493,7 @@ const buildPartMusicXml = (params: {
   includeTempoEvents: boolean;
   ticksPerQuarter: number;
   warnings: MidiImportDiagnostic[];
+  debugImportMetadata: boolean;
 }): string => {
   const {
     partId,
@@ -1362,6 +1508,7 @@ const buildPartMusicXml = (params: {
     includeTempoEvents,
     ticksPerQuarter,
     warnings,
+    debugImportMetadata,
   } = params;
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
   const measureDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
@@ -1450,6 +1597,9 @@ const buildPartMusicXml = (params: {
         partXml += "</direction>";
       }
     }
+    if (debugImportMetadata) {
+      partXml += buildMeasureMidiDebugMiscXml(measureSegments);
+    }
     if (measureSegments.length > 0) {
       const dynamicVelocityByOffset = new Map<number, number>();
       for (const segment of measureSegments) {
@@ -1502,6 +1652,7 @@ const buildImportSkeletonMusicXml = (params: {
   notesByTrackChannel: Map<TrackChannelKey, ImportedQuantizedNote[]>;
   programByTrackChannel: Map<TrackChannelKey, number>;
   warnings: MidiImportDiagnostic[];
+  debugImportMetadata: boolean;
 }): string => {
   const {
     title,
@@ -1516,6 +1667,7 @@ const buildImportSkeletonMusicXml = (params: {
     notesByTrackChannel,
     programByTrackChannel,
     warnings,
+    debugImportMetadata,
   } = params;
   const divisions = quantizeGridToDivisions(quantizeGrid);
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
@@ -1592,6 +1744,7 @@ const buildImportSkeletonMusicXml = (params: {
         includeTempoEvents: partIndex === 0,
         ticksPerQuarter,
         warnings,
+        debugImportMetadata,
       })
     )
     .join("");
@@ -2357,6 +2510,8 @@ export const convertMidiToMusicXml = (
   const warnings: MidiImportDiagnostic[] = [];
   const quantizeGrid = normalizeMidiImportQuantizeGrid(options.quantizeGrid);
   const title = String(options.title ?? "").trim() || "Imported MIDI";
+  const debugImportMetadata = options.debugMetadata ?? true;
+  const debugPrettyPrint = options.debugPrettyPrint ?? debugImportMetadata;
 
   if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
     diagnostics.push({
@@ -2488,6 +2643,7 @@ export const convertMidiToMusicXml = (
     notesByTrackChannel,
     programByTrackChannel,
     warnings,
+    debugImportMetadata,
   });
 
   if (hadDrumChannel) {
@@ -2499,7 +2655,7 @@ export const convertMidiToMusicXml = (
 
   return {
     ok: diagnostics.length === 0,
-    xml,
+    xml: debugPrettyPrint ? prettyPrintXml(xml) : xml,
     diagnostics,
     warnings,
   };

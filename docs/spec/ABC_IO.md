@@ -147,7 +147,21 @@ Generation policy:
 - restores tuplet semantics using both `<time-modification>` and `<notations><tuplet>`
 - restores measure metadata (`number`, `implicit`) and repeat barlines from `%@mks measure`
 - restores transpose (`chromatic`, `diatonic`) from `%@mks transpose`
+- emits debug metadata to `attributes/miscellaneous-field` (`mks:abc-debug-*`) by default; disable with `debugMetadata:false`
 - inserts a fallback whole-rest note for empty measures
+
+### Incident analysis using `miscellaneous-field`
+
+For ABC import troubleshooting, inspect:
+
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:abc-debug-count"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-debug-"]`
+
+Recommended flow:
+
+1. identify the problematic measure/event in the rendered score.
+2. inspect corresponding `mks:abc-debug-*` rows in MusicXML.
+3. compare parsed note facts (`r`, `g`, `ch`, `st`, `al`, `oc`, `dd`, `tp`) against expected ABC intent.
 
 ---
 

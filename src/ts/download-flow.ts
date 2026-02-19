@@ -10,7 +10,7 @@ import {
   type MetricAccentProfile,
   type MidiProgramPreset,
 } from "./midi-io";
-import { parseMusicXmlDocument } from "./musicxml-io";
+import { parseMusicXmlDocument, prettyPrintMusicXmlText } from "./musicxml-io";
 
 export type DownloadFilePayload = {
   fileName: string;
@@ -41,9 +41,10 @@ export const triggerFileDownload = (payload: DownloadFilePayload): void => {
 
 export const createMusicXmlDownloadPayload = (xmlText: string): DownloadFilePayload => {
   const ts = buildFileTimestamp();
+  const formattedXml = prettyPrintMusicXmlText(xmlText);
   return {
     fileName: `mikuscore-${ts}.musicxml`,
-    blob: new Blob([xmlText], { type: "application/xml;charset=utf-8" }),
+    blob: new Blob([formattedXml], { type: "application/xml;charset=utf-8" }),
   };
 };
 

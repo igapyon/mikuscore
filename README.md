@@ -61,6 +61,9 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
 
+Debugging note:
+- For import-side incident analysis, check `docs/spec/MIDI_IO.md` and `docs/spec/ABC_IO.md` sections about `attributes > miscellaneous > miscellaneous-field` (`mks:*` debug fields).
+
 ### Screenshots
 ![mikuscore screenshot 1](screenshots/screen1.png)
 ![mikuscore screenshot 2](screenshots/screen2.png)
@@ -129,6 +132,9 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/UI_SPEC.md`
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
+
+デバッグメモ:
+- インポート時の事象解析は `docs/spec/MIDI_IO.md` と `docs/spec/ABC_IO.md` の `attributes > miscellaneous > miscellaneous-field`（`mks:*` デバッグ項目）を参照してください。
 
 ### スクリーンショット
 ![mikuscore スクリーンショット 1](screenshots/screen1.png)

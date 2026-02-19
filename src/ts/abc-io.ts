@@ -1843,7 +1843,66 @@ type AbcParsedResult = {
   warnings?: string[];
 };
 
-const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
+export type AbcImportOptions = {
+  debugMetadata?: boolean;
+  debugPrettyPrint?: boolean;
+};
+
+const toHex = (value: number, width = 2): string => {
+  const safe = Math.max(0, Math.round(Number(value) || 0));
+  return `0x${safe.toString(16).toUpperCase().padStart(width, "0")}`;
+};
+
+const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string => {
+  if (!notes.length) return "";
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="mks:abc-debug-count">${toHex(notes.length, 4)}</miscellaneous-field>`;
+  for (let i = 0; i < notes.length; i += 1) {
+    const note = notes[i];
+    const voice = normalizeVoiceForMusicXml(note.voice);
+    const step = note.isRest ? "R" : (/^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C");
+    const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(Number(note.octave)))) : 4;
+    const alter = Number.isFinite(note.alter) ? Math.round(Number(note.alter)) : 0;
+    const dur = note.grace ? 0 : Math.max(1, Math.round(Number(note.duration) || 1));
+    const payload = [
+      `idx=${toHex(i, 4)}`,
+      `m=${toHex(measureNo, 4)}`,
+      `v=${xmlEscape(voice)}`,
+      `r=${note.isRest ? "1" : "0"}`,
+      `g=${note.grace ? "1" : "0"}`,
+      `ch=${note.chord ? "1" : "0"}`,
+      `st=${step}`,
+      `al=${String(alter)}`,
+      `oc=${toHex(octave, 2)}`,
+      `dd=${toHex(dur, 4)}`,
+      `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
+    ].join(";");
+    xml += `<miscellaneous-field name="mks:abc-debug-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
+const prettyPrintXml = (xml: string): string => {
+  const compact = xml.replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indent = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
+    lines.push(`${"  ".repeat(indent)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indent += 1;
+  }
+  return lines.join("\n");
+};
+
+const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult, options: AbcImportOptions = {}): string => {
+  const debugMetadata = options.debugMetadata ?? true;
+  const debugPrettyPrint = options.debugPrettyPrint ?? debugMetadata;
   const parts =
     parsed.parts && parsed.parts.length > 0
       ? parsed.parts
@@ -2011,15 +2070,16 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
                   : ""
               }/></barline>`
             : "";
+        const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
         measuresXml.push(
-          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${notesXml}${repeatEndXml}</measure>`
+          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${notesXml}${repeatEndXml}</measure>`
         );
       }
       return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
     })
     .join("");
 
-  return [
+  const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<score-partwise version="4.0">',
     `<work><work-title>${xmlEscape(title)}</work-title></work>`,
@@ -2028,13 +2088,14 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult): string => {
     partBodyXml,
     "</score-partwise>",
   ].join("");
+  return debugPrettyPrint ? prettyPrintXml(xml) : xml;
 };
 
-export const convertAbcToMusicXml = (abcSource: string): string => {
+export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOptions = {}): string => {
   const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
     defaultTitle: "mikuscore",
     defaultComposer: "Unknown",
     inferTransposeFromPartName: true,
   }) as AbcParsedResult;
-  return buildMusicXmlFromAbcParsed(parsed);
+  return buildMusicXmlFromAbcParsed(parsed, options);
 };
