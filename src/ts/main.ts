@@ -74,11 +74,12 @@ const qo = <T extends Element>(selector: string): T | null => {
   return document.querySelector(selector) as T | null;
 };
 
-const inputTypeXml = q<HTMLInputElement>("#inputTypeXml");
-const inputTypeAbc = q<HTMLInputElement>("#inputTypeAbc");
-const inputTypeNew = q<HTMLInputElement>("#inputTypeNew");
-const inputModeFile = q<HTMLInputElement>("#inputModeFile");
-const inputModeSource = q<HTMLInputElement>("#inputModeSource");
+const inputEntryFile = q<HTMLInputElement>("#inputEntryFile");
+const inputEntrySource = q<HTMLInputElement>("#inputEntrySource");
+const inputEntryNew = q<HTMLInputElement>("#inputEntryNew");
+const sourceTypeBlock = q<HTMLDivElement>("#sourceTypeBlock");
+const sourceTypeXml = q<HTMLInputElement>("#sourceTypeXml");
+const sourceTypeAbc = q<HTMLInputElement>("#sourceTypeAbc");
 const newInputBlock = q<HTMLDivElement>("#newInputBlock");
 const newTemplatePianoGrandStaff = q<HTMLInputElement>("#newTemplatePianoGrandStaff");
 const newPartCountInput = q<HTMLInputElement>("#newPartCount");
@@ -486,26 +487,26 @@ const applyInitialXmlInputValue = (): void => {
 };
 
 const renderInputMode = (): void => {
-  const isAbcType = inputTypeAbc.checked;
-  const isNewType = inputTypeNew.checked;
-  const fileMode = inputModeFile.checked;
-  newInputBlock.classList.toggle("md-hidden", !isNewType);
-  fileInputBlock.classList.toggle("md-hidden", isNewType || !fileMode);
-  sourceXmlInputBlock.classList.toggle("md-hidden", isNewType || fileMode || isAbcType);
-  abcInputBlock.classList.toggle("md-hidden", isNewType || fileMode || !isAbcType);
+  const isNewEntry = inputEntryNew.checked;
+  const isFileEntry = inputEntryFile.checked;
+  const isSourceEntry = inputEntrySource.checked;
+  const isAbcSource = sourceTypeAbc.checked;
+  newInputBlock.classList.toggle("md-hidden", !isNewEntry);
+  sourceTypeBlock.classList.toggle("md-hidden", !isSourceEntry);
+  fileInputBlock.classList.toggle("md-hidden", !isFileEntry);
+  sourceXmlInputBlock.classList.toggle("md-hidden", !isSourceEntry || isAbcSource);
+  abcInputBlock.classList.toggle("md-hidden", !isSourceEntry || !isAbcSource);
 
-  inputModeFile.disabled = isNewType;
-  inputModeSource.disabled = isNewType;
-  fileSelectBtn.classList.toggle("md-hidden", isNewType || !fileMode);
-  loadBtn.classList.toggle("md-hidden", !isNewType && fileMode);
+  sourceTypeXml.disabled = !isSourceEntry;
+  sourceTypeAbc.disabled = !isSourceEntry;
+  fileSelectBtn.classList.toggle("md-hidden", !isFileEntry);
+  loadBtn.classList.toggle("md-hidden", isFileEntry);
   const loadLabel = loadBtn.querySelector("span");
   if (loadLabel) {
-    loadLabel.textContent = isNewType ? "Create" : "Load";
+    loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
-  fileInput.accept = isAbcType
-    ? ".abc,text/plain"
-    : ".musicxml,.xml,.mxl,text/xml,application/xml";
+  fileInput.accept = ".musicxml,.xml,.mxl,.abc,text/plain,text/xml,application/xml";
 };
 
 const normalizeNewPartCount = (): number => {
@@ -1802,9 +1803,9 @@ const loadFromText = (xml: string): void => {
 
 const onLoadClick = async (): Promise<void> => {
   const result = await resolveLoadFlow({
-    isNewType: inputTypeNew.checked,
-    isAbcType: inputTypeAbc.checked,
-    isFileMode: inputModeFile.checked,
+    isNewType: inputEntryNew.checked,
+    isAbcType: inputEntrySource.checked && sourceTypeAbc.checked,
+    isFileMode: inputEntryFile.checked,
     selectedFile: fileInput.files?.[0] ?? null,
     xmlSourceText: xmlInput.value,
     abcSourceText: abcInput.value,
@@ -2505,11 +2506,11 @@ measureSelectGuideBtn.addEventListener("click", () => {
   activateTopTab("score");
 });
 
-inputTypeXml.addEventListener("change", renderInputMode);
-inputTypeAbc.addEventListener("change", renderInputMode);
-inputTypeNew.addEventListener("change", renderInputMode);
-inputModeFile.addEventListener("change", renderInputMode);
-inputModeSource.addEventListener("change", renderInputMode);
+inputEntryFile.addEventListener("change", renderInputMode);
+inputEntrySource.addEventListener("change", renderInputMode);
+inputEntryNew.addEventListener("change", renderInputMode);
+sourceTypeXml.addEventListener("change", renderInputMode);
+sourceTypeAbc.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
@@ -2523,15 +2524,11 @@ fileInput.addEventListener("change", () => {
   fileNameText.textContent = f ? f.name : "No file selected";
   fileNameText.classList.toggle("md-hidden", !f);
   if (!f) return;
-  const lowerName = f.name.toLowerCase();
-  const isAbcFile = lowerName.endsWith(".abc");
-  inputTypeAbc.checked = isAbcFile;
-  inputTypeXml.checked = !isAbcFile;
-  inputTypeNew.checked = false;
-  inputModeFile.checked = true;
-  inputModeSource.checked = false;
+  inputEntryFile.checked = true;
+  inputEntrySource.checked = false;
+  inputEntryNew.checked = false;
   renderInputMode();
-  if (inputTypeNew.checked || !inputModeFile.checked) return;
+  if (inputEntryNew.checked || !inputEntryFile.checked) return;
   void onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
@@ -2539,11 +2536,11 @@ loadBtn.addEventListener("click", () => {
 });
 discardDraftExportBtn.addEventListener("click", onDiscardLocalDraft);
 const loadBuiltInSample = (xml: string): void => {
-  inputTypeXml.checked = true;
-  inputTypeAbc.checked = false;
-  inputTypeNew.checked = false;
-  inputModeSource.checked = true;
-  inputModeFile.checked = false;
+  inputEntryFile.checked = false;
+  inputEntrySource.checked = true;
+  inputEntryNew.checked = false;
+  sourceTypeXml.checked = true;
+  sourceTypeAbc.checked = false;
   xmlInput.value = xml;
   renderInputMode();
   renderLocalDraftUi();

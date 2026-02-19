@@ -98,17 +98,17 @@
           </h2>
 
           <div class="ms-radio-group-wrap">
-            <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
-              <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
-              <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
-              <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
+            <div class="ms-radio-group" role="radiogroup" aria-label="Input entry mode">
+              <label class="md-radio"><input id="inputEntryFile" type="radio" name="inputEntry" value="file" checked /> File input</label>
+              <label class="md-radio"><input id="inputEntrySource" type="radio" name="inputEntry" value="source" /> Source input</label>
+              <label class="md-radio"><input id="inputEntryNew" type="radio" name="inputEntry" value="new" /> New Score</label>
             </div>
           </div>
 
-          <div class="ms-radio-group-wrap">
-            <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
-              <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
-              <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
+          <div id="sourceTypeBlock" class="ms-radio-group-wrap md-hidden">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Source input format">
+              <label class="md-radio"><input id="sourceTypeXml" type="radio" name="sourceType" value="xml" checked /> MusicXML Input</label>
+              <label class="md-radio"><input id="sourceTypeAbc" type="radio" name="sourceType" value="abc" /> ABC Input</label>
             </div>
           </div>
 
