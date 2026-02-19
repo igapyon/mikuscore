@@ -16,12 +16,14 @@
 - [x] Added playback path with `midi-writer.js`.
 - [x] Fixed transpose behavior including Clarinet in A.
 - [x] Improved iPhone Safari audio start stability (`pointerdown`/`touchstart` unlock, `AudioContext` resume flow, `webkitAudioContext` fallback).
+- [x] Fixed ABC tuplet timing drift in playback-related roundtrip paths.
+- [x] Added `%@mks` roundtrip support for measure metadata (`number` / `implicit` / `repeat` / `times`) and `transpose` (`chromatic` / `diatonic`).
+- [x] Improved ABC accidental export rules (suppress redundant naturals, preserve required naturals per key/measure context).
 
 #### Known Issues
 - [ ] Verovio warning `slur ... could not be ended` may appear from input MusicXML; loading currently continues.
 - [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
 - [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
-- [ ] Some accidental rendering in `ABC export` is still incorrect (key/accidental precedence needs review).
 
 ### Next Priorities
 #### P1: Editing stability
@@ -34,6 +36,9 @@
 - [ ] Document and test selection retention rules across re-render.
 - [ ] Add ABC roundtrip golden tests (`MusicXML -> ABC -> MusicXML`) for representative orchestral/piano scores.
 - [ ] Define acceptable roundtrip delta policy for ABC path (what may change vs must be preserved).
+- [ ] Add optional `%@mks ...` metadata compaction:
+  - On `MusicXML -> ABC`, suppress consecutive `%@mks` comment lines when values are unchanged from the previous measure.
+  - On `ABC -> MusicXML`, if `%@mks` metadata is omitted, inherit the previous measure's metadata for reconstruction.
 
 #### P3: Feature expansion
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
@@ -70,12 +75,14 @@
 - [x] `midi-writer.js` を使った再生経路を導入済み。
 - [x] Clarinet in A 含む `transpose` 反映を修正済み。
 - [x] iPhone Safari での音出し安定性を改善済み（`pointerdown`/`touchstart` 先行アンロック、`AudioContext` resume 経路、`webkitAudioContext` フォールバック）。
+- [x] ABC の連符（tuplet）往復時に発生していた再生タイミングずれを修正済み。
+- [x] `%@mks` の小節メタ（`number` / `implicit` / `repeat` / `times`）と `transpose`（`chromatic` / `diatonic`）の往復保持を実装済み。
+- [x] ABC 出力の臨時記号ルールを改善済み（不要なナチュラル抑制、必要なナチュラルは保持）。
 
 #### 既知事項
 - [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示されることがある。現状は読み込み継続。
 - [ ] クリック選択は音符クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になりうる。
 - [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。
-- [ ] `ABC出力` で一部臨時記号（alter/accidental）の表現が崩れる問題が残っている。
 
 ### 次にやること
 #### P1: 編集体験の安定化
@@ -88,6 +95,9 @@
 - [ ] レンダリング更新時の選択維持ルールを明文化しテスト化。
 - [ ] 代表的なオーケストラ譜/ピアノ譜で `MusicXML -> ABC -> MusicXML` のゴールデン往復テストを追加。
 - [ ] ABC経由での往復差分ポリシー（許容差分/非許容差分）を明文化。
+- [ ] `%@mks ...` メタコメントの省略最適化を追加。
+  - `MusicXML -> ABC` では、前小節と同一内容が連続する場合、後続の `%@mks` コメント行を省略可能にする。
+  - `ABC -> MusicXML` では、省略により不足した `%@mks` 情報を前小節の値で継承して復元する。
 
 #### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。

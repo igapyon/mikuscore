@@ -51,6 +51,7 @@ Parser reads:
 - headers (`X:`, `T:`, `C:`, `M:`, `L:`, `K:`)
 - voice directives (`V:` with optional `name`, `clef`, `transpose`)
 - optional `%%score` voice ordering directive
+- optional mikuscore metadata comments (`%@mks key ...`, `%@mks measure ...`, `%@mks transpose ...`)
 - body note/rest/chord tokens
 
 ## Compatibility behavior
@@ -78,6 +79,8 @@ Returned structure includes:
 
 - `meta` (title/composer/meter/unit/key)
 - `parts[]` with `partId`, `partName`, `clef`, optional `transpose`, `measures`
+- per-measure metadata hints (measure number / implicit / repeat / repeat times)
+- tuplet timing metadata (`timeModification`, tuplet start/stop markers)
 - voice ordering based on `%%score` + declared fallback order
 - `warnings[]` for non-fatal issues
 
@@ -115,8 +118,15 @@ Exports:
 ## Note export policy
 
 - supports rests, pitch notes, chords, durations, ties
+- supports tuplet roundtrip export (`(n:q:r` style) from MusicXML time-modification/tuplet notations
 - emits accidentals based on key signature + measure accidental memory
+  - suppresses redundant naturals in-context
+  - emits required naturals where key/measure context differs
 - serializes each part as ABC measure stream (`|` separated)
+- emits mikuscore metadata lines for lossless roundtrip:
+  - `%@mks key voice=... measure=... fifths=...`
+  - `%@mks measure voice=... measure=... number=... implicit=... [repeat=...] [times=...]`
+  - `%@mks transpose voice=... chromatic=... [diatonic=...]`
 
 ---
 
@@ -134,6 +144,9 @@ Generation policy:
 - writes part list + default midi-instrument tags
 - writes first-measure attributes (key/time/clef and optional transpose)
 - preserves tie semantics using both `<tie>` and `<notations><tied>`
+- restores tuplet semantics using both `<time-modification>` and `<notations><tuplet>`
+- restores measure metadata (`number`, `implicit`) and repeat barlines from `%@mks measure`
+- restores transpose (`chromatic`, `diatonic`) from `%@mks transpose`
 - inserts a fallback whole-rest note for empty measures
 
 ---
@@ -162,4 +175,3 @@ Supported mappings:
 - This module is compatibility-oriented and intentionally pragmatic.
 - It does not aim to be a complete strict ABC standard implementation.
 - Behavior prioritizes stable import/export for mikuscore workflows.
-
