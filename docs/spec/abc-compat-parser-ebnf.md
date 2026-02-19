@@ -8,7 +8,7 @@ It is based on ABC 2.1 and includes currently supported compatibility behavior o
 ## Scope
 - Header: `X,T,C,M,L,K,V` and `%%score`
 - Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets
-- Compatibility extensions: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
+- Compatibility extensions: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`), mikuscore `%@mks ...` metadata comments
 
 ## EBNF
 
@@ -81,6 +81,7 @@ digit            = "0".."9" ;
 - Treat `x` rest as `z` rest.
 - Support chords (`[CEG]`, `[A,,CE]`).
 - Support tuplets (`(3abc`, `(5:4:5abcde`) with duration scaling.
+- Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
 - Ignore `:` in barline variants (`:|`, `|:`, `||`) without parse failure.
 - Ignore standalone `,` / `'` for compatibility.
 
@@ -99,7 +100,7 @@ ABC 2.1 を土台とし、`abcjs` / `abcm2ps` 系の実データ差を現行実�
 ## Scope
 - ヘッダ: `X,T,C,M,L,K,V` と `%%score`
 - ボディ: 音符、休符(`z/x`)、臨時記号、長さ、タイ(`-`)、broken rhythm(`>` `<`)、小節線、和音、連符
-- 許容拡張: `M:C`, `M:C|`, インライン文字列(`"..."`)のスキップ、単独オクターブ記号(`,`/`'`)の許容
+- 許容拡張: `M:C`, `M:C|`, インライン文字列(`"..."`)のスキップ、単独オクターブ記号(`,`/`'`)の許容、mikuscore の `%@mks ...` メタコメント
 
 ## EBNF
 上記 English セクションの EBNF を正本とする。
@@ -110,6 +111,7 @@ ABC 2.1 を土台とし、`abcjs` / `abcm2ps` 系の実データ差を現行実�
 - `x` 休符を `z` と同様に扱う。
 - chord (`[CEG]`, `[A,,CE]` など) を同時発音として扱う。
 - tuplet (`(3abc`, `(5:4:5abcde` など) を音価スケーリングで扱う。
+- `%@mks` メタコメント（`key` / `measure` / `transpose`）を受理し、存在時は往復メタ情報として利用する。
 - `:|`, `|:`, `||` などの `:` は小節補助記号として無視（構文エラー化しない）。
 - 単独の `,` / `'` は互換目的で無視して継続する。
 
