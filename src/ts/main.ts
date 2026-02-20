@@ -126,6 +126,8 @@ const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
 const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
+const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
+const generalSettingsAccordion = q<HTMLDetailsElement>("#generalSettingsAccordion");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
 const resetPlaybackSettingsBtn = q<HTMLButtonElement>("#resetPlaybackSettingsBtn");
 const refreshMidiDebugBtn = q<HTMLButtonElement>("#refreshMidiDebugBtn");
@@ -193,6 +195,7 @@ const DEFAULT_MIDI_PROGRAM: MidiProgramPreset = "electric_piano_2";
 const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
+const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
@@ -210,6 +213,8 @@ type PlaybackSettings = {
   metricAccentEnabled: boolean;
   metricAccentProfile: MetricAccentProfile;
   forceMidiProgramOverride: boolean;
+  keepMetadataInMusicXml: boolean;
+  generalSettingsExpanded: boolean;
   settingsExpanded: boolean;
 };
 
@@ -240,6 +245,10 @@ const normalizeWaveformSetting = (value: string): PlaybackSettings["waveform"] =
 
 const normalizeForceMidiProgramOverride = (value: unknown): boolean => {
   return value === true;
+};
+
+const normalizeKeepMetadataInMusicXml = (value: unknown): boolean => {
+  return value !== false;
 };
 
 const normalizeUseMidiLikePlayback = (value: unknown): boolean => {
@@ -273,6 +282,8 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
       metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
+      keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+      generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
       settingsExpanded: Boolean(parsed.settingsExpanded),
     };
   } catch {
@@ -290,6 +301,8 @@ const writePlaybackSettings = (): void => {
       metricAccentEnabled: metricAccentEnabledInput.checked,
       metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
+      keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+      generalSettingsExpanded: generalSettingsAccordion.open,
       settingsExpanded: settingsAccordion.open,
     };
     localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
@@ -308,6 +321,8 @@ const applyInitialPlaybackSettings = (): void => {
   metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+  keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  generalSettingsAccordion.open = stored?.generalSettingsExpanded ?? false;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
 };
 
@@ -319,8 +334,37 @@ const onResetPlaybackSettings = (): void => {
   metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
   metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+  keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
   writePlaybackSettings();
   renderControlState();
+};
+
+const stripMetadataFromMusicXml = (xml: string, keepMetadata: boolean): string => {
+  if (keepMetadata) return xml;
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return xml;
+  const fields = Array.from(
+    doc.querySelectorAll(
+      'part > measure > attributes > miscellaneous > miscellaneous-field[name^="src:"], part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'
+    )
+  );
+  for (const field of fields) {
+    field.remove();
+  }
+  for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
+    if (misc.querySelector("miscellaneous-field")) continue;
+    misc.remove();
+  }
+  for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
+    if (attributes.children.length > 0) continue;
+    attributes.remove();
+  }
+  return serializeMusicXmlDocument(doc);
+};
+
+const resolveMusicXmlOutput = (): string => {
+  if (!state.lastSuccessfulSaveXml) return "";
+  return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, keepMetadataInMusicXml.checked);
 };
 
 const logDiagnostics = (
@@ -1063,7 +1107,7 @@ const renderOutput = (): void => {
     saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
   }
   if (outputXml) {
-    outputXml.value = state.lastSaveResult?.ok ? state.lastSaveResult.xml : "";
+    outputXml.value = state.lastSaveResult?.ok ? resolveMusicXmlOutput() : "";
   }
   downloadBtn.disabled = !state.lastSaveResult?.ok;
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
@@ -1806,6 +1850,7 @@ const loadFromText = (xml: string): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
+  const keepMetadata = keepMetadataInMusicXml.checked;
   const result = await resolveLoadFlow({
     isNewType: inputEntryNew.checked,
     isAbcType: inputEntrySource.checked && sourceTypeAbc.checked,
@@ -1814,9 +1859,21 @@ const onLoadClick = async (): Promise<void> => {
     xmlSourceText: xmlInput.value,
     abcSourceText: abcInput.value,
     createNewMusicXml,
-    convertAbcToMusicXml,
-    convertMeiToMusicXml,
-    convertMidiToMusicXml: (midiBytes) => convertMidiToMusicXml(midiBytes),
+    convertAbcToMusicXml: (abcSource) =>
+      convertAbcToMusicXml(abcSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertMeiToMusicXml: (meiSource) =>
+      convertMeiToMusicXml(meiSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertMidiToMusicXml: (midiBytes) =>
+      convertMidiToMusicXml(midiBytes, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
   });
 
   if (!result.ok) {
@@ -2329,24 +2386,26 @@ const failExport = (format: "MusicXML" | "MIDI" | "ABC" | "MEI", reason: string)
 };
 
 const onDownload = (): void => {
-  if (!state.lastSuccessfulSaveXml) {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
     failExport("MusicXML", "No valid saved XML is available.");
     return;
   }
   try {
-    triggerFileDownload(createMusicXmlDownloadPayload(state.lastSuccessfulSaveXml));
+    triggerFileDownload(createMusicXmlDownloadPayload(xmlText));
   } catch (err) {
     failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
   }
 };
 
 const onDownloadMidi = (): void => {
-  if (!state.lastSuccessfulSaveXml) {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
     failExport("MIDI", "No valid saved XML is available.");
     return;
   }
   refreshMidiDebugInfo();
-  const sourceDoc = parseMusicXmlDocument(state.lastSuccessfulSaveXml);
+  const sourceDoc = parseMusicXmlDocument(xmlText);
   if (!sourceDoc) {
     failExport("MIDI", "Current MusicXML could not be parsed.");
     return;
@@ -2362,7 +2421,7 @@ const onDownloadMidi = (): void => {
     return;
   }
   const payload = createMidiDownloadPayload(
-    state.lastSuccessfulSaveXml,
+    xmlText,
     PLAYBACK_TICKS_PER_QUARTER,
     normalizeMidiProgram(midiProgramSelect.value),
     forceMidiProgramOverride.checked,
@@ -2382,11 +2441,12 @@ const onDownloadMidi = (): void => {
 };
 
 const onDownloadAbc = (): void => {
-  if (!state.lastSuccessfulSaveXml) {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
     failExport("ABC", "No valid saved XML is available.");
     return;
   }
-  const payload = createAbcDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToAbc);
+  const payload = createAbcDownloadPayload(xmlText, exportMusicXmlDomToAbc);
   if (!payload) {
     failExport("ABC", "Could not build ABC payload from current MusicXML.");
     return;
@@ -2399,11 +2459,12 @@ const onDownloadAbc = (): void => {
 };
 
 const onDownloadMei = (): void => {
-  if (!state.lastSuccessfulSaveXml) {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
     failExport("MEI", "No valid saved XML is available.");
     return;
   }
-  const payload = createMeiDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToMei);
+  const payload = createMeiDownloadPayload(xmlText, exportMusicXmlDomToMei);
   if (!payload) {
     failExport("MEI", "Could not build MEI payload from current MusicXML.");
     return;
@@ -2626,6 +2687,11 @@ metricAccentEnabledInput.addEventListener("change", () => {
   renderControlState();
 });
 metricAccentProfileSelect.addEventListener("change", writePlaybackSettings);
+keepMetadataInMusicXml.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderOutput();
+});
+generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);

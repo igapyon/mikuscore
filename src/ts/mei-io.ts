@@ -7,6 +7,11 @@ type StaffSlot = {
   label: string;
 };
 
+export type MeiImportOptions = {
+  debugMetadata?: boolean;
+  sourceMetadata?: boolean;
+};
+
 const esc = (value: string): string =>
   String(value)
     .replace(/&/g, "&amp;")
@@ -614,7 +619,9 @@ const buildMeiDebugFieldsFromStaff = (
   return fields;
 };
 
-export const convertMeiToMusicXml = (meiSource: string): string => {
+export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOptions = {}): string => {
+  const debugMetadata = options.debugMetadata ?? true;
+  const sourceMetadata = options.sourceMetadata ?? true;
   const parser = new DOMParser();
   const doc = parser.parseFromString(String(meiSource || ""), "application/xml");
   if (doc.querySelector("parsererror")) {
@@ -718,8 +725,10 @@ export const convertMeiToMusicXml = (meiSource: string): string => {
             }
           }
 
-          const miscFields = extractMiscFieldsFromMeiStaff(targetStaff);
-          const meiDebugFields = buildMeiDebugFieldsFromStaff(targetStaff, measureNo, divisions);
+          const miscFields = sourceMetadata ? extractMiscFieldsFromMeiStaff(targetStaff) : [];
+          const meiDebugFields = debugMetadata
+            ? buildMeiDebugFieldsFromStaff(targetStaff, measureNo, divisions)
+            : [];
           const allFields = [...miscFields, ...meiDebugFields];
           const miscellaneousXml =
             allFields.length > 0
