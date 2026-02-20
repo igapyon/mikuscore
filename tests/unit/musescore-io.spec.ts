@@ -431,6 +431,14 @@ describe("musescore-io", () => {
       .join("\n");
     expect(allDiag).not.toContain("unknown-duration");
     expect(allDiag).not.toContain("tag=Tuplet");
+    const firstNote = doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1)");
+    const thirdNote = doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(3)");
+    expect(firstNote?.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(firstNote?.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+    const tupletStart = firstNote?.querySelector(":scope > notations > tuplet[type=\"start\"]");
+    expect(tupletStart).not.toBeNull();
+    expect(tupletStart?.getAttribute("bracket")).toBe("yes");
+    expect(thirdNote?.querySelector(":scope > notations > tuplet[type=\"stop\"]")).not.toBeNull();
   });
 
   it("imports pickup measure len as implicit short measure", () => {
@@ -466,5 +474,93 @@ describe("musescore-io", () => {
     const durationTotal = Array.from(firstMeasure?.querySelectorAll(":scope > note > duration") ?? [])
       .reduce((sum, node) => sum + Number(node.textContent?.trim() || 0), 0);
     expect(durationTotal).toBe(240);
+  });
+
+  it("keeps written note type for tuplet notes (e.g. 16th triplet stays 16th)", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Tuplet><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>
+          <Chord><durationType>16th</durationType><Note><pitch>60</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>64</pitch></Note></Chord>
+          <endTuplet/>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const first = doc.querySelector("part > measure > note:nth-of-type(1)");
+    expect(first?.querySelector(":scope > type")?.textContent?.trim()).toBe("16th");
+    expect(first?.querySelector(":scope > duration")?.textContent?.trim()).toBe("80");
+    expect(first?.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(first?.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+  });
+
+  it("maps MuseScore BeamMode begin chain to MusicXML beam begin/continue/end", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord><BeamMode>begin</BeamMode><durationType>16th</durationType><Note><pitch>60</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>64</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+  });
+
+  it("auto-beams contiguous short chords when BeamMode is absent", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>3</sigN><sigD>8</sigD></TimeSig>
+          <Chord><durationType>16th</durationType><Note><pitch>60</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>64</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
   });
 });
