@@ -563,6 +563,70 @@ describe("musescore-io", () => {
     expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
   });
 
+  it("keeps beaming across a rest when MuseScore BeamMode marks the rest lane", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Chord><BeamMode>begin</BeamMode><durationType>16th</durationType><Note><pitch>67</pitch></Note></Chord>
+          <Rest><BeamMode>mid</BeamMode><durationType>16th</durationType></Rest>
+          <Chord><durationType>16th</durationType><Note><pitch>69</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+  });
+
+  it("includes the preceding chord when rest starts with BeamMode mid", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Chord><durationType>eighth</durationType><Note><pitch>67</pitch></Note></Chord>
+          <Rest><BeamMode>mid</BeamMode><durationType>16th</durationType></Rest>
+          <Chord><durationType>16th</durationType><Note><pitch>69</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>71</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>72</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
+    const n4 = doc.querySelector("part > measure > note:nth-of-type(4)");
+    const n5 = doc.querySelector("part > measure > note:nth-of-type(5)");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+    expect(n4?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n5?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+  });
+
   it("auto-beams contiguous short chords when BeamMode is absent", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="3.02">

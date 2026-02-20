@@ -645,19 +645,31 @@ const semitoneShiftForOttavaDisplay = (state: MuseOttavaState): number => {
 
 const buildBeamXmlByVoiceEvents = (
   voiceEvents: ParsedMuseScoreEvent[],
-  divisions: number
+  divisions: number,
+  beatDiv: number
 ): Map<number, string> => {
   const beamXmlByIndex = new Map<number, string>();
+  const isBeamableTimedEvent = (ev: ParsedMuseScoreEvent | undefined): boolean => {
+    if (!ev) return false;
+    if (ev.kind !== "chord" && ev.kind !== "rest") return false;
+    if (ev.kind === "chord" && ev.grace) return false;
+    const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
+    return beamLevelFromType(info.type) > 0;
+  };
   const flushGroup = (indices: number[]): void => {
-    if (indices.length < 2) return;
-    for (let gi = 0; gi < indices.length; gi += 1) {
-      const idx = indices[gi];
+    const chordIndices = indices.filter((idx) => {
+      const ev = voiceEvents[idx];
+      return ev?.kind === "chord" && !ev.grace;
+    });
+    if (chordIndices.length < 2) return;
+    for (let gi = 0; gi < chordIndices.length; gi += 1) {
+      const idx = chordIndices[gi];
       const ev = voiceEvents[idx];
       if (!ev || ev.kind !== "chord") continue;
       const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
       const levels = beamLevelFromType(info.type);
       if (levels <= 0) continue;
-      const state = gi === 0 ? "begin" : (gi === indices.length - 1 ? "end" : "continue");
+      const state = gi === 0 ? "begin" : (gi === chordIndices.length - 1 ? "end" : "continue");
       let xml = "";
       for (let level = 1; level <= levels; level += 1) {
         xml += `<beam number="${level}">${state}</beam>`;
@@ -667,7 +679,10 @@ const buildBeamXmlByVoiceEvents = (
   };
 
   const hasExplicitBeamMode = voiceEvents.some(
-    (ev) => ev.kind === "chord" && (ev.beamMode === "begin" || ev.beamMode === "mid")
+    (ev) =>
+      (ev.kind === "chord" || ev.kind === "rest")
+      && ev.beamMode !== undefined
+      && (ev.beamMode === "begin" || ev.beamMode === "mid")
   );
   if (!hasExplicitBeamMode) {
     let currentGroup: number[] = [];
@@ -692,15 +707,26 @@ const buildBeamXmlByVoiceEvents = (
   }
 
   let activeGroup: number[] = [];
+  let cursorDiv = 0;
+  const resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
   for (let i = 0; i < voiceEvents.length; i += 1) {
     const ev = voiceEvents[i];
-    if (ev.kind !== "chord") {
+    if (ev.kind !== "chord" && ev.kind !== "rest") {
       flushGroup(activeGroup);
       activeGroup = [];
       continue;
     }
-    const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
-    const beamable = beamLevelFromType(info.type) > 0;
+    const startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv === 0;
+    if (startsAtBeatBoundary) {
+      flushGroup(activeGroup);
+      activeGroup = [];
+    }
+    if (ev.kind === "chord" && ev.grace) {
+      flushGroup(activeGroup);
+      activeGroup = [];
+      continue;
+    }
+    const beamable = isBeamableTimedEvent(ev);
     if (!beamable) {
       flushGroup(activeGroup);
       activeGroup = [];
@@ -709,14 +735,26 @@ const buildBeamXmlByVoiceEvents = (
     if (ev.beamMode === "begin") {
       flushGroup(activeGroup);
       activeGroup = [i];
+      cursorDiv += Math.max(0, ev.durationDiv);
       continue;
     }
     if (ev.beamMode === "mid") {
-      if (!activeGroup.length) activeGroup = [i];
-      else activeGroup.push(i);
+      if (!activeGroup.length) {
+        const prev = i > 0 ? voiceEvents[i - 1] : undefined;
+        if (isBeamableTimedEvent(prev)) {
+          activeGroup = [i - 1, i];
+        } else {
+          activeGroup = [i];
+        }
+      } else {
+        activeGroup.push(i);
+      }
+      cursorDiv += Math.max(0, ev.durationDiv);
       continue;
     }
     if (activeGroup.length) activeGroup.push(i);
+    else activeGroup = [i];
+    cursorDiv += Math.max(0, ev.durationDiv);
   }
   flushGroup(activeGroup);
   return beamXmlByIndex;
@@ -1464,7 +1502,8 @@ export const convertMuseScoreToMusicXml = (
           let occupied = 0;
           const voiceEvents = measure.events.filter((event) => Math.max(1, Math.round(event.voice)) === voiceNo);
           const tupletTolerance = tupletRoundingToleranceByVoiceEvents(voiceEvents);
-          const beamXmlByEventIndex = buildBeamXmlByVoiceEvents(voiceEvents, divisions);
+          const beatDiv = Math.max(1, Math.round(measure.capacityDiv / Math.max(1, measure.beats)));
+          const beamXmlByEventIndex = buildBeamXmlByVoiceEvents(voiceEvents, divisions, beatDiv);
           for (const event of voiceEvents) {
             if (event.kind === "dynamic") {
               const lead = Math.max(0, Math.round(event.atDiv) - occupied);
