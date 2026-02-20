@@ -120,3 +120,25 @@ export const createAbcDownloadPayload = (
     blob: new Blob([abcText], { type: "text/plain;charset=utf-8" }),
   };
 };
+
+export const createMeiDownloadPayload = (
+  xmlText: string,
+  convertMusicXmlToMei: (doc: Document) => string
+): DownloadFilePayload | null => {
+  const musicXmlDoc = parseMusicXmlDocument(xmlText);
+  if (!musicXmlDoc) return null;
+
+  let meiText = "";
+  try {
+    meiText = convertMusicXmlToMei(musicXmlDoc);
+  } catch {
+    return null;
+  }
+  const formattedMei = prettyPrintMusicXmlText(meiText);
+
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${ts}.mei`,
+    blob: new Blob([formattedMei], { type: "application/mei+xml;charset=utf-8" }),
+  };
+};

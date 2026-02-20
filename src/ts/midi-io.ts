@@ -69,6 +69,7 @@ export type MidiImportOptions = {
   title?: string;
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
+  sourceMetadata?: boolean;
 };
 export type MidiImportResult = {
   ok: boolean;
@@ -1352,7 +1353,7 @@ const toHex = (value: number, width = 2): string => {
   return `0x${safe.toString(16).toUpperCase().padStart(width, "0")}`;
 };
 
-const buildMeasureMidiDebugMiscXml = (measureSegments: ImportedVoiceNoteSegment[]): string => {
+const buildMeasureMidiMetaMiscXml = (measureSegments: ImportedVoiceNoteSegment[]): string => {
   if (!measureSegments.length) return "";
   const sorted = measureSegments
     .slice()
@@ -1364,7 +1365,7 @@ const buildMeasureMidiDebugMiscXml = (measureSegments: ImportedVoiceNoteSegment[
         : a.startDiv - b.startDiv
     );
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:midi-debug-count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:midi-meta-count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < sorted.length; i += 1) {
     const seg = sorted[i];
     const payload = [
@@ -1380,7 +1381,33 @@ const buildMeasureMidiDebugMiscXml = (measureSegments: ImportedVoiceNoteSegment[
       `tk0=${toHex(seg.startTick, 6)}`,
       `tk1=${toHex(seg.endTick, 6)}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:midi-debug-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:midi-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
+const buildMidiSourceMiscXml = (midiBytes: Uint8Array): string => {
+  const bytes = midiBytes instanceof Uint8Array ? midiBytes : new Uint8Array();
+  if (!bytes.length) return "";
+  const hex = Array.from(bytes)
+    .map((v) => v.toString(16).toUpperCase().padStart(2, "0"))
+    .join("");
+  const CHUNK_SIZE = 240;
+  const MAX_CHUNKS = 512;
+  const chunks: string[] = [];
+  for (let i = 0; i < hex.length && chunks.length < MAX_CHUNKS; i += CHUNK_SIZE) {
+    chunks.push(hex.slice(i, i + CHUNK_SIZE));
+  }
+  const truncated = chunks.join("").length < hex.length;
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="src:midi:raw-encoding">hex-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:midi:raw-bytes">${bytes.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:midi:raw-hex-length">${hex.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:midi:raw-chunks">${chunks.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:midi:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  for (let i = 0; i < chunks.length; i += 1) {
+    xml += `<miscellaneous-field name="src:midi:raw-${String(i + 1).padStart(4, "0")}">${chunks[i]}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1494,6 +1521,7 @@ const buildPartMusicXml = (params: {
   ticksPerQuarter: number;
   warnings: MidiImportDiagnostic[];
   debugImportMetadata: boolean;
+  sourceMetadataXml: string;
 }): string => {
   const {
     partId,
@@ -1509,6 +1537,7 @@ const buildPartMusicXml = (params: {
     ticksPerQuarter,
     warnings,
     debugImportMetadata,
+    sourceMetadataXml,
   } = params;
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
   const measureDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
@@ -1598,7 +1627,10 @@ const buildPartMusicXml = (params: {
       }
     }
     if (debugImportMetadata) {
-      partXml += buildMeasureMidiDebugMiscXml(measureSegments);
+      partXml += buildMeasureMidiMetaMiscXml(measureSegments);
+    }
+    if (measureIndex === 0 && sourceMetadataXml) {
+      partXml += sourceMetadataXml;
     }
     if (measureSegments.length > 0) {
       const dynamicVelocityByOffset = new Map<number, number>();
@@ -1653,6 +1685,7 @@ const buildImportSkeletonMusicXml = (params: {
   programByTrackChannel: Map<TrackChannelKey, number>;
   warnings: MidiImportDiagnostic[];
   debugImportMetadata: boolean;
+  sourceMetadataXml: string;
 }): string => {
   const {
     title,
@@ -1668,6 +1701,7 @@ const buildImportSkeletonMusicXml = (params: {
     programByTrackChannel,
     warnings,
     debugImportMetadata,
+    sourceMetadataXml,
   } = params;
   const divisions = quantizeGridToDivisions(quantizeGrid);
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
@@ -1745,6 +1779,7 @@ const buildImportSkeletonMusicXml = (params: {
         ticksPerQuarter,
         warnings,
         debugImportMetadata,
+        sourceMetadataXml: partIndex === 0 ? sourceMetadataXml : "",
       })
     )
     .join("");
@@ -2512,6 +2547,7 @@ export const convertMidiToMusicXml = (
   const title = String(options.title ?? "").trim() || "Imported MIDI";
   const debugImportMetadata = options.debugMetadata ?? true;
   const debugPrettyPrint = options.debugPrettyPrint ?? debugImportMetadata;
+  const sourceImportMetadata = options.sourceMetadata ?? true;
 
   if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
     diagnostics.push({
@@ -2644,6 +2680,7 @@ export const convertMidiToMusicXml = (
     programByTrackChannel,
     warnings,
     debugImportMetadata,
+    sourceMetadataXml: sourceImportMetadata ? buildMidiSourceMiscXml(midiBytes) : "",
   });
 
   if (hadDrumChannel) {

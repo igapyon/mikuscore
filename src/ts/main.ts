@@ -11,6 +11,7 @@ import type {
   SaveResult,
 } from "../../core/interfaces";
 import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
+import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
@@ -20,6 +21,7 @@ import {
 } from "./musicxml-io";
 import {
   createAbcDownloadPayload,
+  createMeiDownloadPayload,
   createMidiDownloadPayload,
   createMusicXmlDownloadPayload,
   triggerFileDownload,
@@ -131,6 +133,7 @@ const midiDebugText = q<HTMLPreElement>("#midiDebugText");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
+const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
 const saveModeText = qo<HTMLSpanElement>("#saveModeText");
 const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
@@ -507,7 +510,6 @@ const renderInputMode = (): void => {
     loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
-  fileInput.accept = ".musicxml,.xml,.mxl,.abc,.mid,.midi,text/plain,text/xml,application/xml";
 };
 
 const normalizeNewPartCount = (): number => {
@@ -1066,6 +1068,7 @@ const renderOutput = (): void => {
   downloadBtn.disabled = !state.lastSaveResult?.ok;
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
+  downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
 };
 
 const renderControlState = (): void => {
@@ -1812,6 +1815,7 @@ const onLoadClick = async (): Promise<void> => {
     abcSourceText: abcInput.value,
     createNewMusicXml,
     convertAbcToMusicXml,
+    convertMeiToMusicXml,
     convertMidiToMusicXml: (midiBytes) => convertMidiToMusicXml(midiBytes),
   });
 
@@ -2310,7 +2314,7 @@ const onConvertRestToNote = (): void => {
   runCommand(command);
 };
 
-const failExport = (format: "MusicXML" | "MIDI" | "ABC", reason: string): void => {
+const failExport = (format: "MusicXML" | "MIDI" | "ABC" | "MEI", reason: string): void => {
   const message = `${format} export failed: ${reason}`;
   console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
   state.lastDispatchResult = {
@@ -2391,6 +2395,23 @@ const onDownloadAbc = (): void => {
     triggerFileDownload(payload);
   } catch (err) {
     failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadMei = (): void => {
+  if (!state.lastSuccessfulSaveXml) {
+    failExport("MEI", "No valid saved XML is available.");
+    return;
+  }
+  const payload = createMeiDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToMei);
+  if (!payload) {
+    failExport("MEI", "Could not build MEI payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MEI", err instanceof Error ? err.message : "Unknown download error.");
   }
 };
 
@@ -2592,6 +2613,7 @@ stopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+downloadMeiBtn.addEventListener("click", onDownloadMei);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 refreshMidiDebugBtn.addEventListener("click", refreshMidiDebugInfo);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);

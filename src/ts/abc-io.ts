@@ -1846,6 +1846,7 @@ type AbcParsedResult = {
 export type AbcImportOptions = {
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
+  sourceMetadata?: boolean;
 };
 
 const toHex = (value: number, width = 2): string => {
@@ -1856,7 +1857,7 @@ const toHex = (value: number, width = 2): string => {
 const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string => {
   if (!notes.length) return "";
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:abc-debug-count">${toHex(notes.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:abc-meta-count">${toHex(notes.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < notes.length; i += 1) {
     const note = notes[i];
     const voice = normalizeVoiceForMusicXml(note.voice);
@@ -1877,7 +1878,34 @@ const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number):
       `dd=${toHex(dur, 4)}`,
       `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:abc-debug-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:abc-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
+const buildAbcSourceMiscXml = (abcSource: string): string => {
+  const source = String(abcSource ?? "");
+  if (!source.length) return "";
+  const encoded = source
+    .replace(/\\/g, "\\\\")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
+  const CHUNK_SIZE = 240;
+  const MAX_CHUNKS = 512;
+  const chunks: string[] = [];
+  for (let i = 0; i < encoded.length && chunks.length < MAX_CHUNKS; i += CHUNK_SIZE) {
+    chunks.push(encoded.slice(i, i + CHUNK_SIZE));
+  }
+  const truncated = chunks.join("").length < encoded.length;
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  for (let i = 0; i < chunks.length; i += 1) {
+    xml += `<miscellaneous-field name="src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1900,8 +1928,13 @@ const prettyPrintXml = (xml: string): string => {
   return lines.join("\n");
 };
 
-const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult, options: AbcImportOptions = {}): string => {
+const buildMusicXmlFromAbcParsed = (
+  parsed: AbcParsedResult,
+  abcSource: string,
+  options: AbcImportOptions = {}
+): string => {
   const debugMetadata = options.debugMetadata ?? true;
+  const sourceMetadata = options.sourceMetadata ?? true;
   const debugPrettyPrint = options.debugPrettyPrint ?? debugMetadata;
   const parts =
     parsed.parts && parsed.parts.length > 0
@@ -2071,8 +2104,12 @@ const buildMusicXmlFromAbcParsed = (parsed: AbcParsedResult, options: AbcImportO
               }/></barline>`
             : "";
         const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
+        const sourceMiscXml =
+          sourceMetadata && partIndex === 0 && measureNo === 1
+            ? buildAbcSourceMiscXml(abcSource)
+            : "";
         measuresXml.push(
-          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${notesXml}${repeatEndXml}</measure>`
+          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`
         );
       }
       return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
@@ -2097,5 +2134,5 @@ export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOption
     defaultComposer: "Unknown",
     inferTransposeFromPartName: true,
   }) as AbcParsedResult;
-  return buildMusicXmlFromAbcParsed(parsed, options);
+  return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };

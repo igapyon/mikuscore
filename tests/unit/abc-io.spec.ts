@@ -39,7 +39,7 @@ describe("ABC I/O compatibility", () => {
     expect(voices.every((v) => /^[1-9]\d*$/.test(v))).toBe(true);
   });
 
-  it("ABC->MusicXML writes mks:abc-debug miscellaneous fields by default", () => {
+  it("ABC->MusicXML writes mks:abc-meta miscellaneous fields by default", () => {
     const abc = `X:1
 T:Debug test
 M:4/4
@@ -51,13 +51,21 @@ C D E F |`;
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     const fields = Array.from(
-      outDoc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-debug"]')
+      outDoc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-meta"]')
     );
     expect(fields.length).toBeGreaterThan(0);
     expect(fields.some((field) => (field.textContent || "").includes("st=C"))).toBe(true);
+    expect(
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:abc:raw-truncated"]')
+        ?.textContent
+    ).toBe("0");
+    expect(
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:abc:raw-0001"]')
+        ?.textContent
+    ).toContain("X:1");
   });
 
-  it("ABC->MusicXML can disable mks:abc-debug miscellaneous fields", () => {
+  it("ABC->MusicXML can disable mks:abc-meta miscellaneous fields", () => {
     const abc = `X:1
 T:Debug test
 M:4/4
@@ -69,7 +77,7 @@ C D E F |`;
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(
-      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-debug"]')
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-meta"]')
     ).toBeNull();
   });
 
