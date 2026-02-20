@@ -74,6 +74,60 @@ const buildSmfFormat1 = (tracks: number[][], ticksPerQuarter = 480): Uint8Array 
 };
 
 describe("midi-io MIDI nuance regressions", () => {
+  it("keeps full non-implicit measure length for playback timeline", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "playback" });
+    expect(result.events.length).toBeGreaterThanOrEqual(2);
+    const sorted = result.events.slice().sort((a, b) => a.startTicks - b.startTicks);
+    expect(sorted[0].startTicks).toBe(0);
+    // 3/4 one full measure at tpq=128 -> 384 ticks.
+    expect(sorted[1].startTicks).toBe(384);
+  });
+
+  it("does not double-count underfull bar when followed by implicit pickup", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+    <measure number="X1" implicit="yes">
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "playback" });
+    const sorted = result.events.slice().sort((a, b) => a.startTicks - b.startTicks);
+    expect(sorted.length).toBeGreaterThanOrEqual(3);
+    // m1(2 beats=256) + X1(1 beat=128) => m2 starts at 384, not 512.
+    expect(sorted[2].startTicks).toBe(384);
+  });
+
   it("expands grace notes before principal notes in MIDI mode", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -516,6 +570,9 @@ describe("midi-io MIDI import MVP", () => {
     );
     expect(drumPart).toBeDefined();
     expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
+    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+      "MIDI_DRUM_CHANNEL_SEPARATED"
+    );
   });
 
   it("does not create empty parts from channels without note events", () => {
@@ -714,6 +771,41 @@ describe("midi-io MIDI import MVP", () => {
     ).toMatch(/^[0-9A-F]+$/);
   });
 
+  it("reads mikuscore SysEx metadata into mks:midi-sysex miscellaneous fields", () => {
+    const payloadText =
+      "mks|v=1|m=0001|i=0001|n=0001|d=" +
+      encodeURIComponent("schema=mks-sysex-v1\napp=mikuscore\nsource=musicxml");
+    const payloadBytes = Array.from(payloadText).map((ch) => ch.charCodeAt(0) & 0x7f);
+    const midi = buildSmfFormat0([
+      ...vlq(0),
+      0xf0,
+      ...vlq(payloadBytes.length + 1),
+      ...payloadBytes,
+      0xf7,
+      ...vlq(0),
+      0x90,
+      60,
+      96,
+      ...vlq(480),
+      0x80,
+      60,
+      0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(
+      doc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:schema"]'
+      )?.textContent
+    ).toBe("mks-sysex-v1");
+    expect(
+      doc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:app"]'
+      )?.textContent
+    ).toBe("mikuscore");
+  });
+
   it("pretty-prints imported MusicXML by default when debug metadata is enabled", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
@@ -724,14 +816,14 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.xml.includes("\n")).toBe(true);
   });
 
-  it("can disable pretty-print output even when debug metadata is enabled", () => {
+  it("keeps pretty-print output even when debugPrettyPrint is false", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
       ...vlq(480), 0x80, 60, 0,
     ]);
     const result = convertMidiToMusicXml(midi, { debugMetadata: true, debugPrettyPrint: false });
     expect(result.ok).toBe(true);
-    expect(result.xml.includes("\n")).toBe(false);
+    expect(result.xml.includes("\n")).toBe(true);
   });
 
   it("can disable MIDI debug metadata output", () => {
@@ -745,6 +837,23 @@ describe("midi-io MIDI import MVP", () => {
     expect(
       doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
     ).toBeNull();
+  });
+
+  it("writes MIDI import warnings into diag:* miscellaneous fields", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x90, 64, 96,
+      ...vlq(360), 0x80, 60, 0,
+      ...vlq(120), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { debugMetadata: true, quantizeGrid: "1/16" });
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((warning) => warning.code === "MIDI_POLYPHONY_VOICE_ASSIGNED")).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector('miscellaneous-field[name="diag:count"]')?.textContent).toBe("1");
+    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+      "code=MIDI_POLYPHONY_VOICE_ASSIGNED"
+    );
   });
 
   it("collects key signature events from MusicXML for MIDI FF59 export", () => {

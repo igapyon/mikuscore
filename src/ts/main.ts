@@ -12,15 +12,18 @@ import type {
 } from "../../core/interfaces";
 import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
+import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
   parseMusicXmlDocument,
+  prettyPrintMusicXmlText,
   replaceMeasureInMainDocument,
   serializeMusicXmlDocument,
 } from "./musicxml-io";
 import {
   createAbcDownloadPayload,
+  createLilyPondDownloadPayload,
   createMeiDownloadPayload,
   createMidiDownloadPayload,
   createMusicXmlDownloadPayload,
@@ -136,6 +139,7 @@ const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
 const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
+const downloadLilyPondBtn = q<HTMLButtonElement>("#downloadLilyPondBtn");
 const saveModeText = qo<HTMLSpanElement>("#saveModeText");
 const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
@@ -1113,6 +1117,7 @@ const renderOutput = (): void => {
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
   downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
+  downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
 };
 
 const renderControlState = (): void => {
@@ -1859,6 +1864,7 @@ const onLoadClick = async (): Promise<void> => {
     xmlSourceText: xmlInput.value,
     abcSourceText: abcInput.value,
     createNewMusicXml,
+    formatImportedMusicXml: prettyPrintMusicXmlText,
     convertAbcToMusicXml: (abcSource) =>
       convertAbcToMusicXml(abcSource, {
         sourceMetadata: keepMetadata,
@@ -1866,6 +1872,11 @@ const onLoadClick = async (): Promise<void> => {
       }),
     convertMeiToMusicXml: (meiSource) =>
       convertMeiToMusicXml(meiSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertLilyPondToMusicXml: (lilySource) =>
+      convertLilyPondToMusicXml(lilySource, {
         sourceMetadata: keepMetadata,
         debugMetadata: keepMetadata,
       }),
@@ -2371,7 +2382,10 @@ const onConvertRestToNote = (): void => {
   runCommand(command);
 };
 
-const failExport = (format: "MusicXML" | "MIDI" | "ABC" | "MEI", reason: string): void => {
+const failExport = (
+  format: "MusicXML" | "MIDI" | "ABC" | "MEI" | "LilyPond",
+  reason: string
+): void => {
   const message = `${format} export failed: ${reason}`;
   console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
   state.lastDispatchResult = {
@@ -2473,6 +2487,24 @@ const onDownloadMei = (): void => {
     triggerFileDownload(payload);
   } catch (err) {
     failExport("MEI", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadLilyPond = (): void => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("LilyPond", "No valid saved XML is available.");
+    return;
+  }
+  const payload = createLilyPondDownloadPayload(xmlText, exportMusicXmlDomToLilyPond);
+  if (!payload) {
+    failExport("LilyPond", "Could not build LilyPond payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("LilyPond", err instanceof Error ? err.message : "Unknown download error.");
   }
 };
 
@@ -2675,6 +2707,7 @@ downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
+downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 refreshMidiDebugBtn.addEventListener("click", refreshMidiDebugInfo);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);

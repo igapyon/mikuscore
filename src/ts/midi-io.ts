@@ -208,7 +208,15 @@ type SmfParseSummary = {
   timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
   keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }>;
   tempoEvents: Array<{ tick: number; bpm: number }>;
+  mksSysExPayloads: string[];
   parseWarnings: MidiImportDiagnostic[];
+};
+
+type MksSysExChunk = {
+  messageId: number;
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
 };
 
 const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
@@ -631,6 +639,82 @@ const readVariableLengthAt = (
   return null;
 };
 
+const asciiBytesToString = (bytes: Uint8Array): string => {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    out += String.fromCharCode(bytes[i] & 0x7f);
+  }
+  return out;
+};
+
+const parseMksSysExChunk = (payloadBytes: Uint8Array): MksSysExChunk | null => {
+  if (!payloadBytes.length) return null;
+  const trimmed =
+    payloadBytes[payloadBytes.length - 1] === 0xf7 ? payloadBytes.slice(0, payloadBytes.length - 1) : payloadBytes;
+  const text = asciiBytesToString(trimmed);
+  if (!text.startsWith("mks|")) return null;
+  const parts = text.split("|");
+  const map = new Map<string, string>();
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    map.set(part.slice(0, eq), part.slice(eq + 1));
+  }
+  if ((map.get("v") ?? "") !== "1") return null;
+  const messageId = Number.parseInt(map.get("m") ?? "", 10);
+  const chunkIndex = Number.parseInt(map.get("i") ?? "", 10);
+  const totalChunks = Number.parseInt(map.get("n") ?? "", 10);
+  if (!Number.isFinite(messageId) || !Number.isFinite(chunkIndex) || !Number.isFinite(totalChunks)) return null;
+  if (chunkIndex < 1 || totalChunks < 1 || chunkIndex > totalChunks) return null;
+  const encoded = map.get("d") ?? "";
+  try {
+    return {
+      messageId,
+      chunkIndex,
+      totalChunks,
+      data: decodeURIComponent(encoded),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const assembleMksSysExPayloads = (chunks: MksSysExChunk[]): string[] => {
+  if (!chunks.length) return [];
+  const byMessageId = new Map<number, MksSysExChunk[]>();
+  for (const chunk of chunks) {
+    const bucket = byMessageId.get(chunk.messageId) ?? [];
+    bucket.push(chunk);
+    byMessageId.set(chunk.messageId, bucket);
+  }
+  const payloads: string[] = [];
+  const sortedMessageIds = Array.from(byMessageId.keys()).sort((a, b) => a - b);
+  for (const messageId of sortedMessageIds) {
+    const group = (byMessageId.get(messageId) ?? []).slice().sort((a, b) => a.chunkIndex - b.chunkIndex);
+    const total = group[0]?.totalChunks ?? 0;
+    if (total <= 0) continue;
+    if (group.length < total) continue;
+    const byIndex = new Map<number, string>();
+    for (const chunk of group) {
+      if (chunk.totalChunks !== total) continue;
+      byIndex.set(chunk.chunkIndex, chunk.data);
+    }
+    if (byIndex.size < total) continue;
+    const ordered: string[] = [];
+    let ok = true;
+    for (let i = 1; i <= total; i += 1) {
+      const text = byIndex.get(i);
+      if (text === undefined) {
+        ok = false;
+        break;
+      }
+      ordered.push(text);
+    }
+    if (ok) payloads.push(ordered.join(""));
+  }
+  return payloads;
+};
+
 const parseSmfHeader = (midiBytes: Uint8Array): {
   header: ParsedSmfHeader | null;
   diagnostics: MidiImportDiagnostic[];
@@ -721,6 +805,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoEvents: Array<{ tick: number; bpm: number }> = [];
+  const mksSysExChunks: MksSysExChunk[] = [];
   const parseWarnings: MidiImportDiagnostic[] = [];
   const activeNoteStartTicks = new Map<string, Array<{ startTick: number; velocity: number }>>();
   let cursor = 0;
@@ -800,7 +885,20 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     if (statusByte === 0xf0 || statusByte === 0xf7) {
       const sysExLen = readVariableLengthAt(trackData, cursor);
       if (!sysExLen) break;
-      cursor = sysExLen.next + sysExLen.value;
+      const payloadStart = sysExLen.next;
+      const payloadEnd = payloadStart + sysExLen.value;
+      if (payloadEnd > trackData.length) {
+        parseWarnings.push({
+          code: "MIDI_EVENT_DROPPED",
+          message: "SysEx event length overflow; remaining events were dropped.",
+        });
+        break;
+      }
+      if (statusByte === 0xf0) {
+        const parsedChunk = parseMksSysExChunk(trackData.slice(payloadStart, payloadEnd));
+        if (parsedChunk) mksSysExChunks.push(parsedChunk);
+      }
+      cursor = payloadEnd;
       if (cursor > trackData.length) {
         parseWarnings.push({
           code: "MIDI_EVENT_DROPPED",
@@ -895,6 +993,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     timeSignatureEvents,
     keySignatureEvents,
     tempoEvents,
+    mksSysExPayloads: assembleMksSysExPayloads(mksSysExChunks),
     parseWarnings,
   };
 };
@@ -1413,6 +1512,76 @@ const buildMidiSourceMiscXml = (midiBytes: Uint8Array): string => {
   return xml;
 };
 
+const buildMidiSysExMiscXml = (payloads: string[]): string => {
+  const lines: string[] = [];
+  for (const payload of payloads) {
+    const split = String(payload ?? "").split(/\r?\n/);
+    for (const line of split) {
+      const trimmed = line.trim();
+      if (!trimmed.length) continue;
+      lines.push(trimmed);
+    }
+  }
+  if (!lines.length) return "";
+  const map = new Map<string, string>();
+  for (const line of lines) {
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim().toLowerCase();
+    const value = line.slice(eq + 1).trim();
+    if (!key || !value) continue;
+    map.set(key, value);
+  }
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="mks:midi-sysex-count">${toHex(lines.length, 4)}</miscellaneous-field>`;
+  for (let i = 0; i < lines.length; i += 1) {
+    xml += `<miscellaneous-field name="mks:midi-sysex-${String(i + 1).padStart(4, "0")}">${xmlEscape(
+      lines[i]
+    )}</miscellaneous-field>`;
+  }
+  const preferred = [
+    "schema",
+    "namespace",
+    "app",
+    "source",
+    "tpq",
+    "track-count",
+    "event-count",
+    "tempo-event-count",
+    "timesig-event-count",
+    "keysig-event-count",
+    "control-event-count",
+    "channel-count",
+    "fingerprint-fnv1a32",
+  ];
+  for (const key of preferred) {
+    const value = map.get(key);
+    if (!value) continue;
+    xml += `<miscellaneous-field name="mks:midi-sysex:${key}">${xmlEscape(value)}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
+const buildMidiDiagMiscXml = (warnings: MidiImportDiagnostic[]): string => {
+  if (!warnings.length) return "";
+  const maxEntries = Math.min(256, warnings.length);
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  for (let i = 0; i < maxEntries; i += 1) {
+    const warning = warnings[i];
+    const payload = [
+      "level=warn",
+      `code=${xmlEscape(warning.code)}`,
+      "fmt=midi",
+      `message=${xmlEscape(warning.message)}`,
+    ].join(";");
+    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
 const buildMeasureVoiceXml = (
   segments: ImportedVoiceNoteSegment[],
   voice: number,
@@ -1521,6 +1690,7 @@ const buildPartMusicXml = (params: {
   ticksPerQuarter: number;
   warnings: MidiImportDiagnostic[];
   debugImportMetadata: boolean;
+  mksSysExMetadataXml: string;
   sourceMetadataXml: string;
 }): string => {
   const {
@@ -1537,6 +1707,7 @@ const buildPartMusicXml = (params: {
     ticksPerQuarter,
     warnings,
     debugImportMetadata,
+    mksSysExMetadataXml,
     sourceMetadataXml,
   } = params;
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
@@ -1545,6 +1716,7 @@ const buildPartMusicXml = (params: {
   const measureCount = Math.max(1, Math.ceil(maxEndTick / measureTicks));
 
   const clusters = allocateAutoVoices(notes, warnings);
+  const warningMetadataXml = buildMidiDiagMiscXml(warnings);
   const voiceSegmentsByMeasure = new Map<number, ImportedVoiceNoteSegment[]>();
   const splitSegments = splitClustersToMeasureSegments({
     clusters,
@@ -1629,8 +1801,14 @@ const buildPartMusicXml = (params: {
     if (debugImportMetadata) {
       partXml += buildMeasureMidiMetaMiscXml(measureSegments);
     }
+    if (measureIndex === 0 && mksSysExMetadataXml) {
+      partXml += mksSysExMetadataXml;
+    }
     if (measureIndex === 0 && sourceMetadataXml) {
       partXml += sourceMetadataXml;
+    }
+    if (measureIndex === 0 && warningMetadataXml) {
+      partXml += warningMetadataXml;
     }
     if (measureSegments.length > 0) {
       const dynamicVelocityByOffset = new Map<number, number>();
@@ -1685,6 +1863,7 @@ const buildImportSkeletonMusicXml = (params: {
   programByTrackChannel: Map<TrackChannelKey, number>;
   warnings: MidiImportDiagnostic[];
   debugImportMetadata: boolean;
+  mksSysExMetadataXml: string;
   sourceMetadataXml: string;
 }): string => {
   const {
@@ -1701,6 +1880,7 @@ const buildImportSkeletonMusicXml = (params: {
     programByTrackChannel,
     warnings,
     debugImportMetadata,
+    mksSysExMetadataXml,
     sourceMetadataXml,
   } = params;
   const divisions = quantizeGridToDivisions(quantizeGrid);
@@ -1779,6 +1959,7 @@ const buildImportSkeletonMusicXml = (params: {
         ticksPerQuarter,
         warnings,
         debugImportMetadata,
+        mksSysExMetadataXml: partIndex === 0 ? mksSysExMetadataXml : "",
         sourceMetadataXml: partIndex === 0 ? sourceMetadataXml : "",
       })
     )
@@ -1796,6 +1977,90 @@ const numberToVariableLength = (value: number): number[] => {
     buffer >>= 7;
   }
   return bytes;
+};
+
+const buildMksSysexEventData = (deltaTicks: number, payloadText: string): number[] => {
+  const bytes: number[] = [];
+  for (let i = 0; i < payloadText.length; i += 1) {
+    bytes.push(payloadText.charCodeAt(i) & 0x7f);
+  }
+  // Include terminating F7 in payload for robust parser compatibility.
+  const payloadLength = bytes.length + 1;
+  return [
+    ...numberToVariableLength(deltaTicks),
+    0xf0,
+    ...numberToVariableLength(payloadLength),
+    ...bytes,
+    0xf7,
+  ];
+};
+
+const fnv1a32Hex = (text: string): string => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i) & 0xff;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).toUpperCase().padStart(8, "0");
+};
+
+const chunkString = (text: string, size: number): string[] => {
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i += size) {
+    out.push(text.slice(i, i + size));
+  }
+  return out.length ? out : [""];
+};
+
+const buildMksSysexChunkTexts = (params: {
+  ticksPerQuarter: number;
+  eventCount: number;
+  trackCount: number;
+  tempoEventCount: number;
+  timeSignatureEventCount: number;
+  keySignatureEventCount: number;
+  controlEventCount: number;
+  channelCount: number;
+  diagnostics?: string[];
+}): string[] => {
+  const diagnostics = (params.diagnostics ?? []).filter((entry) => entry.trim().length > 0);
+  const fingerprint = fnv1a32Hex(
+    [
+      params.ticksPerQuarter,
+      params.eventCount,
+      params.trackCount,
+      params.tempoEventCount,
+      params.timeSignatureEventCount,
+      params.keySignatureEventCount,
+      params.controlEventCount,
+      params.channelCount,
+    ].join("|")
+  );
+  const metadataText = [
+    "schema=mks-sysex-v1",
+    "namespace=mks",
+    "app=mikuscore",
+    "source=musicxml",
+    `tpq=${Math.max(1, Math.round(params.ticksPerQuarter))}`,
+    `track-count=${Math.max(0, Math.round(params.trackCount))}`,
+    `event-count=${Math.max(0, Math.round(params.eventCount))}`,
+    `tempo-event-count=${Math.max(0, Math.round(params.tempoEventCount))}`,
+    `timesig-event-count=${Math.max(0, Math.round(params.timeSignatureEventCount))}`,
+    `keysig-event-count=${Math.max(0, Math.round(params.keySignatureEventCount))}`,
+    `control-event-count=${Math.max(0, Math.round(params.controlEventCount))}`,
+    `channel-count=${Math.max(0, Math.round(params.channelCount))}`,
+    `diag-count=${diagnostics.length}`,
+    ...diagnostics.map((diag, index) => `diag-${String(index + 1).padStart(4, "0")}=${diag}`),
+    `fingerprint-fnv1a32=${fingerprint}`,
+  ].join("\n");
+  const encoded = encodeURIComponent(metadataText);
+  const payloadChunks = chunkString(encoded, 180);
+  const total = payloadChunks.length;
+  const messageId = 1;
+  return payloadChunks.map(
+    (chunk, index) =>
+      `mks|v=1|m=${String(messageId).padStart(4, "0")}|i=${String(index + 1).padStart(4, "0")}|n=${String(total).padStart(4, "0")}|d=${chunk}`
+  );
 };
 
 const buildTempoMetaEventData = (deltaTicks: number, bpm: number): number[] => {
@@ -1948,6 +2213,37 @@ export const collectMidiProgramOverridesFromMusicXmlDoc = (doc: Document): Map<s
   return byPartId;
 };
 
+const resolveMeasureAdvanceDiv = (
+  measure: Element,
+  measureMaxDiv: number,
+  currentDivisions: number,
+  currentBeats: number,
+  currentBeatType: number,
+  nextMeasureIsImplicit = false
+): number => {
+  const safeDivisions = Math.max(1, Math.round(currentDivisions));
+  const safeBeats = Math.max(1, Math.round(currentBeats));
+  const safeBeatType = Math.max(1, Math.round(currentBeatType));
+  const capacityDiv = Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+  const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+  if (isImplicit) {
+    return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
+  }
+  // Some scores split one logical bar into [regular underfull] + [implicit pickup].
+  // In that case, padding the regular bar to full capacity causes an extra silent beat.
+  if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    return measureMaxDiv;
+  }
+  return Math.max(capacityDiv, measureMaxDiv);
+};
+
+const isImplicitMeasure = (measure: Element | null | undefined): boolean => {
+  if (!measure) return false;
+  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+  return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+};
+
 export const collectMidiControlEventsFromMusicXmlDoc = (
   doc: Document,
   ticksPerQuarter: number
@@ -1983,11 +2279,22 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
     const trackName = partNameById.get(partId) ?? trackId;
 
     let currentDivisions = 1;
+    let currentBeats = 4;
+    let currentBeatType = 4;
     let timelineDiv = 0;
     let lastPedalValue: number | null = null;
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+      const measure = measures[measureIndex];
+      const nextMeasure = measures[measureIndex + 1] ?? null;
       const divisions = getFirstNumber(measure, "attributes > divisions");
       if (divisions && divisions > 0) currentDivisions = divisions;
+      const beats = getFirstNumber(measure, "attributes > time > beats");
+      const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+      if (beats && beats > 0 && beatType && beatType > 0) {
+        currentBeats = beats;
+        currentBeatType = beatType;
+      }
 
       let cursorDiv = 0;
       let measureMaxDiv = 0;
@@ -2066,12 +2373,14 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
         }
       }
 
-      if (measureMaxDiv <= 0) {
-        const beats = getFirstNumber(measure, "attributes > time > beats") ?? 4;
-        const beatType = getFirstNumber(measure, "attributes > time > beat-type") ?? 4;
-        measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
-      }
-      timelineDiv += measureMaxDiv;
+      timelineDiv += resolveMeasureAdvanceDiv(
+        measure,
+        measureMaxDiv,
+        currentDivisions,
+        currentBeats,
+        currentBeatType,
+        isImplicitMeasure(nextMeasure)
+      );
     }
   });
 
@@ -2087,13 +2396,24 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
   if (!firstPart) return [{ startTicks: 0, bpm: 120 }];
 
   let currentDivisions = 1;
+  let currentBeats = 4;
+  let currentBeatType = 4;
   let timelineDiv = 0;
   let currentTempo = clampTempo(getFirstNumber(doc, "sound[tempo]") ?? 120);
   const events: MidiTempoEvent[] = [{ startTicks: 0, bpm: currentTempo }];
 
-  for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+  const measures = Array.from(firstPart.querySelectorAll(":scope > measure"));
+  for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+    const measure = measures[measureIndex];
+    const nextMeasure = measures[measureIndex + 1] ?? null;
     const divisions = getFirstNumber(measure, "attributes > divisions");
     if (divisions && divisions > 0) currentDivisions = divisions;
+    const beats = getFirstNumber(measure, "attributes > time > beats");
+    const beatType = getFirstNumber(measure, "attributes > time > beat-type");
+    if (beats && beats > 0 && beatType && beatType > 0) {
+      currentBeats = beats;
+      currentBeatType = beatType;
+    }
 
     let cursorDiv = 0;
     let measureMaxDiv = 0;
@@ -2145,12 +2465,14 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
       measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
     }
 
-    if (measureMaxDiv <= 0) {
-      const beats = getFirstNumber(measure, "attributes > time > beats") ?? 4;
-      const beatType = getFirstNumber(measure, "attributes > time > beat-type") ?? 4;
-      measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
-    }
-    timelineDiv += measureMaxDiv;
+    timelineDiv += resolveMeasureAdvanceDiv(
+      measure,
+      measureMaxDiv,
+      currentDivisions,
+      currentBeats,
+      currentBeatType,
+      isImplicitMeasure(nextMeasure)
+    );
   }
 
   const byTick = new Map<number, number>();
@@ -2179,7 +2501,10 @@ export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
   let currentBeatType = 4;
   const events: MidiTimeSignatureEvent[] = [{ startTicks: 0, beats: currentBeats, beatType: currentBeatType }];
 
-  for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+  const measures = Array.from(firstPart.querySelectorAll(":scope > measure"));
+  for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+    const measure = measures[measureIndex];
+    const nextMeasure = measures[measureIndex + 1] ?? null;
     const divisions = getFirstNumber(measure, "attributes > divisions");
     if (divisions && divisions > 0) currentDivisions = divisions;
 
@@ -2217,15 +2542,17 @@ export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
       }
       measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
     }
-    if (measureMaxDiv <= 0) {
-      measureMaxDiv = Math.max(
-        1,
-        Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType))
-      );
-    }
+    const advanceDiv = resolveMeasureAdvanceDiv(
+      measure,
+      measureMaxDiv,
+      currentDivisions,
+      currentBeats,
+      currentBeatType,
+      isImplicitMeasure(nextMeasure)
+    );
     tickCursor += Math.max(
       1,
-      Math.round((measureMaxDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+      Math.round((advanceDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
     );
   }
 
@@ -2261,7 +2588,10 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
   ];
   let hasInitialKey = false;
 
-  for (const measure of Array.from(firstPart.querySelectorAll(":scope > measure"))) {
+  const measures = Array.from(firstPart.querySelectorAll(":scope > measure"));
+  for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+    const measure = measures[measureIndex];
+    const nextMeasure = measures[measureIndex + 1] ?? null;
     const divisions = getFirstNumber(measure, "attributes > divisions");
     if (divisions && divisions > 0) currentDivisions = divisions;
 
@@ -2304,14 +2634,19 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
       }
       measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
     }
-    if (measureMaxDiv <= 0) {
-      const beats = getFirstNumber(measure, "attributes > time > beats") ?? 4;
-      const beatType = getFirstNumber(measure, "attributes > time > beat-type") ?? 4;
-      measureMaxDiv = Math.max(1, Math.round((currentDivisions * 4 * beats) / Math.max(1, beatType)));
-    }
+    const beats = getFirstNumber(measure, "attributes > time > beats") ?? 4;
+    const beatType = getFirstNumber(measure, "attributes > time > beat-type") ?? 4;
+    const advanceDiv = resolveMeasureAdvanceDiv(
+      measure,
+      measureMaxDiv,
+      currentDivisions,
+      beats,
+      beatType,
+      isImplicitMeasure(nextMeasure)
+    );
     tickCursor += Math.max(
       1,
-      Math.round((measureMaxDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+      Math.round((advanceDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
     );
   }
 
@@ -2338,7 +2673,12 @@ export const buildMidiBytesForPlayback = (
   controlEvents: MidiControlEvent[] = [],
   tempoEvents: MidiTempoEvent[] = [],
   timeSignatureEvents: MidiTimeSignatureEvent[] = [],
-  keySignatureEvents: MidiKeySignatureEvent[] = []
+  keySignatureEvents: MidiKeySignatureEvent[] = [],
+  options: {
+    embedMksSysEx?: boolean;
+    ticksPerQuarter?: number;
+    diagnostics?: string[];
+  } = {}
 ): Uint8Array => {
   const midiWriter = getMidiWriterRuntime();
   if (!midiWriter) {
@@ -2409,6 +2749,36 @@ export const buildMidiBytesForPlayback = (
   if (!dedupedKeySignatureEvents.length || dedupedKeySignatureEvents[0].startTicks !== 0) {
     dedupedKeySignatureEvents.unshift({ startTicks: 0, fifths: 0, mode: "major" });
   }
+  const exportDiagnostics: string[] = [];
+  const sourceDiagnostics = (options.diagnostics ?? [])
+    .map((entry) => String(entry || "").trim())
+    .filter((entry) => entry.length > 0);
+  exportDiagnostics.push(...sourceDiagnostics);
+  if (!tempoEvents.length) {
+    exportDiagnostics.push("level=info;code=MIDI_EXPORT_DEFAULT_TEMPO_INSERTED;fmt=midi;startTick=0;bpm=120");
+  } else if (!tempoEvents.some((event) => Math.max(0, Math.round(event.startTicks)) === 0)) {
+    exportDiagnostics.push(
+      "level=info;code=MIDI_EXPORT_DEFAULT_TEMPO_AT_ZERO_INSERTED;fmt=midi;startTick=0;bpm=120"
+    );
+  }
+  if (!timeSignatureEvents.length) {
+    exportDiagnostics.push(
+      "level=info;code=MIDI_EXPORT_DEFAULT_TIMESIG_INSERTED;fmt=midi;startTick=0;beats=4;beatType=4"
+    );
+  } else if (!timeSignatureEvents.some((event) => Math.max(0, Math.round(event.startTicks)) === 0)) {
+    exportDiagnostics.push(
+      "level=info;code=MIDI_EXPORT_DEFAULT_TIMESIG_AT_ZERO_INSERTED;fmt=midi;startTick=0;beats=4;beatType=4"
+    );
+  }
+  if (!keySignatureEvents.length) {
+    exportDiagnostics.push(
+      "level=info;code=MIDI_EXPORT_DEFAULT_KEYSIG_INSERTED;fmt=midi;startTick=0;fifths=0;mode=major"
+    );
+  } else if (!keySignatureEvents.some((event) => Math.max(0, Math.round(event.startTicks)) === 0)) {
+    exportDiagnostics.push(
+      "level=info;code=MIDI_EXPORT_DEFAULT_KEYSIG_AT_ZERO_INSERTED;fmt=midi;startTick=0;fifths=0;mode=major"
+    );
+  }
   const tempoTrack = new midiWriter.Track();
   tempoTrack.addTrackName("Tempo Map");
   tempoTrack.addInstrumentName("Tempo Map");
@@ -2440,6 +2810,23 @@ export const buildMidiBytesForPlayback = (
       });
     }
     prevTempoTick = currentTick;
+  }
+  if (options.embedMksSysEx !== false) {
+    const channelCount = new Set(events.map((event) => normalizeMidiChannel(event.channel))).size;
+    const sysexChunks = buildMksSysexChunkTexts({
+      ticksPerQuarter: normalizeTicksPerQuarter(options.ticksPerQuarter ?? 480),
+      eventCount: events.length,
+      trackCount: tracksById.size,
+      tempoEventCount: dedupedTempoEvents.length,
+      timeSignatureEventCount: dedupedTimeSignatureEvents.length,
+      keySignatureEventCount: dedupedKeySignatureEvents.length,
+      controlEventCount: controlEvents.length,
+      channelCount,
+      diagnostics: exportDiagnostics,
+    });
+    for (const chunk of sysexChunks) {
+      tempoTrack.addEvent({ data: buildMksSysexEventData(0, chunk) });
+    }
   }
   midiTracks.push(tempoTrack);
   const normalizedProgramPreset: MidiProgramPreset =
@@ -2546,7 +2933,6 @@ export const convertMidiToMusicXml = (
   const quantizeGrid = normalizeMidiImportQuantizeGrid(options.quantizeGrid);
   const title = String(options.title ?? "").trim() || "Imported MIDI";
   const debugImportMetadata = options.debugMetadata ?? true;
-  const debugPrettyPrint = options.debugPrettyPrint ?? debugImportMetadata;
   const sourceImportMetadata = options.sourceMetadata ?? true;
 
   if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
@@ -2578,6 +2964,7 @@ export const convertMidiToMusicXml = (
   const timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }> = [];
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
+  const mksSysExPayloads: string[] = [];
 
   for (let i = 0; i < header.trackCount; i += 1) {
     if (offset + 8 > midiBytes.length) {
@@ -2611,6 +2998,7 @@ export const convertMidiToMusicXml = (
     timeSignatureEvents.push(...summary.timeSignatureEvents);
     keySignatureEvents.push(...summary.keySignatureEvents);
     tempoMetaEvents.push(...summary.tempoEvents);
+    mksSysExPayloads.push(...summary.mksSysExPayloads);
     for (const note of summary.notes) trackChannelSet.add(`${i}:${note.channel}`);
     for (const [trackChannel, program] of summary.programByTrackChannel.entries()) {
       if (!programByTrackChannel.has(trackChannel)) {
@@ -2666,6 +3054,12 @@ export const convertMidiToMusicXml = (
       a.trackIndex === b.trackIndex ? a.channel - b.channel : a.trackIndex - b.trackIndex
     );
   const hadDrumChannel = partGroups.some((group) => group.channel === 10);
+  if (hadDrumChannel) {
+    warnings.push({
+      code: "MIDI_DRUM_CHANNEL_SEPARATED",
+      message: "Channel 10 was mapped to a dedicated drum part.",
+    });
+  }
   const xml = buildImportSkeletonMusicXml({
     title,
     quantizeGrid,
@@ -2680,19 +3074,13 @@ export const convertMidiToMusicXml = (
     programByTrackChannel,
     warnings,
     debugImportMetadata,
+    mksSysExMetadataXml: debugImportMetadata ? buildMidiSysExMiscXml(mksSysExPayloads) : "",
     sourceMetadataXml: sourceImportMetadata ? buildMidiSourceMiscXml(midiBytes) : "",
   });
 
-  if (hadDrumChannel) {
-    warnings.push({
-      code: "MIDI_DRUM_CHANNEL_SEPARATED",
-      message: "Channel 10 was mapped to a dedicated drum part.",
-    });
-  }
-
   return {
     ok: diagnostics.length === 0,
-    xml: debugPrettyPrint ? prettyPrintXml(xml) : xml,
+    xml: prettyPrintXml(xml),
     diagnostics,
     warnings,
   };
@@ -2758,7 +3146,10 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
     const activeSlurByVoice = new Map<string, Set<string>>();
     const voiceTimeShiftTicks = new Map<string, number>();
 
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+      const measure = measures[measureIndex];
+      const nextMeasure = measures[measureIndex + 1] ?? null;
       const divisions = getFirstNumber(measure, "attributes > divisions");
       if (divisions && divisions > 0) {
         currentDivisions = divisions;
@@ -3119,13 +3510,14 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
         }
       }
 
-      if (measureMaxDiv <= 0) {
-        measureMaxDiv = Math.max(
-          1,
-          Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType))
-        );
-      }
-      timelineDiv += measureMaxDiv;
+      timelineDiv += resolveMeasureAdvanceDiv(
+        measure,
+        measureMaxDiv,
+        currentDivisions,
+        currentBeats,
+        currentBeatType,
+        isImplicitMeasure(nextMeasure)
+      );
     }
   });
 

@@ -9,8 +9,10 @@ const baseParams = () => ({
   xmlSourceText: "",
   abcSourceText: "",
   createNewMusicXml: () => "<score-partwise version=\"4.0\"/>",
+  formatImportedMusicXml: (xml: string) => `FORMATTED:${xml}`,
   convertAbcToMusicXml: (_abc: string) => "<score-partwise version=\"4.0\"/>",
   convertMeiToMusicXml: (_mei: string) => "<score-partwise version=\"4.0\"/>",
+  convertLilyPondToMusicXml: (_lily: string) => "<score-partwise version=\"4.0\"/>",
   convertMidiToMusicXml: (_bytes: Uint8Array) => ({
     ok: true,
     xml: "<score-partwise version=\"4.0\"><part-list/></score-partwise>",
@@ -41,8 +43,8 @@ describe("load-flow MIDI file input", () => {
     expect(called).toBe(true);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.xmlToLoad).toContain("<score-partwise");
-    expect(result.nextXmlInputText).toContain("<score-partwise");
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+    expect(result.nextXmlInputText).toContain("FORMATTED:<score-partwise");
   });
 
   it("returns load failure when MIDI conversion reports diagnostics", async () => {
@@ -81,6 +83,40 @@ describe("load-flow MEI file input", () => {
     expect(called).toBe(true);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.xmlToLoad).toContain("<score-partwise");
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+  });
+
+  it("does not reformat direct MusicXML file input", async () => {
+    const xml = "<score-partwise version=\"4.0\"><part-list/></score-partwise>";
+    const file = new File([xml], "test.musicxml", { type: "application/xml" });
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toBe(xml);
+    expect(result.nextXmlInputText).toBe(xml);
+  });
+});
+
+describe("load-flow LilyPond file input", () => {
+  it("accepts .ly and converts via convertLilyPondToMusicXml", async () => {
+    const lily = "\\version \"2.24.0\"\\n\\score { \\new Staff { c'4 d'4 e'4 f'4 } }";
+    const file = new File([lily], "test.ly", { type: "text/plain" });
+    let called = false;
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+      convertLilyPondToMusicXml: (text: string) => {
+        called = true;
+        expect(text).toContain("\\score");
+        return "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>";
+      },
+    });
+    expect(called).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
   });
 });

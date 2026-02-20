@@ -33,6 +33,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 
 ### Format Support Note
 - MEI support is currently experimental.
+- LilyPond (`.ly`) support is currently experimental.
 
 ### Distribution and Development
 - Distribution: **single-file web app** (`mikuscore.html`).
@@ -108,6 +109,7 @@ Debugging note:
 
 ### フォーマット対応メモ
 - MEI 対応は現在 Experimental（試験対応）です。
+- LilyPond（`.ly`）対応は現在 Experimental（試験対応）です。
 
 ### 配布と開発方針
 - 配布形態: 単一 HTML（`mikuscore.html`）。

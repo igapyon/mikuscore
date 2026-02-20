@@ -177,4 +177,53 @@ describe("MEI export", () => {
     expect(field).not.toBeNull();
     expect(field?.textContent).toBe("abc123");
   });
+
+  it("clamps overfull MEI layer events to avoid MEASURE_OVERFULL in generated MusicXML", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="4.0.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="3" meter.unit="4" key.sig="0">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2" /></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1">
+                <layer n="1">
+                  <rest dur="4"/>
+                  <rest dur="4"/>
+                  <note pname="d" oct="4" dur="8"/>
+                  <note pname="a" oct="3" dur="8"/>
+                  <note pname="f" oct="3" dur="8"/>
+                </layer>
+              </staff>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const durations = Array.from(outDoc.querySelectorAll("part > measure > note > duration"))
+      .map((node) => Number.parseInt(node.textContent || "0", 10))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const total = durations.reduce((sum, value) => sum + value, 0);
+    expect(total).toBe(1440);
+    expect(
+      outDoc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:count"]'
+      )?.textContent
+    ).toBe("1");
+    expect(
+      outDoc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+      )?.textContent
+    ).toContain("code=OVERFULL_CLAMPED");
+  });
 });

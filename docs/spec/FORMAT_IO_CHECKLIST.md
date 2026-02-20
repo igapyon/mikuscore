@@ -90,6 +90,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Warn vs error boundary is documented
 - [ ] Console diagnostics and UI diagnostics are consistent
 - [ ] For bug investigation, preserve and utilize debug metadata through `miscellaneous-field` (or format-equivalent mapping) whenever possible.
+- [ ] When conversion applies degradation/auto-fix (e.g. overfull clamped), record it as structured diagnostics in `miscellaneous-field` using `diag:*`.
 
 ### `miscellaneous-field` Usage Patterns (MUST classify explicitly)
 
@@ -103,10 +104,16 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - **Optional debug-only metadata** (`dbg:*` recommended if separated):
     - Purpose: investigation/tracing only.
     - Example: event-level conversion traces used for incident analysis.
+  - **Structured conversion diagnostics** (`diag:*`):
+    - Purpose: record warnings/repair actions that occurred during conversion, so issues are not silently hidden.
+    - Example: `diag:0001 = level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=8;staff=1;action=clamped;droppedTicks=240`.
+    - Recommended key order inside `diag:NNNN` payload:
+      - `level;code;fmt;measure;staff;voice;action;message;sourceTicks;capacityTicks;movedEvents;droppedEvents;droppedTicks`
+      - Omit keys that do not apply, but keep relative order for diff/readability.
 - [ ] For each format, document retention policy for both categories:
   - preserve as-is / transform / drop
   - roundtrip expectations (`MusicXML -> Format -> MusicXML`, `Format -> MusicXML -> Format`)
-- [ ] Keep namespace separation strict (`src:*` vs `mks:*` vs optional `dbg:*`) to avoid mixing source data, functional extension metadata, and debug traces.
+- [ ] Keep namespace separation strict (`src:*` vs `mks:*` vs `diag:*` vs optional `dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
 
 ---
 

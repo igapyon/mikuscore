@@ -10,6 +10,8 @@ export type LoadFlowParams = {
   createNewMusicXml: () => string;
   convertAbcToMusicXml: (abcSource: string) => string;
   convertMeiToMusicXml: (meiSource: string) => string;
+  convertLilyPondToMusicXml: (lilySource: string) => string;
+  formatImportedMusicXml: (xml: string) => string;
   convertMidiToMusicXml: (midiBytes: Uint8Array) => {
     ok: boolean;
     xml: string;
@@ -110,6 +112,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
     const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
     const isMeiFile = lowerName.endsWith(".mei");
+    const isLilyPondFile = lowerName.endsWith(".ly");
 
     if (isMxl) {
       try {
@@ -144,7 +147,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     if (isAbcFile) {
       sourceText = await readTextFile(selected);
       try {
-        const convertedXml = params.convertAbcToMusicXml(sourceText);
+        const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
         return {
           ok: true,
           xmlToLoad: convertedXml,
@@ -176,11 +179,12 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
             }`,
           };
         }
+        const formattedXml = params.formatImportedMusicXml(converted.xml);
         return {
           ok: true,
-          xmlToLoad: converted.xml,
+          xmlToLoad: formattedXml,
           collapseInputSection: true,
-          nextXmlInputText: converted.xml,
+          nextXmlInputText: formattedXml,
         };
       } catch (error) {
         return {
@@ -196,7 +200,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     if (isMeiFile) {
       sourceText = await readTextFile(selected);
       try {
-        const convertedXml = params.convertMeiToMusicXml(sourceText);
+        const convertedXml = params.formatImportedMusicXml(params.convertMeiToMusicXml(sourceText));
         return {
           ok: true,
           xmlToLoad: convertedXml,
@@ -214,11 +218,32 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       }
     }
 
+    if (isLilyPondFile) {
+      sourceText = await readTextFile(selected);
+      try {
+        const convertedXml = params.formatImportedMusicXml(params.convertLilyPondToMusicXml(sourceText));
+        return {
+          ok: true,
+          xmlToLoad: convertedXml,
+          collapseInputSection: true,
+          nextXmlInputText: convertedXml,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse LilyPond: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
     return {
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
       diagnosticMessage:
-        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, or .mei.",
+        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, or .ly.",
     };
   }
 
@@ -232,7 +257,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
 
   sourceText = params.abcSourceText;
   try {
-    const convertedXml = params.convertAbcToMusicXml(sourceText);
+    const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
     return {
       ok: true,
       xmlToLoad: convertedXml,

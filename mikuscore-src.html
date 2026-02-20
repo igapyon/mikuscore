@@ -93,7 +93,7 @@
               </span>
               <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
                 To use mikuscore, first load your score here (from file/source) or create a new score.
-                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), MEI (`.mei`).
+                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), MEI (`.mei`), LilyPond (`.ly`).
                 You can move to Score/Edit/Export after completing this step.
               </span>
             </span>
@@ -163,7 +163,7 @@
             <div class="ms-file-meta">
               <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
             </div>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.mei,text/plain,text/xml,application/xml,application/mei+xml" hidden />
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.mei,.ly,text/plain,text/xml,application/xml,application/mei+xml" hidden />
           </div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
@@ -393,7 +393,7 @@
               <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
                 Export is where you take your work out of mikuscore.
                 The main flow is exporting your edited result as MusicXML.
-                In addition, mikuscore also supports ABC/MEI export and lightweight MIDI output for quick checks.
+                In addition, mikuscore also supports ABC/MEI/LilyPond export and lightweight MIDI output for quick checks.
                 MIDI export is handy for simple confirmation, while complex production/export work is best done in dedicated software.
               </span>
             </span>
@@ -405,7 +405,7 @@
                 <path d="M8 11l4 4 4-4"></path>
                 <path d="M4 19h16"></path>
               </svg>
-              <span>Export MusicXML</span>
+              <span>MusicXML</span>
             </button>
             <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -416,7 +416,7 @@
                 <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
                 <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
               </svg>
-              <span>Export ABC</span>
+              <span>ABC</span>
             </button>
             <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -428,7 +428,7 @@
                 <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
                 <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
               </svg>
-              <span>Export MIDI</span>
+              <span>MIDI</span>
             </button>
             <button id="downloadMeiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -436,7 +436,16 @@
                 <path d="M8 15V9l2.5 3 2.5-3v6"></path>
                 <path d="M15.5 9v6"></path>
               </svg>
-              <span>Export MEI</span>
+              <span>MEI</span>
+            </button>
+            <button id="downloadLilyPondBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8.5 9.5v5"></path>
+                <path d="M8.5 14.5h6"></path>
+                <path d="M14.5 9.5v5"></path>
+              </svg>
+              <span>LilyPond</span>
             </button>
           </div>
           <div class="ms-actions">
