@@ -2571,6 +2571,30 @@ loadFromText(xmlInput.value);
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.convertMidiToMusicXml = exports.buildMidiBytesForPlayback = exports.collectMidiKeySignatureEventsFromMusicXmlDoc = exports.collectMidiTimeSignatureEventsFromMusicXmlDoc = exports.collectMidiTempoEventsFromMusicXmlDoc = exports.collectMidiControlEventsFromMusicXmlDoc = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
+const normalizeLeadingPickupTimeSignatureEvents = (events, ticksPerQuarter) => {
+    if (events.length < 2)
+        return { events, normalized: false, pickupTicks: 0 };
+    const sorted = events
+        .map((event) => ({
+        ...event,
+        tick: Math.max(0, Math.round(event.tick)),
+        beats: Math.max(1, Math.round(event.beats)),
+        beatType: Math.max(1, Math.round(event.beatType)),
+    }))
+        .sort((a, b) => a.tick - b.tick);
+    const first = sorted[0];
+    const second = sorted[1];
+    const firstMeasureTicks = Math.max(1, Math.round((Math.max(1, Math.round(ticksPerQuarter)) * 4 * first.beats) / Math.max(1, first.beatType)));
+    const isPickupPrelude = first.tick === 0 &&
+        first.beats === 1 &&
+        second.tick === firstMeasureTicks &&
+        second.beats > 1 &&
+        second.beatType === first.beatType;
+    if (!isPickupPrelude)
+        return { events: sorted, normalized: false, pickupTicks: 0 };
+    const normalized = [{ ...second, tick: 0 }, ...sorted.slice(2)];
+    return { events: normalized, normalized: true, pickupTicks: firstMeasureTicks };
+};
 const instrumentByPreset = {
     electric_piano_2: 5, // Existing default in this app.
     acoustic_grand_piano: 1,
@@ -3671,17 +3695,43 @@ const allocateAutoVoices = (notes, warnings) => {
     return out;
 };
 const splitClustersToMeasureSegments = (params) => {
+    var _a;
     const out = [];
     const { clusters, ticksPerQuarter, divisions, measureTicks, isDrum } = params;
+    const pickupTicks = Math.max(0, Math.round((_a = params.pickupTicks) !== null && _a !== void 0 ? _a : 0));
     const toDiv = (ticks) => Math.max(0, Math.round((ticks * divisions) / ticksPerQuarter));
+    const measureStartTick = (measureIndex) => {
+        if (pickupTicks <= 0)
+            return measureIndex * measureTicks;
+        if (measureIndex <= 0)
+            return 0;
+        return pickupTicks + (measureIndex - 1) * measureTicks;
+    };
+    const measureIndexAtTick = (tick) => {
+        if (pickupTicks <= 0)
+            return Math.floor(tick / measureTicks);
+        if (tick < pickupTicks)
+            return 0;
+        return 1 + Math.floor((tick - pickupTicks) / measureTicks);
+    };
+    const nextMeasureBoundaryTick = (tick) => {
+        if (pickupTicks <= 0) {
+            const idx = Math.floor(tick / measureTicks);
+            return (idx + 1) * measureTicks;
+        }
+        if (tick < pickupTicks)
+            return pickupTicks;
+        const idx = Math.floor((tick - pickupTicks) / measureTicks);
+        return pickupTicks + (idx + 1) * measureTicks;
+    };
     for (const cluster of clusters) {
         for (const note of cluster.notes) {
             let segmentStart = note.startTick;
             while (segmentStart < note.endTick) {
-                const measureIndex = Math.floor(segmentStart / measureTicks);
-                const measureEndTick = (measureIndex + 1) * measureTicks;
+                const measureIndex = measureIndexAtTick(segmentStart);
+                const measureEndTick = nextMeasureBoundaryTick(segmentStart);
                 const segmentEnd = Math.min(note.endTick, measureEndTick);
-                const startInMeasureTick = segmentStart - measureIndex * measureTicks;
+                const startInMeasureTick = segmentStart - measureStartTick(measureIndex);
                 const startDiv = toDiv(startInMeasureTick);
                 const durDiv = Math.max(1, toDiv(segmentEnd - segmentStart));
                 out.push({
@@ -4050,11 +4100,20 @@ const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measure
 };
 const buildPartMusicXml = (params) => {
     var _a, _b, _c, _d;
-    const { partId, divisions, beats, beatType, keyFifths, keyMode, isDrum, notes, tempoEventsByMeasure, includeTempoEvents, ticksPerQuarter, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
+    const { partId, divisions, beats, beatType, keyFifths, keyMode, isDrum, notes, tempoEventsByMeasure, includeTempoEvents, ticksPerQuarter, pickupTicks = 0, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
     const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
     const measureDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+    const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
+    const pickupMeasureDiv = pickupMeasureTicks > 0
+        ? Math.max(1, Math.round((pickupMeasureTicks * divisions) / ticksPerQuarter))
+        : 0;
+    const measureDivForIndex = (measureIndex) => measureIndex === 0 && pickupMeasureDiv > 0 ? pickupMeasureDiv : measureDiv;
     const maxEndTick = notes.length ? Math.max(...notes.map((note) => note.endTick)) : measureTicks;
-    const measureCount = Math.max(1, Math.ceil(maxEndTick / measureTicks));
+    const measureCount = pickupMeasureTicks > 0
+        ? (maxEndTick <= pickupMeasureTicks
+            ? 1
+            : 1 + Math.max(1, Math.ceil((maxEndTick - pickupMeasureTicks) / measureTicks)))
+        : Math.max(1, Math.ceil(maxEndTick / measureTicks));
     const clusters = allocateAutoVoices(notes, warnings);
     const warningMetadataXml = buildMidiDiagMiscXml(warnings);
     const voiceSegmentsByMeasure = new Map();
@@ -4063,6 +4122,7 @@ const buildPartMusicXml = (params) => {
         ticksPerQuarter,
         divisions,
         measureTicks,
+        pickupTicks: pickupMeasureTicks,
         isDrum,
     });
     for (const segment of splitSegments) {
@@ -4097,9 +4157,11 @@ const buildPartMusicXml = (params) => {
     let partXml = `<part id="${partId}">`;
     let previousDynamicMark = null;
     for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
-        const measureNumber = measureIndex + 1;
+        const measureNumber = pickupMeasureDiv > 0 ? measureIndex : (measureIndex + 1);
         const measureSegments = (_b = voiceSegmentsByMeasure.get(measureIndex)) !== null && _b !== void 0 ? _b : [];
-        partXml += `<measure number="${measureNumber}">`;
+        const currentMeasureDiv = measureDivForIndex(measureIndex);
+        const implicitAttr = measureIndex === 0 && pickupMeasureDiv > 0 ? ' implicit="yes"' : "";
+        partXml += `<measure number="${measureNumber}"${implicitAttr}>`;
         if (measureIndex === 0) {
             partXml += "<attributes>";
             partXml += `<divisions>${divisions}</divisions>`;
@@ -4168,9 +4230,9 @@ const buildPartMusicXml = (params) => {
         for (let laneIndex = 0; laneIndex < laneDefs.length; laneIndex += 1) {
             const lane = laneDefs[laneIndex];
             if (laneIndex > 0) {
-                partXml += `<backup><duration>${measureDiv}</duration></backup>`;
+                partXml += `<backup><duration>${currentMeasureDiv}</duration></backup>`;
             }
-            partXml += buildMeasureVoiceXml(measureSegments, lane.voice, lane.sourceStaff, lane.outputStaff, measureDiv, isDrum, divisions, keyFifths);
+            partXml += buildMeasureVoiceXml(measureSegments, lane.voice, lane.sourceStaff, lane.outputStaff, currentMeasureDiv, isDrum, divisions, keyFifths);
         }
         partXml += "</measure>";
     }
@@ -4179,9 +4241,25 @@ const buildPartMusicXml = (params) => {
 };
 const buildImportSkeletonMusicXml = (params) => {
     var _a, _b, _c;
-    const { title, quantizeGrid, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, partGroups, notesByTrackChannel, programByTrackChannel, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
+    const { title, quantizeGrid, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, pickupTicks = 0, partGroups, notesByTrackChannel, programByTrackChannel, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
     const divisions = quantizeGridToDivisions(quantizeGrid);
     const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
+    const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
+    const mapTickToMeasureOffsetDiv = (tickRaw) => {
+        const tick = Math.max(0, Math.round(tickRaw));
+        let measureIndex = 0;
+        let tickInMeasure = tick;
+        if (pickupMeasureTicks > 0 && tick >= pickupMeasureTicks) {
+            measureIndex = 1 + Math.floor((tick - pickupMeasureTicks) / measureTicks);
+            tickInMeasure = (tick - pickupMeasureTicks) % measureTicks;
+        }
+        else if (pickupMeasureTicks <= 0) {
+            measureIndex = Math.floor(tick / measureTicks);
+            tickInMeasure = tick - measureIndex * measureTicks;
+        }
+        const offsetDiv = Math.max(0, Math.round((tickInMeasure * divisions) / ticksPerQuarter));
+        return { measureIndex, offsetDiv };
+    };
     const partDefs = [];
     let index = 1;
     for (const group of partGroups) {
@@ -4212,13 +4290,10 @@ const buildImportSkeletonMusicXml = (params) => {
         .join("");
     const tempoEventsByMeasure = new Map();
     for (const tempoEvent of tempoEvents) {
-        const tick = Math.max(0, Math.round(tempoEvent.tick));
-        const measureIndex = Math.floor(tick / measureTicks);
-        const tickInMeasure = tick - measureIndex * measureTicks;
-        const offsetDiv = Math.max(0, Math.round((tickInMeasure * divisions) / ticksPerQuarter));
-        const bucket = (_c = tempoEventsByMeasure.get(measureIndex)) !== null && _c !== void 0 ? _c : [];
-        bucket.push({ offsetDiv, bpm: clampTempo(tempoEvent.bpm) });
-        tempoEventsByMeasure.set(measureIndex, bucket);
+        const mapped = mapTickToMeasureOffsetDiv(tempoEvent.tick);
+        const bucket = (_c = tempoEventsByMeasure.get(mapped.measureIndex)) !== null && _c !== void 0 ? _c : [];
+        bucket.push({ offsetDiv: mapped.offsetDiv, bpm: clampTempo(tempoEvent.bpm) });
+        tempoEventsByMeasure.set(mapped.measureIndex, bucket);
     }
     for (const [measureIndex, events] of tempoEventsByMeasure.entries()) {
         events.sort((a, b) => (a.offsetDiv === b.offsetDiv ? a.bpm - b.bpm : a.offsetDiv - b.offsetDiv));
@@ -4249,6 +4324,7 @@ const buildImportSkeletonMusicXml = (params) => {
             tempoEventsByMeasure,
             includeTempoEvents: partIndex === 0,
             ticksPerQuarter,
+            pickupTicks: pickupMeasureTicks,
             warnings,
             debugImportMetadata,
             mksSysExMetadataXml: partIndex === 0 ? mksSysExMetadataXml : "",
@@ -5168,9 +5244,14 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         bucket.push(note);
         notesByTrackChannel.set(key, bucket);
     }
-    const firstTimeSignature = (_e = timeSignatureEvents
-        .slice()
-        .sort((a, b) => a.tick - b.tick)[0]) !== null && _e !== void 0 ? _e : { tick: 0, beats: 4, beatType: 4 };
+    const normalizedTimeSignature = normalizeLeadingPickupTimeSignatureEvents(timeSignatureEvents, header.ticksPerQuarter);
+    if (normalizedTimeSignature.normalized) {
+        warnings.push({
+            code: "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED",
+            message: "Normalized leading pickup time signature (e.g. 1/8 at tick 0 followed by full meter).",
+        });
+    }
+    const firstTimeSignature = (_e = normalizedTimeSignature.events[0]) !== null && _e !== void 0 ? _e : { tick: 0, beats: 4, beatType: 4 };
     const inferredKeySignature = keySignatureEvents.length
         ? null
         : inferKeySignatureFromImportedNotes(velocityScaledNotes);
@@ -5229,6 +5310,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         keyFifths,
         keyMode,
         tempoEvents,
+        pickupTicks: normalizedTimeSignature.pickupTicks,
         partGroups,
         notesByTrackChannel,
         programByTrackChannel,
@@ -7685,6 +7767,23 @@ const parseMeasureValue = (measure, selectors, fallback) => {
     }
     return fallback;
 };
+const parseMeasureLenToDivisions = (measure, divisions) => {
+    var _a;
+    const raw = ((_a = measure.getAttribute("len")) !== null && _a !== void 0 ? _a : "").trim();
+    if (!raw)
+        return null;
+    const m = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+    if (!m)
+        return null;
+    const num = Number(m[1]);
+    const den = Number(m[2]);
+    if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0)
+        return null;
+    const div = (Math.max(1, Math.round(divisions)) * 4 * num) / den;
+    if (!Number.isFinite(div) || div <= 0)
+        return null;
+    return Math.max(1, Math.round(div));
+};
 const readPartNameFromMusePart = (part, fallback) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const candidate = ((_b = (_a = part.querySelector(":scope > trackName")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
@@ -7755,7 +7854,7 @@ const withDirectionPlacement = (directionXml, staffNo, voiceNo) => {
     return out;
 };
 const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12;
     const doc = new DOMParser().parseFromString(mscxSource, "application/xml");
     if (doc.querySelector("parsererror")) {
         throw new Error("MuseScore XML parse error.");
@@ -7842,6 +7941,8 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                             index: 1,
                             beats: globalBeats,
                             beatType: globalBeatType,
+                            capacityDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+                            implicit: false,
                             fifths: globalFifths,
                             mode: globalMode,
                             tempoBpm: null,
@@ -7865,6 +7966,10 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                 const measure = measures[mi];
                 const beats = parseMeasureValue(measure, [":scope > TimeSig > sigN", ":scope > voice > TimeSig > sigN", ":scope > voice > timesig > sigN"], currentBeats);
                 const beatType = parseMeasureValue(measure, [":scope > TimeSig > sigD", ":scope > voice > TimeSig > sigD", ":scope > voice > timesig > sigD"], currentBeatType);
+                const nominalCapacityDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+                const measureLenDiv = parseMeasureLenToDivisions(measure, divisions);
+                const capacityDiv = measureLenDiv !== null && measureLenDiv !== void 0 ? measureLenDiv : nominalCapacityDiv;
+                const implicit = measureLenDiv !== null && measureLenDiv < nominalCapacityDiv;
                 const fifthsRaw = (_o = (_m = firstNumber(measure, ":scope > KeySig > accidental")) !== null && _m !== void 0 ? _m : firstNumber(measure, ":scope > voice > KeySig > accidental")) !== null && _o !== void 0 ? _o : firstNumber(measure, ":scope > voice > keysig > accidental");
                 const fifths = fifthsRaw === null ? currentFifths : Math.max(-7, Math.min(7, Math.round(fifthsRaw)));
                 const modeRaw = normalizeKeyMode((_s = (_q = (_p = measure.querySelector(":scope > KeySig > mode")) === null || _p === void 0 ? void 0 : _p.textContent) !== null && _q !== void 0 ? _q : (_r = measure.querySelector(":scope > voice > KeySig > mode")) === null || _r === void 0 ? void 0 : _r.textContent) !== null && _s !== void 0 ? _s : (_t = measure.querySelector(":scope > voice > keysig > mode")) === null || _t === void 0 ? void 0 : _t.textContent);
@@ -7875,7 +7980,6 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                     || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
                 const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
                     || measure.querySelector(":scope > endRepeat, :scope > voice > endRepeat") !== null;
-                const measureCapacityDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
                 const events = [];
                 const voiceNodes = Array.from(measure.querySelectorAll(":scope > voice"));
                 const eventHolders = voiceNodes.length ? voiceNodes : [measure];
@@ -7915,7 +8019,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                             continue;
                         }
                         if (tag === "rest") {
-                            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+                            const parsed = parseDurationDiv(event, divisions, capacityDiv);
                             const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
                             if (!durationDiv) {
                                 pushWarning({
@@ -7936,7 +8040,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                             continue;
                         }
                         if (tag === "chord") {
-                            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+                            const parsed = parseDurationDiv(event, divisions, capacityDiv);
                             const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
                             if (!durationDiv) {
                                 pushWarning({
@@ -8069,7 +8173,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                         unknownTagSet.add(tag);
                     }
                 }
-                const capacity = measureCapacityDiv;
+                const capacity = capacityDiv;
                 const occupiedByVoice = new Map();
                 for (const event of events) {
                     if (!("durationDiv" in event))
@@ -8096,6 +8200,8 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                     index: mi + 1,
                     beats,
                     beatType,
+                    capacityDiv,
+                    implicit,
                     fifths,
                     mode,
                     tempoBpm,
@@ -8171,11 +8277,14 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
         let prevFifths = globalFifths;
         let prevMode = globalMode;
         const measureCount = Math.max(1, ...part.staffs.map((staff) => staff.measures.length));
+        const startsWithPickup = ((_6 = (_5 = (_4 = part.staffs[0]) === null || _4 === void 0 ? void 0 : _4.measures[0]) === null || _5 === void 0 ? void 0 : _5.implicit) !== null && _6 !== void 0 ? _6 : false) === true;
         for (let mi = 0; mi < measureCount; mi += 1) {
-            const primaryMeasure = (_5 = (_4 = part.staffs[0]) === null || _4 === void 0 ? void 0 : _4.measures[mi]) !== null && _5 !== void 0 ? _5 : {
+            const primaryMeasure = (_8 = (_7 = part.staffs[0]) === null || _7 === void 0 ? void 0 : _7.measures[mi]) !== null && _8 !== void 0 ? _8 : {
                 index: mi + 1,
                 beats: prevBeats,
                 beatType: prevBeatType,
+                capacityDiv: Math.max(1, Math.round((divisions * 4 * prevBeats) / Math.max(1, prevBeatType))),
+                implicit: false,
                 fifths: prevFifths,
                 mode: prevMode,
                 tempoBpm: null,
@@ -8183,7 +8292,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                 repeatBackward: false,
                 events: [],
             };
-            const capacity = Math.max(1, Math.round((divisions * 4 * primaryMeasure.beats) / Math.max(1, primaryMeasure.beatType)));
+            const capacity = Math.max(1, Math.round(primaryMeasure.capacityDiv));
             let body = "";
             const needsAttributes = mi === 0
                 || primaryMeasure.beats !== prevBeats
@@ -8201,7 +8310,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                 }
                 else {
                     const staff = part.staffs[0];
-                    body += `<clef><sign>${(_6 = staff === null || staff === void 0 ? void 0 : staff.clefSign) !== null && _6 !== void 0 ? _6 : "G"}</sign><line>${(_7 = staff === null || staff === void 0 ? void 0 : staff.clefLine) !== null && _7 !== void 0 ? _7 : 2}</line></clef>`;
+                    body += `<clef><sign>${(_9 = staff === null || staff === void 0 ? void 0 : staff.clefSign) !== null && _9 !== void 0 ? _9 : "G"}</sign><line>${(_10 = staff === null || staff === void 0 ? void 0 : staff.clefLine) !== null && _10 !== void 0 ? _10 : 2}</line></clef>`;
                 }
                 if (mi === 0 && partIndex === 0 && miscXml) {
                     body += `<miscellaneous>${miscXml}</miscellaneous>`;
@@ -8216,10 +8325,12 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
             }
             for (let si = 0; si < part.staffs.length; si += 1) {
                 const staffNo = si + 1;
-                const measure = (_9 = (_8 = part.staffs[si]) === null || _8 === void 0 ? void 0 : _8.measures[mi]) !== null && _9 !== void 0 ? _9 : {
+                const measure = (_12 = (_11 = part.staffs[si]) === null || _11 === void 0 ? void 0 : _11.measures[mi]) !== null && _12 !== void 0 ? _12 : {
                     index: mi + 1,
                     beats: primaryMeasure.beats,
                     beatType: primaryMeasure.beatType,
+                    capacityDiv: primaryMeasure.capacityDiv,
+                    implicit: primaryMeasure.implicit,
                     fifths: primaryMeasure.fifths,
                     mode: primaryMeasure.mode,
                     tempoBpm: null,
@@ -8287,7 +8398,9 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
             if (primaryMeasure.repeatBackward) {
                 body += `<barline location="right"><repeat direction="backward"/></barline>`;
             }
-            measuresXml.push(`<measure number="${mi + 1}">${body}</measure>`);
+            const implicitAttr = primaryMeasure.implicit ? ' implicit="yes"' : "";
+            const measureNumber = startsWithPickup ? mi : mi + 1;
+            measuresXml.push(`<measure number="${measureNumber}"${implicitAttr}>${body}</measure>`);
             prevBeats = primaryMeasure.beats;
             prevBeatType = primaryMeasure.beatType;
             prevFifths = primaryMeasure.fifths;

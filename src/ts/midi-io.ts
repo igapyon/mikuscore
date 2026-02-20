@@ -54,6 +54,7 @@ export type MidiImportDiagnosticCode =
   | "MIDI_NOTE_PAIR_BROKEN"
   | "MIDI_QUANTIZE_CLAMPED"
   | "MIDI_EVENT_DROPPED"
+  | "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED"
   | "MIDI_KEY_SIGNATURE_INFERRED"
   | "MIDI_POLYPHONY_VOICE_ASSIGNED"
   | "MIDI_POLYPHONY_VOICE_OVERFLOW"
@@ -77,6 +78,36 @@ export type MidiImportResult = {
   xml: string;
   diagnostics: MidiImportDiagnostic[];
   warnings: MidiImportDiagnostic[];
+};
+
+const normalizeLeadingPickupTimeSignatureEvents = <T extends { tick: number; beats: number; beatType: number }>(
+  events: T[],
+  ticksPerQuarter: number
+): { events: T[]; normalized: boolean; pickupTicks: number } => {
+  if (events.length < 2) return { events, normalized: false, pickupTicks: 0 };
+  const sorted = events
+    .map((event) => ({
+      ...event,
+      tick: Math.max(0, Math.round(event.tick)),
+      beats: Math.max(1, Math.round(event.beats)),
+      beatType: Math.max(1, Math.round(event.beatType)),
+    }))
+    .sort((a, b) => a.tick - b.tick) as T[];
+  const first = sorted[0];
+  const second = sorted[1];
+  const firstMeasureTicks = Math.max(
+    1,
+    Math.round((Math.max(1, Math.round(ticksPerQuarter)) * 4 * first.beats) / Math.max(1, first.beatType))
+  );
+  const isPickupPrelude =
+    first.tick === 0 &&
+    first.beats === 1 &&
+    second.tick === firstMeasureTicks &&
+    second.beats > 1 &&
+    second.beatType === first.beatType;
+  if (!isPickupPrelude) return { events: sorted, normalized: false, pickupTicks: 0 };
+  const normalized: T[] = [{ ...second, tick: 0 } as T, ...sorted.slice(2)];
+  return { events: normalized, normalized: true, pickupTicks: firstMeasureTicks };
 };
 
 const instrumentByPreset: Record<MidiProgramPreset, number> = {
@@ -1354,20 +1385,41 @@ const splitClustersToMeasureSegments = (params: {
   ticksPerQuarter: number;
   divisions: number;
   measureTicks: number;
+  pickupTicks?: number;
   isDrum: boolean;
 }): ImportedVoiceNoteSegment[] => {
   const out: ImportedVoiceNoteSegment[] = [];
   const { clusters, ticksPerQuarter, divisions, measureTicks, isDrum } = params;
+  const pickupTicks = Math.max(0, Math.round(params.pickupTicks ?? 0));
   const toDiv = (ticks: number): number => Math.max(0, Math.round((ticks * divisions) / ticksPerQuarter));
+  const measureStartTick = (measureIndex: number): number => {
+    if (pickupTicks <= 0) return measureIndex * measureTicks;
+    if (measureIndex <= 0) return 0;
+    return pickupTicks + (measureIndex - 1) * measureTicks;
+  };
+  const measureIndexAtTick = (tick: number): number => {
+    if (pickupTicks <= 0) return Math.floor(tick / measureTicks);
+    if (tick < pickupTicks) return 0;
+    return 1 + Math.floor((tick - pickupTicks) / measureTicks);
+  };
+  const nextMeasureBoundaryTick = (tick: number): number => {
+    if (pickupTicks <= 0) {
+      const idx = Math.floor(tick / measureTicks);
+      return (idx + 1) * measureTicks;
+    }
+    if (tick < pickupTicks) return pickupTicks;
+    const idx = Math.floor((tick - pickupTicks) / measureTicks);
+    return pickupTicks + (idx + 1) * measureTicks;
+  };
 
   for (const cluster of clusters) {
     for (const note of cluster.notes) {
       let segmentStart = note.startTick;
       while (segmentStart < note.endTick) {
-        const measureIndex = Math.floor(segmentStart / measureTicks);
-        const measureEndTick = (measureIndex + 1) * measureTicks;
+        const measureIndex = measureIndexAtTick(segmentStart);
+        const measureEndTick = nextMeasureBoundaryTick(segmentStart);
         const segmentEnd = Math.min(note.endTick, measureEndTick);
-        const startInMeasureTick = segmentStart - measureIndex * measureTicks;
+        const startInMeasureTick = segmentStart - measureStartTick(measureIndex);
         const startDiv = toDiv(startInMeasureTick);
         const durDiv = Math.max(1, toDiv(segmentEnd - segmentStart));
         out.push({
@@ -1758,6 +1810,7 @@ const buildPartMusicXml = (params: {
   tempoEventsByMeasure: Map<number, Array<{ offsetDiv: number; bpm: number }>>;
   includeTempoEvents: boolean;
   ticksPerQuarter: number;
+  pickupTicks?: number;
   warnings: MidiImportDiagnostic[];
   debugImportMetadata: boolean;
   mksSysExMetadataXml: string;
@@ -1775,6 +1828,7 @@ const buildPartMusicXml = (params: {
     tempoEventsByMeasure,
     includeTempoEvents,
     ticksPerQuarter,
+    pickupTicks = 0,
     warnings,
     debugImportMetadata,
     mksSysExMetadataXml,
@@ -1782,8 +1836,18 @@ const buildPartMusicXml = (params: {
   } = params;
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
   const measureDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+  const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
+  const pickupMeasureDiv = pickupMeasureTicks > 0
+    ? Math.max(1, Math.round((pickupMeasureTicks * divisions) / ticksPerQuarter))
+    : 0;
+  const measureDivForIndex = (measureIndex: number): number =>
+    measureIndex === 0 && pickupMeasureDiv > 0 ? pickupMeasureDiv : measureDiv;
   const maxEndTick = notes.length ? Math.max(...notes.map((note) => note.endTick)) : measureTicks;
-  const measureCount = Math.max(1, Math.ceil(maxEndTick / measureTicks));
+  const measureCount = pickupMeasureTicks > 0
+    ? (maxEndTick <= pickupMeasureTicks
+      ? 1
+      : 1 + Math.max(1, Math.ceil((maxEndTick - pickupMeasureTicks) / measureTicks)))
+    : Math.max(1, Math.ceil(maxEndTick / measureTicks));
 
   const clusters = allocateAutoVoices(notes, warnings);
   const warningMetadataXml = buildMidiDiagMiscXml(warnings);
@@ -1793,6 +1857,7 @@ const buildPartMusicXml = (params: {
     ticksPerQuarter,
     divisions,
     measureTicks,
+    pickupTicks: pickupMeasureTicks,
     isDrum,
   });
   for (const segment of splitSegments) {
@@ -1832,9 +1897,11 @@ const buildPartMusicXml = (params: {
   let partXml = `<part id="${partId}">`;
   let previousDynamicMark: DynamicMark | null = null;
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
-    const measureNumber = measureIndex + 1;
+    const measureNumber = pickupMeasureDiv > 0 ? measureIndex : (measureIndex + 1);
     const measureSegments = voiceSegmentsByMeasure.get(measureIndex) ?? [];
-    partXml += `<measure number="${measureNumber}">`;
+    const currentMeasureDiv = measureDivForIndex(measureIndex);
+    const implicitAttr = measureIndex === 0 && pickupMeasureDiv > 0 ? ' implicit="yes"' : "";
+    partXml += `<measure number="${measureNumber}"${implicitAttr}>`;
     if (measureIndex === 0) {
       partXml += "<attributes>";
       partXml += `<divisions>${divisions}</divisions>`;
@@ -1900,14 +1967,14 @@ const buildPartMusicXml = (params: {
     for (let laneIndex = 0; laneIndex < laneDefs.length; laneIndex += 1) {
       const lane = laneDefs[laneIndex];
       if (laneIndex > 0) {
-        partXml += `<backup><duration>${measureDiv}</duration></backup>`;
+        partXml += `<backup><duration>${currentMeasureDiv}</duration></backup>`;
       }
       partXml += buildMeasureVoiceXml(
         measureSegments,
         lane.voice,
         lane.sourceStaff,
         lane.outputStaff,
-        measureDiv,
+        currentMeasureDiv,
         isDrum,
         divisions,
         keyFifths
@@ -1928,6 +1995,7 @@ const buildImportSkeletonMusicXml = (params: {
   keyFifths: number;
   keyMode: "major" | "minor";
   tempoEvents: Array<{ tick: number; bpm: number }>;
+  pickupTicks?: number;
   partGroups: Array<{ trackIndex: number; channel: number }>;
   notesByTrackChannel: Map<TrackChannelKey, ImportedQuantizedNote[]>;
   programByTrackChannel: Map<TrackChannelKey, number>;
@@ -1945,6 +2013,7 @@ const buildImportSkeletonMusicXml = (params: {
     keyFifths,
     keyMode,
     tempoEvents,
+    pickupTicks = 0,
     partGroups,
     notesByTrackChannel,
     programByTrackChannel,
@@ -1955,6 +2024,21 @@ const buildImportSkeletonMusicXml = (params: {
   } = params;
   const divisions = quantizeGridToDivisions(quantizeGrid);
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
+  const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
+  const mapTickToMeasureOffsetDiv = (tickRaw: number): { measureIndex: number; offsetDiv: number } => {
+    const tick = Math.max(0, Math.round(tickRaw));
+    let measureIndex = 0;
+    let tickInMeasure = tick;
+    if (pickupMeasureTicks > 0 && tick >= pickupMeasureTicks) {
+      measureIndex = 1 + Math.floor((tick - pickupMeasureTicks) / measureTicks);
+      tickInMeasure = (tick - pickupMeasureTicks) % measureTicks;
+    } else if (pickupMeasureTicks <= 0) {
+      measureIndex = Math.floor(tick / measureTicks);
+      tickInMeasure = tick - measureIndex * measureTicks;
+    }
+    const offsetDiv = Math.max(0, Math.round((tickInMeasure * divisions) / ticksPerQuarter));
+    return { measureIndex, offsetDiv };
+  };
   const partDefs: Array<{ partId: string; name: string; channel: number; program: number; key: TrackChannelKey }> = [];
 
   let index = 1;
@@ -1991,13 +2075,10 @@ const buildImportSkeletonMusicXml = (params: {
 
   const tempoEventsByMeasure = new Map<number, Array<{ offsetDiv: number; bpm: number }>>();
   for (const tempoEvent of tempoEvents) {
-    const tick = Math.max(0, Math.round(tempoEvent.tick));
-    const measureIndex = Math.floor(tick / measureTicks);
-    const tickInMeasure = tick - measureIndex * measureTicks;
-    const offsetDiv = Math.max(0, Math.round((tickInMeasure * divisions) / ticksPerQuarter));
-    const bucket = tempoEventsByMeasure.get(measureIndex) ?? [];
-    bucket.push({ offsetDiv, bpm: clampTempo(tempoEvent.bpm) });
-    tempoEventsByMeasure.set(measureIndex, bucket);
+    const mapped = mapTickToMeasureOffsetDiv(tempoEvent.tick);
+    const bucket = tempoEventsByMeasure.get(mapped.measureIndex) ?? [];
+    bucket.push({ offsetDiv: mapped.offsetDiv, bpm: clampTempo(tempoEvent.bpm) });
+    tempoEventsByMeasure.set(mapped.measureIndex, bucket);
   }
   for (const [measureIndex, events] of tempoEventsByMeasure.entries()) {
     events.sort((a, b) => (a.offsetDiv === b.offsetDiv ? a.bpm - b.bpm : a.offsetDiv - b.offsetDiv));
@@ -2027,6 +2108,7 @@ const buildImportSkeletonMusicXml = (params: {
         tempoEventsByMeasure,
         includeTempoEvents: partIndex === 0,
         ticksPerQuarter,
+        pickupTicks: pickupMeasureTicks,
         warnings,
         debugImportMetadata,
         mksSysExMetadataXml: partIndex === 0 ? mksSysExMetadataXml : "",
@@ -3090,9 +3172,17 @@ export const convertMidiToMusicXml = (
     notesByTrackChannel.set(key, bucket);
   }
 
-  const firstTimeSignature = timeSignatureEvents
-    .slice()
-    .sort((a, b) => a.tick - b.tick)[0] ?? { tick: 0, beats: 4, beatType: 4 };
+  const normalizedTimeSignature = normalizeLeadingPickupTimeSignatureEvents(
+    timeSignatureEvents,
+    header.ticksPerQuarter
+  );
+  if (normalizedTimeSignature.normalized) {
+    warnings.push({
+      code: "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED",
+      message: "Normalized leading pickup time signature (e.g. 1/8 at tick 0 followed by full meter).",
+    });
+  }
+  const firstTimeSignature = normalizedTimeSignature.events[0] ?? { tick: 0, beats: 4, beatType: 4 };
   const inferredKeySignature = keySignatureEvents.length
     ? null
     : inferKeySignatureFromImportedNotes(velocityScaledNotes);
@@ -3152,6 +3242,7 @@ export const convertMidiToMusicXml = (
     keyFifths,
     keyMode,
     tempoEvents,
+    pickupTicks: normalizedTimeSignature.pickupTicks,
     partGroups,
     notesByTrackChannel,
     programByTrackChannel,
