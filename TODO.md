@@ -53,6 +53,11 @@
 - [ ] Add LilyPond (`.ly`) import/export support.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
+- [ ] MuseScore staged import roadmap:
+  - [ ] Phase 1 (now): `.mscx` / `.mscz` load path, basic note/rest/chord import, and `diag` + `src:musescore:*` raw metadata preservation.
+  - [ ] Phase 2: playback-rich metadata import (tempo map, repeat/jump semantics, dynamics/play-tech where mappable) with explicit `diag` for dropped items.
+  - [ ] Phase 3: layout fidelity import (system/page breaks, spacing hints) as optional metadata and selective restoration.
+  - [ ] Phase 4: notation extensions (ornaments, tuplet variants, articulations, technique text) with preserve/degrade policy per item.
 - [ ] Prevent exporting overfull measures to external formats (at minimum MEI/ABC); normalize or split at export time so invalid data is not emitted.
 - [ ] Add a mandatory shared pre-export capacity check for all formats; if overfull is detected, emit `diag` and abort export.
 
@@ -117,6 +122,11 @@
 - [ ] LilyPond（`.ly`）の入出力対応を追加。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
+- [ ] MuseScore 段階対応ロードマップ:
+  - [ ] フェーズ1（現状）: `.mscx` / `.mscz` の読込経路、基本音符/休符/和音の取り込み、`diag` と `src:musescore:*` で生データ退避。
+  - [ ] フェーズ2: 再生系メタ（テンポ、リピート/ジャンプ、強弱・奏法のうち対応可能なもの）を優先対応し、欠落は `diag` 明示。
+  - [ ] フェーズ3: レイアウト系（改行、ページ、間隔ヒント）をオプションメタとして保持・必要に応じて復元。
+  - [ ] フェーズ4: 記譜拡張（装飾、連符バリエーション、アーティキュレーション、奏法テキスト）を保持/劣化ポリシー付きで拡充。
 - [ ] 外部形式（最低でも MEI/ABC）への出力時に overfull 小節を生成しない。エクスポート時に正規化または分割して不正データを出さない。
 - [ ] 全エクスポート形式の直前に共通の容量チェックを必須化し、overfull 検知時は `diag` を出してエクスポートを中止する。
 

@@ -356,6 +356,12 @@ body {
   margin-bottom: 0.7rem;
 }
 
+.ms-export-divider {
+  height: 1px;
+  background: #d9d3e5;
+  margin: 0.65rem 0 0.85rem;
+}
+
 .ms-playback-status {
   margin: 0.2rem 0 0.45rem;
   font-size: 0.92rem;

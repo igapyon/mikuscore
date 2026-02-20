@@ -1,4 +1,4 @@
-import { extractMusicXmlTextFromMxl } from "./mxl-io";
+import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "./mxl-io";
 
 export type LoadFlowParams = {
   isNewType: boolean;
@@ -11,6 +11,7 @@ export type LoadFlowParams = {
   convertAbcToMusicXml: (abcSource: string) => string;
   convertMeiToMusicXml: (meiSource: string) => string;
   convertLilyPondToMusicXml: (lilySource: string) => string;
+  convertMuseScoreToMusicXml: (musescoreSource: string) => string;
   formatImportedMusicXml: (xml: string) => string;
   convertMidiToMusicXml: (midiBytes: Uint8Array) => {
     ok: boolean;
@@ -113,6 +114,8 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
     const isMeiFile = lowerName.endsWith(".mei");
     const isLilyPondFile = lowerName.endsWith(".ly");
+    const isMuseScoreXmlFile = lowerName.endsWith(".mscx");
+    const isMuseScoreZipFile = lowerName.endsWith(".mscz");
 
     if (isMxl) {
       try {
@@ -239,11 +242,63 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       }
     }
 
+    if (isMuseScoreZipFile) {
+      try {
+        try {
+          sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
+          return {
+            ok: true,
+            xmlToLoad: sourceText,
+            collapseInputSection: true,
+            nextXmlInputText: sourceText,
+          };
+        } catch {
+          const mscxText = await extractTextFromZipByExtensions(await selected.arrayBuffer(), [".mscx"]);
+          const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(mscxText));
+          return {
+            ok: true,
+            xmlToLoad: convertedXml,
+            collapseInputSection: true,
+            nextXmlInputText: convertedXml,
+          };
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse MuseScore: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
+    if (isMuseScoreXmlFile) {
+      sourceText = await readTextFile(selected);
+      try {
+        const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(sourceText));
+        return {
+          ok: true,
+          xmlToLoad: convertedXml,
+          collapseInputSection: true,
+          nextXmlInputText: convertedXml,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse MuseScore: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
     return {
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
       diagnosticMessage:
-        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, or .ly.",
+        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, .ly, .mscx, or .mscz.",
     };
   }
 

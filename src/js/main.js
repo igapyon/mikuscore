@@ -9,6 +9,7 @@ const timeIndex_1 = require("../../core/timeIndex");
 const abc_io_1 = require("./abc-io");
 const mei_io_1 = require("./mei-io");
 const lilypond_io_1 = require("./lilypond-io");
+const musescore_io_1 = require("./musescore-io");
 const musicxml_io_1 = require("./musicxml-io");
 const download_flow_1 = require("./download-flow");
 const load_flow_1 = require("./load-flow");
@@ -79,6 +80,7 @@ const metricAccentProfileSelect = q("#metricAccentProfile");
 const midiProgramSelect = q("#midiProgramSelect");
 const forceMidiProgramOverride = q("#forceMidiProgramOverride");
 const keepMetadataInMusicXml = q("#keepMetadataInMusicXml");
+const compressXmlMuseScoreExport = q("#compressXmlMuseScoreExport");
 const generalSettingsAccordion = q("#generalSettingsAccordion");
 const settingsAccordion = q("#settingsAccordion");
 const resetPlaybackSettingsBtn = q("#resetPlaybackSettingsBtn");
@@ -87,6 +89,7 @@ const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
 const downloadMeiBtn = q("#downloadMeiBtn");
 const downloadLilyPondBtn = q("#downloadLilyPondBtn");
+const downloadMuseScoreBtn = q("#downloadMuseScoreBtn");
 const saveModeText = qo("#saveModeText");
 const playbackText = qo("#playbackText");
 const outputXml = qo("#outputXml");
@@ -145,6 +148,7 @@ const DEFAULT_PLAYBACK_WAVEFORM = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
+const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
 const DEFAULT_GRACE_TIMING_MODE = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE = "subtle";
@@ -178,6 +182,9 @@ const normalizeForceMidiProgramOverride = (value) => {
 const normalizeKeepMetadataInMusicXml = (value) => {
     return value !== false;
 };
+const normalizeCompressXmlMuseScoreExport = (value) => {
+    return value === true;
+};
 const normalizeUseMidiLikePlayback = (value) => {
     return value !== false;
 };
@@ -210,6 +217,7 @@ const readPlaybackSettings = () => {
             metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
             forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
             keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+            compressXmlMuseScoreExport: normalizeCompressXmlMuseScoreExport(parsed.compressXmlMuseScoreExport),
             generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
             settingsExpanded: Boolean(parsed.settingsExpanded),
         };
@@ -229,6 +237,7 @@ const writePlaybackSettings = () => {
             metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
             forceMidiProgramOverride: forceMidiProgramOverride.checked,
             keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+            compressXmlMuseScoreExport: compressXmlMuseScoreExport.checked,
             generalSettingsExpanded: generalSettingsAccordion.open,
             settingsExpanded: settingsAccordion.open,
         };
@@ -239,7 +248,7 @@ const writePlaybackSettings = () => {
     }
 };
 const applyInitialPlaybackSettings = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     const stored = readPlaybackSettings();
     midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_PROGRAM;
     playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : DEFAULT_PLAYBACK_WAVEFORM;
@@ -250,8 +259,10 @@ const applyInitialPlaybackSettings = () => {
     forceMidiProgramOverride.checked =
         (_g = stored === null || stored === void 0 ? void 0 : stored.forceMidiProgramOverride) !== null && _g !== void 0 ? _g : DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
     keepMetadataInMusicXml.checked = (_h = stored === null || stored === void 0 ? void 0 : stored.keepMetadataInMusicXml) !== null && _h !== void 0 ? _h : DEFAULT_KEEP_METADATA_IN_MUSICXML;
-    generalSettingsAccordion.open = (_j = stored === null || stored === void 0 ? void 0 : stored.generalSettingsExpanded) !== null && _j !== void 0 ? _j : false;
-    settingsAccordion.open = (_k = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _k !== void 0 ? _k : false;
+    compressXmlMuseScoreExport.checked =
+        (_j = stored === null || stored === void 0 ? void 0 : stored.compressXmlMuseScoreExport) !== null && _j !== void 0 ? _j : DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+    generalSettingsAccordion.open = (_k = stored === null || stored === void 0 ? void 0 : stored.generalSettingsExpanded) !== null && _k !== void 0 ? _k : false;
+    settingsAccordion.open = (_l = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _l !== void 0 ? _l : false;
 };
 const onResetPlaybackSettings = () => {
     midiProgramSelect.value = DEFAULT_MIDI_PROGRAM;
@@ -262,6 +273,7 @@ const onResetPlaybackSettings = () => {
     metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
     forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
     keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
+    compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
     writePlaybackSettings();
     renderControlState();
 };
@@ -993,7 +1005,7 @@ const renderUiMessage = () => {
     }
 };
 const renderOutput = () => {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (saveModeText) {
         saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
     }
@@ -1005,6 +1017,7 @@ const renderOutput = () => {
     downloadAbcBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
     downloadMeiBtn.disabled = !((_e = state.lastSaveResult) === null || _e === void 0 ? void 0 : _e.ok);
     downloadLilyPondBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
+    downloadMuseScoreBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
 };
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
@@ -1750,6 +1763,10 @@ const onLoadClick = async () => {
             sourceMetadata: keepMetadata,
             debugMetadata: keepMetadata,
         }),
+        convertMuseScoreToMusicXml: (musescoreSource) => (0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreSource, {
+            sourceMetadata: keepMetadata,
+            debugMetadata: keepMetadata,
+        }),
         convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
             sourceMetadata: keepMetadata,
             debugMetadata: keepMetadata,
@@ -2261,14 +2278,17 @@ const failExport = (format, reason) => {
     };
     renderAll();
 };
-const onDownload = () => {
+const onDownload = async () => {
     const xmlText = resolveMusicXmlOutput();
     if (!xmlText) {
         failExport("MusicXML", "No valid saved XML is available.");
         return;
     }
     try {
-        (0, download_flow_1.triggerFileDownload)((0, download_flow_1.createMusicXmlDownloadPayload)(xmlText));
+        const payload = await (0, download_flow_1.createMusicXmlDownloadPayload)(xmlText, {
+            compressed: compressXmlMuseScoreExport.checked,
+        });
+        (0, download_flow_1.triggerFileDownload)(payload);
     }
     catch (err) {
         failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
@@ -2359,6 +2379,26 @@ const onDownloadLilyPond = () => {
     }
     catch (err) {
         failExport("LilyPond", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
+const onDownloadMuseScore = async () => {
+    const xmlText = resolveMusicXmlOutput();
+    if (!xmlText) {
+        failExport("MuseScore", "No valid saved XML is available.");
+        return;
+    }
+    const payload = await (0, download_flow_1.createMuseScoreDownloadPayload)(xmlText, musescore_io_1.exportMusicXmlDomToMuseScore, {
+        compressed: compressXmlMuseScoreExport.checked,
+    });
+    if (!payload) {
+        failExport("MuseScore", "Could not build MuseScore payload from current MusicXML.");
+        return;
+    }
+    try {
+        (0, download_flow_1.triggerFileDownload)(payload);
+    }
+    catch (err) {
+        failExport("MuseScore", err instanceof Error ? err.message : "Unknown download error.");
     }
 };
 const activateTopTab = (tabName) => {
@@ -2487,6 +2527,7 @@ downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
+downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
@@ -2502,6 +2543,7 @@ keepMetadataInMusicXml.addEventListener("change", () => {
     writePlaybackSettings();
     renderOutput();
 });
+compressXmlMuseScoreExport.addEventListener("change", writePlaybackSettings);
 generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
@@ -6622,6 +6664,8 @@ const resolveLoadFlow = async (params) => {
         const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
         const isMeiFile = lowerName.endsWith(".mei");
         const isLilyPondFile = lowerName.endsWith(".ly");
+        const isMuseScoreXmlFile = lowerName.endsWith(".mscx");
+        const isMuseScoreZipFile = lowerName.endsWith(".mscz");
         if (isMxl) {
             try {
                 sourceText = await (0, mxl_io_1.extractMusicXmlTextFromMxl)(await selected.arrayBuffer());
@@ -6734,10 +6778,59 @@ const resolveLoadFlow = async (params) => {
                 };
             }
         }
+        if (isMuseScoreZipFile) {
+            try {
+                try {
+                    sourceText = await (0, mxl_io_1.extractMusicXmlTextFromMxl)(await selected.arrayBuffer());
+                    return {
+                        ok: true,
+                        xmlToLoad: sourceText,
+                        collapseInputSection: true,
+                        nextXmlInputText: sourceText,
+                    };
+                }
+                catch (_a) {
+                    const mscxText = await (0, mxl_io_1.extractTextFromZipByExtensions)(await selected.arrayBuffer(), [".mscx"]);
+                    const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(mscxText));
+                    return {
+                        ok: true,
+                        xmlToLoad: convertedXml,
+                        collapseInputSection: true,
+                        nextXmlInputText: convertedXml,
+                    };
+                }
+            }
+            catch (error) {
+                return {
+                    ok: false,
+                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+                    diagnosticMessage: `Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+        }
+        if (isMuseScoreXmlFile) {
+            sourceText = await readTextFile(selected);
+            try {
+                const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(sourceText));
+                return {
+                    ok: true,
+                    xmlToLoad: convertedXml,
+                    collapseInputSection: true,
+                    nextXmlInputText: convertedXml,
+                };
+            }
+            catch (error) {
+                return {
+                    ok: false,
+                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+                    diagnosticMessage: `Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+        }
         return {
             ok: false,
             diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-            diagnosticMessage: "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, or .ly.",
+            diagnosticMessage: "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, .ly, .mscx, or .mscz.",
         };
     }
     if (!treatAsAbc) {
@@ -6771,7 +6864,7 @@ exports.resolveLoadFlow = resolveLoadFlow;
   "src/ts/mxl-io.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractMusicXmlTextFromMxl = void 0;
+exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = void 0;
 const ZIP_EOCD_SIG = 0x06054b50;
 const ZIP_CDFH_SIG = 0x02014b50;
 const ZIP_LFH_SIG = 0x04034b50;
@@ -6900,6 +6993,17 @@ const findLikelyMusicXmlEntry = (entries) => {
     }
     return null;
 };
+const findFirstEntryByExtensions = (entries, extensions) => {
+    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    if (!normalized.length)
+        return null;
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (normalized.some((ext) => p.endsWith(ext)))
+            return entry;
+    }
+    return null;
+};
 const parseContainerRootFilePath = (containerXmlText) => {
     var _a, _b;
     const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
@@ -6937,12 +7041,26 @@ const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
     return new TextDecoder("utf-8").decode(xmlBytes);
 };
 exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
+const extractTextFromZipByExtensions = async (archiveBuffer, extensions) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+    }
+    const entry = findFirstEntryByExtensions(entries, extensions);
+    if (!entry) {
+        throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
+    }
+    const bytes = await extractEntryBytes(archiveBytes, entry);
+    return new TextDecoder("utf-8").decode(bytes);
+};
+exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
 
   },
   "src/ts/download-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
+exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
 const pad2 = (value) => String(value).padStart(2, "0");
@@ -6965,9 +7083,168 @@ const triggerFileDownload = (payload) => {
     URL.revokeObjectURL(url);
 };
 exports.triggerFileDownload = triggerFileDownload;
-const createMusicXmlDownloadPayload = (xmlText) => {
+const crc32Table = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+        let c = n;
+        for (let k = 0; k < 8; k += 1) {
+            c = (c & 1) !== 0 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+const crc32 = (bytes) => {
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i += 1) {
+        crc = crc32Table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+};
+const writeU16 = (target, offset, value) => {
+    target[offset] = value & 0xff;
+    target[offset + 1] = (value >>> 8) & 0xff;
+};
+const writeU32 = (target, offset, value) => {
+    target[offset] = value & 0xff;
+    target[offset + 1] = (value >>> 8) & 0xff;
+    target[offset + 2] = (value >>> 16) & 0xff;
+    target[offset + 3] = (value >>> 24) & 0xff;
+};
+const compressDeflateRaw = async (input) => {
+    const CS = globalThis.CompressionStream;
+    if (!CS)
+        return null;
+    try {
+        const source = new Uint8Array(input.length);
+        source.set(input);
+        const stream = new Blob([bytesToArrayBuffer(source)]).stream().pipeThrough(new CS("deflate-raw"));
+        const compressedBuffer = await new Response(stream).arrayBuffer();
+        return new Uint8Array(compressedBuffer);
+    }
+    catch (_a) {
+        return null;
+    }
+};
+const makeZipBytes = async (entries, preferCompression) => {
+    const encoder = new TextEncoder();
+    const localChunks = [];
+    const centralChunks = [];
+    let localOffset = 0;
+    const encodedEntries = [];
+    for (const entry of entries) {
+        const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
+        const uncompressed = entry.bytes;
+        let data = uncompressed;
+        let method = 0;
+        if (preferCompression) {
+            const compressed = await compressDeflateRaw(uncompressed);
+            if (compressed && compressed.length < uncompressed.length) {
+                data = compressed;
+                method = 8;
+            }
+        }
+        encodedEntries.push({
+            pathBytes,
+            data,
+            crc: crc32(uncompressed),
+            method,
+            compressedSize: data.length,
+            uncompressedSize: uncompressed.length,
+        });
+    }
+    for (const entry of encodedEntries) {
+        const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
+        const localHeader = new Uint8Array(30 + pathBytes.length);
+        writeU32(localHeader, 0, 0x04034b50);
+        writeU16(localHeader, 4, 20);
+        writeU16(localHeader, 6, 0x0800);
+        writeU16(localHeader, 8, method);
+        writeU16(localHeader, 10, 0);
+        writeU16(localHeader, 12, 0);
+        writeU32(localHeader, 14, crc);
+        writeU32(localHeader, 18, compressedSize);
+        writeU32(localHeader, 22, uncompressedSize);
+        writeU16(localHeader, 26, pathBytes.length);
+        writeU16(localHeader, 28, 0);
+        localHeader.set(pathBytes, 30);
+        localChunks.push(localHeader, data);
+        const centralHeader = new Uint8Array(46 + pathBytes.length);
+        writeU32(centralHeader, 0, 0x02014b50);
+        writeU16(centralHeader, 4, 20);
+        writeU16(centralHeader, 6, 20);
+        writeU16(centralHeader, 8, 0x0800);
+        writeU16(centralHeader, 10, method);
+        writeU16(centralHeader, 12, 0);
+        writeU16(centralHeader, 14, 0);
+        writeU32(centralHeader, 16, crc);
+        writeU32(centralHeader, 20, compressedSize);
+        writeU32(centralHeader, 24, uncompressedSize);
+        writeU16(centralHeader, 28, pathBytes.length);
+        writeU16(centralHeader, 30, 0);
+        writeU16(centralHeader, 32, 0);
+        writeU16(centralHeader, 34, 0);
+        writeU16(centralHeader, 36, 0);
+        writeU32(centralHeader, 38, 0);
+        writeU32(centralHeader, 42, localOffset);
+        centralHeader.set(pathBytes, 46);
+        centralChunks.push(centralHeader);
+        localOffset += localHeader.length + compressedSize;
+    }
+    const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
+    const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
+    const eocd = new Uint8Array(22);
+    writeU32(eocd, 0, 0x06054b50);
+    writeU16(eocd, 4, 0);
+    writeU16(eocd, 6, 0);
+    writeU16(eocd, 8, entries.length);
+    writeU16(eocd, 10, entries.length);
+    writeU32(eocd, 12, centralSize);
+    writeU32(eocd, 16, localSize);
+    writeU16(eocd, 20, 0);
+    const out = new Uint8Array(localSize + centralSize + eocd.length);
+    let cursor = 0;
+    for (const chunk of localChunks) {
+        out.set(chunk, cursor);
+        cursor += chunk.length;
+    }
+    for (const chunk of centralChunks) {
+        out.set(chunk, cursor);
+        cursor += chunk.length;
+    }
+    out.set(eocd, cursor);
+    return out;
+};
+const makeMxlBytes = async (formattedXml) => {
+    const encoder = new TextEncoder();
+    const containerXml = `<?xml version="1.0" encoding="UTF-8"?>` +
+        `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
+        `<rootfiles><rootfile full-path="score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles>` +
+        `</container>`;
+    return makeZipBytes([
+        { path: "META-INF/container.xml", bytes: encoder.encode(containerXml) },
+        { path: "score.musicxml", bytes: encoder.encode(formattedXml) },
+    ], true);
+};
+const makeMsczBytes = async (mscxText) => {
+    const encoder = new TextEncoder();
+    return makeZipBytes([{ path: "score.mscx", bytes: encoder.encode(mscxText) }], true);
+};
+const bytesToArrayBuffer = (bytes) => {
+    const out = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(out).set(bytes);
+    return out;
+};
+const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
     const ts = buildFileTimestamp();
     const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
+    if (options.compressed === true) {
+        const mxlBytes = await makeMxlBytes(formattedXml);
+        return {
+            fileName: `mikuscore-${ts}.mxl`,
+            blob: new Blob([bytesToArrayBuffer(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
+        };
+    }
     return {
         fileName: `mikuscore-${ts}.musicxml`,
         blob: new Blob([formattedXml], { type: "application/xml;charset=utf-8" }),
@@ -7064,6 +7341,655 @@ const createLilyPondDownloadPayload = (xmlText, convertMusicXmlToLilyPond) => {
     };
 };
 exports.createLilyPondDownloadPayload = createLilyPondDownloadPayload;
+const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
+    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!musicXmlDoc)
+        return null;
+    let mscxText = "";
+    try {
+        mscxText = convertMusicXmlToMuseScore(musicXmlDoc);
+    }
+    catch (_a) {
+        return null;
+    }
+    const ts = buildFileTimestamp();
+    if (options.compressed === true) {
+        const msczBytes = await makeMsczBytes(mscxText);
+        return {
+            fileName: `mikuscore-${ts}.mscz`,
+            blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
+        };
+    }
+    return {
+        fileName: `mikuscore-${ts}.mscx`,
+        blob: new Blob([mscxText], { type: "application/xml;charset=utf-8" }),
+    };
+};
+exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
+
+  },
+  "src/ts/musescore-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.exportMusicXmlDomToMuseScore = exports.convertMuseScoreToMusicXml = void 0;
+const xmlEscape = (value) => String(value !== null && value !== void 0 ? value : "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+const firstNumber = (scope, selector) => {
+    var _a, _b;
+    const text = ((_b = (_a = scope.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim();
+    if (!text)
+        return null;
+    const n = Number(text);
+    return Number.isFinite(n) ? n : null;
+};
+const firstAttrNumber = (scope, selector, attrName) => {
+    var _a, _b;
+    const raw = ((_b = (_a = scope.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.getAttribute(attrName)) !== null && _b !== void 0 ? _b : "").trim();
+    if (!raw)
+        return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+};
+const durationTypeToDivisions = (durationType, divisions) => {
+    const base = Math.max(1, Math.round(divisions));
+    switch (String(durationType || "").trim().toLowerCase()) {
+        case "whole":
+            return base * 4;
+        case "half":
+            return base * 2;
+        case "quarter":
+            return base;
+        case "eighth":
+            return Math.round(base / 2);
+        case "16th":
+            return Math.round(base / 4);
+        case "32nd":
+            return Math.round(base / 8);
+        case "64th":
+            return Math.round(base / 16);
+        default:
+            return null;
+    }
+};
+const durationWithDots = (baseDiv, dots) => {
+    let out = Math.max(1, Math.round(baseDiv));
+    let extra = out;
+    for (let i = 0; i < Math.max(0, Math.round(dots)); i += 1) {
+        extra = Math.max(1, Math.round(extra / 2));
+        out += extra;
+    }
+    return out;
+};
+const divisionToTypeAndDots = (divisions, durationDiv) => {
+    const base = Math.max(1, Math.round(divisions));
+    const candidates = [
+        { type: "whole", div: base * 4 },
+        { type: "half", div: base * 2 },
+        { type: "quarter", div: base },
+        { type: "eighth", div: Math.max(1, Math.round(base / 2)) },
+        { type: "16th", div: Math.max(1, Math.round(base / 4)) },
+        { type: "32nd", div: Math.max(1, Math.round(base / 8)) },
+        { type: "64th", div: Math.max(1, Math.round(base / 16)) },
+    ];
+    for (const c of candidates) {
+        if (durationWithDots(c.div, 0) === durationDiv)
+            return { type: c.type, dots: 0 };
+        if (durationWithDots(c.div, 1) === durationDiv)
+            return { type: c.type, dots: 1 };
+        if (durationWithDots(c.div, 2) === durationDiv)
+            return { type: c.type, dots: 2 };
+    }
+    let nearest = candidates[0];
+    let best = Math.abs(nearest.div - durationDiv);
+    for (const c of candidates) {
+        const d = Math.abs(c.div - durationDiv);
+        if (d < best) {
+            best = d;
+            nearest = c;
+        }
+    }
+    return { type: nearest.type, dots: 0 };
+};
+const midiToPitch = (midiNumber) => {
+    var _a;
+    const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
+    const octave = Math.floor(n / 12) - 1;
+    const semitone = n % 12;
+    const table = [
+        { step: "C", alter: 0 },
+        { step: "C", alter: 1 },
+        { step: "D", alter: 0 },
+        { step: "D", alter: 1 },
+        { step: "E", alter: 0 },
+        { step: "F", alter: 0 },
+        { step: "F", alter: 1 },
+        { step: "G", alter: 0 },
+        { step: "G", alter: 1 },
+        { step: "A", alter: 0 },
+        { step: "A", alter: 1 },
+        { step: "B", alter: 0 },
+    ];
+    const mapped = (_a = table[semitone]) !== null && _a !== void 0 ? _a : { step: "C", alter: 0 };
+    return { step: mapped.step, alter: mapped.alter, octave };
+};
+const chunkString = (value, maxChunk) => {
+    const out = [];
+    const size = Math.max(1, Math.round(maxChunk));
+    for (let i = 0; i < value.length; i += size)
+        out.push(value.slice(i, i + size));
+    return out;
+};
+const buildWarningMiscXml = (warnings) => {
+    if (!warnings.length)
+        return "";
+    const maxEntries = Math.min(256, warnings.length);
+    let xml = `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+    for (let i = 0; i < maxEntries; i += 1) {
+        const warning = warnings[i];
+        const payload = `level=warn;code=${warning.code};fmt=mscx;message=${warning.message}`;
+        xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${xmlEscape(payload)}</miscellaneous-field>`;
+    }
+    return xml;
+};
+const buildSourceMiscXml = (source) => {
+    const encoded = encodeURIComponent(source);
+    const chunks = chunkString(encoded, 800);
+    let xml = "";
+    xml += '<miscellaneous-field name="src:musescore:raw-encoding">uri-v1</miscellaneous-field>';
+    xml += `<miscellaneous-field name="src:musescore:raw-length">${source.length}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="src:musescore:raw-encoded-length">${encoded.length}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="src:musescore:raw-chunks">${chunks.length}</miscellaneous-field>`;
+    for (let i = 0; i < chunks.length; i += 1) {
+        xml += `<miscellaneous-field name="src:musescore:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
+    }
+    return xml;
+};
+const parseDurationDiv = (node, divisions) => {
+    var _a, _b, _c;
+    const explicitDuration = firstNumber(node, ":scope > duration");
+    if (explicitDuration !== null && explicitDuration > 0) {
+        return Math.max(1, Math.round(explicitDuration));
+    }
+    const durationType = ((_b = (_a = node.querySelector(":scope > durationType")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim();
+    const base = durationTypeToDivisions(durationType, divisions);
+    if (base === null)
+        return null;
+    const dots = (_c = firstNumber(node, ":scope > dots")) !== null && _c !== void 0 ? _c : 0;
+    return durationWithDots(base, dots);
+};
+const parseTruthyFlag = (value) => {
+    const v = String(value !== null && value !== void 0 ? value : "").trim().toLowerCase();
+    return v === "1" || v === "true" || v === "yes";
+};
+const parseMuseDynamicMark = (value) => {
+    const v = String(value || "").trim().toLowerCase();
+    if (!v)
+        return null;
+    const allow = new Set(["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sf", "sfz", "rfz"]);
+    return allow.has(v) ? v : null;
+};
+const buildDynamicDirectionXml = (mark) => {
+    return `<direction><direction-type><dynamics><${mark}/></dynamics></direction-type></direction>`;
+};
+const buildWordsDirectionXml = (text) => {
+    return `<direction><direction-type><words>${xmlEscape(text)}</words></direction-type></direction>`;
+};
+const buildSegnoDirectionXml = () => {
+    return "<direction><direction-type><segno/></direction-type></direction>";
+};
+const buildCodaDirectionXml = () => {
+    return "<direction><direction-type><coda/></direction-type></direction>";
+};
+const parseMarkerDirectionXml = (marker) => {
+    var _a, _b, _c, _d;
+    const subtype = ((_b = (_a = marker.querySelector(":scope > subtype")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
+    const label = ((_d = (_c = marker.querySelector(":scope > label")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim();
+    if (subtype.includes("segno"))
+        return buildSegnoDirectionXml();
+    if (subtype.includes("coda"))
+        return buildCodaDirectionXml();
+    if (subtype.includes("fine"))
+        return buildWordsDirectionXml(label || "Fine");
+    if (label)
+        return buildWordsDirectionXml(label);
+    return null;
+};
+const parseJumpDirectionXml = (jump) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    const jumpTo = ((_b = (_a = jump.querySelector(":scope > jumpTo")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim();
+    const playUntil = ((_d = (_c = jump.querySelector(":scope > playUntil")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim();
+    const continueAt = ((_f = (_e = jump.querySelector(":scope > continueAt")) === null || _e === void 0 ? void 0 : _e.textContent) !== null && _f !== void 0 ? _f : "").trim();
+    const text = ((_h = (_g = jump.querySelector(":scope > text")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim();
+    const subtype = ((_k = (_j = jump.querySelector(":scope > subtype")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim().toLowerCase();
+    const words = text || subtype || [jumpTo, playUntil, continueAt].filter((v) => v.length > 0).join(" / ");
+    if (!words)
+        return null;
+    const attrs = [];
+    if (jumpTo.toLowerCase().includes("segno"))
+        attrs.push('dalsegno="segno"');
+    if (jumpTo.toLowerCase().includes("coda"))
+        attrs.push('dacapo="yes"');
+    if (playUntil.toLowerCase().includes("fine"))
+        attrs.push('fine="fine"');
+    if (playUntil.toLowerCase().includes("coda") || continueAt.toLowerCase().includes("coda"))
+        attrs.push('tocoda="coda"');
+    const soundXml = attrs.length ? `<sound ${attrs.join(" ")}/>` : "";
+    return {
+        xml: `<direction><direction-type><words>${xmlEscape(words)}</words></direction-type>${soundXml}</direction>`,
+        mapped: attrs.length > 0,
+    };
+};
+const parseMeasureValue = (measure, selectors, fallback) => {
+    for (const selector of selectors) {
+        const n = firstNumber(measure, selector);
+        if (n !== null && Number.isFinite(n) && n > 0)
+            return Math.max(1, Math.round(n));
+    }
+    return fallback;
+};
+const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    const doc = new DOMParser().parseFromString(mscxSource, "application/xml");
+    if (doc.querySelector("parsererror")) {
+        throw new Error("MuseScore XML parse error.");
+    }
+    const score = doc.querySelector("museScore > Score, Score");
+    if (!score) {
+        throw new Error("MuseScore Score root was not found.");
+    }
+    const divisions = Math.max(1, Math.round((_a = firstNumber(score, ":scope > Division")) !== null && _a !== void 0 ? _a : 480));
+    const sourceVersion = ((_c = (_b = doc.querySelector("museScore")) === null || _b === void 0 ? void 0 : _b.getAttribute("version")) !== null && _c !== void 0 ? _c : "").trim();
+    const workTitle = ((_e = (_d = score.querySelector(':scope > metaTag[name="workTitle"]')) === null || _d === void 0 ? void 0 : _d.textContent) !== null && _e !== void 0 ? _e : "").trim() || "Imported MuseScore";
+    const globalBeats = Math.max(1, Math.round((_f = firstNumber(score, ":scope > Staff > Measure TimeSig > sigN")) !== null && _f !== void 0 ? _f : 4));
+    const globalBeatType = Math.max(1, Math.round((_g = firstNumber(score, ":scope > Staff > Measure TimeSig > sigD")) !== null && _g !== void 0 ? _g : 4));
+    const globalFifths = Math.max(-7, Math.min(7, Math.round((_h = firstNumber(score, ":scope > Staff > Measure KeySig > accidental")) !== null && _h !== void 0 ? _h : 0)));
+    const staffNodes = Array.from(score.querySelectorAll(":scope > Staff")).filter((staff) => staff.querySelector(":scope > Measure") !== null);
+    const warnings = [];
+    const unknownTagSet = new Set();
+    if (!staffNodes.length) {
+        warnings.push({
+            code: "MUSESCORE_IMPORT_WARNING",
+            message: "No readable staff content found; created an empty placeholder score.",
+        });
+    }
+    const partList = [];
+    const parsedByPart = [];
+    const sourceMetadata = options.sourceMetadata !== false;
+    const debugMetadata = options.debugMetadata !== false;
+    const staffs = staffNodes.length ? staffNodes : [doc.createElement("Staff")];
+    for (let staffIndex = 0; staffIndex < staffs.length; staffIndex += 1) {
+        const staff = staffs[staffIndex];
+        const partId = `P${staffIndex + 1}`;
+        partList.push(`<score-part id="${partId}"><part-name>${partId}</part-name></score-part>`);
+        const measures = Array.from(staff.querySelectorAll(":scope > Measure"));
+        if (!measures.length) {
+            parsedByPart.push({
+                partId,
+                measures: [{
+                        index: 1,
+                        beats: globalBeats,
+                        beatType: globalBeatType,
+                        fifths: globalFifths,
+                        tempoBpm: null,
+                        repeatForward: false,
+                        repeatBackward: false,
+                        events: [{ kind: "rest", durationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))) }],
+                    }],
+            });
+            continue;
+        }
+        let currentBeats = globalBeats;
+        let currentBeatType = globalBeatType;
+        let currentFifths = globalFifths;
+        const parsedMeasures = [];
+        for (let mi = 0; mi < measures.length; mi += 1) {
+            const measure = measures[mi];
+            const beats = parseMeasureValue(measure, [":scope > TimeSig > sigN", ":scope > voice > TimeSig > sigN", ":scope > voice > timesig > sigN"], currentBeats);
+            const beatType = parseMeasureValue(measure, [":scope > TimeSig > sigD", ":scope > voice > TimeSig > sigD", ":scope > voice > timesig > sigD"], currentBeatType);
+            const fifthsRaw = (_k = (_j = firstNumber(measure, ":scope > KeySig > accidental")) !== null && _j !== void 0 ? _j : firstNumber(measure, ":scope > voice > KeySig > accidental")) !== null && _k !== void 0 ? _k : firstNumber(measure, ":scope > voice > keysig > accidental");
+            const fifths = fifthsRaw === null ? currentFifths : Math.max(-7, Math.min(7, Math.round(fifthsRaw)));
+            const tempoQps = (_m = (_l = firstNumber(measure, ":scope > Tempo > tempo")) !== null && _l !== void 0 ? _l : firstNumber(measure, ":scope > voice > Tempo > tempo")) !== null && _m !== void 0 ? _m : firstNumber(measure, ":scope > voice > tempo > tempo");
+            const tempoBpm = tempoQps !== null && tempoQps > 0 ? Math.max(20, Math.min(300, Math.round(tempoQps * 60))) : null;
+            const repeatForward = parseTruthyFlag(measure.getAttribute("startRepeat"))
+                || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
+            const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
+                || measure.querySelector(":scope > endRepeat, :scope > voice > endRepeat") !== null;
+            const events = [];
+            const voiceNodes = Array.from(measure.querySelectorAll(":scope > voice"));
+            const eventHolders = voiceNodes.length ? voiceNodes : [measure];
+            for (const holder of eventHolders) {
+                const children = Array.from(holder.children);
+                for (const event of children) {
+                    const tag = event.tagName.toLowerCase();
+                    if (tag === "rest") {
+                        const durationDiv = parseDurationDiv(event, divisions);
+                        if (!durationDiv) {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped rest with unknown duration.` });
+                            continue;
+                        }
+                        events.push({ kind: "rest", durationDiv });
+                        continue;
+                    }
+                    if (tag === "chord") {
+                        const durationDiv = parseDurationDiv(event, divisions);
+                        if (!durationDiv) {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped chord with unknown duration.` });
+                            continue;
+                        }
+                        const pitchNodes = Array.from(event.querySelectorAll(":scope > Note > pitch"));
+                        const pitches = pitchNodes
+                            .map((p) => { var _a; return Number.parseInt(((_a = p.textContent) !== null && _a !== void 0 ? _a : "").trim(), 10); })
+                            .filter((midi) => Number.isFinite(midi));
+                        if (!pitches.length) {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped chord without pitch.` });
+                            continue;
+                        }
+                        events.push({ kind: "chord", durationDiv, pitches });
+                        continue;
+                    }
+                    if (tag === "dynamic") {
+                        const mark = parseMuseDynamicMark(((_q = (_p = (_o = event.querySelector(":scope > subtype")) === null || _o === void 0 ? void 0 : _o.textContent) !== null && _p !== void 0 ? _p : event.textContent) !== null && _q !== void 0 ? _q : "").trim());
+                        if (mark) {
+                            events.push({ kind: "dynamic", mark });
+                        }
+                        else {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported dynamic skipped.` });
+                        }
+                        continue;
+                    }
+                    if (tag === "marker") {
+                        const directionXml = parseMarkerDirectionXml(event);
+                        if (directionXml) {
+                            events.push({ kind: "directionXml", xml: directionXml });
+                        }
+                        else {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported marker skipped.` });
+                        }
+                        continue;
+                    }
+                    if (tag === "jump") {
+                        const parsed = parseJumpDirectionXml(event);
+                        if (!parsed) {
+                            warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported jump skipped.` });
+                        }
+                        else {
+                            events.push({ kind: "directionXml", xml: parsed.xml });
+                            if (!parsed.mapped) {
+                                warnings.push({
+                                    code: "MUSESCORE_IMPORT_WARNING",
+                                    message: `measure ${mi + 1}: jump mapped as text only; playback semantics may be incomplete.`,
+                                });
+                            }
+                        }
+                        continue;
+                    }
+                    if (tag === "timesig" || tag === "keysig" || tag === "tempo" || tag === "layoutbreak" || tag === "clef") {
+                        continue;
+                    }
+                    unknownTagSet.add(tag);
+                }
+            }
+            const capacity = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+            const occupied = events
+                .filter((event) => "durationDiv" in event)
+                .reduce((sum, event) => sum + Math.max(0, Math.round(event.durationDiv)), 0);
+            if (occupied > capacity) {
+                warnings.push({
+                    code: "MUSESCORE_IMPORT_WARNING",
+                    message: `measure ${mi + 1}: overfull content (${occupied} > ${capacity}); tail events are clamped.`,
+                });
+            }
+            parsedMeasures.push({
+                index: mi + 1,
+                beats,
+                beatType,
+                fifths,
+                tempoBpm,
+                repeatForward,
+                repeatBackward,
+                events,
+            });
+            currentBeats = beats;
+            currentBeatType = beatType;
+            currentFifths = fifths;
+        }
+        parsedByPart.push({ partId, measures: parsedMeasures });
+    }
+    if (unknownTagSet.size > 0) {
+        warnings.push({
+            code: "MUSESCORE_IMPORT_WARNING",
+            message: `unsupported MuseScore elements skipped: ${Array.from(unknownTagSet).sort().join(", ")}`,
+        });
+    }
+    let sourceMiscXml = "";
+    if (sourceMetadata) {
+        sourceMiscXml = buildSourceMiscXml(mscxSource);
+        if (sourceVersion) {
+            sourceMiscXml += `<miscellaneous-field name="src:musescore:version">${xmlEscape(sourceVersion)}</miscellaneous-field>`;
+        }
+    }
+    const miscXml = `${debugMetadata ? buildWarningMiscXml(warnings) : ""}${sourceMiscXml}`;
+    const partXml = [];
+    for (const part of parsedByPart) {
+        const measuresXml = [];
+        let prevBeats = globalBeats;
+        let prevBeatType = globalBeatType;
+        let prevFifths = globalFifths;
+        for (let mi = 0; mi < part.measures.length; mi += 1) {
+            const measure = part.measures[mi];
+            const capacity = Math.max(1, Math.round((divisions * 4 * measure.beats) / Math.max(1, measure.beatType)));
+            let body = "";
+            const needsAttributes = mi === 0
+                || measure.beats !== prevBeats
+                || measure.beatType !== prevBeatType
+                || measure.fifths !== prevFifths;
+            if (needsAttributes) {
+                body += `<attributes><divisions>${divisions}</divisions><key><fifths>${measure.fifths}</fifths><mode>major</mode></key><time><beats>${measure.beats}</beats><beat-type>${measure.beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef>${mi === 0 && miscXml ? `<miscellaneous>${miscXml}</miscellaneous>` : ""}</attributes>`;
+            }
+            if (measure.repeatForward) {
+                body += `<barline location="left"><repeat direction="forward"/></barline>`;
+            }
+            if (measure.tempoBpm !== null) {
+                body += `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${measure.tempoBpm}</per-minute></metronome></direction-type><sound tempo="${measure.tempoBpm}"/></direction>`;
+            }
+            let occupied = 0;
+            for (const event of measure.events) {
+                if (event.kind === "dynamic") {
+                    body += buildDynamicDirectionXml(event.mark);
+                    continue;
+                }
+                if (event.kind === "directionXml") {
+                    body += event.xml;
+                    continue;
+                }
+                if (occupied + event.durationDiv > capacity)
+                    break;
+                occupied += event.durationDiv;
+                const info = divisionToTypeAndDots(divisions, event.durationDiv);
+                if (event.kind === "rest") {
+                    body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
+                    continue;
+                }
+                for (let ni = 0; ni < event.pitches.length; ni += 1) {
+                    const pitch = midiToPitch(event.pitches[ni]);
+                    body += `<note>${ni > 0 ? "<chord/>" : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
+                }
+            }
+            if (occupied < capacity) {
+                const restDiv = capacity - occupied;
+                const info = divisionToTypeAndDots(divisions, restDiv);
+                body += `<note><rest/><duration>${restDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
+            }
+            if (measure.repeatBackward) {
+                body += `<barline location="right"><repeat direction="backward"/></barline>`;
+            }
+            measuresXml.push(`<measure number="${measure.index}">${body}</measure>`);
+            prevBeats = measure.beats;
+            prevBeatType = measure.beatType;
+            prevFifths = measure.fifths;
+        }
+        partXml.push(`<part id="${part.partId}">${measuresXml.join("")}</part>`);
+    }
+    return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(workTitle)}</work-title></work><part-list>${partList.join("")}</part-list>${partXml.join("")}</score-partwise>`;
+};
+exports.convertMuseScoreToMusicXml = convertMuseScoreToMusicXml;
+const firstNumberInDoc = (scope, selectors, fallback) => {
+    for (const selector of selectors) {
+        const n = firstNumber(scope, selector);
+        if (n !== null && Number.isFinite(n) && n > 0)
+            return Math.max(1, Math.round(n));
+    }
+    return fallback;
+};
+const divisionsToMuseDurationType = (divisions, durationDiv) => {
+    const info = divisionToTypeAndDots(divisions, Math.max(1, Math.round(durationDiv)));
+    switch (info.type) {
+        case "whole":
+        case "half":
+        case "quarter":
+        case "eighth":
+        case "16th":
+        case "32nd":
+        case "64th":
+            return { durationType: info.type, dots: info.dots };
+        default:
+            return { durationType: "quarter", dots: 0 };
+    }
+};
+const makeMuseChordXml = (durationDiv, divisions, pitches) => {
+    const duration = divisionsToMuseDurationType(divisions, durationDiv);
+    let xml = "<Chord>";
+    xml += `<durationType>${duration.durationType}</durationType>`;
+    if (duration.dots > 0)
+        xml += `<dots>${duration.dots}</dots>`;
+    for (const pitch of pitches) {
+        xml += `<Note><pitch>${Math.max(0, Math.min(127, Math.round(pitch)))}</pitch></Note>`;
+    }
+    xml += "</Chord>";
+    return xml;
+};
+const makeMuseRestXml = (durationDiv, divisions) => {
+    const duration = divisionsToMuseDurationType(divisions, durationDiv);
+    let xml = "<Rest>";
+    xml += `<durationType>${duration.durationType}</durationType>`;
+    if (duration.dots > 0)
+        xml += `<dots>${duration.dots}</dots>`;
+    xml += "</Rest>";
+    return xml;
+};
+const exportMusicXmlDomToMuseScore = (doc) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const score = doc.querySelector("score-partwise");
+    if (!score)
+        throw new Error("MusicXML score-partwise root was not found.");
+    const title = ((_b = (_a = score.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
+        || ((_d = (_c = score.querySelector("movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim()
+        || "mikuscore export";
+    const divisions = firstNumberInDoc(score, ["part > measure > attributes > divisions"], 480);
+    const partNodes = Array.from(score.querySelectorAll(":scope > part"));
+    let scoreXml = `<?xml version="1.0" encoding="UTF-8"?><museScore version="4.0"><Score>`;
+    scoreXml += `<metaTag name="workTitle">${xmlEscape(title)}</metaTag>`;
+    scoreXml += `<Division>${divisions}</Division>`;
+    if (!partNodes.length) {
+        const capacity = Math.max(1, Math.round((divisions * 4 * 4) / 4));
+        scoreXml += `<Staff id="1"><Measure><voice>${makeMuseRestXml(capacity, divisions)}</voice></Measure></Staff>`;
+        scoreXml += "</Score></museScore>";
+        return scoreXml;
+    }
+    for (let pi = 0; pi < partNodes.length; pi += 1) {
+        const part = partNodes[pi];
+        const staffId = pi + 1;
+        scoreXml += `<Staff id="${staffId}">`;
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        let currentBeats = 4;
+        let currentBeatType = 4;
+        let currentFifths = 0;
+        for (const measure of measures) {
+            scoreXml += "<Measure><voice>";
+            const beats = firstNumber(measure, ":scope > attributes > time > beats");
+            const beatType = firstNumber(measure, ":scope > attributes > time > beat-type");
+            if (beats !== null && beatType !== null && (Math.round(beats) !== currentBeats || Math.round(beatType) !== currentBeatType)) {
+                currentBeats = Math.max(1, Math.round(beats));
+                currentBeatType = Math.max(1, Math.round(beatType));
+                scoreXml += `<TimeSig><sigN>${currentBeats}</sigN><sigD>${currentBeatType}</sigD></TimeSig>`;
+            }
+            const fifths = firstNumber(measure, ":scope > attributes > key > fifths");
+            if (fifths !== null && Math.round(fifths) !== currentFifths) {
+                currentFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
+                scoreXml += `<KeySig><accidental>${currentFifths}</accidental></KeySig>`;
+            }
+            const tempo = firstAttrNumber(measure, ":scope > direction > sound[tempo]", "tempo");
+            if (tempo !== null && tempo > 0) {
+                scoreXml += `<Tempo><tempo>${(tempo / 60).toFixed(6)}</tempo></Tempo>`;
+            }
+            const mfNodes = Array.from(measure.querySelectorAll(":scope > direction > direction-type > dynamics > *"));
+            for (const node of mfNodes) {
+                const tag = node.tagName.toLowerCase();
+                scoreXml += `<Dynamic><subtype>${xmlEscape(tag)}</subtype></Dynamic>`;
+            }
+            if (measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]')) {
+                scoreXml += "<startRepeat/>";
+            }
+            const children = Array.from(measure.children);
+            let pendingChord = null;
+            for (const child of children) {
+                if (child.tagName !== "note")
+                    continue;
+                const isRest = child.querySelector(":scope > rest") !== null;
+                const durationDiv = Math.max(1, Math.round((_e = firstNumber(child, ":scope > duration")) !== null && _e !== void 0 ? _e : divisions));
+                if (isRest) {
+                    if (pendingChord) {
+                        scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
+                        pendingChord = null;
+                    }
+                    scoreXml += makeMuseRestXml(durationDiv, divisions);
+                    continue;
+                }
+                const step = ((_g = (_f = child.querySelector(":scope > pitch > step")) === null || _f === void 0 ? void 0 : _f.textContent) !== null && _g !== void 0 ? _g : "").trim();
+                const octave = firstNumber(child, ":scope > pitch > octave");
+                if (!step || octave === null)
+                    continue;
+                const alter = Math.round((_h = firstNumber(child, ":scope > pitch > alter")) !== null && _h !== void 0 ? _h : 0);
+                const midi = (() => {
+                    const map = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+                    if (map[step] === undefined)
+                        return null;
+                    return map[step] + alter + (Math.round(octave) + 1) * 12;
+                })();
+                if (midi === null)
+                    continue;
+                const isChordFollow = child.querySelector(":scope > chord") !== null;
+                if (!isChordFollow) {
+                    if (pendingChord) {
+                        scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
+                    }
+                    pendingChord = { durationDiv, pitches: [midi] };
+                }
+                else if (pendingChord) {
+                    pendingChord.pitches.push(midi);
+                }
+                else {
+                    pendingChord = { durationDiv, pitches: [midi] };
+                }
+            }
+            if (pendingChord) {
+                scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
+            }
+            if (measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')) {
+                scoreXml += "<endRepeat/>";
+            }
+            scoreXml += "</voice></Measure>";
+        }
+        scoreXml += "</Staff>";
+    }
+    scoreXml += "</Score></museScore>";
+    return scoreXml;
+};
+exports.exportMusicXmlDomToMuseScore = exportMusicXmlDomToMuseScore;
 
   },
   "src/ts/lilypond-io.js": function (require, module, exports) {

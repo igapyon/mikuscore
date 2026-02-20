@@ -149,6 +149,16 @@ const findLikelyMusicXmlEntry = (entries: ZipEntry[]): ZipEntry | null => {
   return null;
 };
 
+const findFirstEntryByExtensions = (entries: ZipEntry[], extensions: string[]): ZipEntry | null => {
+  const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+  if (!normalized.length) return null;
+  for (const entry of entries) {
+    const p = entry.path.toLowerCase();
+    if (normalized.some((ext) => p.endsWith(ext))) return entry;
+  }
+  return null;
+};
+
 const parseContainerRootFilePath = (containerXmlText: string): string | null => {
   const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
   if (doc.querySelector("parsererror")) return null;
@@ -185,4 +195,21 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
   }
   const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
   return new TextDecoder("utf-8").decode(xmlBytes);
+};
+
+export const extractTextFromZipByExtensions = async (
+  archiveBuffer: ArrayBuffer,
+  extensions: string[]
+): Promise<string> => {
+  const archiveBytes = new Uint8Array(archiveBuffer);
+  const entries = readZipEntries(archiveBytes);
+  if (!entries.length) {
+    throw new Error("The ZIP archive is empty.");
+  }
+  const entry = findFirstEntryByExtensions(entries, extensions);
+  if (!entry) {
+    throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
+  }
+  const bytes = await extractEntryBytes(archiveBytes, entry);
+  return new TextDecoder("utf-8").decode(bytes);
 };
