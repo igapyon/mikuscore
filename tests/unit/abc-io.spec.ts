@@ -237,6 +237,34 @@ C D E F G A B c d |`;
     if (!outDoc) return;
     const measureCount = outDoc.querySelectorAll("part > measure").length;
     expect(measureCount).toBeGreaterThanOrEqual(2);
+    expect(
+      outDoc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:count"]'
+      )?.textContent
+    ).toBe("1");
+    expect(
+      outDoc.querySelector(
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+      )?.textContent
+    ).toContain("code=OVERFULL_REFLOWED");
+  });
+
+  it("records ABC parser fallback warnings into diag:* fields", () => {
+    const abc = `X:1
+T:Bad header
+M:not-a-meter
+L:1/8
+K:C
+V:1
+C D E F |`;
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector('miscellaneous-field[name="diag:count"]')).not.toBeNull();
+    expect(outDoc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+      "code=ABC_IMPORT_WARNING"
+    );
   });
 
   it("ABC->MusicXML parses trill decoration and grace notes", () => {
@@ -281,6 +309,38 @@ V:1
 
     const firstNote = outDoc.querySelector("part > measure > note");
     expect(firstNote?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
+  });
+
+  it("exports diag:* miscellaneous-field into %@mks diag metadata lines", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Lead</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+        <miscellaneous>
+          <miscellaneous-field name="diag:count">1</miscellaneous-field>
+          <miscellaneous-field name="diag:0001">level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=1</miscellaneous-field>
+        </miscellaneous>
+      </attributes>
+      <note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("%@mks diag");
+    expect(abc).toContain("name=diag:count");
+    expect(abc).toContain("name=diag:0001");
+    expect(abc).toContain("enc=uri-v1");
   });
 
   it("ABC->MusicXML parses slur notation", () => {

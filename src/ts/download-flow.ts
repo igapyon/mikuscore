@@ -85,7 +85,8 @@ export const createMidiDownloadPayload = (
       midiControlEvents,
       midiTempoEvents,
       midiTimeSignatureEvents,
-      midiKeySignatureEvents
+      midiKeySignatureEvents,
+      { embedMksSysEx: true, ticksPerQuarter }
     );
   } catch {
     return null;
@@ -140,5 +141,26 @@ export const createMeiDownloadPayload = (
   return {
     fileName: `mikuscore-${ts}.mei`,
     blob: new Blob([formattedMei], { type: "application/mei+xml;charset=utf-8" }),
+  };
+};
+
+export const createLilyPondDownloadPayload = (
+  xmlText: string,
+  convertMusicXmlToLilyPond: (doc: Document) => string
+): DownloadFilePayload | null => {
+  const musicXmlDoc = parseMusicXmlDocument(xmlText);
+  if (!musicXmlDoc) return null;
+
+  let lilyText = "";
+  try {
+    lilyText = convertMusicXmlToLilyPond(musicXmlDoc);
+  } catch {
+    return null;
+  }
+
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${ts}.ly`,
+    blob: new Blob([lilyText], { type: "text/plain;charset=utf-8" }),
   };
 };

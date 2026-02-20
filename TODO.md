@@ -53,6 +53,8 @@
 - [ ] Add LilyPond (`.ly`) import/export support.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
+- [ ] Prevent exporting overfull measures to external formats (at minimum MEI/ABC); normalize or split at export time so invalid data is not emitted.
+- [ ] Add a mandatory shared pre-export capacity check for all formats; if overfull is detected, emit `diag` and abort export.
 
 ### Resume Checklist
 1. `npm run build`
@@ -115,6 +117,8 @@
 - [ ] LilyPond（`.ly`）の入出力対応を追加。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
+- [ ] 外部形式（最低でも MEI/ABC）への出力時に overfull 小節を生成しない。エクスポート時に正規化または分割して不正データを出さない。
+- [ ] 全エクスポート形式の直前に共通の容量チェックを必須化し、overfull 検知時は `diag` を出してエクスポートを中止する。
 
 ### 次回の再開手順
 1. `npm run build`

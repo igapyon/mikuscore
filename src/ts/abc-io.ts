@@ -807,13 +807,26 @@ const abcCommon = AbcCommon;
       1,
       Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960)
     );
+    const importDiagnostics = [];
     const parts = orderedVoiceIds.map((voiceId, index) => {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
       const transpose =
         transposeHintByVoiceId.get(voiceId) ||
         voiceTransposeById[voiceId] ||
         (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
-      const normalizedMeasures = normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity);
+      const normalized = normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity);
+      const normalizedMeasures = normalized.measures;
+      for (const diag of normalized.diagnostics) {
+        importDiagnostics.push({
+          level: "warn",
+          code: "OVERFULL_REFLOWED",
+          fmt: "abc",
+          voiceId,
+          measure: diag.sourceMeasure,
+          action: "reflowed",
+          movedEvents: diag.movedEvents,
+        });
+      }
       const keyByMeasure: Record<number, number> = {};
       const measureMetaByIndex: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }> = {};
       for (let m = 1; m <= normalizedMeasures.length; m += 1) {
@@ -839,6 +852,12 @@ const abcCommon = AbcCommon;
     });
     const measureCount = parts.reduce((acc, part) => Math.max(acc, part.measures.length), 0);
 
+    const warningDiagnostics = warnings.map((message) => ({
+      level: "warn" as const,
+      code: "ABC_IMPORT_WARNING",
+      fmt: "abc" as const,
+      message,
+    }));
     return {
       meta: {
         title: headers.T || settings.defaultTitle,
@@ -856,7 +875,8 @@ const abcCommon = AbcCommon;
       voiceCount: parts.length,
       measureCount,
       noteCount,
-      warnings
+      warnings,
+      diagnostics: warningDiagnostics.concat(importDiagnostics)
     };
   }
 
@@ -1260,15 +1280,16 @@ const abcCommon = AbcCommon;
 
   function normalizeMeasuresToCapacity(measures, capacity) {
     if (!Array.isArray(measures) || measures.length === 0) {
-      return [[]];
+      return { measures: [[]], diagnostics: [] };
     }
     if (!Number.isFinite(capacity) || capacity <= 0) {
-      return measures;
+      return { measures, diagnostics: [] };
     }
 
     const normalized = [];
     let carry = [];
     let measureIdx = 0;
+    const diagnostics = [];
 
     while (measureIdx < measures.length || carry.length > 0) {
       const source = measureIdx < measures.length ? measures[measureIdx] : [];
@@ -1300,6 +1321,10 @@ const abcCommon = AbcCommon;
         }
 
         carry = events.slice(i);
+        diagnostics.push({
+          sourceMeasure: normalized.length + 1,
+          movedEvents: Math.max(1, carry.length),
+        });
         break;
       }
 
@@ -1309,7 +1334,10 @@ const abcCommon = AbcCommon;
     while (normalized.length > 1 && normalized[normalized.length - 1].length === 0) {
       normalized.pop();
     }
-    return normalized.length > 0 ? normalized : [[]];
+    return {
+      measures: normalized.length > 0 ? normalized : [[]],
+      diagnostics,
+    };
   }
 
 export const AbcCompatParser = {
@@ -1410,6 +1438,36 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const bodyLines: string[] = [];
   const metaLines: string[] = [];
   const emittedKeyMetaByVoiceMeasure = new Set<string>();
+  const emitDiagMetaForMeasure = (
+    normalizedVoiceId: string,
+    measure: Element,
+    safeMeasureNumber: number
+  ): void => {
+    const fields = Array.from(
+      measure.querySelectorAll(
+        ':scope > attributes > miscellaneous > miscellaneous-field[name^="diag:"]'
+      )
+    );
+    if (!fields.length) return;
+    const byName = new Map<string, string>();
+    for (const field of fields) {
+      const name = (field.getAttribute("name") || "").trim();
+      if (!name) continue;
+      const value = (field.textContent || "").trim();
+      byName.set(name, value);
+    }
+    const orderedNames = Array.from(byName.keys()).sort((a, b) => {
+      if (a === "diag:count") return -1;
+      if (b === "diag:count") return 1;
+      return a.localeCompare(b);
+    });
+    for (const name of orderedNames) {
+      const value = byName.get(name) || "";
+      metaLines.push(
+        `%@mks diag voice=${normalizedVoiceId} measure=${safeMeasureNumber} name=${name} enc=uri-v1 value=${encodeURIComponent(value)}`
+      );
+    }
+  };
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   parts.forEach((part, partIndex) => {
     const partId = part.getAttribute("id") || `P${partIndex + 1}`;
@@ -1546,6 +1604,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           }
           metaLines.push(metaChunks.join(" "));
         }
+        emitDiagMetaForMeasure(normalizedVoiceId, measure, safeMeasureNumber);
         const isFirstMeasureForLane = measureTexts.length === 0;
         const hasExplicitKeyInMeasure = parsedFifths !== null;
         const shouldEmitMeasureHint = hasExplicitKeyInMeasure || isFirstMeasureForLane;
@@ -1841,6 +1900,16 @@ type AbcParsedResult = {
   meta: AbcParsedMeta;
   parts: AbcParsedPart[];
   warnings?: string[];
+  diagnostics?: Array<{
+    level: "warn";
+    code: string;
+    fmt: "abc";
+    message?: string;
+    voiceId?: string;
+    measure?: number;
+    action?: string;
+    movedEvents?: number;
+  }>;
 };
 
 export type AbcImportOptions = {
@@ -1906,6 +1975,42 @@ const buildAbcSourceMiscXml = (abcSource: string): string => {
   xml += `<miscellaneous-field name="src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
     xml += `<miscellaneous-field name="src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
+  }
+  xml += "</miscellaneous></attributes>";
+  return xml;
+};
+
+const buildAbcDiagMiscXml = (
+  diagnostics: Array<{
+    level: "warn";
+    code: string;
+    fmt: "abc";
+    message?: string;
+    voiceId?: string;
+    measure?: number;
+    action?: string;
+    movedEvents?: number;
+  }>
+): string => {
+  if (!diagnostics.length) return "";
+  const maxEntries = Math.min(256, diagnostics.length);
+  let xml = "<attributes><miscellaneous>";
+  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  for (let i = 0; i < maxEntries; i += 1) {
+    const item = diagnostics[i];
+    const payload = [
+      `level=${item.level}`,
+      `code=${item.code}`,
+      `fmt=${item.fmt}`,
+      Number.isFinite(item.measure) ? `measure=${Math.max(1, Math.round(Number(item.measure)))}` : "",
+      item.voiceId ? `voice=${xmlEscape(item.voiceId)}` : "",
+      item.action ? `action=${xmlEscape(item.action)}` : "",
+      item.message ? `message=${xmlEscape(item.message)}` : "",
+      Number.isFinite(item.movedEvents) ? `movedEvents=${Math.max(0, Math.round(Number(item.movedEvents)))}` : "",
+    ]
+      .filter(Boolean)
+      .join(";");
+    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2104,12 +2209,20 @@ const buildMusicXmlFromAbcParsed = (
               }/></barline>`
             : "";
         const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
+        const diagMiscXml =
+          partIndex === 0 && measureNo === 1
+            ? buildAbcDiagMiscXml(
+                (parsed.diagnostics ?? []).filter(
+                  (diag) => !diag.voiceId || diag.voiceId === (part.voiceId || "")
+                )
+              )
+            : "";
         const sourceMiscXml =
           sourceMetadata && partIndex === 0 && measureNo === 1
             ? buildAbcSourceMiscXml(abcSource)
             : "";
         measuresXml.push(
-          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`
+          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${diagMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`
         );
       }
       return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;

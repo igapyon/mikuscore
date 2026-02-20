@@ -542,6 +542,26 @@ const parseLayerEvents = (layer: Element, divisions: number, voice: string): Par
   return events;
 };
 
+const trimLayerEventsToMeasureCapacity = (
+  events: ParsedMeiEvent[],
+  measureTicks: number
+): { events: ParsedMeiEvent[]; totalTicks: number; droppedCount: number; droppedTicks: number } => {
+  const kept: ParsedMeiEvent[] = [];
+  let totalTicks = 0;
+  let droppedCount = 0;
+  let droppedTicks = 0;
+  for (const event of events) {
+    if (totalTicks + event.durationTicks <= measureTicks) {
+      kept.push(event);
+      totalTicks += event.durationTicks;
+      continue;
+    }
+    droppedCount += 1;
+    droppedTicks += event.durationTicks;
+  }
+  return { events: kept, totalTicks, droppedCount, droppedTicks };
+};
+
 const extractMiscFieldsFromMeiStaff = (staff: Element): Array<{ name: string; value: string }> => {
   const out: Array<{ name: string; value: string }> = [];
   const normalizeName = (rawName: string): string => {
@@ -705,12 +725,16 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           const layers = layerNodes
             .map((layer, i) => {
               const voice = layer.getAttribute("n")?.trim() || String(i + 1);
-              const events = parseLayerEvents(layer, divisions, voice);
-              const totalTicks = events.reduce((sum, event) => sum + event.durationTicks, 0);
+              const parsedEvents = parseLayerEvents(layer, divisions, voice);
+              const sourceTotalTicks = parsedEvents.reduce((sum, event) => sum + event.durationTicks, 0);
+              const trimmed = trimLayerEventsToMeasureCapacity(parsedEvents, measureTicks);
               return {
                 voice,
-                xml: events.map((event) => event.xml).join(""),
-                totalTicks,
+                xml: trimmed.events.map((event) => event.xml).join(""),
+                totalTicks: trimmed.totalTicks,
+                sourceTotalTicks,
+                droppedCount: trimmed.droppedCount,
+                droppedTicks: trimmed.droppedTicks,
               };
             })
             .filter((layer) => layer.xml.length > 0);
@@ -729,7 +753,21 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           const meiDebugFields = debugMetadata
             ? buildMeiDebugFieldsFromStaff(targetStaff, measureNo, divisions)
             : [];
-          const allFields = [...miscFields, ...meiDebugFields];
+          const droppedEvents = layers.reduce((sum, layer) => sum + layer.droppedCount, 0);
+          const droppedTicks = layers.reduce((sum, layer) => sum + layer.droppedTicks, 0);
+          const sourceTotalTicks = layers.reduce((sum, layer) => sum + layer.sourceTotalTicks, 0);
+          const overfullDetected = layers.some((layer) => layer.sourceTotalTicks > measureTicks);
+          const overflowFields: Array<{ name: string; value: string }> =
+            overfullDetected
+              ? [
+                  { name: "diag:count", value: "1" },
+                  {
+                    name: "diag:0001",
+                    value: `level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=${measureNo};staff=${staffNo};action=clamped;sourceTicks=${sourceTotalTicks};capacityTicks=${measureTicks};droppedEvents=${droppedEvents};droppedTicks=${droppedTicks}`,
+                  },
+                ]
+              : [];
+          const allFields = [...miscFields, ...meiDebugFields, ...overflowFields];
           const miscellaneousXml =
             allFields.length > 0
               ? `<miscellaneous>${allFields
