@@ -621,6 +621,27 @@ describe("midi-io MIDI import MVP", () => {
     expect(mode).toBe("minor");
   });
 
+  it("infers MusicXML key when MIDI key signature meta event is missing", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 62, 96, // D
+      ...vlq(480), 0x80, 62, 0,
+      ...vlq(0), 0x90, 66, 96, // F#
+      ...vlq(480), 0x80, 66, 0,
+      ...vlq(0), 0x90, 69, 96, // A
+      ...vlq(480), 0x80, 69, 0,
+      ...vlq(0), 0x90, 74, 96, // D
+      ...vlq(480), 0x80, 74, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const fifths = doc.querySelector("part > measure > attributes > key > fifths")?.textContent?.trim();
+    const mode = doc.querySelector("part > measure > attributes > key > mode")?.textContent?.trim();
+    expect(fifths).toBe("2");
+    expect(mode).toBe("major");
+    expect(result.warnings.some((warning) => warning.code === "MIDI_KEY_SIGNATURE_INFERRED")).toBe(true);
+  });
+
   it("emits natural accidental when note contradicts key signature", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0xff, 0x59, 0x02, 0x01, 0x00, // key: +1 (G major, F#)

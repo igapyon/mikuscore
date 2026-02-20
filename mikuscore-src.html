@@ -448,7 +448,19 @@
               <span>LilyPond</span>
             </button>
           </div>
-          <div class="ms-actions">
+          <div class="ms-actions ms-preview-actions">
+            <button id="exportPlayBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>Play</span>
+            </button>
+            <button id="exportStopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
+              </svg>
+              <span>Stop</span>
+            </button>
             <button id="discardDraftExportBtn" type="button" class="md-button md-button--surface ms-icon-button md-hidden">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 7h16"></path>
@@ -458,6 +470,9 @@
                 <path d="M14 10v7"></path>
               </svg>
               <span>Discard Draft</span>
+            </button>
+            <button id="resetPlaybackSettingsBtn" type="button" class="md-button md-button--surface ms-icon-button">
+              <span>Reset to defaults</span>
             </button>
           </div>
           <section class="ms-settings-card" aria-label="General settings">
@@ -675,20 +690,6 @@
                       <option value="square">Square</option>
                     </select>
                   </label>
-                </div>
-                <div class="ms-settings-actions ms-settings-actions--section-divider">
-                  <button id="resetPlaybackSettingsBtn" type="button" class="md-button md-button--surface">
-                    Reset to defaults
-                  </button>
-                </div>
-                <div class="ms-settings-block">
-                  <h4 class="ms-settings-subtitle">MIDI Debug</h4>
-                  <div class="ms-settings-actions">
-                    <button id="refreshMidiDebugBtn" type="button" class="md-button md-button--surface">
-                      Refresh MIDI Debug
-                    </button>
-                  </div>
-                  <pre id="midiDebugText" class="ms-midi-debug-text">MIDI debug: no data</pre>
                 </div>
               </div>
             </details>

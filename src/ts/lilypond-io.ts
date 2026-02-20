@@ -22,6 +22,12 @@ type LilyDirectEvent =
   | { kind: "chord"; durationDiv: number; type: string; dots: number; pitches: LilyParsedPitch[] };
 
 type LilyTransposeHint = { chromatic?: number; diatonic?: number };
+type LilyMeasureHint = {
+  number?: string;
+  implicit?: boolean;
+  repeat?: "forward" | "backward";
+  times?: number;
+};
 
 const xmlEscape = (value: string): string =>
   String(value ?? "")
@@ -394,6 +400,42 @@ const parseMksTransposeHints = (source: string): Map<string, LilyTransposeHint> 
   return out;
 };
 
+const parseMksMeasureHints = (source: string): Map<string, Map<number, LilyMeasureHint>> => {
+  const out = new Map<string, Map<number, LilyMeasureHint>>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+measure\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0) continue;
+    const hint: LilyMeasureHint = {};
+    const numberText = String(params.number || "").trim();
+    if (numberText) hint.number = numberText;
+    const implicitRaw = String(params.implicit || "").trim().toLowerCase();
+    if (implicitRaw) {
+      hint.implicit = implicitRaw === "1" || implicitRaw === "true" || implicitRaw === "yes";
+    }
+    const repeatRaw = String(params.repeat || "").trim().toLowerCase();
+    if (repeatRaw === "forward" || repeatRaw === "backward") {
+      hint.repeat = repeatRaw;
+    }
+    const times = Number.parseInt(String(params.times || ""), 10);
+    if (Number.isFinite(times) && times > 1) hint.times = times;
+    const byMeasure = out.get(voiceId) ?? new Map<number, LilyMeasureHint>();
+    byMeasure.set(measureNo, hint);
+    out.set(voiceId, byMeasure);
+  }
+  return out;
+};
+
 const extractAllStaffBlocks = (source: string): Array<{
   voiceId: string;
   body: string;
@@ -639,8 +681,7 @@ const parseLilyDirectBody = (
       measures.push([]);
       continue;
     }
-    const chordMatch = token.match(/^<([^>]+)>(\d+)?(\.*)$/);
-    const chordExprMatch = token.match(/^<([^>]+)>((?:\d+(?:\*\d+\/\d+)?)?)(\.*)$/);
+    const chordExprMatch = token.match(/^<([^>]+)>((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
     if (chordExprMatch) {
       const durExprText = chordExprMatch[2] || "";
       const dots = chordExprMatch[3]?.length || 0;
@@ -676,7 +717,7 @@ const parseLilyDirectBody = (
       });
       continue;
     }
-    const m = token.match(/^([a-grs])(isis|eses|is|es)?([,']*)((?:\d+(?:\*\d+\/\d+)?)?)(\.*)$/);
+    const m = token.match(/^([a-grs])(isis|eses|is|es)?([,']*)((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
     if (!m) continue;
     const durExprText = m[4] || "";
     const dots = m[5]?.length || 0;
@@ -724,7 +765,13 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
   beatType: number;
   fifths: number;
   mode: "major" | "minor";
-  staffs: Array<{ voiceId: string; clef: string; measures: LilyDirectEvent[][]; transpose?: LilyTransposeHint | null }>;
+  staffs: Array<{
+    voiceId: string;
+    clef: string;
+    measures: LilyDirectEvent[][];
+    transpose?: LilyTransposeHint | null;
+    measureHintsByIndex?: Map<number, LilyMeasureHint>;
+  }>;
 }): string => {
   const partList = params.staffs
     .map((staff, i) => `<score-part id="P${i + 1}"><part-name>${xmlEscape(staff.voiceId || `Part ${i + 1}`)}</part-name></score-part>`)
@@ -737,7 +784,10 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
       const measureCapacity = Math.max(1, Math.round((480 * 4 * params.beats) / Math.max(1, params.beatType)));
       for (let m = 0; m < measureCount; m += 1) {
         const events = staff.measures[m] || [];
-        const number = m + 1;
+        const index1 = m + 1;
+        const hint = staff.measureHintsByIndex?.get(index1) ?? null;
+        const numberText = hint?.number?.trim() || String(index1);
+        const implicitAttr = hint?.implicit ? ' implicit="yes"' : "";
         let body = "";
         if (m === 0) {
           const clefXml =
@@ -756,7 +806,15 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         }
         if (!events.length) {
           body += `<note><rest/><duration>${measureCapacity}</duration><voice>1</voice><type>whole</type></note>`;
-          measuresXml.push(`<measure number="${number}">${body}</measure>`);
+          if (hint?.repeat === "forward") {
+            body = `<barline location="left"><repeat direction="forward"/></barline>${body}`;
+          } else if (hint?.repeat === "backward") {
+            const timesText = Number.isFinite(hint.times) && (hint.times as number) > 1
+              ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/><ending number="${Math.round(hint.times as number)}" type="stop"/>`
+              : `<repeat direction="backward"/>`;
+            body += `<barline location="right">${timesText}</barline>`;
+          }
+          measuresXml.push(`<measure number="${xmlEscape(numberText)}"${implicitAttr}>${body}</measure>`);
           continue;
         }
         for (const event of events) {
@@ -773,7 +831,15 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
             body += `<note>${pi > 0 ? "<chord/>" : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
           }
         }
-        measuresXml.push(`<measure number="${number}">${body}</measure>`);
+        if (hint?.repeat === "forward") {
+          body = `<barline location="left"><repeat direction="forward"/></barline>${body}`;
+        } else if (hint?.repeat === "backward") {
+          const timesText = Number.isFinite(hint.times) && (hint.times as number) > 1
+            ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/><ending number="${Math.round(hint.times as number)}" type="stop"/>`
+            : `<repeat direction="backward"/>`;
+          body += `<barline location="right">${timesText}</barline>`;
+        }
+        measuresXml.push(`<measure number="${xmlEscape(numberText)}"${implicitAttr}>${body}</measure>`);
       }
       return `<part id="${partId}">${measuresXml.join("")}</part>`;
     })
@@ -795,6 +861,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
   const keyInfo = keyModeAndFifthsFromAbcKey(keyAbc);
   const staffBlocks = extractAllStaffBlocks(source);
   const transposeHintByVoiceId = parseMksTransposeHints(source);
+  const measureHintByVoiceId = parseMksMeasureHints(source);
   if (!staffBlocks.length) return null;
   const warnings: string[] = [];
   const staffs = staffBlocks.map((staff, index) => ({
@@ -802,6 +869,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
     clef: normalizeAbcClefName(staff.clef || "treble"),
     measures: parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType),
     transpose: transposeHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || staff.transpose || null,
+    measureHintsByIndex: measureHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || undefined,
   }));
   if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
     return null;
@@ -1284,6 +1352,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
   const keyToken = mode === "minor" ? keyByFifthsMinor[keyIndex] : keyByFifthsMajor[keyIndex];
   const warnings: string[] = [];
   const transposeComments: string[] = [];
+  const measureComments: string[] = [];
   const blocks: string[] = [];
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i];
@@ -1307,6 +1376,33 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       if (Number.isFinite(partTranspose.diatonic)) fields.push(`diatonic=${Math.round(Number(partTranspose.diatonic))}`);
       return fields.length > 1 ? fields.join(" ") : null;
     };
+    const measureCommentsForVoice = (voiceId: string): string[] => {
+      const out: string[] = [];
+      const measures = Array.from(part.querySelectorAll(":scope > measure"));
+      for (let mi = 0; mi < measures.length; mi += 1) {
+        const measure = measures[mi];
+        const fields = [`%@mks measure voice=${voiceId} measure=${mi + 1}`];
+        const rawNo = (measure.getAttribute("number") || "").trim();
+        if (rawNo) fields.push(`number=${rawNo}`);
+        const implicitRaw = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+        const isImplicit = implicitRaw === "yes" || implicitRaw === "true" || implicitRaw === "1";
+        fields.push(`implicit=${isImplicit ? 1 : 0}`);
+        const leftRepeat = measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]');
+        const rightRepeat = measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]');
+        if (leftRepeat) {
+          fields.push("repeat=forward");
+        } else if (rightRepeat) {
+          fields.push("repeat=backward");
+          const times = Number.parseInt(
+            measure.querySelector(':scope > barline[location="right"] > ending[type="stop"]')?.getAttribute("number") || "",
+            10
+          );
+          if (Number.isFinite(times) && times > 1) fields.push(`times=${times}`);
+        }
+        out.push(fields.join(" "));
+      }
+      return out;
+    };
     const declaredStaffNumbers = collectStaffNumbersForPart(part);
     const activeStaffNumbers = collectActiveStaffNumbersForPart(part);
     const staffNumbers = activeStaffNumbers.length ? activeStaffNumbers : declaredStaffNumbers.slice(0, 1);
@@ -1318,6 +1414,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       blocks.push(`\\new Staff = "${partId}" { ${clefPrefix}${body} }`);
       const transposeComment = transposeCommentForVoice(partId);
       if (transposeComment) transposeComments.push(transposeComment);
+      measureComments.push(...measureCommentsForVoice(partId));
       continue;
     }
     const staffBlocks = staffNumbers.map((staffNo) => {
@@ -1327,6 +1424,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       const voiceId = `${partId}_s${staffNo}`;
       const transposeComment = transposeCommentForVoice(voiceId);
       if (transposeComment) transposeComments.push(transposeComment);
+      measureComments.push(...measureCommentsForVoice(voiceId));
       return `\\new Staff = "${partId}_s${staffNo}" { ${clefPrefix}${body} }`;
     });
     blocks.push(`\\new PianoStaff = "${partId}" << ${staffBlocks.join(" ")} >>`);
@@ -1357,6 +1455,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
     `\\time ${Number.isFinite(beats) && beats > 0 ? beats : 4}/${Number.isFinite(beatType) && beatType > 0 ? beatType : 4}`,
     `\\key ${keyToken} \\${mode}`,
     ...transposeComments.map((line) => `% ${line}`),
+    ...measureComments.map((line) => `% ${line}`),
     ...diagComments.map((line) => `% ${line}`),
     ...warningComments.map((line) => `% ${line}`),
     "\\score {",

@@ -54,6 +54,7 @@ export type MidiImportDiagnosticCode =
   | "MIDI_NOTE_PAIR_BROKEN"
   | "MIDI_QUANTIZE_CLAMPED"
   | "MIDI_EVENT_DROPPED"
+  | "MIDI_KEY_SIGNATURE_INFERRED"
   | "MIDI_POLYPHONY_VOICE_ASSIGNED"
   | "MIDI_POLYPHONY_VOICE_OVERFLOW"
   | "MIDI_DRUM_CHANNEL_SEPARATED"
@@ -131,6 +132,75 @@ const clampTempo = (tempo: number): number => {
 const clampVelocity = (velocity: number): number => {
   if (!Number.isFinite(velocity)) return 80;
   return Math.max(1, Math.min(127, Math.round(velocity)));
+};
+
+const mod12 = (value: number): number => {
+  const rounded = Math.round(value);
+  return ((rounded % 12) + 12) % 12;
+};
+
+const keyTonicPitchClassFromFifths = (fifths: number, mode: "major" | "minor"): number => {
+  const majorTonic = mod12(7 * Math.max(-7, Math.min(7, Math.round(fifths))));
+  return mode === "minor" ? mod12(majorTonic + 9) : majorTonic;
+};
+
+const keyScalePitchClasses = (fifths: number, mode: "major" | "minor"): Set<number> => {
+  const tonic = keyTonicPitchClassFromFifths(fifths, mode);
+  const intervals = mode === "minor" ? [0, 2, 3, 5, 7, 8, 10] : [0, 2, 4, 5, 7, 9, 11];
+  return new Set(intervals.map((interval) => mod12(tonic + interval)));
+};
+
+const inferKeySignatureFromImportedNotes = (
+  notes: ImportedQuantizedNote[]
+): { fifths: number; mode: "major" | "minor" } | null => {
+  if (!notes.length) return null;
+  const pitchClassWeights = new Array<number>(12).fill(0);
+  for (const note of notes) {
+    const pitchClass = mod12(note.midi);
+    const duration = Math.max(1, Math.round(note.endTick) - Math.round(note.startTick));
+    pitchClassWeights[pitchClass] += duration;
+  }
+  const totalWeight = pitchClassWeights.reduce((sum, value) => sum + value, 0);
+  if (totalWeight <= 0) return null;
+  const uniquePitchClasses = pitchClassWeights.filter((weight) => weight > 0).length;
+  if (notes.length < 3 || uniquePitchClasses < 3) return null;
+
+  const sortedNotes = notes
+    .slice()
+    .sort((a, b) => (a.startTick === b.startTick ? a.midi - b.midi : a.startTick - b.startTick));
+  const firstPitchClass = mod12(sortedNotes[0]?.midi ?? 0);
+  const lastPitchClass = mod12(sortedNotes[sortedNotes.length - 1]?.midi ?? 0);
+  let best: { fifths: number; mode: "major" | "minor"; score: number } | null = null;
+
+  for (let fifths = -7; fifths <= 7; fifths += 1) {
+    for (const mode of ["major", "minor"] as const) {
+      const inScale = keyScalePitchClasses(fifths, mode);
+      const tonicPitchClass = keyTonicPitchClassFromFifths(fifths, mode);
+      let score = 0;
+      for (let pitchClass = 0; pitchClass < 12; pitchClass += 1) {
+        const weight = pitchClassWeights[pitchClass] ?? 0;
+        if (weight <= 0) continue;
+        score += inScale.has(pitchClass) ? weight : -weight * 0.55;
+      }
+      score += (pitchClassWeights[tonicPitchClass] ?? 0) * 0.2;
+      if (firstPitchClass === tonicPitchClass) score += totalWeight * 0.08;
+      if (lastPitchClass === tonicPitchClass) score += totalWeight * 0.12;
+
+      if (!best || score > best.score) {
+        best = { fifths, mode, score };
+        continue;
+      }
+      if (score === best.score && Math.abs(fifths) < Math.abs(best.fifths)) {
+        best = { fifths, mode, score };
+        continue;
+      }
+      if (score === best.score && Math.abs(fifths) === Math.abs(best.fifths) && mode === "major") {
+        best = { fifths, mode, score };
+      }
+    }
+  }
+
+  return best ? { fifths: best.fifths, mode: best.mode } : null;
 };
 
 const DRUM_NAME_HINT_TO_GM_NOTE: Array<{ pattern: RegExp; midi: number }> = [
@@ -3023,13 +3093,26 @@ export const convertMidiToMusicXml = (
   const firstTimeSignature = timeSignatureEvents
     .slice()
     .sort((a, b) => a.tick - b.tick)[0] ?? { tick: 0, beats: 4, beatType: 4 };
+  const inferredKeySignature = keySignatureEvents.length
+    ? null
+    : inferKeySignatureFromImportedNotes(velocityScaledNotes);
   const firstKeySignature = keySignatureEvents
     .slice()
-    .sort((a, b) => a.tick - b.tick)[0] ?? { tick: 0, fifths: 0, mode: "major" as const };
+    .sort((a, b) => a.tick - b.tick)[0] ?? {
+    tick: 0,
+    fifths: inferredKeySignature?.fifths ?? 0,
+    mode: inferredKeySignature?.mode ?? ("major" as const),
+  };
   const beats = Math.max(1, Math.round(firstTimeSignature.beats));
   const beatType = Math.max(1, Math.round(firstTimeSignature.beatType));
   const keyFifths = Math.max(-7, Math.min(7, Math.round(firstKeySignature.fifths)));
   const keyMode: "major" | "minor" = firstKeySignature.mode === "minor" ? "minor" : "major";
+  if (!keySignatureEvents.length && inferredKeySignature) {
+    warnings.push({
+      code: "MIDI_KEY_SIGNATURE_INFERRED",
+      message: `MIDI key signature meta event was missing; inferred key signature (${keyFifths}, ${keyMode}).`,
+    });
+  }
   const sortedTempoEvents = tempoMetaEvents.slice().sort((a, b) => a.tick - b.tick);
   const tempoEvents: Array<{ tick: number; bpm: number }> = [];
   for (const event of sortedTempoEvents) {

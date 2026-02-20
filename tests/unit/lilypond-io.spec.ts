@@ -294,6 +294,46 @@ describe("LilyPond I/O", () => {
     expect(lily).toContain("% %@mks transpose voice=P1 chromatic=-3 diatonic=-2");
   });
 
+  it("exports and imports %@mks measure metadata for implicit and repeat", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="12">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="right"><repeat direction="backward"/></barline>
+    </measure>
+    <measure number="X1" implicit="yes">
+      <barline location="left"><repeat direction="forward"/></barline>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="13">
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks measure voice=P1 measure=2 number=X1 implicit=1 repeat=forward");
+    const roundtrip = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const m2 = outDoc.querySelector("part > measure:nth-of-type(2)");
+    expect(m2?.getAttribute("number")).toBe("X1");
+    expect(m2?.getAttribute("implicit")).toBe("yes");
+    expect(m2?.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]')).not.toBeNull();
+    const m1 = outDoc.querySelector("part > measure:nth-of-type(1)");
+    expect(m1?.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')).not.toBeNull();
+  });
+
   it("exported LilyPond does not overfill 3/4 when source has backup lanes", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
