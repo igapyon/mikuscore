@@ -9,6 +9,7 @@ export type LoadFlowParams = {
   abcSourceText: string;
   createNewMusicXml: () => string;
   convertAbcToMusicXml: (abcSource: string) => string;
+  convertMeiToMusicXml: (meiSource: string) => string;
   convertMidiToMusicXml: (midiBytes: Uint8Array) => {
     ok: boolean;
     xml: string;
@@ -57,6 +58,29 @@ const readBinaryFile = async (file: File): Promise<Uint8Array> => {
   });
 };
 
+const readTextFile = async (file: File): Promise<string> => {
+  const withText = file as File & { text?: () => Promise<string> };
+  if (typeof withText.text === "function") {
+    return withText.text();
+  }
+  const blob = file as Blob;
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== "string") {
+        reject(new Error("Failed to read text file."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => {
+      reject(reader.error ?? new Error("Failed to read text file."));
+    };
+    reader.readAsText(blob);
+  });
+};
+
 export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowResult> => {
   if (params.isNewType) {
     const sourceText = params.createNewMusicXml();
@@ -85,6 +109,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     const isMxl = lowerName.endsWith(".mxl");
     const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
     const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
+    const isMeiFile = lowerName.endsWith(".mei");
 
     if (isMxl) {
       try {
@@ -107,7 +132,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     }
 
     if (isMusicXmlLike) {
-      sourceText = await selected.text();
+      sourceText = await readTextFile(selected);
       return {
         ok: true,
         xmlToLoad: sourceText,
@@ -117,7 +142,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     }
 
     if (isAbcFile) {
-      sourceText = await selected.text();
+      sourceText = await readTextFile(selected);
       try {
         const convertedXml = params.convertAbcToMusicXml(sourceText);
         return {
@@ -168,11 +193,32 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       }
     }
 
+    if (isMeiFile) {
+      sourceText = await readTextFile(selected);
+      try {
+        const convertedXml = params.convertMeiToMusicXml(sourceText);
+        return {
+          ok: true,
+          xmlToLoad: convertedXml,
+          collapseInputSection: true,
+          nextXmlInputText: convertedXml,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse MEI: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
     return {
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
       diagnosticMessage:
-        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, or .midi.",
+        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, or .mei.",
     };
   }
 

@@ -10,6 +10,7 @@ const baseParams = () => ({
   abcSourceText: "",
   createNewMusicXml: () => "<score-partwise version=\"4.0\"/>",
   convertAbcToMusicXml: (_abc: string) => "<score-partwise version=\"4.0\"/>",
+  convertMeiToMusicXml: (_mei: string) => "<score-partwise version=\"4.0\"/>",
   convertMidiToMusicXml: (_bytes: Uint8Array) => ({
     ok: true,
     xml: "<score-partwise version=\"4.0\"><part-list/></score-partwise>",
@@ -60,5 +61,26 @@ describe("load-flow MIDI file input", () => {
     if (result.ok) return;
     expect(result.diagnosticMessage).toContain("Failed to parse MIDI");
     expect(result.diagnosticMessage).toContain("MIDI_INVALID_FILE");
+  });
+});
+
+describe("load-flow MEI file input", () => {
+  it("accepts .mei and converts via convertMeiToMusicXml", async () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?><mei xmlns="http://www.music-encoding.org/ns/mei"/>`;
+    const file = new File([mei], "test.mei", { type: "application/mei+xml" });
+    let called = false;
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+      convertMeiToMusicXml: (text: string) => {
+        called = true;
+        expect(text).toContain("<mei");
+        return "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>";
+      },
+    });
+    expect(called).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toContain("<score-partwise");
   });
 });

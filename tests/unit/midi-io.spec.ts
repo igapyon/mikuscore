@@ -677,7 +677,7 @@ describe("midi-io MIDI import MVP", () => {
     ).toBe(false);
   });
 
-  it("writes MIDI debug metadata into miscellaneous-field by default", () => {
+  it("writes MIDI meta metadata into miscellaneous-field by default", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
       ...vlq(480), 0x80, 60, 0,
@@ -685,15 +685,33 @@ describe("midi-io MIDI import MVP", () => {
     const result = convertMidiToMusicXml(midi);
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
-    const debugFields = Array.from(
-      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-debug"]')
+    const metaFields = Array.from(
+      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
     );
-    expect(debugFields.length).toBeGreaterThan(0);
-    const firstPayload = debugFields.find((node) =>
-      /^mks:midi-debug-\d{4}$/.test(node.getAttribute("name") ?? "")
+    expect(metaFields.length).toBeGreaterThan(0);
+    const firstPayload = metaFields.find((node) =>
+      /^mks:midi-meta-\d{4}$/.test(node.getAttribute("name") ?? "")
     )?.textContent;
     expect(firstPayload ?? "").toContain("key=0x3C");
     expect(firstPayload ?? "").toContain("vel=0x60");
+  });
+
+  it("writes src:midi raw source metadata by default", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(480), 0x80, 60, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-encoding"]')
+        ?.textContent
+    ).toBe("hex-v1");
+    expect(
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-0001"]')
+        ?.textContent
+    ).toMatch(/^[0-9A-F]+$/);
   });
 
   it("pretty-prints imported MusicXML by default when debug metadata is enabled", () => {
@@ -725,7 +743,7 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-debug"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
     ).toBeNull();
   });
 

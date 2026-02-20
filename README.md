@@ -31,6 +31,9 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ### Supported MusicXML Version
 - **MusicXML 4.0**
 
+### Format Support Note
+- MEI support is currently experimental.
+
 ### Distribution and Development
 - Distribution: **single-file web app** (`mikuscore.html`).
 - Runtime: offline, no external network dependency.
@@ -102,6 +105,9 @@ Debugging note:
 
 ### 対応 MusicXML バージョン
 - **MusicXML 4.0**
+
+### フォーマット対応メモ
+- MEI 対応は現在 Experimental（試験対応）です。
 
 ### 配布と開発方針
 - 配布形態: 単一 HTML（`mikuscore.html`）。
