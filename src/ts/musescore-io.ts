@@ -82,6 +82,7 @@ type ParsedMuseScoreMeasure = {
   fifths: number;
   mode: "major" | "minor";
   tempoBpm: number | null;
+  tempoText: string | null;
   repeatForward: boolean;
   repeatBackward: boolean;
   events: ParsedMuseScoreEvent[];
@@ -335,8 +336,14 @@ const museAccidentalSubtypeToMusicXml = (raw: string | null | undefined): string
   return null;
 };
 
-const buildWordsDirectionXml = (text: string): string => {
-  return `<direction><direction-type><words>${xmlEscape(text)}</words></direction-type></direction>`;
+const buildWordsDirectionXml = (
+  text: string,
+  options?: { placement?: "above" | "below"; soundTempo?: number | null }
+): string => {
+  const placementAttr = options?.placement ? ` placement="${options.placement}"` : "";
+  const soundTempo = options?.soundTempo ?? null;
+  const soundXml = soundTempo !== null ? `<sound tempo="${soundTempo}"/>` : "";
+  return `<direction${placementAttr}><direction-type><words>${xmlEscape(text)}</words></direction-type>${soundXml}</direction>`;
 };
 
 const buildSegnoDirectionXml = (): string => {
@@ -848,50 +855,51 @@ export const convertMuseScoreToMusicXml = (
       const staff = staffById.get(sourceStaffId) ?? doc.createElement("Staff");
       const clef = partClefOverrides.get(sourceStaffId) ?? readClefForMuseStaff(staff);
 
-    const measures = Array.from(staff.querySelectorAll(":scope > Measure"));
-    if (!measures.length) {
-      parsedStaffs.push({
-        sourceStaffId,
-        clefSign: clef.sign,
-        clefLine: clef.line,
-        measures: [{
-          index: 1,
-          beats: globalBeats,
-          beatType: globalBeatType,
-          capacityDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
-          implicit: false,
-          fifths: globalFifths,
-          mode: globalMode,
-          tempoBpm: null,
-          repeatForward: false,
-          repeatBackward: false,
-          events: [{
-            kind: "rest",
-            durationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
-            displayDurationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
-            voice: 1,
+      const measures = Array.from(staff.querySelectorAll(":scope > Measure"));
+      if (!measures.length) {
+        parsedStaffs.push({
+          sourceStaffId,
+          clefSign: clef.sign,
+          clefLine: clef.line,
+          measures: [{
+            index: 1,
+            beats: globalBeats,
+            beatType: globalBeatType,
+            capacityDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+            implicit: false,
+            fifths: globalFifths,
+            mode: globalMode,
+            tempoBpm: null,
+            tempoText: null,
+            repeatForward: false,
+            repeatBackward: false,
+            events: [{
+              kind: "rest",
+              durationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+              displayDurationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+              voice: 1,
+            }],
           }],
-        }],
-      });
-      continue;
-    }
+        });
+        continue;
+      }
 
-    let currentBeats = globalBeats;
-    let currentBeatType = globalBeatType;
-    let currentFifths = globalFifths;
-    let currentMode = globalMode;
-    const parsedMeasures: ParsedMuseScoreMeasure[] = [];
-    const slurStateByVoice = new Map<number, {
-      activeSlurNumbers: number[];
-      nextSlurNumber: number;
-      slurKeyToNumber: Map<string, number>;
-    }>();
-    const ottavaStateByVoice = new Map<number, {
-      activeOttavaStates: MuseOttavaState[];
-      nextOttavaNumber: number;
-    }>();
-    for (let mi = 0; mi < measures.length; mi += 1) {
-      const measure = measures[mi];
+      let currentBeats = globalBeats;
+      let currentBeatType = globalBeatType;
+      let currentFifths = globalFifths;
+      let currentMode = globalMode;
+      const parsedMeasures: ParsedMuseScoreMeasure[] = [];
+      const slurStateByVoice = new Map<number, {
+        activeSlurNumbers: number[];
+        nextSlurNumber: number;
+        slurKeyToNumber: Map<string, number>;
+      }>();
+      const ottavaStateByVoice = new Map<number, {
+        activeOttavaStates: MuseOttavaState[];
+        nextOttavaNumber: number;
+      }>();
+      for (let mi = 0; mi < measures.length; mi += 1) {
+        const measure = measures[mi];
       const beats = parseMeasureValue(
         measure,
         [":scope > TimeSig > sigN", ":scope > voice > TimeSig > sigN", ":scope > voice > timesig > sigN"],
@@ -920,6 +928,12 @@ export const convertMuseScoreToMusicXml = (
         ?? firstNumber(measure, ":scope > voice > Tempo > tempo")
         ?? firstNumber(measure, ":scope > voice > tempo > tempo");
       const tempoBpm = tempoQps !== null && tempoQps > 0 ? Math.max(20, Math.min(300, Math.round(tempoQps * 60))) : null;
+      const tempoText = (
+        measure.querySelector(":scope > Tempo > text")?.textContent
+        ?? measure.querySelector(":scope > voice > Tempo > text")?.textContent
+        ?? measure.querySelector(":scope > voice > tempo > text")?.textContent
+        ?? ""
+      ).trim() || null;
       const repeatForward = parseTruthyFlag(measure.getAttribute("startRepeat"))
         || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
       const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
@@ -1350,6 +1364,7 @@ export const convertMuseScoreToMusicXml = (
         fifths,
         mode,
         tempoBpm,
+        tempoText,
         repeatForward,
         repeatBackward,
         events,
@@ -1435,6 +1450,7 @@ export const convertMuseScoreToMusicXml = (
         fifths: prevFifths,
         mode: prevMode,
         tempoBpm: null,
+        tempoText: null,
         repeatForward: false,
         repeatBackward: false,
         events: [] as ParsedMuseScoreEvent[],
@@ -1467,7 +1483,12 @@ export const convertMuseScoreToMusicXml = (
       if (primaryMeasure.repeatForward) {
         body += `<barline location="left"><repeat direction="forward"/></barline>`;
       }
-      if (primaryMeasure.tempoBpm !== null) {
+      if (primaryMeasure.tempoText) {
+        body += buildWordsDirectionXml(primaryMeasure.tempoText, {
+          placement: "above",
+          soundTempo: primaryMeasure.tempoBpm,
+        });
+      } else if (primaryMeasure.tempoBpm !== null) {
         body += `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${primaryMeasure.tempoBpm}</per-minute></metronome></direction-type><sound tempo="${primaryMeasure.tempoBpm}"/></direction>`;
       }
 
@@ -1482,6 +1503,7 @@ export const convertMuseScoreToMusicXml = (
           fifths: primaryMeasure.fifths,
           mode: primaryMeasure.mode,
           tempoBpm: null,
+          tempoText: null,
           repeatForward: false,
           repeatBackward: false,
           events: [] as ParsedMuseScoreEvent[],

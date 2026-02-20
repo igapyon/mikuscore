@@ -77,6 +77,37 @@ describe("musescore-io", () => {
     expect(doc.querySelector("miscellaneous-field[name=\"src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
+  it("imports only measure-anchored tempo text as words direction", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <VBox>
+        <Text><text>Tema</text></Text>
+      </VBox>
+      <Measure>
+        <voice>
+          <Tempo><tempo>2.1666667</tempo><text>Quasi Presto</text></Tempo>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const words = Array.from(doc.querySelectorAll("part > measure:nth-of-type(1) > direction > direction-type > words"))
+      .map((node) => node.textContent?.trim() ?? "");
+    expect(words).toContain("Quasi Presto");
+    expect(words).not.toContain("Tema");
+    expect(doc.querySelector("part > measure:nth-of-type(1) > direction[placement=\"above\"] > direction-type > words")?.textContent?.trim()).toBe("Quasi Presto");
+    expect(doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > metronome")).toBeNull();
+    expect(doc.querySelector("part > measure:nth-of-type(1) > direction > sound")?.getAttribute("tempo")).toBe("130");
+  });
+
   it("infers key mode from title when MuseScore key mode is not present", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="3.02">
