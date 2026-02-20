@@ -232,6 +232,18 @@
               </svg>
               <span>Stop</span>
             </button>
+            <button id="scoreEditBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 20h4l10-10a2 2 0 0 0-4-4L4 16z"></path>
+                <path d="m12 6 6 6"></path>
+              </svg>
+              <span>Edit</span>
+            </button>
+          </div>
+          <div id="debugScoreWrap" class="ms-debug-wrap">
+            <div id="debugScoreArea" class="ms-debug-score"></div>
+          </div>
+          <div class="ms-actions ms-preview-actions">
             <button id="appendMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 5v14"></path>
@@ -239,9 +251,6 @@
               </svg>
               <span>Add Measure (End)</span>
             </button>
-          </div>
-          <div id="debugScoreWrap" class="ms-debug-wrap">
-            <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
           <p id="playbackText" class="ms-playback-status" aria-live="polite">Playback: idle</p>
         </section>

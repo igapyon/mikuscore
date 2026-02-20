@@ -123,6 +123,7 @@ const convertRestBtn = q<HTMLButtonElement>("#convertRestBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
+const scoreEditBtn = q<HTMLButtonElement>("#scoreEditBtn");
 const exportPlayBtn = q<HTMLButtonElement>("#exportPlayBtn");
 const exportStopBtn = q<HTMLButtonElement>("#exportStopBtn");
 const downloadSvgBtn = q<HTMLButtonElement>("#downloadSvgBtn");
@@ -1153,6 +1154,7 @@ const renderControlState = (): void => {
   playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
+  scoreEditBtn.disabled = !state.loaded || !selectedMeasure;
   exportPlayBtn.disabled = !state.loaded || isPlaying;
   exportStopBtn.disabled = !isPlaying;
   downloadSvgBtn.disabled = !state.loaded;
@@ -1933,6 +1935,7 @@ const onLoadClick = async (): Promise<void> => {
   // Persist immediately on explicit load actions (Load / Load sample).
   writeLocalDraft(result.xmlToLoad);
   loadFromText(result.xmlToLoad);
+  activateTopTab("score");
 };
 
 const onDiscardLocalDraft = (): void => {
@@ -2688,6 +2691,10 @@ exportPlayBtn.addEventListener("click", () => {
 exportPlayBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
 exportPlayBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 stopBtn.addEventListener("click", stopPlayback);
+scoreEditBtn.addEventListener("click", () => {
+  if (!selectedMeasure) return;
+  activateTopTab("edit");
+});
 exportStopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
