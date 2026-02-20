@@ -17,6 +17,7 @@ import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./muse
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
+  normalizeImportedMusicXmlText,
   parseMusicXmlDocument,
   prettyPrintMusicXmlText,
   replaceMeasureInMainDocument,
@@ -1879,7 +1880,7 @@ const onLoadClick = async (): Promise<void> => {
     xmlSourceText: xmlInput.value,
     abcSourceText: abcInput.value,
     createNewMusicXml,
-    formatImportedMusicXml: prettyPrintMusicXmlText,
+    formatImportedMusicXml: normalizeImportedMusicXmlText,
     convertAbcToMusicXml: (abcSource) =>
       convertAbcToMusicXml(abcSource, {
         sourceMetadata: keepMetadata,

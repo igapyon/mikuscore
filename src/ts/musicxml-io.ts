@@ -30,6 +30,102 @@ export const prettyPrintMusicXmlText = (xml: string): string => {
   return lines.join("\n");
 };
 
+const ensureTupletNotation = (
+  note: Element,
+  type: "start" | "stop",
+  number: number,
+  withDisplayAttrs: boolean
+): void => {
+  let notations = note.querySelector(":scope > notations");
+  if (!notations) {
+    notations = note.ownerDocument.createElement("notations");
+    note.appendChild(notations);
+  }
+  const existing = notations.querySelector(`:scope > tuplet[type="${type}"]`);
+  if (existing) {
+    if (!existing.getAttribute("number")) existing.setAttribute("number", String(number));
+    if (type === "start" && withDisplayAttrs) {
+      if (!existing.getAttribute("bracket")) existing.setAttribute("bracket", "yes");
+      if (!existing.getAttribute("show-number")) existing.setAttribute("show-number", "actual");
+    }
+    return;
+  }
+  const tuplet = note.ownerDocument.createElement("tuplet");
+  tuplet.setAttribute("type", type);
+  tuplet.setAttribute("number", String(number));
+  if (type === "start" && withDisplayAttrs) {
+    tuplet.setAttribute("bracket", "yes");
+    tuplet.setAttribute("show-number", "actual");
+  }
+  notations.appendChild(tuplet);
+};
+
+const hasChordTag = (note: Element): boolean => note.querySelector(":scope > chord") !== null;
+const laneKeyForNote = (note: Element): string => {
+  const voice = note.querySelector(":scope > voice")?.textContent?.trim() ?? "1";
+  const staff = note.querySelector(":scope > staff")?.textContent?.trim() ?? "1";
+  return `${voice}::${staff}`;
+};
+const tupletSignatureForNote = (note: Element): string | null => {
+  const tm = note.querySelector(":scope > time-modification");
+  if (!tm) return null;
+  const actual = Number(tm.querySelector(":scope > actual-notes")?.textContent?.trim() ?? "");
+  const normal = Number(tm.querySelector(":scope > normal-notes")?.textContent?.trim() ?? "");
+  if (!Number.isFinite(actual) || !Number.isFinite(normal) || actual <= 0 || normal <= 0) return null;
+  return `${Math.round(actual)}/${Math.round(normal)}`;
+};
+
+const enrichTupletNotationsInDocument = (doc: Document): void => {
+  for (const measure of Array.from(doc.querySelectorAll("part > measure"))) {
+    const children = Array.from(measure.children);
+    const activeByLane = new Map<string, { sig: string; notes: Element[] }>();
+    const nextTupletNoByLane = new Map<string, number>();
+    const flushLane = (lane: string): void => {
+      const group = activeByLane.get(lane);
+      activeByLane.delete(lane);
+      if (!group || group.notes.length < 2) return;
+      const number = nextTupletNoByLane.get(lane) ?? 1;
+      nextTupletNoByLane.set(lane, number + 1);
+      ensureTupletNotation(group.notes[0], "start", number, true);
+      ensureTupletNotation(group.notes[group.notes.length - 1], "stop", number, false);
+    };
+    const flushAll = (): void => {
+      for (const lane of Array.from(activeByLane.keys())) flushLane(lane);
+    };
+
+    for (const child of children) {
+      if (child.tagName === "backup" || child.tagName === "forward") {
+        flushAll();
+        continue;
+      }
+      if (child.tagName !== "note") continue;
+      const note = child as Element;
+      if (hasChordTag(note)) continue;
+      const lane = laneKeyForNote(note);
+      const sig = tupletSignatureForNote(note);
+      const current = activeByLane.get(lane);
+      if (!sig) {
+        flushLane(lane);
+        continue;
+      }
+      if (!current || current.sig !== sig) {
+        flushLane(lane);
+        activeByLane.set(lane, { sig, notes: [note] });
+      } else {
+        current.notes.push(note);
+      }
+    }
+    flushAll();
+  }
+};
+
+export const normalizeImportedMusicXmlText = (xml: string): string => {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return xml;
+  enrichTupletNotationsInDocument(doc);
+  return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
+};
+
 const cloneXmlDocument = (doc: Document): Document => {
   const cloned = document.implementation.createDocument("", "", null);
   const root = cloned.importNode(doc.documentElement, true);

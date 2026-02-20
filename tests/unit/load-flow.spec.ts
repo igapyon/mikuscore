@@ -87,7 +87,7 @@ describe("load-flow MEI file input", () => {
     expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
   });
 
-  it("does not reformat direct MusicXML file input", async () => {
+  it("normalizes direct MusicXML file input", async () => {
     const xml = "<score-partwise version=\"4.0\"><part-list/></score-partwise>";
     const file = new File([xml], "test.musicxml", { type: "application/xml" });
     const result = await resolveLoadFlow({
@@ -96,8 +96,8 @@ describe("load-flow MEI file input", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.xmlToLoad).toBe(xml);
-    expect(result.nextXmlInputText).toBe(xml);
+    expect(result.xmlToLoad).toBe(`FORMATTED:${xml}`);
+    expect(result.nextXmlInputText).toBe(`FORMATTED:${xml}`);
   });
 });
 

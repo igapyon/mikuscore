@@ -133,21 +133,23 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
           }`,
         };
       }
+      const normalized = params.formatImportedMusicXml(sourceText);
       return {
         ok: true,
-        xmlToLoad: sourceText,
+        xmlToLoad: normalized,
         collapseInputSection: true,
-        nextXmlInputText: sourceText,
+        nextXmlInputText: normalized,
       };
     }
 
     if (isMusicXmlLike) {
       sourceText = await readTextFile(selected);
+      const normalized = params.formatImportedMusicXml(sourceText);
       return {
         ok: true,
-        xmlToLoad: sourceText,
+        xmlToLoad: normalized,
         collapseInputSection: true,
-        nextXmlInputText: sourceText,
+        nextXmlInputText: normalized,
       };
     }
 
@@ -262,11 +264,12 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
           // Fallback: if this ZIP actually carries MusicXML, accept it as-is.
           sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
           if (looksLikeScorePartwise(sourceText)) {
+            const normalized = params.formatImportedMusicXml(sourceText);
             return {
               ok: true,
-              xmlToLoad: sourceText,
+              xmlToLoad: normalized,
               collapseInputSection: true,
-              nextXmlInputText: sourceText,
+              nextXmlInputText: normalized,
             };
           }
           // Last resort: try interpreting the extracted XML as MuseScore XML text.
@@ -319,10 +322,12 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
   }
 
   if (!treatAsAbc) {
+    const normalized = params.formatImportedMusicXml(params.xmlSourceText);
     return {
       ok: true,
-      xmlToLoad: params.xmlSourceText,
+      xmlToLoad: normalized,
       collapseInputSection: true,
+      nextXmlInputText: normalized,
     };
   }
 
