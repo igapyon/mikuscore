@@ -30,6 +30,7 @@ import {
   createMeiDownloadPayload,
   createMidiDownloadPayload,
   createMusicXmlDownloadPayload,
+  createSvgDownloadPayload,
   triggerFileDownload,
 } from "./download-flow";
 import { resolveLoadFlow } from "./load-flow";
@@ -124,6 +125,7 @@ const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
 const exportPlayBtn = q<HTMLButtonElement>("#exportPlayBtn");
 const exportStopBtn = q<HTMLButtonElement>("#exportStopBtn");
+const downloadSvgBtn = q<HTMLButtonElement>("#downloadSvgBtn");
 const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
 const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
 const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
@@ -1153,6 +1155,7 @@ const renderControlState = (): void => {
   stopBtn.disabled = !isPlaying;
   exportPlayBtn.disabled = !state.loaded || isPlaying;
   exportStopBtn.disabled = !isPlaying;
+  downloadSvgBtn.disabled = !state.loaded;
   playbackWaveform.disabled = isPlaying;
   playbackUseMidiLike.disabled = isPlaying;
   metricAccentEnabledInput.disabled = isPlaying;
@@ -2404,7 +2407,7 @@ const onConvertRestToNote = (): void => {
 };
 
 const failExport = (
-  format: "MusicXML" | "MIDI" | "ABC" | "MEI" | "LilyPond" | "MuseScore",
+  format: "MusicXML" | "MIDI" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "SVG",
   reason: string
 ): void => {
   const message = `${format} export failed: ${reason}`;
@@ -2551,6 +2554,20 @@ const onDownloadMuseScore = async (): Promise<void> => {
   }
 };
 
+const onDownloadSvg = (): void => {
+  const svgNode = debugScoreArea.querySelector("svg");
+  if (!svgNode) {
+    failExport("SVG", "No rendered SVG preview is available.");
+    return;
+  }
+  try {
+    const svgText = new XMLSerializer().serializeToString(svgNode);
+    triggerFileDownload(createSvgDownloadPayload(svgText));
+  } catch (err) {
+    failExport("SVG", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
 const activateTopTab = (tabName: string): void => {
   const activeIndex = topTabButtons.findIndex((button) => button.dataset.tab === tabName);
   for (const button of topTabButtons) {
@@ -2678,6 +2695,7 @@ downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
+downloadSvgBtn.addEventListener("click", onDownloadSvg);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);

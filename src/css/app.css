@@ -356,6 +356,16 @@ body {
   margin-bottom: 0.7rem;
 }
 
+#exportPlayBtn {
+  background: var(--md-sys-color-secondary);
+  color: var(--md-sys-color-on-secondary);
+  border-color: color-mix(in srgb, var(--md-sys-color-secondary) 80%, #000 20%);
+}
+
+#exportPlayBtn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-secondary) 88%, #000 12%);
+}
+
 .ms-export-divider {
   height: 1px;
   background: #d9d3e5;
@@ -379,7 +389,7 @@ body {
   border: 1px solid #d6d1e0;
   border-radius: 12px;
   background: #f4f1f8;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ms-settings-summary {

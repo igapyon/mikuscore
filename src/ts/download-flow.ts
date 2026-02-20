@@ -239,6 +239,14 @@ export const createMusicXmlDownloadPayload = async (
   };
 };
 
+export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload => {
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${ts}.svg`,
+    blob: new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }),
+  };
+};
+
 export const createMidiDownloadPayload = (
   xmlText: string,
   ticksPerQuarter: number,
