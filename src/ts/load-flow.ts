@@ -37,6 +37,10 @@ export type LoadFlowFailure = {
 
 export type LoadFlowResult = LoadFlowSuccess | LoadFlowFailure;
 
+const looksLikeScorePartwise = (xmlText: string): boolean => {
+  return /<\s*score-partwise(?:\s|>)/i.test(xmlText);
+};
+
 const readBinaryFile = async (file: File): Promise<Uint8Array> => {
   const withArrayBuffer = file as File & { arrayBuffer?: () => Promise<ArrayBuffer> };
   if (typeof withArrayBuffer.arrayBuffer === "function") {
@@ -245,16 +249,28 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     if (isMuseScoreZipFile) {
       try {
         try {
-          sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
-          return {
-            ok: true,
-            xmlToLoad: sourceText,
-            collapseInputSection: true,
-            nextXmlInputText: sourceText,
-          };
-        } catch {
+          // Prefer MuseScore XML entry first; generic MXL fallback can pick unrelated XML entries.
           const mscxText = await extractTextFromZipByExtensions(await selected.arrayBuffer(), [".mscx"]);
           const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(mscxText));
+          return {
+            ok: true,
+            xmlToLoad: convertedXml,
+            collapseInputSection: true,
+            nextXmlInputText: convertedXml,
+          };
+        } catch {
+          // Fallback: if this ZIP actually carries MusicXML, accept it as-is.
+          sourceText = await extractMusicXmlTextFromMxl(await selected.arrayBuffer());
+          if (looksLikeScorePartwise(sourceText)) {
+            return {
+              ok: true,
+              xmlToLoad: sourceText,
+              collapseInputSection: true,
+              nextXmlInputText: sourceText,
+            };
+          }
+          // Last resort: try interpreting the extracted XML as MuseScore XML text.
+          const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(sourceText));
           return {
             ok: true,
             xmlToLoad: convertedXml,

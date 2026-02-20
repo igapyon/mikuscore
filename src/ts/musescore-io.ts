@@ -6,19 +6,34 @@ type MuseScoreImportOptions = {
 type MuseScoreWarning = {
   code: "MUSESCORE_IMPORT_WARNING";
   message: string;
+  measure?: number;
+  staff?: number;
+  voice?: number;
+  atDiv?: number;
+  action?: string;
+  reason?: string;
+  tag?: string;
+  occupiedDiv?: number;
+  capacityDiv?: number;
 };
 
 type ParsedMuseScoreEvent =
-  | { kind: "rest"; durationDiv: number }
-  | { kind: "chord"; durationDiv: number; pitches: number[] }
-  | { kind: "dynamic"; mark: string }
-  | { kind: "directionXml"; xml: string };
+  | { kind: "rest"; durationDiv: number; voice: number }
+  | { kind: "chord"; durationDiv: number; notes: ParsedMuseScoreChordNote[]; voice: number }
+  | { kind: "dynamic"; mark: string; voice: number; atDiv: number }
+  | { kind: "directionXml"; xml: string; voice: number; atDiv: number };
+
+type ParsedMuseScoreChordNote = {
+  midi: number;
+  accidentalText: string | null;
+};
 
 type ParsedMuseScoreMeasure = {
   index: number;
   beats: number;
   beatType: number;
   fifths: number;
+  mode: "major" | "minor";
   tempoBpm: number | null;
   repeatForward: boolean;
   repeatBackward: boolean;
@@ -142,7 +157,22 @@ const buildWarningMiscXml = (warnings: MuseScoreWarning[]): string => {
   let xml = `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const warning = warnings[i];
-    const payload = `level=warn;code=${warning.code};fmt=mscx;message=${warning.message}`;
+    const attrs: string[] = [
+      "level=warn",
+      `code=${warning.code}`,
+      "fmt=mscx",
+      `message=${warning.message}`,
+    ];
+    if (warning.measure !== undefined) attrs.push(`measure=${warning.measure}`);
+    if (warning.staff !== undefined) attrs.push(`staff=${warning.staff}`);
+    if (warning.voice !== undefined) attrs.push(`voice=${warning.voice}`);
+    if (warning.atDiv !== undefined) attrs.push(`atDiv=${warning.atDiv}`);
+    if (warning.action) attrs.push(`action=${warning.action}`);
+    if (warning.reason) attrs.push(`reason=${warning.reason}`);
+    if (warning.tag) attrs.push(`tag=${warning.tag}`);
+    if (warning.occupiedDiv !== undefined) attrs.push(`occupiedDiv=${warning.occupiedDiv}`);
+    if (warning.capacityDiv !== undefined) attrs.push(`capacityDiv=${warning.capacityDiv}`);
+    const payload = attrs.join(";");
     xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${xmlEscape(payload)}</miscellaneous-field>`;
   }
   return xml;
@@ -162,12 +192,19 @@ const buildSourceMiscXml = (source: string): string => {
   return xml;
 };
 
-const parseDurationDiv = (node: Element, divisions: number): number | null => {
+const parseDurationDiv = (
+  node: Element,
+  divisions: number,
+  measureCapacityDiv: number | null = null
+): number | null => {
   const explicitDuration = firstNumber(node, ":scope > duration");
   if (explicitDuration !== null && explicitDuration > 0) {
     return Math.max(1, Math.round(explicitDuration));
   }
   const durationType = (node.querySelector(":scope > durationType")?.textContent ?? "").trim();
+  if (durationType.toLowerCase() === "measure" && measureCapacityDiv !== null) {
+    return Math.max(1, Math.round(measureCapacityDiv));
+  }
   const base = durationTypeToDivisions(durationType, divisions);
   if (base === null) return null;
   const dots = firstNumber(node, ":scope > dots") ?? 0;
@@ -186,8 +223,50 @@ const parseMuseDynamicMark = (value: string): string | null => {
   return allow.has(v) ? v : null;
 };
 
+const normalizeKeyMode = (raw: string | null | undefined): "major" | "minor" | null => {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "major" || v === "maj") return "major";
+  if (v === "minor" || v === "min") return "minor";
+  if (v === "0") return "major";
+  if (v === "1") return "minor";
+  return null;
+};
+
+const inferKeyModeFromText = (raw: string | null | undefined): "major" | "minor" | null => {
+  const v = String(raw ?? "");
+  if (!v) return null;
+  if (/\bminor\b/i.test(v) || /短調/.test(v)) return "minor";
+  if (/\bmajor\b/i.test(v) || /長調/.test(v)) return "major";
+  return null;
+};
+
+const readGlobalMuseKeyMode = (score: Element): "major" | "minor" => {
+  const explicit =
+    normalizeKeyMode(score.querySelector(":scope > Staff > Measure > KeySig > mode")?.textContent)
+    || normalizeKeyMode(score.querySelector(":scope > Staff > Measure > voice > KeySig > mode")?.textContent)
+    || normalizeKeyMode(score.querySelector(":scope > Staff > Measure > voice > keysig > mode")?.textContent);
+  if (explicit) return explicit;
+  const inferred =
+    inferKeyModeFromText(score.querySelector(':scope > metaTag[name="workTitle"]')?.textContent)
+    || inferKeyModeFromText(score.querySelector(':scope > metaTag[name="movementTitle"]')?.textContent)
+    || inferKeyModeFromText(score.querySelector(":scope > Staff > VBox > Text > text")?.textContent);
+  return inferred || "major";
+};
+
 const buildDynamicDirectionXml = (mark: string): string => {
   return `<direction><direction-type><dynamics><${mark}/></dynamics></direction-type></direction>`;
+};
+
+const museAccidentalSubtypeToMusicXml = (raw: string | null | undefined): string | null => {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "accidentalsharp") return "sharp";
+  if (v === "accidentalflat") return "flat";
+  if (v === "accidentalnatural") return "natural";
+  if (v === "accidentaldoublesharp") return "double-sharp";
+  if (v === "accidentaldoubleflat") return "flat-flat";
+  return null;
 };
 
 const buildWordsDirectionXml = (text: string): string => {
@@ -240,6 +319,91 @@ const parseMeasureValue = (measure: Element, selectors: string[], fallback: numb
   return fallback;
 };
 
+type ParsedMuseScoreStaff = {
+  sourceStaffId: string;
+  clefSign: "G" | "F";
+  clefLine: number;
+  measures: ParsedMuseScoreMeasure[];
+};
+
+type ParsedMuseScorePart = {
+  partId: string;
+  partName: string;
+  staffs: ParsedMuseScoreStaff[];
+};
+
+const readPartNameFromMusePart = (part: Element, fallback: string): string => {
+  const candidate =
+    (part.querySelector(":scope > trackName")?.textContent ?? "").trim()
+    || (part.querySelector(":scope > Instrument > longName")?.textContent ?? "").trim()
+    || (part.querySelector(":scope > Instrument > trackName")?.textContent ?? "").trim()
+    || (part.querySelector(":scope > Instrument > shortName")?.textContent ?? "").trim()
+    || (part.querySelector(":scope > Instrument > instrumentId")?.textContent ?? "").trim();
+  return candidate || fallback;
+};
+
+const readClefForMuseStaff = (staff: Element): { sign: "G" | "F"; line: number } => {
+  const clefTypeText =
+    (staff.querySelector(":scope > Measure > voice > Clef > concertClefType")?.textContent ?? "").trim()
+    || (staff.querySelector(":scope > Measure > voice > Clef > subtype")?.textContent ?? "").trim()
+    || (staff.querySelector(":scope > Measure > Clef > concertClefType")?.textContent ?? "").trim()
+    || (staff.querySelector(":scope > Measure > Clef > subtype")?.textContent ?? "").trim()
+    || (staff.querySelector(":scope > Clef > concertClefType")?.textContent ?? "").trim()
+    || (staff.querySelector(":scope > Clef > subtype")?.textContent ?? "").trim();
+  const lower = clefTypeText.toLowerCase();
+  if (lower.includes("f")) return { sign: "F", line: 4 };
+  return { sign: "G", line: 2 };
+};
+
+const readStaffClefOverridesFromMusePart = (part: Element): Map<string, { sign: "G" | "F"; line: number }> => {
+  const overrides = new Map<string, { sign: "G" | "F"; line: number }>();
+  for (const staffDef of Array.from(part.querySelectorAll(":scope > Staff[id]"))) {
+    const staffId = (staffDef.getAttribute("id") ?? "").trim();
+    if (!staffId) continue;
+    const defaultClef = (staffDef.querySelector(":scope > defaultClef")?.textContent ?? "").trim().toUpperCase();
+    if (defaultClef.includes("F")) {
+      overrides.set(staffId, { sign: "F", line: 4 });
+      continue;
+    }
+    if (defaultClef.includes("G")) {
+      overrides.set(staffId, { sign: "G", line: 2 });
+      continue;
+    }
+  }
+  for (const clefDef of Array.from(part.querySelectorAll(":scope > Instrument > clef[staff]"))) {
+    const staffId = (clefDef.getAttribute("staff") ?? "").trim();
+    if (!staffId) continue;
+    const clef = (clefDef.textContent ?? "").trim().toUpperCase();
+    if (clef.includes("F")) {
+      overrides.set(staffId, { sign: "F", line: 4 });
+      continue;
+    }
+    if (clef.includes("G")) {
+      overrides.set(staffId, { sign: "G", line: 2 });
+      continue;
+    }
+  }
+  return overrides;
+};
+
+const withDirectionStaff = (directionXml: string, staffNo: number): string => {
+  if (/<staff>\d+<\/staff>/.test(directionXml)) return directionXml;
+  if (!directionXml.includes("</direction>")) return directionXml;
+  return directionXml.replace(/<\/direction>\s*$/, `<staff>${staffNo}</staff></direction>`);
+};
+
+const withDirectionPlacement = (
+  directionXml: string,
+  staffNo: number,
+  voiceNo: number
+): string => {
+  let out = withDirectionStaff(directionXml, staffNo);
+  if (!/<voice>\d+<\/voice>/.test(out) && out.includes("</direction>")) {
+    out = out.replace(/<\/direction>\s*$/, `<voice>${voiceNo}</voice></direction>`);
+  }
+  return out;
+};
+
 export const convertMuseScoreToMusicXml = (
   mscxSource: string,
   options: MuseScoreImportOptions = {}
@@ -257,46 +421,97 @@ export const convertMuseScoreToMusicXml = (
   const workTitle =
     (score.querySelector(':scope > metaTag[name="workTitle"]')?.textContent ?? "").trim() || "Imported MuseScore";
 
-  const globalBeats = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure TimeSig > sigN") ?? 4));
-  const globalBeatType = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure TimeSig > sigD") ?? 4));
-  const globalFifths = Math.max(-7, Math.min(7, Math.round(firstNumber(score, ":scope > Staff > Measure KeySig > accidental") ?? 0)));
-
-  const staffNodes = Array.from(score.querySelectorAll(":scope > Staff")).filter(
-    (staff) => staff.querySelector(":scope > Measure") !== null
+  const globalBeats = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure > TimeSig > sigN") ?? 4));
+  const globalBeatType = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure > TimeSig > sigD") ?? 4));
+  const globalFifths = Math.max(
+    -7,
+    Math.min(7, Math.round(firstNumber(score, ":scope > Staff > Measure > KeySig > accidental") ?? 0))
   );
+  const globalMode = readGlobalMuseKeyMode(score);
+
+  const staffNodes = Array.from(score.querySelectorAll(":scope > Staff")).filter((staff) => {
+    if ((staff.parentElement?.tagName ?? "").toLowerCase() !== "score") return false;
+    return staff.querySelector(":scope > Measure") !== null;
+  });
+  const staffById = new Map<string, Element>();
+  staffNodes.forEach((staff, index) => {
+    const id = (staff.getAttribute("id") ?? "").trim() || String(index + 1);
+    staffById.set(id, staff);
+  });
   const warnings: MuseScoreWarning[] = [];
+  const pushWarning = (warning: MuseScoreWarning): void => {
+    warnings.push(warning);
+  };
   const unknownTagSet = new Set<string>();
   if (!staffNodes.length) {
-    warnings.push({
+    pushWarning({
       code: "MUSESCORE_IMPORT_WARNING",
       message: "No readable staff content found; created an empty placeholder score.",
+      action: "placeholder-created",
     });
   }
 
-  const partList: string[] = [];
-  const parsedByPart: Array<{ partId: string; measures: ParsedMuseScoreMeasure[] }> = [];
+  const parsedByPart: ParsedMuseScorePart[] = [];
 
   const sourceMetadata = options.sourceMetadata !== false;
   const debugMetadata = options.debugMetadata !== false;
 
-  const staffs = staffNodes.length ? staffNodes : [doc.createElement("Staff")];
-  for (let staffIndex = 0; staffIndex < staffs.length; staffIndex += 1) {
-    const staff = staffs[staffIndex];
-    const partId = `P${staffIndex + 1}`;
-    partList.push(`<score-part id="${partId}"><part-name>${partId}</part-name></score-part>`);
+  const usedStaffIds = new Set<string>();
+  const partNodes = Array.from(score.querySelectorAll(":scope > Part")).filter(
+    (part) => (part.parentElement?.tagName ?? "").toLowerCase() === "score"
+  );
+  const groupedStaffIds: Array<{ partName: string; staffIds: string[]; partEl: Element | null }> = [];
+  for (let partIndex = 0; partIndex < partNodes.length; partIndex += 1) {
+    const part = partNodes[partIndex];
+    const partName = readPartNameFromMusePart(part, `P${partIndex + 1}`);
+    const staffIds = Array.from(part.querySelectorAll(":scope > Staff"))
+      .map((staffEl) => (staffEl.getAttribute("id") ?? "").trim())
+      .filter((id) => id.length > 0 && staffById.has(id));
+    if (!staffIds.length) continue;
+    groupedStaffIds.push({ partName, staffIds, partEl: part });
+    for (const id of staffIds) usedStaffIds.add(id);
+  }
+  for (const [id] of staffById) {
+    if (usedStaffIds.has(id)) continue;
+    groupedStaffIds.push({ partName: `P${groupedStaffIds.length + 1}`, staffIds: [id], partEl: null });
+  }
+  if (!groupedStaffIds.length) {
+    groupedStaffIds.push({ partName: "P1", staffIds: [], partEl: null });
+  }
+
+  for (let partIndex = 0; partIndex < groupedStaffIds.length; partIndex += 1) {
+    const group = groupedStaffIds[partIndex];
+    const partId = `P${partIndex + 1}`;
+    const parsedStaffs: ParsedMuseScoreStaff[] = [];
+    const partClefOverrides = group.partEl
+      ? readStaffClefOverridesFromMusePart(group.partEl)
+      : new Map<string, { sign: "G" | "F"; line: number }>();
+
+    for (let localStaffIndex = 0; localStaffIndex < Math.max(1, group.staffIds.length); localStaffIndex += 1) {
+      const sourceStaffId = group.staffIds[localStaffIndex] ?? `${localStaffIndex + 1}`;
+      const staff = staffById.get(sourceStaffId) ?? doc.createElement("Staff");
+      const clef = partClefOverrides.get(sourceStaffId) ?? readClefForMuseStaff(staff);
+
     const measures = Array.from(staff.querySelectorAll(":scope > Measure"));
     if (!measures.length) {
-      parsedByPart.push({
-        partId,
+      parsedStaffs.push({
+        sourceStaffId,
+        clefSign: clef.sign,
+        clefLine: clef.line,
         measures: [{
           index: 1,
           beats: globalBeats,
           beatType: globalBeatType,
           fifths: globalFifths,
+          mode: globalMode,
           tempoBpm: null,
           repeatForward: false,
           repeatBackward: false,
-          events: [{ kind: "rest", durationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))) }],
+          events: [{
+            kind: "rest",
+            durationDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+            voice: 1,
+          }],
         }],
       });
       continue;
@@ -305,7 +520,8 @@ export const convertMuseScoreToMusicXml = (
     let currentBeats = globalBeats;
     let currentBeatType = globalBeatType;
     let currentFifths = globalFifths;
-    const parsedMeasures: ParsedMuseScoreMeasure[] = [];
+    let currentMode = globalMode;
+      const parsedMeasures: ParsedMuseScoreMeasure[] = [];
     for (let mi = 0; mi < measures.length; mi += 1) {
       const measure = measures[mi];
       const beats = parseMeasureValue(
@@ -322,6 +538,12 @@ export const convertMuseScoreToMusicXml = (
         ?? firstNumber(measure, ":scope > voice > KeySig > accidental")
         ?? firstNumber(measure, ":scope > voice > keysig > accidental");
       const fifths = fifthsRaw === null ? currentFifths : Math.max(-7, Math.min(7, Math.round(fifthsRaw)));
+      const modeRaw = normalizeKeyMode(
+        measure.querySelector(":scope > KeySig > mode")?.textContent
+        ?? measure.querySelector(":scope > voice > KeySig > mode")?.textContent
+        ?? measure.querySelector(":scope > voice > keysig > mode")?.textContent
+      );
+      const mode = modeRaw ?? currentMode;
       const tempoQps = firstNumber(measure, ":scope > Tempo > tempo")
         ?? firstNumber(measure, ":scope > voice > Tempo > tempo")
         ?? firstNumber(measure, ":scope > voice > tempo > tempo");
@@ -330,38 +552,113 @@ export const convertMuseScoreToMusicXml = (
         || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
       const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
         || measure.querySelector(":scope > endRepeat, :scope > voice > endRepeat") !== null;
+      const measureCapacityDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
 
       const events: ParsedMuseScoreEvent[] = [];
       const voiceNodes = Array.from(measure.querySelectorAll(":scope > voice"));
       const eventHolders = voiceNodes.length ? voiceNodes : [measure];
-      for (const holder of eventHolders) {
+      for (let holderIndex = 0; holderIndex < eventHolders.length; holderIndex += 1) {
+        const holder = eventHolders[holderIndex];
+        const voiceNo = holderIndex + 1;
+        let voicePosDiv = 0;
+        const tupletScaleStack: number[] = [];
+        const currentTupletScale = (): number =>
+          tupletScaleStack.reduce((acc, value) => acc * value, 1);
         const children = Array.from(holder.children);
         for (const event of children) {
           const tag = event.tagName.toLowerCase();
+          if (tag === "tuplet") {
+            const normalNotes = Math.round(firstNumber(event, ":scope > normalNotes") ?? 0);
+            const actualNotes = Math.round(firstNumber(event, ":scope > actualNotes") ?? 0);
+            if (normalNotes > 0 && actualNotes > 0) {
+              tupletScaleStack.push(normalNotes / actualNotes);
+            } else {
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: unsupported tuplet skipped.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "skipped",
+                reason: "unsupported",
+                tag: "Tuplet",
+              });
+            }
+            continue;
+          }
+          if (tag === "endtuplet") {
+            if (tupletScaleStack.length > 0) tupletScaleStack.pop();
+            continue;
+          }
           if (tag === "rest") {
-            const durationDiv = parseDurationDiv(event, divisions);
+            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+            const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
             if (!durationDiv) {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped rest with unknown duration.` });
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: dropped rest with unknown duration.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "dropped",
+                reason: "unknown-duration",
+                tag: "Rest",
+              });
               continue;
             }
-            events.push({ kind: "rest", durationDiv });
+            events.push({ kind: "rest", durationDiv, voice: voiceNo });
+            voicePosDiv += durationDiv;
             continue;
           }
           if (tag === "chord") {
-            const durationDiv = parseDurationDiv(event, divisions);
+            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+            const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
             if (!durationDiv) {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped chord with unknown duration.` });
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: dropped chord with unknown duration.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "dropped",
+                reason: "unknown-duration",
+                tag: "Chord",
+              });
               continue;
             }
-            const pitchNodes = Array.from(event.querySelectorAll(":scope > Note > pitch"));
-            const pitches = pitchNodes
-              .map((p) => Number.parseInt((p.textContent ?? "").trim(), 10))
-              .filter((midi) => Number.isFinite(midi));
-            if (!pitches.length) {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: dropped chord without pitch.` });
+            const noteNodes = Array.from(event.querySelectorAll(":scope > Note"));
+            const notes = noteNodes
+              .map((noteNode) => {
+                const midi = Number.parseInt((noteNode.querySelector(":scope > pitch")?.textContent ?? "").trim(), 10);
+                if (!Number.isFinite(midi)) return null;
+                const accidentalText = museAccidentalSubtypeToMusicXml(
+                  noteNode.querySelector(":scope > Accidental > subtype")?.textContent
+                );
+                return {
+                  midi,
+                  accidentalText,
+                };
+              })
+              .filter((note): note is ParsedMuseScoreChordNote => note !== null);
+            if (!notes.length) {
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: dropped chord without pitch.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "dropped",
+                reason: "missing-pitch",
+                tag: "Chord",
+              });
               continue;
             }
-            events.push({ kind: "chord", durationDiv, pitches });
+            events.push({ kind: "chord", durationDiv, notes, voice: voiceNo });
+            voicePosDiv += durationDiv;
             continue;
           }
           if (tag === "dynamic") {
@@ -369,75 +666,142 @@ export const convertMuseScoreToMusicXml = (
               (event.querySelector(":scope > subtype")?.textContent ?? event.textContent ?? "").trim()
             );
             if (mark) {
-              events.push({ kind: "dynamic", mark });
+              events.push({ kind: "dynamic", mark, voice: voiceNo, atDiv: voicePosDiv });
             } else {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported dynamic skipped.` });
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: unsupported dynamic skipped.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "skipped",
+                reason: "unsupported",
+                tag: "Dynamic",
+              });
             }
             continue;
           }
           if (tag === "marker") {
             const directionXml = parseMarkerDirectionXml(event);
             if (directionXml) {
-              events.push({ kind: "directionXml", xml: directionXml });
+              events.push({ kind: "directionXml", xml: directionXml, voice: voiceNo, atDiv: voicePosDiv });
             } else {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported marker skipped.` });
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: unsupported marker skipped.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "skipped",
+                reason: "unsupported",
+                tag: "Marker",
+              });
             }
             continue;
           }
           if (tag === "jump") {
             const parsed = parseJumpDirectionXml(event);
             if (!parsed) {
-              warnings.push({ code: "MUSESCORE_IMPORT_WARNING", message: `measure ${mi + 1}: unsupported jump skipped.` });
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: unsupported jump skipped.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "skipped",
+                reason: "unsupported",
+                tag: "Jump",
+              });
             } else {
-              events.push({ kind: "directionXml", xml: parsed.xml });
+              events.push({ kind: "directionXml", xml: parsed.xml, voice: voiceNo, atDiv: voicePosDiv });
               if (!parsed.mapped) {
-                warnings.push({
+                pushWarning({
                   code: "MUSESCORE_IMPORT_WARNING",
                   message: `measure ${mi + 1}: jump mapped as text only; playback semantics may be incomplete.`,
+                  measure: mi + 1,
+                  staff: localStaffIndex + 1,
+                  voice: voiceNo,
+                  atDiv: voicePosDiv,
+                  action: "mapped-with-loss",
+                  reason: "playback-semantics-incomplete",
+                  tag: "Jump",
                 });
               }
             }
             continue;
           }
-          if (tag === "timesig" || tag === "keysig" || tag === "tempo" || tag === "layoutbreak" || tag === "clef") {
+          if (
+            tag === "timesig"
+            || tag === "keysig"
+            || tag === "tempo"
+            || tag === "layoutbreak"
+            || tag === "clef"
+            || tag === "beam"
+            || tag === "spanner"
+          ) {
             continue;
           }
           unknownTagSet.add(tag);
         }
       }
 
-      const capacity = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
-      const occupied = events
-        .filter((event): event is Extract<ParsedMuseScoreEvent, { durationDiv: number }> => "durationDiv" in event)
-        .reduce((sum, event) => sum + Math.max(0, Math.round(event.durationDiv)), 0);
-      if (occupied > capacity) {
-        warnings.push({
+      const capacity = measureCapacityDiv;
+      const occupiedByVoice = new Map<number, number>();
+      for (const event of events) {
+        if (!("durationDiv" in event)) continue;
+        const current = occupiedByVoice.get(event.voice) ?? 0;
+        occupiedByVoice.set(event.voice, current + Math.max(0, Math.round(event.durationDiv)));
+      }
+      for (const [voice, occupied] of occupiedByVoice) {
+        if (occupied <= capacity) continue;
+        pushWarning({
           code: "MUSESCORE_IMPORT_WARNING",
-          message: `measure ${mi + 1}: overfull content (${occupied} > ${capacity}); tail events are clamped.`,
+          message: `measure ${mi + 1} voice ${voice}: overfull content (${occupied} > ${capacity}); tail events are clamped.`,
+          measure: mi + 1,
+          staff: localStaffIndex + 1,
+          voice,
+          action: "clamped",
+          reason: "overfull",
+          occupiedDiv: occupied,
+          capacityDiv: capacity,
         });
       }
 
-      parsedMeasures.push({
+        parsedMeasures.push({
         index: mi + 1,
         beats,
         beatType,
         fifths,
+        mode,
         tempoBpm,
         repeatForward,
         repeatBackward,
         events,
       });
-      currentBeats = beats;
-      currentBeatType = beatType;
-      currentFifths = fifths;
+        currentBeats = beats;
+        currentBeatType = beatType;
+        currentFifths = fifths;
+        currentMode = mode;
+      }
+      parsedStaffs.push({
+        sourceStaffId,
+        clefSign: clef.sign,
+        clefLine: clef.line,
+        measures: parsedMeasures,
+      });
     }
-    parsedByPart.push({ partId, measures: parsedMeasures });
+    parsedByPart.push({ partId, partName: group.partName, staffs: parsedStaffs });
   }
 
   if (unknownTagSet.size > 0) {
-    warnings.push({
+    pushWarning({
       code: "MUSESCORE_IMPORT_WARNING",
       message: `unsupported MuseScore elements skipped: ${Array.from(unknownTagSet).sort().join(", ")}`,
+      action: "skipped",
+      reason: "unsupported-elements",
     });
   }
 
@@ -449,64 +813,169 @@ export const convertMuseScoreToMusicXml = (
     }
   }
   const miscXml = `${debugMetadata ? buildWarningMiscXml(warnings) : ""}${sourceMiscXml}`;
+  const partList = parsedByPart.map(
+    (part) => `<score-part id="${part.partId}"><part-name>${xmlEscape(part.partName)}</part-name></score-part>`
+  );
   const partXml: string[] = [];
-  for (const part of parsedByPart) {
+  for (let partIndex = 0; partIndex < parsedByPart.length; partIndex += 1) {
+    const part = parsedByPart[partIndex];
     const measuresXml: string[] = [];
+    const voiceIdByStaffLocal = new Map<string, number>();
+    let nextVoiceId = 1;
+    const resolvePartVoiceId = (staffNo: number, localVoiceNo: number): number => {
+      const key = `${staffNo}:${Math.max(1, Math.round(localVoiceNo))}`;
+      const existing = voiceIdByStaffLocal.get(key);
+      if (existing !== undefined) return existing;
+      const assigned = nextVoiceId;
+      nextVoiceId += 1;
+      voiceIdByStaffLocal.set(key, assigned);
+      return assigned;
+    };
+    for (let si = 0; si < part.staffs.length; si += 1) {
+      const staffNo = si + 1;
+      const voices = new Set<number>();
+      for (const measure of part.staffs[si]?.measures ?? []) {
+        for (const event of measure.events) {
+          voices.add(Math.max(1, Math.round(event.voice)));
+        }
+      }
+      if (!voices.size) voices.add(1);
+      Array.from(voices)
+        .sort((a, b) => a - b)
+        .forEach((voiceNo) => {
+          resolvePartVoiceId(staffNo, voiceNo);
+        });
+    }
     let prevBeats = globalBeats;
     let prevBeatType = globalBeatType;
     let prevFifths = globalFifths;
-    for (let mi = 0; mi < part.measures.length; mi += 1) {
-      const measure = part.measures[mi];
-      const capacity = Math.max(1, Math.round((divisions * 4 * measure.beats) / Math.max(1, measure.beatType)));
+    let prevMode = globalMode;
+    const measureCount = Math.max(1, ...part.staffs.map((staff) => staff.measures.length));
+    for (let mi = 0; mi < measureCount; mi += 1) {
+      const primaryMeasure = part.staffs[0]?.measures[mi] ?? {
+        index: mi + 1,
+        beats: prevBeats,
+        beatType: prevBeatType,
+        fifths: prevFifths,
+        mode: prevMode,
+        tempoBpm: null,
+        repeatForward: false,
+        repeatBackward: false,
+        events: [] as ParsedMuseScoreEvent[],
+      };
+      const capacity = Math.max(
+        1,
+        Math.round((divisions * 4 * primaryMeasure.beats) / Math.max(1, primaryMeasure.beatType))
+      );
       let body = "";
       const needsAttributes =
         mi === 0
-        || measure.beats !== prevBeats
-        || measure.beatType !== prevBeatType
-        || measure.fifths !== prevFifths;
+        || primaryMeasure.beats !== prevBeats
+        || primaryMeasure.beatType !== prevBeatType
+        || primaryMeasure.fifths !== prevFifths
+        || primaryMeasure.mode !== prevMode;
       if (needsAttributes) {
-        body += `<attributes><divisions>${divisions}</divisions><key><fifths>${measure.fifths}</fifths><mode>major</mode></key><time><beats>${measure.beats}</beats><beat-type>${measure.beatType}</beat-type></time><clef><sign>G</sign><line>2</line></clef>${mi === 0 && miscXml ? `<miscellaneous>${miscXml}</miscellaneous>` : ""}</attributes>`;
+        body += `<attributes><divisions>${divisions}</divisions><key><fifths>${primaryMeasure.fifths}</fifths><mode>${primaryMeasure.mode}</mode></key><time><beats>${primaryMeasure.beats}</beats><beat-type>${primaryMeasure.beatType}</beat-type></time>`;
+        if (part.staffs.length > 1) {
+          body += `<staves>${part.staffs.length}</staves>`;
+          for (let si = 0; si < part.staffs.length; si += 1) {
+            const staff = part.staffs[si];
+            body += `<clef number="${si + 1}"><sign>${staff.clefSign}</sign><line>${staff.clefLine}</line></clef>`;
+          }
+        } else {
+          const staff = part.staffs[0];
+          body += `<clef><sign>${staff?.clefSign ?? "G"}</sign><line>${staff?.clefLine ?? 2}</line></clef>`;
+        }
+        if (mi === 0 && partIndex === 0 && miscXml) {
+          body += `<miscellaneous>${miscXml}</miscellaneous>`;
+        }
+        body += "</attributes>";
       }
-      if (measure.repeatForward) {
+      if (primaryMeasure.repeatForward) {
         body += `<barline location="left"><repeat direction="forward"/></barline>`;
       }
-      if (measure.tempoBpm !== null) {
-        body += `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${measure.tempoBpm}</per-minute></metronome></direction-type><sound tempo="${measure.tempoBpm}"/></direction>`;
+      if (primaryMeasure.tempoBpm !== null) {
+        body += `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${primaryMeasure.tempoBpm}</per-minute></metronome></direction-type><sound tempo="${primaryMeasure.tempoBpm}"/></direction>`;
       }
-      let occupied = 0;
-      for (const event of measure.events) {
-        if (event.kind === "dynamic") {
-          body += buildDynamicDirectionXml(event.mark);
-          continue;
+
+      for (let si = 0; si < part.staffs.length; si += 1) {
+        const staffNo = si + 1;
+        const measure = part.staffs[si]?.measures[mi] ?? {
+          index: mi + 1,
+          beats: primaryMeasure.beats,
+          beatType: primaryMeasure.beatType,
+          fifths: primaryMeasure.fifths,
+          mode: primaryMeasure.mode,
+          tempoBpm: null,
+          repeatForward: false,
+          repeatBackward: false,
+          events: [] as ParsedMuseScoreEvent[],
+        };
+        if (si > 0) {
+          body += `<backup><duration>${capacity}</duration></backup>`;
         }
-        if (event.kind === "directionXml") {
-          body += event.xml;
-          continue;
-        }
-        if (occupied + event.durationDiv > capacity) break;
-        occupied += event.durationDiv;
-        const info = divisionToTypeAndDots(divisions, event.durationDiv);
-        if (event.kind === "rest") {
-          body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
-          continue;
-        }
-        for (let ni = 0; ni < event.pitches.length; ni += 1) {
-          const pitch = midiToPitch(event.pitches[ni]);
-          body += `<note>${ni > 0 ? "<chord/>" : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
+        const voices = Array.from(new Set(measure.events.map((event) => Math.max(1, Math.round(event.voice))))).sort(
+          (a, b) => a - b
+        );
+        if (!voices.length) voices.push(1);
+        for (let vi = 0; vi < voices.length; vi += 1) {
+          const voiceNo = voices[vi];
+          const partVoiceNo = resolvePartVoiceId(staffNo, voiceNo);
+          if (vi > 0) {
+            body += `<backup><duration>${capacity}</duration></backup>`;
+          }
+          let occupied = 0;
+          const voiceEvents = measure.events.filter((event) => Math.max(1, Math.round(event.voice)) === voiceNo);
+          for (const event of voiceEvents) {
+            if (event.kind === "dynamic") {
+              const lead = Math.max(0, Math.round(event.atDiv) - occupied);
+              if (lead > 0) {
+                body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${staffNo}</staff></forward>`;
+                occupied += lead;
+              }
+              body += withDirectionPlacement(buildDynamicDirectionXml(event.mark), staffNo, partVoiceNo);
+              continue;
+            }
+            if (event.kind === "directionXml") {
+              const lead = Math.max(0, Math.round(event.atDiv) - occupied);
+              if (lead > 0) {
+                body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${staffNo}</staff></forward>`;
+                occupied += lead;
+              }
+              body += withDirectionPlacement(event.xml, staffNo, partVoiceNo);
+              continue;
+            }
+            if (occupied + event.durationDiv > capacity) break;
+            occupied += event.durationDiv;
+            const info = divisionToTypeAndDots(divisions, event.durationDiv);
+            if (event.kind === "rest") {
+              body += `<note><rest/><duration>${event.durationDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}<staff>${staffNo}</staff></note>`;
+              continue;
+            }
+            for (let ni = 0; ni < event.notes.length; ni += 1) {
+              const note = event.notes[ni];
+              const pitch = midiToPitch(note.midi);
+              const accidentalXml = note.accidentalText
+                ? `<accidental>${note.accidentalText}</accidental>`
+                : "";
+              body += `<note>${ni > 0 ? "<chord/>" : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}${accidentalXml}<staff>${staffNo}</staff></note>`;
+            }
+          }
+          if (occupied < capacity) {
+            const restDiv = capacity - occupied;
+            const info = divisionToTypeAndDots(divisions, restDiv);
+            body += `<note><rest/><duration>${restDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}<staff>${staffNo}</staff></note>`;
+          }
         }
       }
-      if (occupied < capacity) {
-        const restDiv = capacity - occupied;
-        const info = divisionToTypeAndDots(divisions, restDiv);
-        body += `<note><rest/><duration>${restDiv}</duration><voice>1</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}</note>`;
-      }
-      if (measure.repeatBackward) {
+      if (primaryMeasure.repeatBackward) {
         body += `<barline location="right"><repeat direction="backward"/></barline>`;
       }
-      measuresXml.push(`<measure number="${measure.index}">${body}</measure>`);
-      prevBeats = measure.beats;
-      prevBeatType = measure.beatType;
-      prevFifths = measure.fifths;
+      measuresXml.push(`<measure number="${mi + 1}">${body}</measure>`);
+      prevBeats = primaryMeasure.beats;
+      prevBeatType = primaryMeasure.beatType;
+      prevFifths = primaryMeasure.fifths;
+      prevMode = primaryMeasure.mode;
     }
     partXml.push(`<part id="${part.partId}">${measuresXml.join("")}</part>`);
   }
@@ -559,6 +1028,117 @@ const makeMuseRestXml = (durationDiv: number, divisions: number): string => {
   return xml;
 };
 
+const getNoteStaffNo = (note: Element): number => {
+  const staff = firstNumber(note, ":scope > staff");
+  if (staff === null) return 1;
+  return Math.max(1, Math.round(staff));
+};
+
+const getMeasureStaffCountFromMusicXml = (measure: Element): number => {
+  let maxStaff = Math.max(1, Math.round(firstNumber(measure, ":scope > attributes > staves") ?? 1));
+  for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
+    maxStaff = Math.max(maxStaff, getNoteStaffNo(note));
+  }
+  return maxStaff;
+};
+
+const getPartStaffCountFromMusicXml = (part: Element): number => {
+  let maxStaff = 1;
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    maxStaff = Math.max(maxStaff, getMeasureStaffCountFromMusicXml(measure));
+  }
+  return maxStaff;
+};
+
+type MuseVoiceEvent = {
+  atDiv: number;
+  durationDiv: number;
+  pitches: number[] | null;
+};
+
+const buildMuseVoiceEventsByStaff = (
+  measure: Element,
+  divisions: number
+): Map<number, Map<number, MuseVoiceEvent[]>> => {
+  const byStaff = new Map<number, Map<number, MuseVoiceEvent[]>>();
+  let cursorDiv = 0;
+
+  const children = Array.from(measure.children);
+  for (const child of children) {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "backup") {
+      const duration = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      cursorDiv = Math.max(0, cursorDiv - duration);
+      continue;
+    }
+    if (tag === "forward") {
+      const duration = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      cursorDiv += duration;
+      continue;
+    }
+    if (tag !== "note") continue;
+
+    const staffNo = getNoteStaffNo(child);
+    const voiceNo = Math.max(1, Math.round(firstNumber(child, ":scope > voice") ?? 1));
+    const durationDiv = Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? divisions));
+    const isChordFollow = child.querySelector(":scope > chord") !== null;
+    const isRest = child.querySelector(":scope > rest") !== null;
+
+    const byVoice = byStaff.get(staffNo) ?? new Map<number, MuseVoiceEvent[]>();
+    byStaff.set(staffNo, byVoice);
+    const events = byVoice.get(voiceNo) ?? [];
+    byVoice.set(voiceNo, events);
+
+    if (isChordFollow && !isRest && events.length > 0) {
+      const prev = events[events.length - 1];
+      if (prev.pitches !== null && prev.atDiv === cursorDiv) {
+        const step = (child.querySelector(":scope > pitch > step")?.textContent ?? "").trim();
+        const octave = firstNumber(child, ":scope > pitch > octave");
+        if (step && octave !== null) {
+          const alter = Math.round(firstNumber(child, ":scope > pitch > alter") ?? 0);
+          const map: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+          const base = map[step];
+          if (base !== undefined) prev.pitches.push(base + alter + (Math.round(octave) + 1) * 12);
+        }
+      }
+    } else if (isRest) {
+      events.push({ atDiv: cursorDiv, durationDiv, pitches: null });
+    } else {
+      const step = (child.querySelector(":scope > pitch > step")?.textContent ?? "").trim();
+      const octave = firstNumber(child, ":scope > pitch > octave");
+      if (step && octave !== null) {
+        const alter = Math.round(firstNumber(child, ":scope > pitch > alter") ?? 0);
+        const map: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const base = map[step];
+        if (base !== undefined) {
+          events.push({
+            atDiv: cursorDiv,
+            durationDiv,
+            pitches: [base + alter + (Math.round(octave) + 1) * 12],
+          });
+        }
+      }
+    }
+
+    if (!isChordFollow) {
+      cursorDiv += durationDiv;
+    }
+  }
+
+  return byStaff;
+};
+
+const readPartNameMapFromMusicXml = (score: Element): Map<string, string> => {
+  const map = new Map<string, string>();
+  for (const sp of Array.from(score.querySelectorAll(":scope > part-list > score-part"))) {
+    const id = (sp.getAttribute("id") ?? "").trim();
+    if (!id) continue;
+    const name = (sp.querySelector(":scope > part-name")?.textContent ?? "").trim() || id;
+    map.set(id, name);
+  }
+  return map;
+};
+
 export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
   const score = doc.querySelector("score-partwise");
   if (!score) throw new Error("MusicXML score-partwise root was not found.");
@@ -568,6 +1148,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
     || "mikuscore export";
   const divisions = firstNumberInDoc(score, ["part > measure > attributes > divisions"], 480);
   const partNodes = Array.from(score.querySelectorAll(":scope > part"));
+  const partNameById = readPartNameMapFromMusicXml(score);
 
   let scoreXml = `<?xml version="1.0" encoding="UTF-8"?><museScore version="4.0"><Score>`;
   scoreXml += `<metaTag name="workTitle">${xmlEscape(title)}</metaTag>`;
@@ -575,94 +1156,128 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
 
   if (!partNodes.length) {
     const capacity = Math.max(1, Math.round((divisions * 4 * 4) / 4));
+    scoreXml += `<Part><trackName>P1</trackName><Staff id="1"/></Part>`;
     scoreXml += `<Staff id="1"><Measure><voice>${makeMuseRestXml(capacity, divisions)}</voice></Measure></Staff>`;
     scoreXml += "</Score></museScore>";
     return scoreXml;
   }
 
+  let nextStaffId = 1;
+  const partDefs: string[] = [];
+  const staffsXml: string[] = [];
+
   for (let pi = 0; pi < partNodes.length; pi += 1) {
     const part = partNodes[pi];
-    const staffId = pi + 1;
-    scoreXml += `<Staff id="${staffId}">`;
+    const partId = (part.getAttribute("id") ?? "").trim();
+    const partName = partNameById.get(partId) ?? (partId || `P${pi + 1}`);
+    const laneCount = getPartStaffCountFromMusicXml(part);
+    const staffIds = Array.from({ length: laneCount }, () => nextStaffId++);
+    partDefs.push(
+      `<Part><trackName>${xmlEscape(partName)}</trackName>${staffIds
+        .map((id) => `<Staff id="${id}"/>`)
+        .join("")}</Part>`
+    );
+
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    let currentBeats = 4;
-    let currentBeatType = 4;
-    let currentFifths = 0;
+    let currentBeats = Math.max(1, Math.round(firstNumber(part, ":scope > measure > attributes > time > beats") ?? 4));
+    let currentBeatType = Math.max(
+      1,
+      Math.round(firstNumber(part, ":scope > measure > attributes > time > beat-type") ?? 4)
+    );
+    let currentFifths = Math.max(-7, Math.min(7, Math.round(firstNumber(part, ":scope > measure > attributes > key > fifths") ?? 0)));
 
-    for (const measure of measures) {
-      scoreXml += "<Measure><voice>";
-      const beats = firstNumber(measure, ":scope > attributes > time > beats");
-      const beatType = firstNumber(measure, ":scope > attributes > time > beat-type");
-      if (beats !== null && beatType !== null && (Math.round(beats) !== currentBeats || Math.round(beatType) !== currentBeatType)) {
-        currentBeats = Math.max(1, Math.round(beats));
-        currentBeatType = Math.max(1, Math.round(beatType));
-        scoreXml += `<TimeSig><sigN>${currentBeats}</sigN><sigD>${currentBeatType}</sigD></TimeSig>`;
-      }
-      const fifths = firstNumber(measure, ":scope > attributes > key > fifths");
-      if (fifths !== null && Math.round(fifths) !== currentFifths) {
-        currentFifths = Math.max(-7, Math.min(7, Math.round(fifths)));
-        scoreXml += `<KeySig><accidental>${currentFifths}</accidental></KeySig>`;
-      }
-      const tempo = firstAttrNumber(measure, ":scope > direction > sound[tempo]", "tempo");
-      if (tempo !== null && tempo > 0) {
-        scoreXml += `<Tempo><tempo>${(tempo / 60).toFixed(6)}</tempo></Tempo>`;
-      }
-      const mfNodes = Array.from(measure.querySelectorAll(":scope > direction > direction-type > dynamics > *"));
-      for (const node of mfNodes) {
-        const tag = node.tagName.toLowerCase();
-        scoreXml += `<Dynamic><subtype>${xmlEscape(tag)}</subtype></Dynamic>`;
-      }
-      if (measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]')) {
-        scoreXml += "<startRepeat/>";
-      }
+    const staffXmlByLane = Array.from({ length: laneCount }, (_unused, laneIndex) => {
+      const staffNo = laneIndex + 1;
+      let staffXml = `<Staff id="${staffIds[laneIndex]}">`;
 
-      const children = Array.from(measure.children);
-      let pendingChord: { durationDiv: number; pitches: number[] } | null = null;
-      for (const child of children) {
-        if (child.tagName !== "note") continue;
-        const isRest = child.querySelector(":scope > rest") !== null;
-        const durationDiv = Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? divisions));
-        if (isRest) {
-          if (pendingChord) {
-            scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
-            pendingChord = null;
+      for (let mi = 0; mi < measures.length; mi += 1) {
+        const measure = measures[mi];
+        const byStaffVoice = buildMuseVoiceEventsByStaff(measure, divisions);
+        const byVoice = byStaffVoice.get(staffNo) ?? new Map<number, MuseVoiceEvent[]>();
+        const measureBeats = Math.max(1, Math.round(firstNumber(measure, ":scope > attributes > time > beats") ?? currentBeats));
+        const measureBeatType = Math.max(
+          1,
+          Math.round(firstNumber(measure, ":scope > attributes > time > beat-type") ?? currentBeatType)
+        );
+        const measureFifths = Math.max(
+          -7,
+          Math.min(7, Math.round(firstNumber(measure, ":scope > attributes > key > fifths") ?? currentFifths))
+        );
+        const capacityDiv = Math.max(1, Math.round((divisions * 4 * measureBeats) / Math.max(1, measureBeatType)));
+        const tempo = firstAttrNumber(measure, ":scope > direction > sound[tempo]", "tempo");
+        const dynamics: string[] = [];
+        for (const direction of Array.from(measure.querySelectorAll(":scope > direction"))) {
+          if (Math.max(1, Math.round(firstNumber(direction, ":scope > staff") ?? 1)) !== staffNo) continue;
+          for (const node of Array.from(direction.querySelectorAll(":scope > direction-type > dynamics > *"))) {
+            dynamics.push(node.tagName.toLowerCase());
           }
-          scoreXml += makeMuseRestXml(durationDiv, divisions);
-          continue;
         }
-        const step = (child.querySelector(":scope > pitch > step")?.textContent ?? "").trim();
-        const octave = firstNumber(child, ":scope > pitch > octave");
-        if (!step || octave === null) continue;
-        const alter = Math.round(firstNumber(child, ":scope > pitch > alter") ?? 0);
-        const midi = (() => {
-          const map: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-          if (map[step] === undefined) return null;
-          return map[step] + alter + (Math.round(octave) + 1) * 12;
-        })();
-        if (midi === null) continue;
-        const isChordFollow = child.querySelector(":scope > chord") !== null;
-        if (!isChordFollow) {
-          if (pendingChord) {
-            scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
+
+        const voiceNos = Array.from(byVoice.keys()).sort((a, b) => a - b);
+        if (!voiceNos.length) voiceNos.push(1);
+        let measureXml = "<Measure>";
+        for (let vi = 0; vi < voiceNos.length; vi += 1) {
+          const voiceNo = voiceNos[vi];
+          let voiceXml = "<voice>";
+          if (vi === 0) {
+            const shouldWriteTime = mi === 0 || measureBeats !== currentBeats || measureBeatType !== currentBeatType;
+            const shouldWriteKey = mi === 0 || measureFifths !== currentFifths;
+            if (shouldWriteTime) {
+              voiceXml += `<TimeSig><sigN>${measureBeats}</sigN><sigD>${measureBeatType}</sigD></TimeSig>`;
+            }
+            if (shouldWriteKey) {
+              voiceXml += `<KeySig><accidental>${measureFifths}</accidental></KeySig>`;
+            }
+            if (tempo !== null && tempo > 0) {
+              voiceXml += `<Tempo><tempo>${(tempo / 60).toFixed(6)}</tempo></Tempo>`;
+            }
+            for (const dyn of dynamics) {
+              voiceXml += `<Dynamic><subtype>${xmlEscape(dyn)}</subtype></Dynamic>`;
+            }
+            if (measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]')) {
+              voiceXml += "<startRepeat/>";
+            }
           }
-          pendingChord = { durationDiv, pitches: [midi] };
-        } else if (pendingChord) {
-          pendingChord.pitches.push(midi);
-        } else {
-          pendingChord = { durationDiv, pitches: [midi] };
+
+          const events = (byVoice.get(voiceNo) ?? []).slice().sort((a, b) => a.atDiv - b.atDiv);
+          let cursorDiv = 0;
+          for (const event of events) {
+            if (event.atDiv > cursorDiv) {
+              voiceXml += makeMuseRestXml(event.atDiv - cursorDiv, divisions);
+              cursorDiv = event.atDiv;
+            }
+            if (event.pitches === null) {
+              voiceXml += makeMuseRestXml(event.durationDiv, divisions);
+            } else {
+              voiceXml += makeMuseChordXml(event.durationDiv, divisions, event.pitches);
+            }
+            cursorDiv += event.durationDiv;
+          }
+          if (cursorDiv < capacityDiv) {
+            voiceXml += makeMuseRestXml(capacityDiv - cursorDiv, divisions);
+          }
+          if (vi === 0 && measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')) {
+            voiceXml += "<endRepeat/>";
+          }
+          voiceXml += "</voice>";
+          measureXml += voiceXml;
         }
+
+        measureXml += "</Measure>";
+        staffXml += measureXml;
+        currentBeats = measureBeats;
+        currentBeatType = measureBeatType;
+        currentFifths = measureFifths;
       }
-      if (pendingChord) {
-        scoreXml += makeMuseChordXml(pendingChord.durationDiv, divisions, pendingChord.pitches);
-      }
-      if (measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')) {
-        scoreXml += "<endRepeat/>";
-      }
-      scoreXml += "</voice></Measure>";
-    }
-    scoreXml += "</Staff>";
+      staffXml += "</Staff>";
+      return staffXml;
+    });
+
+    staffsXml.push(...staffXmlByLane);
   }
 
+  scoreXml += partDefs.join("");
+  scoreXml += staffsXml.join("");
   scoreXml += "</Score></museScore>";
   return scoreXml;
 };
