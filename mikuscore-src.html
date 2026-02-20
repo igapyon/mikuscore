@@ -451,6 +451,43 @@
               <span>Discard Draft</span>
             </button>
           </div>
+          <section class="ms-settings-card" aria-label="General settings">
+            <details id="generalSettingsAccordion" class="ms-settings-accordion">
+              <summary class="ms-settings-summary">General Settings</summary>
+              <div class="ms-settings-body">
+                <div class="ms-settings-block">
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Keep source/extension metadata (`src:*`, `mks:*`)</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MusicXML source metadata help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          When enabled, metadata is preserved during import and kept in MusicXML output/export.
+                          When disabled, metadata generation on import is turned off, and existing `src:*` / `mks:*` fields are omitted from MusicXML output/export.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMetadataInMusicXml">
+                      <input
+                        id="keepMetadataInMusicXml"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Keep source and extension metadata"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </section>
           <section class="ms-settings-card" aria-label="MIDI and playback settings">
             <details id="settingsAccordion" class="ms-settings-accordion">
               <summary class="ms-settings-summary">MIDI &amp; Playback Settings</summary>
