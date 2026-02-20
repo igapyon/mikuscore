@@ -46,9 +46,6 @@ import { sampleXml } from "./sampleXml";
 import { sampleXml2 } from "./sampleXml2";
 import {
   buildPlaybackEventsFromMusicXmlDoc,
-  collectMidiControlEventsFromMusicXmlDoc,
-  collectMidiProgramOverridesFromMusicXmlDoc,
-  collectMidiTempoEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
   type GraceTimingMode,
   type MetricAccentProfile,
@@ -122,6 +119,8 @@ const convertRestBtn = q<HTMLButtonElement>("#convertRestBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
+const exportPlayBtn = q<HTMLButtonElement>("#exportPlayBtn");
+const exportStopBtn = q<HTMLButtonElement>("#exportStopBtn");
 const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
 const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
 const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
@@ -133,8 +132,6 @@ const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
 const generalSettingsAccordion = q<HTMLDetailsElement>("#generalSettingsAccordion");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
 const resetPlaybackSettingsBtn = q<HTMLButtonElement>("#resetPlaybackSettingsBtn");
-const refreshMidiDebugBtn = q<HTMLButtonElement>("#refreshMidiDebugBtn");
-const midiDebugText = q<HTMLPreElement>("#midiDebugText");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
@@ -1137,6 +1134,8 @@ const renderControlState = (): void => {
   playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
+  exportPlayBtn.disabled = !state.loaded || isPlaying;
+  exportStopBtn.disabled = !isPlaying;
   playbackWaveform.disabled = isPlaying;
   playbackUseMidiLike.disabled = isPlaying;
   metricAccentEnabledInput.disabled = isPlaying;
@@ -2418,7 +2417,6 @@ const onDownloadMidi = (): void => {
     failExport("MIDI", "No valid saved XML is available.");
     return;
   }
-  refreshMidiDebugInfo();
   const sourceDoc = parseMusicXmlDocument(xmlText);
   if (!sourceDoc) {
     failExport("MIDI", "Current MusicXML could not be parsed.");
@@ -2506,86 +2504,6 @@ const onDownloadLilyPond = (): void => {
   } catch (err) {
     failExport("LilyPond", err instanceof Error ? err.message : "Unknown download error.");
   }
-};
-
-const resolveMidiDebugXml = (): string => {
-  if (state.lastSuccessfulSaveXml.trim()) return state.lastSuccessfulSaveXml;
-  const coreXml = core.debugSerializeCurrentXml();
-  if ((coreXml ?? "").trim()) return coreXml ?? "";
-  return xmlInput.value;
-};
-
-const refreshMidiDebugInfo = (): void => {
-  const sourceXml = resolveMidiDebugXml().trim();
-  if (!sourceXml) {
-    midiDebugText.textContent = "MIDI debug: no source XML";
-    return;
-  }
-  const doc = parseMusicXmlDocument(sourceXml);
-  if (!doc) {
-    midiDebugText.textContent = "MIDI debug: source XML parse failed";
-    return;
-  }
-
-  const tempoEvents = collectMidiTempoEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER);
-  const ccEvents = collectMidiControlEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER);
-  const cc64Events = ccEvents.filter((event) => event.controllerNumber === 64);
-  const programOverrides = collectMidiProgramOverridesFromMusicXmlDoc(doc);
-  const midiLikePlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
-    mode: "midi",
-    graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
-    metricAccentEnabled: metricAccentEnabledInput.checked,
-    metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-  }).events;
-  const plainPlaybackEvents = buildPlaybackEventsFromMusicXmlDoc(doc, PLAYBACK_TICKS_PER_QUARTER, {
-    mode: "playback",
-  }).events;
-  const drumEvents = midiLikePlaybackEvents.filter((event) => event.channel === 10);
-  const uniqueDrumNotes = Array.from(new Set(drumEvents.map((event) => event.midiNumber))).sort((a, b) => a - b);
-
-  const lines: string[] = [];
-  lines.push(`Tempo events: ${tempoEvents.length}`);
-  lines.push(
-    tempoEvents.length
-      ? `  ${tempoEvents.map((event) => `tick ${event.startTicks} -> ${event.bpm} bpm`).join(" | ")}`
-      : "  (none)"
-  );
-
-  const programPairs = Array.from(programOverrides.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  lines.push(`Program overrides from MusicXML: ${programPairs.length}`);
-  lines.push(
-    programPairs.length
-      ? `  ${programPairs.map(([partId, program]) => `${partId}: program ${program}`).join(" | ")}`
-      : "  (none)"
-  );
-
-  lines.push(`CC64 pedal events: ${cc64Events.length}`);
-  lines.push(
-    cc64Events.length
-      ? `  ${cc64Events
-          .slice(0, 16)
-          .map((event) => `${event.trackId}/ch${event.channel}@${event.startTicks}=${event.controllerValue}`)
-          .join(" | ")}${cc64Events.length > 16 ? " | ..." : ""}`
-      : "  (none)"
-  );
-
-  lines.push(`Drum-like note events (ch10): ${drumEvents.length}`);
-  lines.push(
-    drumEvents.length
-      ? `  notes: ${uniqueDrumNotes.join(", ")}`
-      : "  (none)"
-  );
-
-  const deltaPlaybackEvents = midiLikePlaybackEvents.length - plainPlaybackEvents.length;
-  lines.push("Playback vs MIDI-like alignment:");
-  lines.push(
-    `  plain=${plainPlaybackEvents.length} midi-like=${midiLikePlaybackEvents.length} delta=${deltaPlaybackEvents >= 0 ? `+${deltaPlaybackEvents}` : String(deltaPlaybackEvents)}`
-  );
-  lines.push(
-    `  tempoChanges=${Math.max(0, tempoEvents.length - 1)} cc64=${cc64Events.length} programOverrides=${programPairs.length}`
-  );
-
-  midiDebugText.textContent = lines.join("\n");
 };
 
 const activateTopTab = (tabName: string): void => {
@@ -2702,14 +2620,19 @@ playBtn.addEventListener("click", () => {
 });
 playBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
 playBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
+exportPlayBtn.addEventListener("click", () => {
+  void startPlayback();
+});
+exportPlayBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+exportPlayBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 stopBtn.addEventListener("click", stopPlayback);
+exportStopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
-refreshMidiDebugBtn.addEventListener("click", refreshMidiDebugInfo);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
@@ -2746,4 +2669,3 @@ applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);
-refreshMidiDebugInfo();

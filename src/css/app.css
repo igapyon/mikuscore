@@ -621,19 +621,6 @@ body {
   justify-content: flex-end;
 }
 
-.ms-midi-debug-text {
-  margin: 0.55rem 0 0;
-  padding: 0.65rem 0.7rem;
-  border: 1px solid #d9d2e4;
-  border-radius: 8px;
-  background: #faf8fd;
-  color: #4f495a;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* Keep duration selector on its own row for compact editing flow */
 .ms-grid .ms-field:nth-of-type(3) {
   grid-column: 1 / -1;
