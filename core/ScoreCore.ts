@@ -349,7 +349,8 @@ export class ScoreCore {
       for (const voice of voices) {
         const timing = getMeasureTimingForVoice(note, voice);
         if (!timing) continue;
-        if (timing.occupied > timing.capacity) {
+        const tolerance = this.computeTupletRoundingTolerance(measure, voice);
+        if (timing.occupied > timing.capacity + tolerance) {
           return {
             code: "MEASURE_OVERFULL",
             message: `Occupied time ${timing.occupied} exceeds capacity ${timing.capacity}.`,
@@ -388,6 +389,23 @@ export class ScoreCore {
       if (pitchDiagnostic) return pitchDiagnostic;
     }
     return null;
+  }
+
+  private computeTupletRoundingTolerance(measure: Element, voice: string): number {
+    // Tuplet durations are integer-rounded in many MusicXML files.
+    // Allow a small overrun proportional to the number of non-chord tuplet onsets.
+    let tupletOnsetCount = 0;
+    for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
+      const noteVoice = getVoiceText(note);
+      if (noteVoice !== voice) continue;
+      if (note.querySelector(":scope > chord")) continue;
+      if (note.querySelector(":scope > time-modification") === null) continue;
+      const duration = getDurationValue(note);
+      if (duration === null || duration <= 0) continue;
+      tupletOnsetCount += 1;
+    }
+    if (tupletOnsetCount <= 0) return 0;
+    return Math.floor(tupletOnsetCount / 2);
   }
 
   private fail(code: Diagnostic["code"], message: string): DispatchResult {

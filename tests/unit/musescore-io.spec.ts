@@ -476,6 +476,34 @@ describe("musescore-io", () => {
     expect(durationTotal).toBe(240);
   });
 
+  it("adds final light-heavy barline on the last measure even without explicit MuseScore end barline", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lastMeasure = doc.querySelector("part > measure:last-of-type");
+    expect(lastMeasure?.querySelector(":scope > barline[location=\"right\"] > bar-style")?.textContent?.trim()).toBe("light-heavy");
+  });
+
   it("keeps written note type for tuplet notes (e.g. 16th triplet stays 16th)", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="3.02">
@@ -562,5 +590,348 @@ describe("musescore-io", () => {
     expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
     expect(n2?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
     expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+  });
+
+  it("imports MuseScore Slur spanner into MusicXML slur start/stop", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>16th</durationType>
+            <Spanner type="Slur"><Slur/></Spanner>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+          <Chord>
+            <durationType>16th</durationType>
+            <Spanner type="Slur"><prev/></Spanner>
+            <Note><pitch>62</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(n1?.querySelector(':scope > notations > slur[type="start"]')).not.toBeNull();
+    expect(n2?.querySelector(':scope > notations > slur[type="stop"]')).not.toBeNull();
+  });
+
+  it("keeps slur matching across measure boundary for MuseScore Spanner Slur", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>16th</durationType>
+            <Spanner type="Slur"><Slur/><next><location><fractions>5/16</fractions></location></next></Spanner>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Chord>
+            <durationType>16th</durationType>
+            <Spanner type="Slur"><prev><location><fractions>-5/16</fractions></location></prev></Spanner>
+            <Note><pitch>64</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const start = doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1) > notations > slur[type=\"start\"]");
+    const stop = doc.querySelector("part > measure:nth-of-type(2) > note:nth-of-type(1) > notations > slur[type=\"stop\"]");
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+    expect(start?.getAttribute("number")).toBe(stop?.getAttribute("number"));
+  });
+
+  it("imports MuseScore legacy chord-level Slur type start/stop with id", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <Slur id="2"><track>0</track></Slur>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>eighth</durationType>
+            <Slur type="start" id="2"/>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+          <Chord>
+            <durationType>eighth</durationType>
+            <Slur type="stop" id="2"/>
+            <Note><pitch>62</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(n1?.querySelector(':scope > notations > slur[type="start"][number="2"]')).not.toBeNull();
+    expect(n2?.querySelector(':scope > notations > slur[type="stop"][number="2"]')).not.toBeNull();
+  });
+
+  it("imports MuseScore note tie markers into MusicXML tie/tied", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Note><pitch>60</pitch><Tie/></Note>
+          </Chord>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Note><pitch>60</pitch><endSpanner/></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(n1?.querySelector(':scope > tie[type="start"]')).not.toBeNull();
+    expect(n1?.querySelector(':scope > notations > tied[type="start"]')).not.toBeNull();
+    expect(n2?.querySelector(':scope > tie[type="stop"]')).not.toBeNull();
+    expect(n2?.querySelector(':scope > notations > tied[type="stop"]')).not.toBeNull();
+  });
+
+  it("imports MuseScore chord articulation subtype into MusicXML articulations", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>eighth</durationType>
+            <Articulation><subtype>articStaccatoBelow</subtype></Articulation>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+          <Chord>
+            <durationType>eighth</durationType>
+            <Articulation><subtype>articTenutoAbove</subtype></Articulation>
+            <Note><pitch>62</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(n1?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
+    expect(n2?.querySelector(":scope > notations > articulations > tenuto")).not.toBeNull();
+  });
+
+  it("maps MuseScore left-hand pizzicato articulation into MusicXML technical stopped (+)", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Articulation><subtype>articLhPizzicatoAbove</subtype></Articulation>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const stopped = doc.querySelector("part > measure > note > notations > technical > stopped");
+    expect(stopped).not.toBeNull();
+  });
+
+  it("imports MuseScore Trill spanner into MusicXML ornaments trill-mark/wavy-line", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Spanner type="Trill"><Trill><subtype>trill</subtype></Trill><next><location><measures>1</measures></location></next></Spanner>
+          <Chord><durationType>half</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Spanner type="Trill"><prev><location><measures>-1</measures></location></prev></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const start = doc.querySelector("part > measure:nth-of-type(1) > note > notations > ornaments > wavy-line[type=\"start\"]");
+    const stop = doc.querySelector("part > measure:nth-of-type(2) > note > notations > ornaments > wavy-line[type=\"stop\"]");
+    expect(doc.querySelector("part > measure:nth-of-type(1) > note > notations > ornaments > trill-mark")).not.toBeNull();
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+    expect(start?.getAttribute("number")).toBe(stop?.getAttribute("number"));
+  });
+
+  it("imports MuseScore Ottava spanner into MusicXML octave-shift direction", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Spanner type="Ottava"><Ottava><subtype>8va</subtype></Ottava><next><location><measures>1</measures></location></next></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Spanner type="Ottava"><prev><location><measures>-1</measures></location></prev></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const start = doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type=\"start\"]");
+    const stop = doc.querySelector("part > measure:nth-of-type(2) > direction > direction-type > octave-shift[type=\"stop\"]");
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+    expect(start?.getAttribute("size")).toBe("8");
+    expect(start?.getAttribute("number")).toBe(stop?.getAttribute("number"));
+  });
+
+  it("raises displayed pitch under Ottava while exporting octave-shift", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Spanner type="Ottava"><Ottava><subtype>8va</subtype></Ottava><next><location><measures>1</measures></location></next></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>81</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Spanner type="Ottava"><prev><location><measures>-1</measures></location></prev></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const firstStep = doc.querySelector("part > measure:nth-of-type(1) > note > pitch > step")?.textContent?.trim();
+    const firstOctave = doc.querySelector("part > measure:nth-of-type(1) > note > pitch > octave")?.textContent?.trim();
+    expect(firstStep).toBe("A");
+    expect(firstOctave).toBe("6");
+    expect(doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type=\"start\"]")).not.toBeNull();
+  });
+
+  it("keeps Ottava display shift active across measure boundaries including repeat barlines", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Spanner type="Ottava"><Ottava><subtype>8va</subtype></Ottava><next><location><measures>2</measures></location></next></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure endRepeat="1">
+        <voice>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Spanner type="Ottava"><prev><location><measures>-2</measures></location></prev></Spanner>
+          <Chord><durationType>quarter</durationType><Note><pitch>64</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const m1Oct = doc.querySelector("part > measure:nth-of-type(1) > note > pitch > octave")?.textContent?.trim();
+    const m2Oct = doc.querySelector("part > measure:nth-of-type(2) > note > pitch > octave")?.textContent?.trim();
+    expect(m1Oct).toBe("5");
+    expect(m2Oct).toBe("5");
+    expect(doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type=\"start\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure:nth-of-type(3) > direction > direction-type > octave-shift[type=\"stop\"]")).not.toBeNull();
   });
 });

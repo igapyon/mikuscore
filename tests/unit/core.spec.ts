@@ -988,6 +988,39 @@ describe("ScoreCore MVP", () => {
     expect(saved.ok).toBe(true);
   });
 
+  it("SV-3b: save allows tiny overrun caused by tuplet integer rounding", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Music</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const core = new ScoreCore();
+    core.load(xml);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+  });
+
   it("SV-4: save is rejected when a note has invalid voice", () => {
     const core = new ScoreCore();
     core.load(XML_WITH_INVALID_NOTE_VOICE);
