@@ -93,7 +93,7 @@
               </span>
               <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
                 To use mikuscore, first load your score here (from file/source) or create a new score.
-                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), MEI (`.mei`), LilyPond (`.ly`).
+                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
                 You can move to Score/Edit/Export after completing this step.
               </span>
             </span>
@@ -163,7 +163,7 @@
             <div class="ms-file-meta">
               <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
             </div>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.mei,.ly,text/plain,text/xml,application/xml,application/mei+xml" hidden />
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.mei,.ly,.mscx,.mscz,text/plain,text/xml,application/xml,application/mei+xml" hidden />
           </div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
@@ -393,7 +393,7 @@
               <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
                 Export is where you take your work out of mikuscore.
                 The main flow is exporting your edited result as MusicXML.
-                In addition, mikuscore also supports ABC/MEI/LilyPond export and lightweight MIDI output for quick checks.
+                In addition, mikuscore also supports ABC/MEI/LilyPond/MuseScore export and lightweight MIDI output for quick checks.
                 MIDI export is handy for simple confirmation, while complex production/export work is best done in dedicated software.
               </span>
             </span>
@@ -430,6 +430,15 @@
               </svg>
               <span>MIDI</span>
             </button>
+            <button id="downloadMuseScoreBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8 8h8"></path>
+                <path d="M8 12h8"></path>
+                <path d="M8 16h5"></path>
+              </svg>
+              <span>MuseScore</span>
+            </button>
             <button id="downloadMeiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
@@ -448,6 +457,7 @@
               <span>LilyPond</span>
             </button>
           </div>
+          <div class="ms-export-divider" role="separator" aria-hidden="true"></div>
           <div class="ms-actions ms-preview-actions">
             <button id="exportPlayBtn" type="button" class="md-button md-button--primary ms-icon-button">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
@@ -504,6 +514,33 @@
                         class="md-switch-input"
                         checked
                         aria-label="Keep source and extension metadata"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Compress MusicXML / MuseScore export</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Compression export help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          When enabled, MusicXML export uses `.mxl` and MuseScore export uses `.mscz` (ZIP container).
+                          When disabled, plain `.musicxml` / `.mscx` text files are exported.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="compressXmlMuseScoreExport">
+                      <input
+                        id="compressXmlMuseScoreExport"
+                        type="checkbox"
+                        class="md-switch-input"
+                        aria-label="Compress MusicXML and MuseScore export"
                       />
                       <span class="md-switch" aria-hidden="true"></span>
                     </label>

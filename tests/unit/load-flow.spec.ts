@@ -13,6 +13,7 @@ const baseParams = () => ({
   convertAbcToMusicXml: (_abc: string) => "<score-partwise version=\"4.0\"/>",
   convertMeiToMusicXml: (_mei: string) => "<score-partwise version=\"4.0\"/>",
   convertLilyPondToMusicXml: (_lily: string) => "<score-partwise version=\"4.0\"/>",
+  convertMuseScoreToMusicXml: (_musescore: string) => "<score-partwise version=\"4.0\"/>",
   convertMidiToMusicXml: (_bytes: Uint8Array) => ({
     ok: true,
     xml: "<score-partwise version=\"4.0\"><part-list/></score-partwise>",
@@ -111,6 +112,27 @@ describe("load-flow LilyPond file input", () => {
       convertLilyPondToMusicXml: (text: string) => {
         called = true;
         expect(text).toContain("\\score");
+        return "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>";
+      },
+    });
+    expect(called).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+  });
+});
+
+describe("load-flow MuseScore file input", () => {
+  it("accepts .mscx and converts via convertMuseScoreToMusicXml", async () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?><museScore version="4.0"><Score/></museScore>`;
+    const file = new File([mscx], "test.mscx", { type: "application/xml" });
+    let called = false;
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+      convertMuseScoreToMusicXml: (text: string) => {
+        called = true;
+        expect(text).toContain("<museScore");
         return "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>";
       },
     });
