@@ -432,4 +432,39 @@ describe("musescore-io", () => {
     expect(allDiag).not.toContain("unknown-duration");
     expect(allDiag).not.toContain("tag=Tuplet");
   });
+
+  it("imports pickup measure len as implicit short measure", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure len="1/8">
+        <irregular>1</irregular>
+        <voice>
+          <TimeSig><sigN>3</sigN><sigD>8</sigD></TimeSig>
+          <Chord><durationType>16th</durationType><Note><pitch>76</pitch></Note></Chord>
+          <Chord><durationType>16th</durationType><Note><pitch>75</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Rest><durationType>quarter</durationType><dots>1</dots></Rest>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const firstMeasure = doc.querySelector("part > measure[number=\"0\"]");
+    expect(firstMeasure?.getAttribute("implicit")).toBe("yes");
+    const secondMeasure = doc.querySelector("part > measure:nth-of-type(2)");
+    expect(secondMeasure?.getAttribute("number")).toBe("1");
+    const durationTotal = Array.from(firstMeasure?.querySelectorAll(":scope > note > duration") ?? [])
+      .reduce((sum, node) => sum + Number(node.textContent?.trim() || 0), 0);
+    expect(durationTotal).toBe(240);
+  });
 });

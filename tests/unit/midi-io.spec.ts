@@ -621,6 +621,61 @@ describe("midi-io MIDI import MVP", () => {
     expect(mode).toBe("minor");
   });
 
+  it("normalizes leading pickup FF58 (1/8 at tick 0 then 3/8) to 3/8 on MIDI import", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x58, 0x04, 0x01, 0x03, 0x18, 0x08, // 1/8 at tick 0
+      ...vlq(0), 0x90, 69, 96,
+      ...vlq(240), 0x80, 69, 0, // 1/8 later (tpq=480)
+      ...vlq(0), 0xff, 0x58, 0x04, 0x03, 0x03, 0x18, 0x08, // 3/8
+      ...vlq(0), 0x90, 71, 96,
+      ...vlq(480), 0x80, 71, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const beats = doc.querySelector("part > measure > attributes > time > beats")?.textContent?.trim();
+    const beatType = doc.querySelector("part > measure > attributes > time > beat-type")?.textContent?.trim();
+    expect(beats).toBe("3");
+    expect(beatType).toBe("8");
+    expect(result.warnings.some((warning) => warning.code === "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED")).toBe(true);
+  });
+
+  it("keeps pickup measure as implicit when leading FF58 encodes anacrusis", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x58, 0x04, 0x01, 0x03, 0x18, 0x08, // 1/8 at tick 0
+      ...vlq(0), 0x90, 76, 96,
+      ...vlq(120), 0x80, 76, 0,
+      ...vlq(0), 0x90, 75, 96,
+      ...vlq(120), 0x80, 75, 0, // pickup ends at tick 240
+      ...vlq(0), 0xff, 0x58, 0x04, 0x03, 0x03, 0x18, 0x08, // 3/8 from here
+      ...vlq(0), 0x90, 76, 96,
+      ...vlq(120), 0x80, 76, 0,
+      ...vlq(0), 0x90, 71, 96,
+      ...vlq(120), 0x80, 71, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const firstMeasure = doc.querySelector("part > measure[number=\"0\"]");
+    expect(firstMeasure?.getAttribute("implicit")).toBe("yes");
+    const beats = doc.querySelector("part > measure[number=\"0\"] > attributes > time > beats")?.textContent?.trim();
+    const beatType = doc.querySelector("part > measure[number=\"0\"] > attributes > time > beat-type")?.textContent?.trim();
+    expect(beats).toBe("3");
+    expect(beatType).toBe("8");
+    const sumVoiceDuration = (measureSelector: string, voice: string): number =>
+      Array.from(doc.querySelectorAll(`${measureSelector} > note`))
+        .filter((note) => note.querySelector("voice")?.textContent?.trim() === voice)
+        .reduce((sum, note) => {
+          const dur = Number(note.querySelector("duration")?.textContent?.trim() ?? "0");
+          return sum + (Number.isFinite(dur) ? dur : 0);
+        }, 0);
+    const firstMeasureVoice1Duration = sumVoiceDuration("part > measure[number=\"0\"]", "1");
+    const secondMeasureVoice1Duration = sumVoiceDuration("part > measure[number=\"1\"]", "1");
+    expect(firstMeasureVoice1Duration).toBeGreaterThan(0);
+    expect(secondMeasureVoice1Duration).toBeGreaterThan(0);
+    expect(firstMeasureVoice1Duration).toBeLessThan(secondMeasureVoice1Duration);
+  });
+
   it("infers MusicXML key when MIDI key signature meta event is missing", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 62, 96, // D

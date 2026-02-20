@@ -32,6 +32,8 @@ type ParsedMuseScoreMeasure = {
   index: number;
   beats: number;
   beatType: number;
+  capacityDiv: number;
+  implicit: boolean;
   fifths: number;
   mode: "major" | "minor";
   tempoBpm: number | null;
@@ -319,6 +321,19 @@ const parseMeasureValue = (measure: Element, selectors: string[], fallback: numb
   return fallback;
 };
 
+const parseMeasureLenToDivisions = (measure: Element, divisions: number): number | null => {
+  const raw = (measure.getAttribute("len") ?? "").trim();
+  if (!raw) return null;
+  const m = raw.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (!m) return null;
+  const num = Number(m[1]);
+  const den = Number(m[2]);
+  if (!Number.isFinite(num) || !Number.isFinite(den) || num <= 0 || den <= 0) return null;
+  const div = (Math.max(1, Math.round(divisions)) * 4 * num) / den;
+  if (!Number.isFinite(div) || div <= 0) return null;
+  return Math.max(1, Math.round(div));
+};
+
 type ParsedMuseScoreStaff = {
   sourceStaffId: string;
   clefSign: "G" | "F";
@@ -502,6 +517,8 @@ export const convertMuseScoreToMusicXml = (
           index: 1,
           beats: globalBeats,
           beatType: globalBeatType,
+          capacityDiv: Math.max(1, Math.round((divisions * 4 * globalBeats) / Math.max(1, globalBeatType))),
+          implicit: false,
           fifths: globalFifths,
           mode: globalMode,
           tempoBpm: null,
@@ -534,6 +551,10 @@ export const convertMuseScoreToMusicXml = (
         [":scope > TimeSig > sigD", ":scope > voice > TimeSig > sigD", ":scope > voice > timesig > sigD"],
         currentBeatType
       );
+      const nominalCapacityDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
+      const measureLenDiv = parseMeasureLenToDivisions(measure, divisions);
+      const capacityDiv = measureLenDiv ?? nominalCapacityDiv;
+      const implicit = measureLenDiv !== null && measureLenDiv < nominalCapacityDiv;
       const fifthsRaw = firstNumber(measure, ":scope > KeySig > accidental")
         ?? firstNumber(measure, ":scope > voice > KeySig > accidental")
         ?? firstNumber(measure, ":scope > voice > keysig > accidental");
@@ -552,7 +573,6 @@ export const convertMuseScoreToMusicXml = (
         || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
       const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
         || measure.querySelector(":scope > endRepeat, :scope > voice > endRepeat") !== null;
-      const measureCapacityDiv = Math.max(1, Math.round((divisions * 4 * beats) / Math.max(1, beatType)));
 
       const events: ParsedMuseScoreEvent[] = [];
       const voiceNodes = Array.from(measure.querySelectorAll(":scope > voice"));
@@ -592,7 +612,7 @@ export const convertMuseScoreToMusicXml = (
             continue;
           }
           if (tag === "rest") {
-            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+            const parsed = parseDurationDiv(event, divisions, capacityDiv);
             const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
             if (!durationDiv) {
               pushWarning({
@@ -613,7 +633,7 @@ export const convertMuseScoreToMusicXml = (
             continue;
           }
           if (tag === "chord") {
-            const parsed = parseDurationDiv(event, divisions, measureCapacityDiv);
+            const parsed = parseDurationDiv(event, divisions, capacityDiv);
             const durationDiv = parsed === null ? null : Math.max(1, Math.round(parsed * currentTupletScale()));
             if (!durationDiv) {
               pushWarning({
@@ -748,7 +768,7 @@ export const convertMuseScoreToMusicXml = (
         }
       }
 
-      const capacity = measureCapacityDiv;
+      const capacity = capacityDiv;
       const occupiedByVoice = new Map<number, number>();
       for (const event of events) {
         if (!("durationDiv" in event)) continue;
@@ -774,6 +794,8 @@ export const convertMuseScoreToMusicXml = (
         index: mi + 1,
         beats,
         beatType,
+        capacityDiv,
+        implicit,
         fifths,
         mode,
         tempoBpm,
@@ -851,11 +873,14 @@ export const convertMuseScoreToMusicXml = (
     let prevFifths = globalFifths;
     let prevMode = globalMode;
     const measureCount = Math.max(1, ...part.staffs.map((staff) => staff.measures.length));
+    const startsWithPickup = (part.staffs[0]?.measures[0]?.implicit ?? false) === true;
     for (let mi = 0; mi < measureCount; mi += 1) {
       const primaryMeasure = part.staffs[0]?.measures[mi] ?? {
         index: mi + 1,
         beats: prevBeats,
         beatType: prevBeatType,
+        capacityDiv: Math.max(1, Math.round((divisions * 4 * prevBeats) / Math.max(1, prevBeatType))),
+        implicit: false,
         fifths: prevFifths,
         mode: prevMode,
         tempoBpm: null,
@@ -863,10 +888,7 @@ export const convertMuseScoreToMusicXml = (
         repeatBackward: false,
         events: [] as ParsedMuseScoreEvent[],
       };
-      const capacity = Math.max(
-        1,
-        Math.round((divisions * 4 * primaryMeasure.beats) / Math.max(1, primaryMeasure.beatType))
-      );
+      const capacity = Math.max(1, Math.round(primaryMeasure.capacityDiv));
       let body = "";
       const needsAttributes =
         mi === 0
@@ -904,6 +926,8 @@ export const convertMuseScoreToMusicXml = (
           index: mi + 1,
           beats: primaryMeasure.beats,
           beatType: primaryMeasure.beatType,
+          capacityDiv: primaryMeasure.capacityDiv,
+          implicit: primaryMeasure.implicit,
           fifths: primaryMeasure.fifths,
           mode: primaryMeasure.mode,
           tempoBpm: null,
@@ -971,7 +995,9 @@ export const convertMuseScoreToMusicXml = (
       if (primaryMeasure.repeatBackward) {
         body += `<barline location="right"><repeat direction="backward"/></barline>`;
       }
-      measuresXml.push(`<measure number="${mi + 1}">${body}</measure>`);
+      const implicitAttr = primaryMeasure.implicit ? ' implicit="yes"' : "";
+      const measureNumber = startsWithPickup ? mi : mi + 1;
+      measuresXml.push(`<measure number="${measureNumber}"${implicitAttr}>${body}</measure>`);
       prevBeats = primaryMeasure.beats;
       prevBeatType = primaryMeasure.beatType;
       prevFifths = primaryMeasure.fifths;
