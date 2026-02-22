@@ -135,6 +135,7 @@ const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
+const exportMusicXmlAsXmlExtension = q<HTMLInputElement>("#exportMusicXmlAsXmlExtension");
 const compressXmlMuseScoreExport = q<HTMLInputElement>("#compressXmlMuseScoreExport");
 const generalSettingsAccordion = q<HTMLDetailsElement>("#generalSettingsAccordion");
 const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
@@ -205,6 +206,7 @@ const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
+const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
 const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
@@ -224,6 +226,7 @@ type PlaybackSettings = {
   metricAccentProfile: MetricAccentProfile;
   forceMidiProgramOverride: boolean;
   keepMetadataInMusicXml: boolean;
+  exportMusicXmlAsXmlExtension: boolean;
   compressXmlMuseScoreExport: boolean;
   generalSettingsExpanded: boolean;
   settingsExpanded: boolean;
@@ -266,6 +269,10 @@ const normalizeCompressXmlMuseScoreExport = (value: unknown): boolean => {
   return value === true;
 };
 
+const normalizeExportMusicXmlAsXmlExtension = (value: unknown): boolean => {
+  return value === true;
+};
+
 const normalizeUseMidiLikePlayback = (value: unknown): boolean => {
   return value !== false;
 };
@@ -298,6 +305,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+      exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
       compressXmlMuseScoreExport: normalizeCompressXmlMuseScoreExport(parsed.compressXmlMuseScoreExport),
       generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
       settingsExpanded: Boolean(parsed.settingsExpanded),
@@ -308,6 +316,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
 };
 
 const writePlaybackSettings = (): void => {
+  syncGeneralExportSettings();
   try {
     const payload: PlaybackSettings = {
       midiProgram: normalizeMidiProgram(midiProgramSelect.value),
@@ -318,6 +327,7 @@ const writePlaybackSettings = (): void => {
       metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+      exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
       compressXmlMuseScoreExport: compressXmlMuseScoreExport.checked,
       generalSettingsExpanded: generalSettingsAccordion.open,
       settingsExpanded: settingsAccordion.open,
@@ -325,6 +335,13 @@ const writePlaybackSettings = (): void => {
     localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
   } catch {
     // Ignore quota/security errors in MVP.
+  }
+};
+
+const syncGeneralExportSettings = (): void => {
+  const useXmlExtension = exportMusicXmlAsXmlExtension.checked;
+  if (useXmlExtension) {
+    compressXmlMuseScoreExport.checked = false;
   }
 };
 
@@ -339,8 +356,11 @@ const applyInitialPlaybackSettings = (): void => {
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  exportMusicXmlAsXmlExtension.checked =
+    stored?.exportMusicXmlAsXmlExtension ?? DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
   compressXmlMuseScoreExport.checked =
     stored?.compressXmlMuseScoreExport ?? DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+  syncGeneralExportSettings();
   generalSettingsAccordion.open = stored?.generalSettingsExpanded ?? false;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
 };
@@ -354,7 +374,9 @@ const onResetPlaybackSettings = (): void => {
   metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
   compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+  syncGeneralExportSettings();
   writePlaybackSettings();
   renderControlState();
 };
@@ -2435,6 +2457,7 @@ const onDownload = async (): Promise<void> => {
   try {
     const payload = await createMusicXmlDownloadPayload(xmlText, {
       compressed: compressXmlMuseScoreExport.checked,
+      useXmlExtension: exportMusicXmlAsXmlExtension.checked,
     });
     triggerFileDownload(payload);
   } catch (err) {
@@ -2718,7 +2741,13 @@ keepMetadataInMusicXml.addEventListener("change", () => {
   writePlaybackSettings();
   renderOutput();
 });
-compressXmlMuseScoreExport.addEventListener("change", writePlaybackSettings);
+exportMusicXmlAsXmlExtension.addEventListener("change", writePlaybackSettings);
+compressXmlMuseScoreExport.addEventListener("change", () => {
+  if (compressXmlMuseScoreExport.checked) {
+    exportMusicXmlAsXmlExtension.checked = false;
+  }
+  writePlaybackSettings();
+});
 generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);

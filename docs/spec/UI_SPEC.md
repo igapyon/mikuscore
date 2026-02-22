@@ -64,8 +64,13 @@ Top-level flow is a 4-step tabbed stepper:
   - `MusicXML Export`
   - `ABC Export`
   - `MIDI Export`
+- General settings:
+  - `Export MusicXML text as .xml extension` (default: OFF)
+  - `Compress MusicXML / MuseScore export`
+  - If `Export MusicXML text as .xml extension` is ON, compression is forced OFF.
+  - If compression is turned ON, `Export MusicXML text as .xml extension` is turned OFF.
 - Download names include timestamp suffix:
-  - `mikuscore-YYYYMMDDhhmm.musicxml`
+  - MusicXML text export: `mikuscore-YYYYMMDDhhmm.musicxml` (default) or `mikuscore-YYYYMMDDhhmm.xml` (when enabled)
   - `mikuscore-YYYYMMDDhhmm.abc`
   - `mikuscore-YYYYMMDDhhmm.mid`
 
@@ -145,8 +150,13 @@ UI は操作レイヤのみで、譜面変更の正本は Core とする。
   - `MusicXML出力`
   - `ABC出力`
   - `MIDI出力`
+- General Settings:
+  - `Export MusicXML text as .xml extension`（デフォルト: OFF）
+  - `Compress MusicXML / MuseScore export`
+  - `Export MusicXML text as .xml extension` が ON の間は、圧縮出力は強制 OFF。
+  - 圧縮出力を ON にした場合、`Export MusicXML text as .xml extension` は OFF になる。
 - ファイル名は衝突緩和のためタイムスタンプを付与:
-  - `mikuscore-YYYYMMDDhhmm.musicxml`
+  - MusicXMLテキスト出力: デフォルト `mikuscore-YYYYMMDDhhmm.musicxml`、オプション有効時 `mikuscore-YYYYMMDDhhmm.xml`
   - `mikuscore-YYYYMMDDhhmm.abc`
   - `mikuscore-YYYYMMDDhhmm.mid`
 
