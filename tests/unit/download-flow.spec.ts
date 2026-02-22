@@ -23,6 +23,18 @@ const readBlobAsArrayBuffer = async (blob: Blob): Promise<ArrayBuffer> => {
 };
 
 describe("download-flow compressed export", () => {
+  it("uses .musicxml for plain MusicXML export by default", async () => {
+    const xml = `<score-partwise version="4.0"><part-list/></score-partwise>`;
+    const payload = await createMusicXmlDownloadPayload(xml);
+    expect(payload.fileName.endsWith(".musicxml")).toBe(true);
+  });
+
+  it("uses .xml for plain MusicXML export when xml extension option is enabled", async () => {
+    const xml = `<score-partwise version="4.0"><part-list/></score-partwise>`;
+    const payload = await createMusicXmlDownloadPayload(xml, { useXmlExtension: true });
+    expect(payload.fileName.endsWith(".xml")).toBe(true);
+  });
+
   it("creates .mxl payload when MusicXML compression is enabled", async () => {
     const xml = `<score-partwise version="4.0"><part-list/></score-partwise>`;
     const payload = await createMusicXmlDownloadPayload(xml, { compressed: true });

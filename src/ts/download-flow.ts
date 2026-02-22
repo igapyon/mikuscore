@@ -222,7 +222,7 @@ const bytesToArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
 
 export const createMusicXmlDownloadPayload = async (
   xmlText: string,
-  options: { compressed?: boolean } = {}
+  options: { compressed?: boolean; useXmlExtension?: boolean } = {}
 ): Promise<DownloadFilePayload> => {
   const ts = buildFileTimestamp();
   const formattedXml = prettyPrintMusicXmlText(xmlText);
@@ -233,8 +233,9 @@ export const createMusicXmlDownloadPayload = async (
       blob: new Blob([bytesToArrayBuffer(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
     };
   }
+  const extension = options.useXmlExtension === true ? "xml" : "musicxml";
   return {
-    fileName: `mikuscore-${ts}.musicxml`,
+    fileName: `mikuscore-${ts}.${extension}`,
     blob: new Blob([formattedXml], { type: "application/xml;charset=utf-8" }),
   };
 };

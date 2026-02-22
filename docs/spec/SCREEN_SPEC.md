@@ -219,8 +219,17 @@ Define the current screen specification for `mikuscore` based on the actual UI t
   - `Refresh MIDI Debug`
   - `midiDebugText` output area
 
+#### Block: `General Settings`
+- `Export MusicXML text as .xml extension` (switch, default OFF)
+  - tooltip: default text export uses `.musicxml`; when enabled it uses `.xml`.
+- `Compress MusicXML / MuseScore export` (switch)
+  - tooltip: when enabled, MusicXML export uses `.mxl` and MuseScore export uses `.mscz`.
+- Mutual exclusion rule:
+  - if `.xml extension` switch is ON, compression is forced OFF.
+  - if compression is turned ON, `.xml extension` switch is turned OFF.
+
 ### File Naming Policy
-- `mikuscore-YYYYMMDDhhmm.musicxml`
+- MusicXML text: `mikuscore-YYYYMMDDhhmm.musicxml` (default) or `mikuscore-YYYYMMDDhhmm.xml` (when enabled)
 - `mikuscore-YYYYMMDDhhmm.abc`
 - `mikuscore-YYYYMMDDhhmm.mid`
 
@@ -454,8 +463,17 @@ Define the current screen specification for `mikuscore` based on the actual UI t
   - `Refresh MIDI Debug`
   - `midiDebugText` 出力領域
 
+#### ブロック: `General Settings`
+- `Export MusicXML text as .xml extension`（スイッチ、デフォルトOFF）
+  - ツールチップ: デフォルトのテキスト出力は `.musicxml`、有効時は `.xml`。
+- `Compress MusicXML / MuseScore export`（スイッチ）
+  - ツールチップ: 有効時は MusicXML が `.mxl`、MuseScore が `.mscz`。
+- 相互排他ルール:
+  - `.xml extension` が ON のとき、圧縮出力は強制 OFF。
+  - 圧縮出力を ON にしたとき、`.xml extension` は OFF。
+
 ### ファイル命名規則
-- `mikuscore-YYYYMMDDhhmm.musicxml`
+- MusicXMLテキスト: デフォルト `mikuscore-YYYYMMDDhhmm.musicxml`、有効時 `mikuscore-YYYYMMDDhhmm.xml`
 - `mikuscore-YYYYMMDDhhmm.abc`
 - `mikuscore-YYYYMMDDhhmm.mid`
 
