@@ -46,6 +46,21 @@
 - [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
 - [ ] Add WAV export support (aligned with current quick-playback synth path).
 - [ ] Add measure-level copy/paste feature.
+- [ ] Add note-level copy/paste feature.
+- [ ] Add functionality to create/add parts (staff/part insertion with basic setup flow).
+- [ ] Verify and strengthen measure-level editing functionality.
+- [ ] Fix unintended pinch-in (gesture zoom) behavior during score editing on touch devices.
+- [ ] Add support for mid-song double barlines.
+- [ ] Add support for multiple simultaneous notes at the same timing (same onset polyphony/chords where applicable).
+- [ ] Investigate and fix the issue where triplet notation cannot be selected in the UI.
+- [ ] Add functionality to merge/consolidate rests for cleanup.
+- [ ] Add cross-measure tie handling in core/editor (logic independent from UI visibility).
+- [ ] Define and implement UI rule for tie editing that may require showing the next measure (always preview or on-demand reveal).
+- [ ] Add slur/tie create, edit, and delete operations in editor/core with validation and undo-safe behavior.
+- [ ] Add articulation input support (at least staccato and tenuto) in editor/core and preserve them across import/export.
+- [ ] Expand articulation support beyond staccato/tenuto (e.g., accent, marcato) with clear per-format preserve/degrade rules.
+- [ ] Add dynamics marking input support (`pp` to `ff`, including intermediate levels) and preserve semantics across import/export.
+- [ ] Add band score workflow support (common band instrumentation templates, part handling, and layout defaults).
 - [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
 - [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
 - [ ] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
@@ -53,6 +68,11 @@
 - [ ] Add LilyPond (`.ly`) import/export support.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
+- [ ] Add VSQX import/export support.
+- [ ] Add lyrics support (import/edit/export with format-specific preserve/degrade rules).
+- [ ] Improve functionality and reliability of import/export across supported formats (options, diagnostics, and roundtrip quality).
+- [ ] Fix invalid data generation when exporting piano scores to ABC and add regression tests.
+- [ ] Add input file size limit checks before import/load and provide clear UI errors when the limit is exceeded.
 - [ ] MuseScore staged import roadmap:
   - [ ] Phase 1 (now): `.mscx` / `.mscz` load path, basic note/rest/chord import, and `diag` + `src:musescore:*` raw metadata preservation.
   - [ ] Phase 2: playback-rich metadata import (tempo map, repeat/jump semantics, dynamics/play-tech where mappable) with explicit `diag` for dropped items.
@@ -115,6 +135,21 @@
 - [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。
 - [ ] WAV 出力対応を追加（現行の簡易再生シンセ経路に沿う形）。
 - [ ] 小節単位のコピー/ペースト機能を追加。
+- [ ] 音符単位のコピー/ペースト機能を追加。
+- [ ] パートを追加する機能を追加（スタッフ/パート挿入と基本セットアップ導線）。
+- [ ] 小節ごとの編集機能の確認・強化。
+- [ ] タッチ端末で編集中に意図せずピンチイン（ジェスチャーズーム）が発生する不具合を修正。
+- [ ] 曲途中の二重線に対応。
+- [ ] 同じタイミングでの複数音（同時発音/必要に応じて和音）に対応。
+- [ ] UIで3連譜を選べない事象を解析し、修正対応する。
+- [ ] 休符を合体・整理する機能を追加。
+- [ ] 小節跨ぎタイの処理を core/editor に追加（UI表示有無に依存しないロジック）。
+- [ ] タイ編集時の UI 仕様を定義して実装（次小節の常時プレビューまたは操作時表示）。
+- [ ] スラー/タイの入力・編集・削除機能を editor/core に追加（妥当性チェックと Undo 安全性を含む）。
+- [ ] アーティキュレーション入力対応を追加（最低限スタッカート/テヌート）し、入出力で保持できるようにする。
+- [ ] スタッカート/テヌート以外のアーティキュレーション（例: アクセント、マルカート）対応を拡張し、形式ごとの保持/劣化ルールを定義する。
+- [ ] 強弱記号（`pp`-`ff` と中間段階）の記入機能を追加し、入出力で意味を保持できるようにする。
+- [ ] バンド譜面への対応を追加（一般的な編成テンプレート、パート管理、レイアウト初期値を含む）。
 - [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
 - [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
 - [ ] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
@@ -122,6 +157,11 @@
 - [ ] LilyPond（`.ly`）の入出力対応を追加。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
+- [ ] VSQX 形式の入出力対応を追加。
+- [ ] 歌詞（lyrics）の対応を追加（取り込み/編集/出力と、形式ごとの保持/劣化ルール定義を含む）。
+- [ ] 各種入出力フォーマットの機能性を向上（オプション、診断、往復品質を含む）。
+- [ ] ピアノ譜を ABC 出力した際に不正データになる問題を修正し、回帰テストを追加する。
+- [ ] 読み込み前に入力ファイルサイズ上限チェックを追加し、上限超過時は明確な UI エラーを表示する。
 - [ ] MuseScore 段階対応ロードマップ:
   - [ ] フェーズ1（現状）: `.mscx` / `.mscz` の読込経路、基本音符/休符/和音の取り込み、`diag` と `src:musescore:*` で生データ退避。
   - [ ] フェーズ2: 再生系メタ（テンポ、リピート/ジャンプ、強弱・奏法のうち対応可能なもの）を優先対応し、欠落は `diag` 明示。
