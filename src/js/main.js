@@ -6186,10 +6186,72 @@ const enrichTupletNotationsInDocument = (doc) => {
         flushAll();
     }
 };
+const normalizePartListAndPartIds = (doc) => {
+    var _a, _b, _c;
+    const root = doc.querySelector("score-partwise");
+    if (!root)
+        return;
+    const parts = Array.from(root.querySelectorAll(":scope > part"));
+    if (parts.length === 0)
+        return;
+    const usedIds = new Set();
+    let seq = 1;
+    const nextPartId = () => {
+        while (usedIds.has(`P${seq}`))
+            seq += 1;
+        const id = `P${seq}`;
+        seq += 1;
+        return id;
+    };
+    for (const part of parts) {
+        const current = ((_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim();
+        if (!current || usedIds.has(current)) {
+            const assigned = nextPartId();
+            part.setAttribute("id", assigned);
+            usedIds.add(assigned);
+            continue;
+        }
+        usedIds.add(current);
+    }
+    let partList = root.querySelector(":scope > part-list");
+    if (!partList) {
+        partList = doc.createElement("part-list");
+        root.insertBefore(partList, parts[0]);
+    }
+    const scorePartById = new Map();
+    for (const scorePart of Array.from(partList.querySelectorAll(":scope > score-part"))) {
+        const id = ((_b = scorePart.getAttribute("id")) !== null && _b !== void 0 ? _b : "").trim();
+        if (!id || scorePartById.has(id))
+            continue;
+        scorePartById.set(id, scorePart);
+    }
+    for (const part of parts) {
+        const id = ((_c = part.getAttribute("id")) !== null && _c !== void 0 ? _c : "").trim();
+        if (!id)
+            continue;
+        const existing = scorePartById.get(id);
+        if (existing) {
+            if (!existing.querySelector(":scope > part-name")) {
+                const partName = doc.createElement("part-name");
+                partName.textContent = "Music";
+                existing.appendChild(partName);
+            }
+            continue;
+        }
+        const scorePart = doc.createElement("score-part");
+        scorePart.setAttribute("id", id);
+        const partName = doc.createElement("part-name");
+        partName.textContent = "Music";
+        scorePart.appendChild(partName);
+        partList.appendChild(scorePart);
+        scorePartById.set(id, scorePart);
+    }
+};
 const normalizeImportedMusicXmlText = (xml) => {
     const doc = (0, exports.parseMusicXmlDocument)(xml);
     if (!doc)
         return xml;
+    normalizePartListAndPartIds(doc);
     enrichTupletNotationsInDocument(doc);
     return (0, exports.prettyPrintMusicXmlText)((0, exports.serializeMusicXmlDocument)(doc));
 };
@@ -13720,7 +13782,7 @@ const resolveTimingContext = (measure) => {
   "core/xmlUtils.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.replaceWithRestNote = exports.createRestElement = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.getDurationNotationHint = exports.setDurationValue = exports.getDurationValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
+exports.measureHasBackupOrForward = exports.findAncestorMeasure = exports.replaceWithRestNote = exports.createRestElement = exports.createNoteElement = exports.isUnsupportedNoteKind = exports.setPitch = exports.getDurationNotationHint = exports.setDurationValue = exports.getDurationValue = exports.ensureVoiceValue = exports.getVoiceText = exports.reindexNodeIds = exports.serializeXml = exports.parseXml = void 0;
 const SCORE_PARTWISE = "score-partwise";
 const parseXml = (xmlText) => {
     const parser = new DOMParser();
@@ -13758,6 +13820,23 @@ const getVoiceText = (note) => {
     return (_b = (_a = voice === null || voice === void 0 ? void 0 : voice.textContent) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : null;
 };
 exports.getVoiceText = getVoiceText;
+const ensureVoiceValue = (note, fallbackVoice) => {
+    var _a, _b;
+    const normalizedFallback = String(fallbackVoice).trim() || "1";
+    let voice = getDirectChild(note, "voice");
+    if (!voice) {
+        voice = note.ownerDocument.createElement("voice");
+        voice.textContent = normalizedFallback;
+        note.appendChild(voice);
+        return normalizedFallback;
+    }
+    const current = (_b = (_a = voice.textContent) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+    if (current)
+        return current;
+    voice.textContent = normalizedFallback;
+    return normalizedFallback;
+};
+exports.ensureVoiceValue = ensureVoiceValue;
 const getDurationValue = (note) => {
     const duration = getDirectChild(note, "duration");
     if (!(duration === null || duration === void 0 ? void 0 : duration.textContent))
@@ -14091,6 +14170,12 @@ class ScoreCore {
         let removedNodeId = null;
         const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
         try {
+            if (command.type === "change_to_pitch" ||
+                command.type === "change_duration" ||
+                command.type === "delete_note" ||
+                command.type === "split_note") {
+                (0, xmlUtils_1.ensureVoiceValue)(target, command.voice);
+            }
             if (command.type === "change_to_pitch") {
                 (0, xmlUtils_1.setPitch)(target, command.pitch);
                 autoAssignGrandStaffByPitch(target);
@@ -14237,21 +14322,29 @@ class ScoreCore {
                 diagnostics: [{ code: "MVP_SCORE_NOT_LOADED", message: "Score is not loaded." }],
             };
         }
-        const integrity = this.findInvalidNoteDiagnostic();
-        if (integrity) {
-            return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrity] };
-        }
-        const overfull = this.findOverfullDiagnostic();
-        if (overfull) {
-            return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
-        }
         if (!this.dirty) {
+            const integrityNoVoice = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: true });
+            if (integrityNoVoice) {
+                return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrityNoVoice] };
+            }
+            const overfullNoop = this.findOverfullDiagnostic();
+            if (overfullNoop) {
+                return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfullNoop] };
+            }
             return {
                 ok: true,
                 mode: "original_noop",
                 xml: this.originalXml,
                 diagnostics: [],
             };
+        }
+        const integrity = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: false });
+        if (integrity) {
+            return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrity] };
+        }
+        const overfull = this.findOverfullDiagnostic();
+        if (overfull) {
+            return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
         }
         return {
             ok: true,
@@ -14316,13 +14409,14 @@ class ScoreCore {
         }
         return null;
     }
-    findInvalidNoteDiagnostic() {
+    findInvalidNoteDiagnostic(options) {
         if (!this.doc)
             return null;
+        const ignoreMissingVoice = Boolean(options === null || options === void 0 ? void 0 : options.ignoreMissingVoice);
         const notes = this.doc.querySelectorAll("note");
         for (const note of notes) {
             const voice = (0, xmlUtils_1.getVoiceText)(note);
-            if (!voice) {
+            if (!voice && !ignoreMissingVoice) {
                 return {
                     code: "MVP_INVALID_NOTE_VOICE",
                     message: "Note is missing a valid <voice> value.",
@@ -14770,6 +14864,8 @@ const validateTargetVoiceMatch = (command, targetNote) => {
     if (command.type === "ui_noop")
         return null;
     const targetVoice = (0, xmlUtils_1.getVoiceText)(targetNote);
+    if (!targetVoice)
+        return null;
     if (targetVoice === command.voice)
         return null;
     return {

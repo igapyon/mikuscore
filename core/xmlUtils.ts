@@ -43,6 +43,21 @@ export const getVoiceText = (note: Element): string | null => {
   return voice?.textContent?.trim() ?? null;
 };
 
+export const ensureVoiceValue = (note: Element, fallbackVoice: string): string => {
+  const normalizedFallback = String(fallbackVoice).trim() || "1";
+  let voice = getDirectChild(note, "voice");
+  if (!voice) {
+    voice = note.ownerDocument.createElement("voice");
+    voice.textContent = normalizedFallback;
+    note.appendChild(voice);
+    return normalizedFallback;
+  }
+  const current = voice.textContent?.trim() ?? "";
+  if (current) return current;
+  voice.textContent = normalizedFallback;
+  return normalizedFallback;
+};
+
 export const getDurationValue = (note: Element): number | null => {
   const duration = getDirectChild(note, "duration");
   if (!duration?.textContent) return null;

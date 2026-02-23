@@ -65,6 +65,7 @@ If no content-changing command succeeded (`dirty === false`):
 
 - save MUST return original input XML text unchanged
 - save mode MUST be `original_noop`
+- save MUST allow missing `<voice>` values in no-op mode (original text pass-through)
 
 If content changed (`dirty === true`):
 
@@ -214,8 +215,12 @@ save MUST reject invalid state with diagnostics:
 
 - overfull (`MEASURE_OVERFULL`)
 - invalid duration (`MVP_INVALID_NOTE_DURATION`)
-- invalid voice (`MVP_INVALID_NOTE_VOICE`)
+- invalid voice (`MVP_INVALID_NOTE_VOICE`) for dirty-save path
 - invalid pitch (`MVP_INVALID_NOTE_PITCH`)
+
+For no-op save (`dirty === false`), missing `<voice>` in input MAY be accepted to preserve original XML text without mutation.
+
+When a content-changing command targets a note with missing `<voice>`, implementation MAY apply a command-local voice patch only on the edited note.
 
 ---
 
