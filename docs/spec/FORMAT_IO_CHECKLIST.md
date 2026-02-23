@@ -24,6 +24,9 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Parser/decoder handles invalid input safely (no crash, diagnostic returned)
 - [ ] Generated MusicXML is valid XML and parseable by existing loader
 - [ ] Output MusicXML is pretty-printed (human-readable)
+- [ ] Apply only bounded structural normalization required for loader/renderer interoperability:
+  - [ ] Allowed example: synthesize missing `part-list` and `part/@id` / `score-part/@id` linkage when absent
+  - [ ] Forbidden example: global musical reflow or cross-voice reconstruction unrelated to import boundary
 - [ ] Basic musical structure is reconstructed:
   - [ ] part / measure
   - [ ] attributes (divisions/key/time/clef as available)

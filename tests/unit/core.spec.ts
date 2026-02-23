@@ -1021,13 +1021,39 @@ describe("ScoreCore MVP", () => {
     expect(saved.ok).toBe(true);
   });
 
-  it("SV-4: save is rejected when a note has invalid voice", () => {
+  it("SV-4: no-op save returns original text even when a note has missing voice", () => {
     const core = new ScoreCore();
     core.load(XML_WITH_INVALID_NOTE_VOICE);
 
     const saved = core.save();
-    expect(saved.ok).toBe(false);
-    expect(saved.diagnostics[0]?.code).toBe("MVP_INVALID_NOTE_VOICE");
+    expect(saved.ok).toBe(true);
+    expect(saved.mode).toBe("original_noop");
+    expect(saved.xml).toBe(XML_WITH_INVALID_NOTE_VOICE);
+  });
+
+  it("SV-4b: editing a note with missing voice sets voice only on that edited note", () => {
+    const core = new ScoreCore();
+    core.load(XML_WITH_INVALID_NOTE_VOICE);
+    const first = core.listNoteNodeIds()[0];
+
+    const result = core.dispatch({
+      type: "change_to_pitch",
+      targetNodeId: first,
+      voice: "1",
+      pitch: { step: "G", octave: 4 },
+    });
+    expect(result.ok).toBe(true);
+
+    const saved = core.save();
+    expect(saved.ok).toBe(true);
+    expect(saved.mode).toBe("serialized_dirty");
+
+    const doc = new DOMParser().parseFromString(saved.xml, "application/xml");
+    const notes = Array.from(doc.querySelectorAll("measure > note"));
+    expect(notes[0]?.querySelector(":scope > voice")?.textContent?.trim()).toBe("1");
+    expect(notes[1]?.querySelector(":scope > voice")?.textContent?.trim()).toBe("1");
+    expect(notes[2]?.querySelector(":scope > voice")?.textContent?.trim()).toBe("1");
+    expect(notes[3]?.querySelector(":scope > voice")?.textContent?.trim()).toBe("1");
   });
 
   it("SV-8: save allows same-voice notes split by backup (grand-staff style timeline)", () => {

@@ -101,4 +101,20 @@ describe("musicxml-io normalizeImportedMusicXmlText", () => {
     expect(start2).not.toBeNull();
     expect(stop2).not.toBeNull();
   });
+
+  it("adds missing part-list and part ids for minimal score-partwise imports", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="2.0"><part><measure number="1"><attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes><sound tempo="128"/><note><pitch><step>A</step><octave>3</octave></pitch><duration>240</duration><lyric><syllabic>single</syllabic><text>will</text></lyric></note></measure></part></score-partwise>`;
+    const normalized = normalizeImportedMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(normalized);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const part = doc.querySelector("score-partwise > part");
+    const partId = part?.getAttribute("id")?.trim() ?? "";
+    expect(partId).toBeTruthy();
+
+    const scorePart = doc.querySelector(`score-partwise > part-list > score-part[id="${partId}"]`);
+    expect(scorePart).not.toBeNull();
+    expect(scorePart?.querySelector(":scope > part-name")).not.toBeNull();
+  });
 });

@@ -12,6 +12,7 @@ import { getMeasureTimingForVoice } from "./timeIndex";
 import {
   createRestElement,
   createNoteElement,
+  ensureVoiceValue,
   findAncestorMeasure,
   getDurationValue,
   getVoiceText,
@@ -104,6 +105,14 @@ export class ScoreCore {
     const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
 
     try {
+      if (
+        command.type === "change_to_pitch" ||
+        command.type === "change_duration" ||
+        command.type === "delete_note" ||
+        command.type === "split_note"
+      ) {
+        ensureVoiceValue(target, command.voice);
+      }
       if (command.type === "change_to_pitch") {
         setPitch(target, command.pitch);
         autoAssignGrandStaffByPitch(target);
@@ -272,7 +281,24 @@ export class ScoreCore {
       };
     }
 
-    const integrity = this.findInvalidNoteDiagnostic();
+    if (!this.dirty) {
+      const integrityNoVoice = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: true });
+      if (integrityNoVoice) {
+        return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrityNoVoice] };
+      }
+      const overfullNoop = this.findOverfullDiagnostic();
+      if (overfullNoop) {
+        return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfullNoop] };
+      }
+      return {
+        ok: true,
+        mode: "original_noop",
+        xml: this.originalXml,
+        diagnostics: [],
+      };
+    }
+
+    const integrity = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: false });
     if (integrity) {
       return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrity] };
     }
@@ -280,15 +306,6 @@ export class ScoreCore {
     const overfull = this.findOverfullDiagnostic();
     if (overfull) {
       return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
-    }
-
-    if (!this.dirty) {
-      return {
-        ok: true,
-        mode: "original_noop",
-        xml: this.originalXml,
-        diagnostics: [],
-      };
     }
 
     return {
@@ -361,12 +378,13 @@ export class ScoreCore {
     return null;
   }
 
-  private findInvalidNoteDiagnostic(): Diagnostic | null {
+  private findInvalidNoteDiagnostic(options?: { ignoreMissingVoice?: boolean }): Diagnostic | null {
     if (!this.doc) return null;
+    const ignoreMissingVoice = Boolean(options?.ignoreMissingVoice);
     const notes = this.doc.querySelectorAll("note");
     for (const note of notes) {
       const voice = getVoiceText(note);
-      if (!voice) {
+      if (!voice && !ignoreMissingVoice) {
         return {
           code: "MVP_INVALID_NOTE_VOICE",
           message: "Note is missing a valid <voice> value.",

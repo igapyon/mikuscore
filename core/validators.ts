@@ -84,6 +84,7 @@ export const validateTargetVoiceMatch = (
 ): Diagnostic | null => {
   if (command.type === "ui_noop") return null;
   const targetVoice = getVoiceText(targetNote);
+  if (!targetVoice) return null;
   if (targetVoice === command.voice) return null;
   return {
     code: "MVP_UNSUPPORTED_NON_EDITABLE_VOICE",

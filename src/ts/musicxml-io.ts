@@ -119,9 +119,71 @@ const enrichTupletNotationsInDocument = (doc: Document): void => {
   }
 };
 
+const normalizePartListAndPartIds = (doc: Document): void => {
+  const root = doc.querySelector("score-partwise");
+  if (!root) return;
+  const parts = Array.from(root.querySelectorAll(":scope > part"));
+  if (parts.length === 0) return;
+
+  const usedIds = new Set<string>();
+  let seq = 1;
+  const nextPartId = (): string => {
+    while (usedIds.has(`P${seq}`)) seq += 1;
+    const id = `P${seq}`;
+    seq += 1;
+    return id;
+  };
+
+  for (const part of parts) {
+    const current = (part.getAttribute("id") ?? "").trim();
+    if (!current || usedIds.has(current)) {
+      const assigned = nextPartId();
+      part.setAttribute("id", assigned);
+      usedIds.add(assigned);
+      continue;
+    }
+    usedIds.add(current);
+  }
+
+  let partList = root.querySelector(":scope > part-list");
+  if (!partList) {
+    partList = doc.createElement("part-list");
+    root.insertBefore(partList, parts[0]);
+  }
+
+  const scorePartById = new Map<string, Element>();
+  for (const scorePart of Array.from(partList.querySelectorAll(":scope > score-part"))) {
+    const id = (scorePart.getAttribute("id") ?? "").trim();
+    if (!id || scorePartById.has(id)) continue;
+    scorePartById.set(id, scorePart);
+  }
+
+  for (const part of parts) {
+    const id = (part.getAttribute("id") ?? "").trim();
+    if (!id) continue;
+    const existing = scorePartById.get(id);
+    if (existing) {
+      if (!existing.querySelector(":scope > part-name")) {
+        const partName = doc.createElement("part-name");
+        partName.textContent = "Music";
+        existing.appendChild(partName);
+      }
+      continue;
+    }
+    const scorePart = doc.createElement("score-part");
+    scorePart.setAttribute("id", id);
+    const partName = doc.createElement("part-name");
+    partName.textContent = "Music";
+    scorePart.appendChild(partName);
+    partList.appendChild(scorePart);
+    scorePartById.set(id, scorePart);
+  }
+};
+
 export const normalizeImportedMusicXmlText = (xml: string): string => {
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
+  normalizePartListAndPartIds(doc);
   enrichTupletNotationsInDocument(doc);
   return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
 };
