@@ -248,6 +248,14 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
   };
 };
 
+export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${ts}.vsqx`,
+    blob: new Blob([vsqxText], { type: "application/xml;charset=utf-8" }),
+  };
+};
+
 export const createMidiDownloadPayload = (
   xmlText: string,
   ticksPerQuarter: number,

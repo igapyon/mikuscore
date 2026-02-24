@@ -27,10 +27,14 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   var index_exports = {};
   __export(index_exports, {
     MikuscoreMusicXmlAdapter: () => MikuscoreMusicXmlAdapter,
+    clearMikuscoreHooks: () => clearMikuscoreHooks,
     convertMusicXmlToVsqx: () => convertMusicXmlToVsqx,
+    convertMusicXmlToVsqxWithReport: () => convertMusicXmlToVsqxWithReport,
     convertVsqxToMusicXml: () => convertVsqxToMusicXml,
     convertVsqxToMusicXmlWithReport: () => convertVsqxToMusicXmlWithReport,
+    getMikuscoreHooks: () => getMikuscoreHooks,
     getMusicXmlAdapter: () => getMusicXmlAdapter,
+    installMikuscoreHooks: () => installMikuscoreHooks,
     setMusicXmlAdapter: () => setMusicXmlAdapter
   });
 
@@ -1165,6 +1169,29 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   var ur = U.map((t) => t[0]);
   var Pt = U.map((t) => t[1]);
 
+  // src/musicxml/MikuscoreHooks.ts
+  function getGlobalLike() {
+    return globalThis;
+  }
+  function getMikuscoreHooks() {
+    const g = getGlobalLike();
+    const fromDirect = g.__utaformatix3TsPlusMikuscoreHooks;
+    if (fromDirect && typeof fromDirect === "object") {
+      return fromDirect;
+    }
+    const mks = g.mikuscore;
+    if (mks && typeof mks === "object") {
+      return mks;
+    }
+    return {};
+  }
+  function installMikuscoreHooks(hooks) {
+    getGlobalLike().__utaformatix3TsPlusMikuscoreHooks = hooks;
+  }
+  function clearMikuscoreHooks() {
+    delete getGlobalLike().__utaformatix3TsPlusMikuscoreHooks;
+  }
+
   // src/musicxml/KeyFifthsEstimator.ts
   var SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"];
   var FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"];
@@ -1885,18 +1912,6 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
 
   // src/musicxml/MikuscoreMusicXmlAdapter.ts
-  function getGlobalHooks() {
-    const g = globalThis;
-    const fromDirect = g.__utaformatix3TsPlusMikuscoreHooks;
-    if (fromDirect && typeof fromDirect === "object") {
-      return fromDirect;
-    }
-    const mks = g.mikuscore;
-    if (mks && typeof mks === "object") {
-      return mks;
-    }
-    return {};
-  }
   function hasXmlDomRuntime() {
     return typeof DOMParser !== "undefined" && typeof XMLSerializer !== "undefined";
   }
@@ -1925,7 +1940,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     return lines.join("\n");
   }
   function normalizeForOutput(xml) {
-    const hooks = getGlobalHooks();
+    const hooks = getMikuscoreHooks();
     if (typeof hooks.normalizeImportedMusicXmlText === "function") {
       try {
         return hooks.normalizeImportedMusicXmlText(xml);
@@ -1945,12 +1960,26 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
   var MikuscoreMusicXmlAdapter = class {
     write(project, options) {
+      const hooks = getMikuscoreHooks();
+      if (typeof hooks.writeProjectToMusicXml === "function") {
+        try {
+          return this.normalize(hooks.writeProjectToMusicXml(project, options));
+        } catch {
+        }
+      }
       const mode = options?.mode ?? "generate";
       const xml = mode === "preserve" ? Vr(project, { mode }) : generateMusicXmlFromProject(project, options);
       return this.normalize(xml);
     }
     parse(xml, options) {
       const normalized = this.normalize(xml);
+      const hooks = getMikuscoreHooks();
+      if (typeof hooks.parseMusicXmlToProject === "function") {
+        try {
+          return hooks.parseMusicXmlToProject(normalized, options);
+        } catch {
+        }
+      }
       return wr(normalized, {
         defaultLyric: options?.defaultLyric
       });
@@ -2009,6 +2038,117 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
   function estimateTrackKeyFifthsByMeasure(trackNotes, measures, trackFifths) {
     return estimateMeasureKeyFifthsSequence(trackNotes, measures, trackFifths);
+  }
+  function normalizeTempoStream(input) {
+    const valid = input.filter((tempo) => Number.isFinite(tempo.tickPosition) && Number.isFinite(tempo.bpm) && tempo.bpm > 0).map((tempo) => ({
+      tickPosition: Math.max(0, Math.trunc(tempo.tickPosition)),
+      bpm: tempo.bpm
+    })).sort((a, b) => a.tickPosition - b.tickPosition);
+    const merged = [];
+    for (const tempo of valid) {
+      const last = merged[merged.length - 1];
+      if (last && last.tickPosition === tempo.tickPosition) {
+        last.bpm = tempo.bpm;
+      } else {
+        merged.push({ tickPosition: tempo.tickPosition, bpm: tempo.bpm });
+      }
+    }
+    if (merged.length === 0 || merged[0].tickPosition !== 0) {
+      return [{ tickPosition: 0, bpm: merged[0]?.bpm ?? 120 }, ...merged];
+    }
+    return merged;
+  }
+  function normalizeTimeSignatureStream(input) {
+    const valid = input.filter(
+      (ts) => Number.isFinite(ts.measurePosition) && Number.isFinite(ts.numerator) && Number.isFinite(ts.denominator) && ts.numerator > 0 && ts.denominator > 0
+    ).map((ts) => ({
+      measurePosition: Math.max(0, Math.trunc(ts.measurePosition)),
+      numerator: Math.max(1, Math.trunc(ts.numerator)),
+      denominator: Math.max(1, Math.trunc(ts.denominator))
+    })).sort((a, b) => a.measurePosition - b.measurePosition);
+    const dedup = [];
+    for (const ts of valid) {
+      const last = dedup[dedup.length - 1];
+      if (last && last.measurePosition === ts.measurePosition) {
+        last.numerator = ts.numerator;
+        last.denominator = ts.denominator;
+      } else {
+        dedup.push({ ...ts });
+      }
+    }
+    if (dedup.length === 0 || dedup[0].measurePosition !== 0) {
+      return [{ measurePosition: 0, numerator: 4, denominator: 4 }, ...dedup];
+    }
+    return dedup;
+  }
+  function normalizeTrackNotes(track, defaultLyric) {
+    const notes = [];
+    let droppedInvalid = 0;
+    for (const note of track.notes ?? []) {
+      if (!Number.isFinite(note.tickOn) || !Number.isFinite(note.tickOff) || !Number.isFinite(note.key)) {
+        droppedInvalid += 1;
+        continue;
+      }
+      const tickOn = Math.max(0, Math.trunc(note.tickOn));
+      const tickOff = Math.max(0, Math.trunc(note.tickOff));
+      if (tickOff <= tickOn) {
+        droppedInvalid += 1;
+        continue;
+      }
+      notes.push({
+        ...note,
+        key: Math.trunc(note.key),
+        tickOn,
+        tickOff,
+        lyric: String(note.lyric && note.lyric.length > 0 ? note.lyric : defaultLyric)
+      });
+    }
+    notes.sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key);
+    return {
+      track: {
+        ...track,
+        notes: notes.map((note, index) => ({ ...note, id: index }))
+      },
+      droppedInvalid
+    };
+  }
+  function stabilizeImportedVsqxProject(project, defaultLyric) {
+    let droppedInvalidNotes = 0;
+    const tracks = (project.tracks ?? []).map((track, index) => {
+      const normalized = normalizeTrackNotes(
+        {
+          ...track,
+          id: index,
+          name: track.name && track.name.length > 0 ? track.name : `Track ${index + 1}`
+        },
+        defaultLyric
+      );
+      droppedInvalidNotes += normalized.droppedInvalid;
+      return normalized.track;
+    });
+    const tempos = normalizeTempoStream(project.tempos ?? []);
+    const timeSignatures = normalizeTimeSignatureStream(project.timeSignatures ?? []);
+    const ppq = Number.isFinite(project.ppq) && project.ppq > 0 ? Math.trunc(project.ppq) : 480;
+    const measurePrefix = Number.isFinite(project.measurePrefix) ? Math.max(0, Math.trunc(project.measurePrefix)) : 0;
+    const normalizedIssues = [];
+    if (droppedInvalidNotes > 0) {
+      normalizedIssues.push({
+        level: "warning",
+        code: "VSQX_IMPORT_NORMALIZED",
+        message: `Dropped ${droppedInvalidNotes} invalid note(s) during VSQX normalization.`
+      });
+    }
+    return {
+      project: {
+        ...project,
+        tracks,
+        tempos,
+        timeSignatures,
+        ppq,
+        measurePrefix
+      },
+      normalizedIssues
+    };
   }
   function enrichProjectWithEstimatedMusicXmlKeyFifths(project) {
     const maxNoteTick = Math.max(0, ...project.tracks.flatMap((track) => track.notes.map((note) => note.tickOff)));
@@ -2101,9 +2241,10 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   function convertVsqxToMusicXmlWithReport(vsqxText, options) {
     const issues = [];
     let parsed;
+    const defaultLyric = options?.defaultLyric ?? "\u3042";
     try {
       parsed = Er(vsqxText, {
-        defaultLyric: options?.defaultLyric ?? "\u3042"
+        defaultLyric
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2115,7 +2256,9 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       return { musicXml: null, issues };
     }
     issues.push(...collectProjectWarnings(parsed));
-    const project = enrichProjectWithEstimatedMusicXmlKeyFifths(parsed);
+    const stabilized = stabilizeImportedVsqxProject(parsed, defaultLyric);
+    issues.push(...stabilized.normalizedIssues);
+    const project = enrichProjectWithEstimatedMusicXmlKeyFifths(stabilized.project);
     try {
       const musicXml = getMusicXmlAdapter().write(project, options?.musicXml);
       return { musicXml, issues };
@@ -2137,9 +2280,177 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
 
   // src/converters/musicXmlToVsqx.ts
+  function formatImportWarningMessage2(warning) {
+    const maybeObject = warning;
+    const kind = typeof maybeObject.kind === "string" ? maybeObject.kind : "Unknown";
+    const message = typeof maybeObject.message === "string" ? maybeObject.message : "";
+    return message ? `MusicXML import warning (${kind}): ${message}` : `MusicXML import warning: ${kind}`;
+  }
+  function collectProjectWarnings2(project) {
+    const issues = [];
+    for (const warning of project.importWarnings ?? []) {
+      issues.push({
+        level: "warning",
+        code: "MUSICXML_IMPORT_WARNING",
+        message: formatImportWarningMessage2(warning)
+      });
+    }
+    if (project.tracks.length === 0) {
+      issues.push({
+        level: "warning",
+        code: "PROJECT_HAS_NO_TRACKS",
+        message: "Project has no tracks. VSQX writer will emit fallback track data."
+      });
+    }
+    for (const [index, track] of project.tracks.entries()) {
+      if (track.notes.length === 0) {
+        issues.push({
+          level: "warning",
+          code: "TRACK_HAS_NO_NOTES",
+          message: `Track[${index}] has no notes.`
+        });
+      }
+    }
+    if (project.tempos.length === 0) {
+      issues.push({
+        level: "warning",
+        code: "PROJECT_HAS_NO_TEMPOS",
+        message: "Project has no tempos. VSQX writer may fall back to a default tempo."
+      });
+    }
+    if (project.timeSignatures.length === 0) {
+      issues.push({
+        level: "warning",
+        code: "PROJECT_HAS_NO_TIMESIGNATURES",
+        message: "Project has no time signatures. VSQX writer may fall back to 4/4."
+      });
+    }
+    return issues;
+  }
+  function detectUnsupportedNotationIssues(xml) {
+    const issues = [];
+    const hasSlur = /<slur(\s|>|\/)/i.test(xml);
+    const hasOrnaments = /<ornaments(\s|>|\/)/i.test(xml);
+    const hasArticulations = /<articulations(\s|>|\/)/i.test(xml);
+    if (hasSlur) {
+      issues.push({
+        level: "warning",
+        code: "MUSICXML_UNSUPPORTED_NOTATION",
+        message: "MusicXML slur is not preserved in VSQX conversion."
+      });
+    }
+    if (hasOrnaments) {
+      issues.push({
+        level: "warning",
+        code: "MUSICXML_UNSUPPORTED_NOTATION",
+        message: "MusicXML ornaments are not preserved in VSQX conversion."
+      });
+    }
+    if (hasArticulations) {
+      issues.push({
+        level: "warning",
+        code: "MUSICXML_UNSUPPORTED_NOTATION",
+        message: "MusicXML articulations are not preserved in VSQX conversion."
+      });
+    }
+    return issues;
+  }
+  function detectUnsupportedNotationSummary(xml) {
+    const slurCount = (xml.match(/<slur(\s|>|\/)/gi) ?? []).length;
+    const ornamentsCount = (xml.match(/<ornaments(\s|>|\/)/gi) ?? []).length;
+    const articulationsCount = (xml.match(/<articulations(\s|>|\/)/gi) ?? []).length;
+    const total = slurCount + ornamentsCount + articulationsCount;
+    if (total === 0) return null;
+    return {
+      slurCount,
+      ornamentsCount,
+      articulationsCount,
+      totalUnsupportedNotationCount: total
+    };
+  }
+  function enrichProjectExtrasWithUnsupportedNotation(project, summary) {
+    if (!summary) return project;
+    const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
+    const extrasRecord = extrasBase;
+    const musicxmlBase = extrasRecord.musicxml && typeof extrasRecord.musicxml === "object" ? extrasRecord.musicxml : {};
+    return {
+      ...project,
+      extras: {
+        ...extrasRecord,
+        musicxml: {
+          ...musicxmlBase,
+          unsupportedNotations: summary
+        }
+      }
+    };
+  }
+  function buildFallbackTrack() {
+    return {
+      id: 0,
+      name: "Track 1",
+      notes: []
+    };
+  }
+  function buildFallbackTempo() {
+    return {
+      tickPosition: 0,
+      bpm: 120
+    };
+  }
+  function buildFallbackTimeSignature() {
+    return {
+      measurePosition: 0,
+      numerator: 4,
+      denominator: 4
+    };
+  }
+  function normalizeProjectForVsqxExport(project) {
+    const tracks = project.tracks.length > 0 ? project.tracks : [buildFallbackTrack()];
+    const tempos = project.tempos.length > 0 ? project.tempos : [buildFallbackTempo()];
+    const timeSignatures = project.timeSignatures.length > 0 ? project.timeSignatures : [buildFallbackTimeSignature()];
+    return {
+      ...project,
+      tracks,
+      tempos,
+      timeSignatures
+    };
+  }
+  function convertMusicXmlToVsqxWithReport(musicXmlText, options) {
+    const issues = [...detectUnsupportedNotationIssues(musicXmlText)];
+    const unsupportedNotationSummary = detectUnsupportedNotationSummary(musicXmlText);
+    let project;
+    try {
+      project = getMusicXmlAdapter().parse(musicXmlText, options?.musicXml);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      issues.push({
+        level: "error",
+        code: "MUSICXML_PARSE_FAILED",
+        message
+      });
+      return { vsqx: null, issues, retainedExtras: void 0 };
+    }
+    issues.push(...collectProjectWarnings2(project));
+    const enriched = enrichProjectExtrasWithUnsupportedNotation(project, unsupportedNotationSummary);
+    const normalized = normalizeProjectForVsqxExport(enriched);
+    try {
+      const result = _r(normalized);
+      return { vsqx: result.content, issues, retainedExtras: result.retainedExtras };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      issues.push({
+        level: "error",
+        code: "VSQX_WRITE_FAILED",
+        message
+      });
+      return { vsqx: null, issues, retainedExtras: void 0 };
+    }
+  }
   function convertMusicXmlToVsqx(musicXmlText, options) {
-    const project = getMusicXmlAdapter().parse(musicXmlText, options?.musicXml);
-    return _r(project).content;
+    const report = convertMusicXmlToVsqxWithReport(musicXmlText, options);
+    if (report.vsqx != null) return report.vsqx;
+    const firstError = report.issues.find((issue) => issue.level === "error");
+    throw new Error(firstError?.message ?? "MusicXML to VSQX conversion failed.");
   }
   return __toCommonJS(index_exports);
 })();
