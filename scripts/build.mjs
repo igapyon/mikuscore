@@ -16,6 +16,7 @@ const CORE_CSS_PATH = "src/css/md3/core-spec.css";
 const CSS_PATH = "src/css/app.css";
 const VEROVIO_JS_PATH = "src/js/verovio.js";
 const MIDI_WRITER_JS_PATH = "src/js/midi-writer.js";
+const UF3P_MIKUSCORE_IIFE_JS_PATH = "src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js";
 const JS_OUT = "src/js/main.js";
 const TMP_DIR = ".mikuscore-build";
 
@@ -125,6 +126,7 @@ const inlineTemplate = (jsBundle) => {
   const css = readText(CSS_PATH);
   const verovioJs = readText(VEROVIO_JS_PATH);
   const midiWriterJs = readText(MIDI_WRITER_JS_PATH);
+  const uf3pMikuscoreIifeJs = readText(UF3P_MIKUSCORE_IIFE_JS_PATH);
 
   if (!template.includes("href=\"src/css/md3/token-spec.css\"")) {
     throw new Error("Template must include src/css/md3/token-spec.css link tag.");
@@ -143,6 +145,9 @@ const inlineTemplate = (jsBundle) => {
   }
   if (!template.includes("src=\"src/js/midi-writer.js\"")) {
     throw new Error("Template must include src/js/midi-writer.js script tag.");
+  }
+  if (!template.includes("src=\"src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js\"")) {
+    throw new Error("Template must include src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js script tag.");
   }
 
   const withTokenCss = template.replace(
@@ -170,7 +175,12 @@ const inlineTemplate = (jsBundle) => {
     `<script>\n${midiWriterJs}\n</script>`
   );
 
-  return withMidiWriterJs.replace(
+  const withUf3pMikuscoreIifeJs = withMidiWriterJs.replace(
+    /<script\s+src="src\/vendor\/utaformatix3\/utaformatix3-ts-plus\.mikuscore\.iife\.js"><\/script>/,
+    `<script>\n${uf3pMikuscoreIifeJs}\n</script>`
+  );
+
+  return withUf3pMikuscoreIifeJs.replace(
     /<script\s+src="src\/js\/main\.js"><\/script>/,
     `<script>\n${jsBundle}\n</script>`
   );

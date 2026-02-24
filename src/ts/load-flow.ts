@@ -13,6 +13,12 @@ export type LoadFlowParams = {
   convertLilyPondToMusicXml: (lilySource: string) => string;
   convertMuseScoreToMusicXml: (musescoreSource: string) => string;
   formatImportedMusicXml: (xml: string) => string;
+  convertVsqxToMusicXml: (vsqxSource: string) => {
+    ok: boolean;
+    xml: string;
+    diagnostics: Array<{ code: string; message: string }>;
+    warnings: Array<{ code: string; message: string }>;
+  };
   convertMidiToMusicXml: (midiBytes: Uint8Array) => {
     ok: boolean;
     xml: string;
@@ -116,6 +122,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     const isMxl = lowerName.endsWith(".mxl");
     const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
     const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
+    const isVsqxFile = lowerName.endsWith(".vsqx");
     const isMeiFile = lowerName.endsWith(".mei");
     const isLilyPondFile = lowerName.endsWith(".ly");
     const isMuseScoreXmlFile = lowerName.endsWith(".mscx");
@@ -200,6 +207,37 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
           ok: false,
           diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
           diagnosticMessage: `Failed to parse MIDI: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    }
+
+    if (isVsqxFile) {
+      try {
+        const converted = params.convertVsqxToMusicXml(await readTextFile(selected));
+        if (!converted.ok) {
+          const first = converted.diagnostics[0];
+          return {
+            ok: false,
+            diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+            diagnosticMessage: `Failed to parse VSQX: ${
+              first ? `${first.message} (${first.code})` : "Unknown parse error."
+            }`,
+          };
+        }
+        const formattedXml = params.formatImportedMusicXml(converted.xml);
+        return {
+          ok: true,
+          xmlToLoad: formattedXml,
+          collapseInputSection: true,
+          nextXmlInputText: formattedXml,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse VSQX: ${
             error instanceof Error ? error.message : String(error)
           }`,
         };
@@ -317,7 +355,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
       diagnosticMessage:
-        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, .ly, .mscx, or .mscz.",
+        "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
     };
   }
 

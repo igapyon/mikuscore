@@ -10,6 +10,7 @@ const abc_io_1 = require("./abc-io");
 const mei_io_1 = require("./mei-io");
 const lilypond_io_1 = require("./lilypond-io");
 const musescore_io_1 = require("./musescore-io");
+const vsqx_io_1 = require("./vsqx-io");
 const musicxml_io_1 = require("./musicxml-io");
 const download_flow_1 = require("./download-flow");
 const load_flow_1 = require("./load-flow");
@@ -1790,6 +1791,9 @@ const onLoadClick = async () => {
             sourceMetadata: keepMetadata,
             debugMetadata: keepMetadata,
         }),
+        convertVsqxToMusicXml: (vsqxSource) => (0, vsqx_io_1.convertVsqxToMusicXml)(vsqxSource, {
+            defaultLyric: "あ",
+        }),
         convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
             sourceMetadata: keepMetadata,
             debugMetadata: keepMetadata,
@@ -2614,6 +2618,7 @@ playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: t
 renderNewPartClefControls();
 applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
+(0, vsqx_io_1.installVsqxMusicXmlNormalizationHook)(musicxml_io_1.normalizeImportedMusicXmlText);
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);
 
@@ -6961,6 +6966,7 @@ const resolveLoadFlow = async (params) => {
         const isMxl = lowerName.endsWith(".mxl");
         const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
         const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
+        const isVsqxFile = lowerName.endsWith(".vsqx");
         const isMeiFile = lowerName.endsWith(".mei");
         const isLilyPondFile = lowerName.endsWith(".ly");
         const isMuseScoreXmlFile = lowerName.endsWith(".mscx");
@@ -7038,6 +7044,33 @@ const resolveLoadFlow = async (params) => {
                     ok: false,
                     diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
                     diagnosticMessage: `Failed to parse MIDI: ${error instanceof Error ? error.message : String(error)}`,
+                };
+            }
+        }
+        if (isVsqxFile) {
+            try {
+                const converted = params.convertVsqxToMusicXml(await readTextFile(selected));
+                if (!converted.ok) {
+                    const first = converted.diagnostics[0];
+                    return {
+                        ok: false,
+                        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+                        diagnosticMessage: `Failed to parse VSQX: ${first ? `${first.message} (${first.code})` : "Unknown parse error."}`,
+                    };
+                }
+                const formattedXml = params.formatImportedMusicXml(converted.xml);
+                return {
+                    ok: true,
+                    xmlToLoad: formattedXml,
+                    collapseInputSection: true,
+                    nextXmlInputText: formattedXml,
+                };
+            }
+            catch (error) {
+                return {
+                    ok: false,
+                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+                    diagnosticMessage: `Failed to parse VSQX: ${error instanceof Error ? error.message : String(error)}`,
                 };
             }
         }
@@ -7144,7 +7177,7 @@ const resolveLoadFlow = async (params) => {
         return {
             ok: false,
             diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-            diagnosticMessage: "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .mei, .ly, .mscx, or .mscz.",
+            diagnosticMessage: "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
         };
     }
     if (!treatAsAbc) {
@@ -7691,6 +7724,136 @@ const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScor
     };
 };
 exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
+
+  },
+  "src/ts/vsqx-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.convertMusicXmlToVsqx = exports.convertVsqxToMusicXml = exports.isVsqxBridgeAvailable = exports.installVsqxMusicXmlNormalizationHook = void 0;
+const bridge = () => {
+    var _a;
+    if (typeof window === "undefined")
+        return null;
+    return (_a = window.UtaFormatix3TsPlusMikuscore) !== null && _a !== void 0 ? _a : null;
+};
+const issueCode = (issue, fallback) => {
+    const raw = String(issue.code || "").trim();
+    return raw || fallback;
+};
+const issueMessage = (issue, fallback) => {
+    const raw = String(issue.message || "").trim();
+    return raw || fallback;
+};
+const installVsqxMusicXmlNormalizationHook = (normalizeImportedMusicXmlText) => {
+    var _a;
+    if (typeof window === "undefined")
+        return;
+    window.__utaformatix3TsPlusMikuscoreHooks = {
+        ...((_a = window.__utaformatix3TsPlusMikuscoreHooks) !== null && _a !== void 0 ? _a : {}),
+        normalizeImportedMusicXmlText,
+    };
+};
+exports.installVsqxMusicXmlNormalizationHook = installVsqxMusicXmlNormalizationHook;
+const isVsqxBridgeAvailable = () => {
+    const runtime = bridge();
+    return !!runtime;
+};
+exports.isVsqxBridgeAvailable = isVsqxBridgeAvailable;
+const convertVsqxToMusicXml = (vsqxText, options) => {
+    const runtime = bridge();
+    if (!runtime) {
+        return {
+            ok: false,
+            xml: "",
+            diagnostics: [
+                {
+                    code: "VSQX_BRIDGE_UNAVAILABLE",
+                    message: "VSQX converter bundle is not loaded.",
+                },
+            ],
+            warnings: [],
+        };
+    }
+    const report = runtime.convertVsqxToMusicXmlWithReport(vsqxText, options);
+    const issues = Array.isArray(report === null || report === void 0 ? void 0 : report.issues) ? report.issues : [];
+    const diagnostics = issues
+        .filter((issue) => String(issue.level || "").toLowerCase() === "error")
+        .map((issue, index) => ({
+        code: issueCode(issue, `VSQX_CONVERT_ERROR_${index + 1}`),
+        message: issueMessage(issue, "VSQX to MusicXML conversion failed."),
+    }));
+    const warnings = issues
+        .filter((issue) => {
+        const level = String(issue.level || "").toLowerCase();
+        return level === "warning" || level === "info";
+    })
+        .map((issue, index) => ({
+        code: issueCode(issue, `VSQX_CONVERT_WARNING_${index + 1}`),
+        message: issueMessage(issue, "VSQX to MusicXML conversion emitted a warning."),
+    }));
+    const xml = String((report === null || report === void 0 ? void 0 : report.musicXml) || "");
+    if (!xml.trim()) {
+        const fallbackDiagnostics = diagnostics.length
+            ? diagnostics
+            : [
+                {
+                    code: "VSQX_CONVERT_EMPTY_RESULT",
+                    message: "VSQX converter returned empty MusicXML.",
+                },
+            ];
+        return {
+            ok: false,
+            xml: "",
+            diagnostics: fallbackDiagnostics,
+            warnings,
+        };
+    }
+    return {
+        ok: diagnostics.length === 0,
+        xml,
+        diagnostics,
+        warnings,
+    };
+};
+exports.convertVsqxToMusicXml = convertVsqxToMusicXml;
+const convertMusicXmlToVsqx = (musicXmlText, options) => {
+    const runtime = bridge();
+    if (!runtime) {
+        return {
+            ok: false,
+            vsqx: "",
+            diagnostic: {
+                code: "VSQX_BRIDGE_UNAVAILABLE",
+                message: "VSQX converter bundle is not loaded.",
+            },
+        };
+    }
+    try {
+        const vsqx = runtime.convertMusicXmlToVsqx(musicXmlText, options);
+        if (!String(vsqx || "").trim()) {
+            return {
+                ok: false,
+                vsqx: "",
+                diagnostic: {
+                    code: "VSQX_EXPORT_EMPTY_RESULT",
+                    message: "MusicXML to VSQX conversion returned empty output.",
+                },
+            };
+        }
+        return { ok: true, vsqx };
+    }
+    catch (error) {
+        return {
+            ok: false,
+            vsqx: "",
+            diagnostic: {
+                code: "VSQX_EXPORT_FAILED",
+                message: error instanceof Error ? error.message : "MusicXML to VSQX conversion failed.",
+            },
+        };
+    }
+};
+exports.convertMusicXmlToVsqx = convertMusicXmlToVsqx;
 
   },
   "src/ts/musescore-io.js": function (require, module, exports) {

@@ -32,6 +32,8 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - **MusicXML 4.0**
 
 ### Format Support Note
+- `utaformatix3-ts-plus` is bundled as a vendored integration (`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`) for VSQX <-> MusicXML conversion.
+- We sincerely appreciate the UtaFormatix / utaformatix3 ecosystem and contributors for making this VSQX interoperability possible.
 - MEI support is currently experimental.
 - LilyPond (`.ly`) support is currently experimental.
 
@@ -108,6 +110,8 @@ Debugging note:
 - **MusicXML 4.0**
 
 ### フォーマット対応メモ
+- VSQX <-> MusicXML 変換のため、`utaformatix3-ts-plus` を同梱連携しています（`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`）。
+- VSQX 相互運用を実現する基盤を築いてくださった UtaFormatix / utaformatix3 のエコシステムと貢献者の皆さまに、深く感謝します。
 - MEI 対応は現在 Experimental（試験対応）です。
 - LilyPond（`.ly`）対応は現在 Experimental（試験対応）です。
 

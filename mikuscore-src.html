@@ -93,7 +93,7 @@
               </span>
               <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
                 To use mikuscore, first load your score here (from file/source) or create a new score.
-                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
+                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), VSQX (`.vsqx`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
                 You can move to Score/Edit/Export after completing this step.
               </span>
             </span>
@@ -163,7 +163,7 @@
             <div class="ms-file-meta">
               <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
             </div>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.mei,.ly,.mscx,.mscz,text/plain,text/xml,application/xml,application/mei+xml" hidden />
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,text/plain,text/xml,application/xml,application/mei+xml" hidden />
           </div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
@@ -783,6 +783,7 @@
 
   <script src="src/js/verovio.js"></script>
   <script src="src/js/midi-writer.js"></script>
+  <script src="src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js"></script>
   <script src="src/js/main.js"></script>
 </body>
 </html>
