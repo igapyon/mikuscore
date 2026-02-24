@@ -14,6 +14,7 @@ import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
+import { convertVsqxToMusicXml, installVsqxMusicXmlNormalizationHook } from "./vsqx-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
@@ -1928,6 +1929,10 @@ const onLoadClick = async (): Promise<void> => {
         sourceMetadata: keepMetadata,
         debugMetadata: keepMetadata,
       }),
+    convertVsqxToMusicXml: (vsqxSource) =>
+      convertVsqxToMusicXml(vsqxSource, {
+        defaultLyric: "あ",
+      }),
     convertMidiToMusicXml: (midiBytes) =>
       convertMidiToMusicXml(midiBytes, {
         sourceMetadata: keepMetadata,
@@ -2768,5 +2773,6 @@ playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: t
 renderNewPartClefControls();
 applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
+installVsqxMusicXmlNormalizationHook(normalizeImportedMusicXmlText);
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);

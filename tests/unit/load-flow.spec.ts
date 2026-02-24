@@ -14,6 +14,12 @@ const baseParams = () => ({
   convertMeiToMusicXml: (_mei: string) => "<score-partwise version=\"4.0\"/>",
   convertLilyPondToMusicXml: (_lily: string) => "<score-partwise version=\"4.0\"/>",
   convertMuseScoreToMusicXml: (_musescore: string) => "<score-partwise version=\"4.0\"/>",
+  convertVsqxToMusicXml: (_vsqx: string) => ({
+    ok: true,
+    xml: "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>",
+    diagnostics: [],
+    warnings: [],
+  }),
   convertMidiToMusicXml: (_bytes: Uint8Array) => ({
     ok: true,
     xml: "<score-partwise version=\"4.0\"><part-list/></score-partwise>",
@@ -98,6 +104,50 @@ describe("load-flow MEI file input", () => {
     if (!result.ok) return;
     expect(result.xmlToLoad).toBe(`FORMATTED:${xml}`);
     expect(result.nextXmlInputText).toBe(`FORMATTED:${xml}`);
+  });
+});
+
+describe("load-flow VSQX file input", () => {
+  it("accepts .vsqx and converts via convertVsqxToMusicXml", async () => {
+    const vsqx = `<?xml version=\"1.0\" encoding=\"UTF-8\"?><vsq3 xmlns=\"http://www.yamaha.co.jp/vocaloid/schema/vsq3/\"/>`;
+    const file = new File([vsqx], "test.vsqx", { type: "application/xml" });
+    let called = false;
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+      convertVsqxToMusicXml: (text: string) => {
+        called = true;
+        expect(text).toContain("<vsq3");
+        return {
+          ok: true,
+          xml: "<score-partwise version=\"4.0\"><part-list/><part id=\"P1\"/></score-partwise>",
+          diagnostics: [],
+          warnings: [],
+        };
+      },
+    });
+    expect(called).toBe(true);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+  });
+
+  it("returns load failure when VSQX conversion reports diagnostics", async () => {
+    const file = new File(["<vsq3/>"], "bad.vsqx", { type: "application/xml" });
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: file,
+      convertVsqxToMusicXml: () => ({
+        ok: false,
+        xml: "",
+        diagnostics: [{ code: "VSQX_CONVERT_ERROR_1", message: "invalid structure" }],
+        warnings: [],
+      }),
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnosticMessage).toContain("Failed to parse VSQX");
+    expect(result.diagnosticMessage).toContain("VSQX_CONVERT_ERROR_1");
   });
 });
 
