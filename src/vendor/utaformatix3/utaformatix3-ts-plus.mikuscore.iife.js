@@ -1196,18 +1196,18 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   var SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"];
   var FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"];
   var PITCH_CANDIDATES = [
-    { step: "C", alter: 0 },
-    { step: "C", alter: 1 },
-    { step: "D", alter: 0 },
-    { step: "D", alter: 1 },
-    { step: "E", alter: 0 },
-    { step: "F", alter: 0 },
-    { step: "F", alter: 1 },
-    { step: "G", alter: 0 },
-    { step: "G", alter: 1 },
-    { step: "A", alter: 0 },
-    { step: "A", alter: 1 },
-    { step: "B", alter: 0 }
+    [{ step: "C", alter: 0 }],
+    [{ step: "C", alter: 1 }, { step: "D", alter: -1 }],
+    [{ step: "D", alter: 0 }],
+    [{ step: "D", alter: 1 }, { step: "E", alter: -1 }],
+    [{ step: "E", alter: 0 }],
+    [{ step: "F", alter: 0 }],
+    [{ step: "F", alter: 1 }, { step: "G", alter: -1 }],
+    [{ step: "G", alter: 0 }],
+    [{ step: "G", alter: 1 }, { step: "A", alter: -1 }],
+    [{ step: "A", alter: 0 }],
+    [{ step: "A", alter: 1 }, { step: "B", alter: -1 }],
+    [{ step: "B", alter: 0 }]
   ];
   function clampFifths(value) {
     return Math.max(-7, Math.min(7, Math.trunc(value)));
@@ -1218,9 +1218,19 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     if (clamped < 0 && FLAT_ORDER.slice(0, -clamped).includes(step)) return -1;
     return 0;
   }
-  function toPitch(key) {
+  function toPitchCandidates(key) {
     const pitchClass = (Math.trunc(key) % 12 + 12) % 12;
     return PITCH_CANDIDATES[pitchClass];
+  }
+  function scoreKeyAgainstFifths(key, fifths) {
+    const candidates = toPitchCandidates(key);
+    let bestPenalty = Number.POSITIVE_INFINITY;
+    for (const pitch of candidates) {
+      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
+      const penalty = Math.abs(pitch.alter - keyAlter);
+      if (penalty < bestPenalty) bestPenalty = penalty;
+    }
+    return bestPenalty;
   }
   function collectMeasureNotes(notes, measure) {
     return notes.map((note) => ({
@@ -1234,9 +1244,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   function scoreMeasureNotesForFifths(inMeasure, fifths) {
     let penalty = 0;
     for (const item of inMeasure) {
-      const pitch = toPitch(item.key);
-      const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-      penalty += Math.abs(pitch.alter - keyAlter) * item.duration;
+      penalty += scoreKeyAgainstFifths(item.key, fifths) * item.duration;
     }
     return penalty;
   }
@@ -1247,9 +1255,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     for (let fifths = -7; fifths <= 7; fifths += 1) {
       let penalty = 0;
       for (const note of notes) {
-        const pitch = toPitch(note.key);
-        const keyAlter = defaultAlterFromFifths(pitch.step, fifths);
-        penalty += Math.abs(pitch.alter - keyAlter);
+        penalty += scoreKeyAgainstFifths(note.key, fifths);
       }
       if (penalty < bestPenalty) {
         bestPenalty = penalty;
@@ -1657,9 +1663,9 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     }
     return { sign: "G", line: 2 };
   }
-  function renderAttributes(measure, divisions, clef, keyFifths) {
+  function renderAttributes(measure, divisions, clef, keyFifths, includeTimeSignature) {
     const ts = measure.timeSignature;
-    return `<attributes><divisions>${divisions}</divisions><key><fifths>${clampFifths2(keyFifths)}</fifths></key><time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time><clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef></attributes>`;
+    return `<attributes><divisions>${divisions}</divisions><key><fifths>${clampFifths2(keyFifths)}</fifths></key>${includeTimeSignature ? `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` : ""}<clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef></attributes>`;
   }
   function renderTempoDirections(measure, tempos) {
     const endTick = measure.startTick + measure.lengthTick;
@@ -1904,7 +1910,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         const hasKeyChange = measureIndex === 0 || keyFifths !== previousKeyFifths;
         const hasTimeSigChange = tsList.some((ts) => ts.measurePosition === measure.index);
         const needsAttributes = measure.index === 0 || hasTimeSigChange || hasKeyChange;
-        return `<measure number="${measureNumberBase + measure.index}">${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths) : ""}${renderTempoDirections(measure, partTempos)}${renderMeasureNotesWithKey(project, notes, measure, keyFifths)}</measure>`;
+        return `<measure number="${measureNumberBase + measure.index}">${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths, measure.index === 0 || hasTimeSigChange) : ""}${renderTempoDirections(measure, partTempos)}${renderMeasureNotesWithKey(project, notes, measure, keyFifths)}</measure>`;
       }).join("");
       return `<part id="${partId}">${measuresXml}</part>`;
     }).join("");
@@ -2073,6 +2079,9 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         last.numerator = ts.numerator;
         last.denominator = ts.denominator;
       } else {
+        if (last && last.numerator === ts.numerator && last.denominator === ts.denominator) {
+          continue;
+        }
         dedup.push({ ...ts });
       }
     }
@@ -2129,7 +2138,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     const tempos = normalizeTempoStream(project.tempos ?? []);
     const timeSignatures = normalizeTimeSignatureStream(project.timeSignatures ?? []);
     const ppq = Number.isFinite(project.ppq) && project.ppq > 0 ? Math.trunc(project.ppq) : 480;
-    const measurePrefix = Number.isFinite(project.measurePrefix) ? Math.max(0, Math.trunc(project.measurePrefix)) : 0;
+    const measurePrefix = Number.isFinite(project.measurePrefix) ? Math.max(0, Math.trunc(project.measurePrefix) - 1) : 0;
     const normalizedIssues = [];
     if (droppedInvalidNotes > 0) {
       normalizedIssues.push({
@@ -2387,6 +2396,180 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       tracks: nextTracks
     };
   }
+  function stepToSemitone(step) {
+    switch (step) {
+      case "C":
+        return 0;
+      case "D":
+        return 2;
+      case "E":
+        return 4;
+      case "F":
+        return 5;
+      case "G":
+        return 7;
+      case "A":
+        return 9;
+      case "B":
+        return 11;
+      default:
+        return 0;
+    }
+  }
+  function extractPartPitchedEvents(partBlock, ppq) {
+    const tokenRegex = /<attributes(?:\s[^>]*)?>[\s\S]*?<\/attributes>|<backup(?:\s[^>]*)?>[\s\S]*?<\/backup>|<forward(?:\s[^>]*)?>[\s\S]*?<\/forward>|<note>[\s\S]*?<\/note>/g;
+    const tokens = Array.from(partBlock.matchAll(tokenRegex)).map((m) => m[0]);
+    const events = [];
+    let divisions = 1;
+    let cursorDiv = 0;
+    let previousOnsetDiv = 0;
+    for (const token of tokens) {
+      if (token.startsWith("<attributes")) {
+        const divRaw = Number(token.match(/<divisions>(\d+)<\/divisions>/)?.[1] ?? "");
+        if (Number.isFinite(divRaw) && divRaw > 0) {
+          divisions = divRaw;
+        }
+        continue;
+      }
+      if (token.startsWith("<backup")) {
+        const durationRaw2 = Number(token.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+        if (Number.isFinite(durationRaw2)) {
+          cursorDiv = Math.max(0, cursorDiv - durationRaw2);
+        }
+        continue;
+      }
+      if (token.startsWith("<forward")) {
+        const durationRaw2 = Number(token.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+        if (Number.isFinite(durationRaw2)) {
+          cursorDiv += Math.max(0, durationRaw2);
+        }
+        continue;
+      }
+      const noteBlock = token;
+      if (/<grace(\s|\/|>)/.test(noteBlock)) continue;
+      const durationRaw = Number(noteBlock.match(/<duration>(-?\d+)<\/duration>/)?.[1] ?? "");
+      const durationDiv = Number.isFinite(durationRaw) ? Math.max(0, durationRaw) : 0;
+      const isChord = /<chord(\s|\/|>)/.test(noteBlock);
+      const isRest = /<rest(\s|\/|>)/.test(noteBlock);
+      const onsetDiv = isChord ? previousOnsetDiv : cursorDiv;
+      if (!isRest) {
+        const step = (noteBlock.match(/<step>([A-G])<\/step>/)?.[1] ?? "").trim();
+        if (step) {
+          const octaveRaw = Number(noteBlock.match(/<octave>(-?\d+)<\/octave>/)?.[1] ?? "");
+          if (Number.isFinite(octaveRaw)) {
+            const alterRaw = Number(noteBlock.match(/<alter>(-?\d+)<\/alter>/)?.[1] ?? "0");
+            const alter = Number.isFinite(alterRaw) ? alterRaw : 0;
+            const key = (octaveRaw + 1) * 12 + stepToSemitone(step) + alter;
+            const tickOn = Math.round(onsetDiv * ppq / divisions);
+            const tickOff = Math.round((onsetDiv + durationDiv) * ppq / divisions);
+            events.push({ key, tickOn, tickOff });
+          }
+        }
+      }
+      previousOnsetDiv = onsetDiv;
+      if (!isChord) {
+        cursorDiv += durationDiv;
+      }
+    }
+    return events;
+  }
+  function normalizeChordOnsetsFromSource(project, musicXmlText) {
+    const partBlocks = extractTagBlocks(musicXmlText, "part");
+    if (partBlocks.length === 0 || partBlocks.length !== project.tracks.length) {
+      return project;
+    }
+    const tracks = project.tracks.map((track, trackIndex) => {
+      const ppq = Number.isFinite(project.ppq) && project.ppq > 0 ? Math.trunc(project.ppq) : 480;
+      const events = extractPartPitchedEvents(partBlocks[trackIndex] ?? "", ppq);
+      if (events.length === 0 || track.notes.length === 0) {
+        return track;
+      }
+      const normalized = track.notes.map((note) => ({ ...note }));
+      let eventIndex = 0;
+      for (let noteIndex = 0; noteIndex < normalized.length; noteIndex += 1) {
+        const note = normalized[noteIndex];
+        let matched = -1;
+        for (let i = eventIndex; i < events.length; i += 1) {
+          if (events[i].key === note.key) {
+            matched = i;
+            break;
+          }
+        }
+        if (matched < 0) continue;
+        const event = events[matched];
+        note.tickOn = event.tickOn;
+        note.tickOff = Math.max(event.tickOn + 1, event.tickOff);
+        eventIndex = matched + 1;
+      }
+      return {
+        ...track,
+        notes: normalized.sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key).map((note, noteId) => ({ ...note, id: noteId }))
+      };
+    });
+    return {
+      ...project,
+      tracks
+    };
+  }
+  function splitTrackIntoMonophonicLanes(track) {
+    const sortedNotes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key);
+    if (sortedNotes.length <= 1) {
+      return [
+        {
+          ...track,
+          notes: sortedNotes.map((note, noteIndex) => ({ ...note, id: noteIndex }))
+        }
+      ];
+    }
+    const laneEndTicks = [];
+    const laneNotes = [];
+    for (const note of sortedNotes) {
+      let laneIndex = -1;
+      for (let i = 0; i < laneEndTicks.length; i += 1) {
+        if (laneEndTicks[i] <= note.tickOn) {
+          laneIndex = i;
+          break;
+        }
+      }
+      if (laneIndex < 0) {
+        laneIndex = laneEndTicks.length;
+        laneEndTicks.push(note.tickOff);
+        laneNotes.push([]);
+      } else {
+        laneEndTicks[laneIndex] = note.tickOff;
+      }
+      laneNotes[laneIndex].push(note);
+    }
+    if (laneNotes.length <= 1) {
+      return [
+        {
+          ...track,
+          notes: sortedNotes.map((note, noteIndex) => ({ ...note, id: noteIndex }))
+        }
+      ];
+    }
+    return laneNotes.map((notes, laneIndex) => ({
+      ...track,
+      name: `${track.name} [Lane ${laneIndex + 1}]`,
+      notes: notes.map((note, noteIndex) => ({ ...note, id: noteIndex }))
+    }));
+  }
+  function splitTracksIntoMonophonicLanes(project) {
+    const nextTracks = [];
+    for (const track of project.tracks) {
+      const lanes = splitTrackIntoMonophonicLanes(track);
+      for (const lane of lanes) {
+        nextTracks.push({
+          ...lane,
+          id: nextTracks.length
+        });
+      }
+    }
+    return {
+      ...project,
+      tracks: nextTracks
+    };
+  }
   function formatImportWarningMessage2(warning) {
     const maybeObject = warning;
     const kind = typeof maybeObject.kind === "string" ? maybeObject.kind : "Unknown";
@@ -2537,7 +2720,11 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       });
       return { vsqx: null, issues, retainedExtras: void 0 };
     }
-    project = splitTracksByPartAndStaff(project, musicXmlText);
+    project = normalizeChordOnsetsFromSource(project, musicXmlText);
+    if (options?.splitPartStaves === true) {
+      project = splitTracksByPartAndStaff(project, musicXmlText);
+    }
+    project = splitTracksIntoMonophonicLanes(project);
     issues.push(...collectProjectWarnings2(project));
     const enriched = enrichProjectExtrasWithUnsupportedNotation(project, unsupportedNotationSummary);
     const normalized = normalizeProjectForVsqxExport(enriched);
