@@ -14,7 +14,11 @@ import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
-import { convertVsqxToMusicXml, installVsqxMusicXmlNormalizationHook } from "./vsqx-io";
+import {
+  convertMusicXmlToVsqx,
+  convertVsqxToMusicXml,
+  installVsqxMusicXmlNormalizationHook,
+} from "./vsqx-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
@@ -32,6 +36,7 @@ import {
   createMidiDownloadPayload,
   createMusicXmlDownloadPayload,
   createSvgDownloadPayload,
+  createVsqxDownloadPayload,
   triggerFileDownload,
 } from "./download-flow";
 import { resolveLoadFlow } from "./load-flow";
@@ -143,6 +148,7 @@ const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
 const resetPlaybackSettingsBtn = q<HTMLButtonElement>("#resetPlaybackSettingsBtn");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
+const downloadVsqxBtn = q<HTMLButtonElement>("#downloadVsqxBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
 const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
 const downloadLilyPondBtn = q<HTMLButtonElement>("#downloadLilyPondBtn");
@@ -1154,6 +1160,7 @@ const renderOutput = (): void => {
   }
   downloadBtn.disabled = !state.lastSaveResult?.ok;
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
+  downloadVsqxBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
   downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
   downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
@@ -2437,7 +2444,7 @@ const onConvertRestToNote = (): void => {
 };
 
 const failExport = (
-  format: "MusicXML" | "MIDI" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "SVG",
+  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "SVG",
   reason: string
 ): void => {
   const message = `${format} export failed: ${reason}`;
@@ -2508,6 +2515,26 @@ const onDownloadMidi = (): void => {
     triggerFileDownload(payload);
   } catch (err) {
     failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadVsqx = (): void => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("VSQX", "No valid saved XML is available.");
+    return;
+  }
+
+  const converted = convertMusicXmlToVsqx(xmlText);
+  if (!converted.ok) {
+    failExport("VSQX", converted.diagnostic?.message ?? "MusicXML to VSQX conversion failed.");
+    return;
+  }
+
+  try {
+    triggerFileDownload(createVsqxDownloadPayload(converted.vsqx));
+  } catch (err) {
+    failExport("VSQX", err instanceof Error ? err.message : "Unknown download error.");
   }
 };
 
@@ -2726,6 +2753,7 @@ scoreEditBtn.addEventListener("click", () => {
 exportStopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
+downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);

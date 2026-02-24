@@ -90,6 +90,7 @@ const settingsAccordion = q("#settingsAccordion");
 const resetPlaybackSettingsBtn = q("#resetPlaybackSettingsBtn");
 const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
+const downloadVsqxBtn = q("#downloadVsqxBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
 const downloadMeiBtn = q("#downloadMeiBtn");
 const downloadLilyPondBtn = q("#downloadLilyPondBtn");
@@ -1027,7 +1028,7 @@ const renderUiMessage = () => {
     }
 };
 const renderOutput = () => {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (saveModeText) {
         saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
     }
@@ -1036,10 +1037,11 @@ const renderOutput = () => {
     }
     downloadBtn.disabled = !((_b = state.lastSaveResult) === null || _b === void 0 ? void 0 : _b.ok);
     downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
-    downloadAbcBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
-    downloadMeiBtn.disabled = !((_e = state.lastSaveResult) === null || _e === void 0 ? void 0 : _e.ok);
-    downloadLilyPondBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
-    downloadMuseScoreBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
+    downloadVsqxBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
+    downloadAbcBtn.disabled = !((_e = state.lastSaveResult) === null || _e === void 0 ? void 0 : _e.ok);
+    downloadMeiBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
+    downloadLilyPondBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
+    downloadMuseScoreBtn.disabled = !((_h = state.lastSaveResult) === null || _h === void 0 ? void 0 : _h.ok);
 };
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
@@ -2356,6 +2358,25 @@ const onDownloadMidi = () => {
         failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
     }
 };
+const onDownloadVsqx = () => {
+    var _a, _b;
+    const xmlText = resolveMusicXmlOutput();
+    if (!xmlText) {
+        failExport("VSQX", "No valid saved XML is available.");
+        return;
+    }
+    const converted = (0, vsqx_io_1.convertMusicXmlToVsqx)(xmlText);
+    if (!converted.ok) {
+        failExport("VSQX", (_b = (_a = converted.diagnostic) === null || _a === void 0 ? void 0 : _a.message) !== null && _b !== void 0 ? _b : "MusicXML to VSQX conversion failed.");
+        return;
+    }
+    try {
+        (0, download_flow_1.triggerFileDownload)((0, download_flow_1.createVsqxDownloadPayload)(converted.vsqx));
+    }
+    catch (err) {
+        failExport("VSQX", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
 const onDownloadAbc = () => {
     const xmlText = resolveMusicXmlOutput();
     if (!xmlText) {
@@ -2572,6 +2593,7 @@ scoreEditBtn.addEventListener("click", () => {
 exportStopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
+downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
@@ -7409,7 +7431,7 @@ exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
   "src/ts/download-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createSvgDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
+exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createVsqxDownloadPayload = exports.createSvgDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
 const pad2 = (value) => String(value).padStart(2, "0");
@@ -7609,6 +7631,14 @@ const createSvgDownloadPayload = (svgText) => {
     };
 };
 exports.createSvgDownloadPayload = createSvgDownloadPayload;
+const createVsqxDownloadPayload = (vsqxText) => {
+    const ts = buildFileTimestamp();
+    return {
+        fileName: `mikuscore-${ts}.vsqx`,
+        blob: new Blob([vsqxText], { type: "application/xml;charset=utf-8" }),
+    };
+};
+exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
 const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle") => {
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!playbackDoc)

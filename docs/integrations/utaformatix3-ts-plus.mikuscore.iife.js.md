@@ -24,9 +24,13 @@
 - `convertVsqxToMusicXml(vsqxText, options?) => string`
 - `convertVsqxToMusicXmlWithReport(vsqxText, options?) => { musicXml, issues }`
 - `convertMusicXmlToVsqx(musicXmlText, options?) => string`
+- `convertMusicXmlToVsqxWithReport(musicXmlText, options?) => { vsqx, issues }`
 - `getMusicXmlAdapter()`
 - `setMusicXmlAdapter(adapter)`
 - `MikuscoreMusicXmlAdapter`
+- `installMikuscoreHooks(hooks)`
+- `getMikuscoreHooks()`
+- `clearMikuscoreHooks()`
 
 ## 4. mikuscore 側への読み込み手順
 
@@ -46,22 +50,24 @@ HTML例:
 
 ## 5. オプション連携フック
 
-`mikuscore` 側の MusicXML 正規化機能を使いたい場合は、以下のフックを事前注入する。
+`mikuscore` 側の MusicXML 正規化機能を使いたい場合は、`installMikuscoreHooks` で事前注入する。
 
 ```js
-window.__utaformatix3TsPlusMikuscoreHooks = {
+window.UtaFormatix3TsPlusMikuscore.installMikuscoreHooks({
   normalizeImportedMusicXmlText: (xml) => {
     // mikuscore 側の既存正規化関数を呼ぶ
     return window.mikuscoreNormalizeMusicXml(xml);
   },
-};
+});
 ```
 
 仕様:
 
 - フック名: `globalThis.__utaformatix3TsPlusMikuscoreHooks`
 - 利用される関数: `normalizeImportedMusicXmlText(xml: string): string`
+- 任意で `parseMusicXmlToProject(xml, options)` / `writeProjectToMusicXml(project, options)` も注入可能
 - フック未設定でも動作は継続する（内部フォールバックあり）
+- 解除する場合は `clearMikuscoreHooks()` を呼ぶ
 
 ## 6. ビルド方法（utaformatix3-ts-plus 側）
 
