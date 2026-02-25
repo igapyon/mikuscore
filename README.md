@@ -50,6 +50,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `npm run test:unit`
 - `npm run test:property`
 - `npm run test:all`
+- `npm run build:vendor:utaformatix3` (sync vendored `utaformatix3-ts-plus` JS/doc from upstream)
 
 ### Documents
 - `docs/spec/SPEC.md`
@@ -128,6 +129,7 @@ Debugging note:
 - `npm run test:unit`
 - `npm run test:property`
 - `npm run test:all`
+- `npm run build:vendor:utaformatix3`（upstream から `utaformatix3-ts-plus` の同梱JS/ドキュメントを同期）
 
 ### ドキュメント
 - `docs/spec/SPEC.md`

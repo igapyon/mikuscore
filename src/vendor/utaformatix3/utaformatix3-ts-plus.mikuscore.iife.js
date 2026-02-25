@@ -1319,6 +1319,10 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   ];
   var STEPS_IN_SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"];
   var STEPS_IN_FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"];
+  var STAFF_SPLIT_C4 = 60;
+  var STAFF_SPLIT_B3 = 59;
+  var UPPER_STAFF_HOLD_MIN = 57;
+  var LOWER_STAFF_HOLD_MAX = 62;
   function escapeXml(value) {
     return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   }
@@ -1663,9 +1667,64 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     }
     return { sign: "G", line: 2 };
   }
-  function renderAttributes(measure, divisions, clef, keyFifths, includeTimeSignature) {
+  function buildGrandStaffLayout(track) {
+    const sorted = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || b.key - a.key || a.tickOff - b.tickOff);
+    const keys = sorted.map((note) => note.key);
+    const minKey = keys.length > 0 ? Math.min(...keys) : 60;
+    const maxKey = keys.length > 0 ? Math.max(...keys) : 60;
+    const useGrandStaff = minKey <= UPPER_STAFF_HOLD_MIN && maxKey >= LOWER_STAFF_HOLD_MAX;
+    if (!useGrandStaff) {
+      return { useGrandStaff: false, staffByNoteId: /* @__PURE__ */ new Map() };
+    }
+    const byOnset = /* @__PURE__ */ new Map();
+    for (const note of sorted) {
+      const bucket = byOnset.get(note.tickOn);
+      if (bucket) bucket.push(note);
+      else byOnset.set(note.tickOn, [note]);
+    }
+    const orderedOnsets = Array.from(byOnset.keys()).sort((a, b) => a - b);
+    const staffByNoteId = /* @__PURE__ */ new Map();
+    let previousStaff = null;
+    for (const onset of orderedOnsets) {
+      const cluster = (byOnset.get(onset) ?? []).sort((a, b) => b.key - a.key || a.tickOff - b.tickOff);
+      if (cluster.length === 0) continue;
+      const minClusterKey = Math.min(...cluster.map((note) => note.key));
+      const maxClusterKey = Math.max(...cluster.map((note) => note.key));
+      const isSplitCluster = maxClusterKey >= STAFF_SPLIT_C4 && minClusterKey <= STAFF_SPLIT_B3;
+      let clusterStaff;
+      if (previousStaff === 1) {
+        clusterStaff = maxClusterKey >= UPPER_STAFF_HOLD_MIN ? 1 : 2;
+      } else if (previousStaff === 2) {
+        clusterStaff = minClusterKey <= LOWER_STAFF_HOLD_MAX ? 2 : 1;
+      } else {
+        clusterStaff = maxClusterKey >= STAFF_SPLIT_C4 ? 1 : 2;
+      }
+      if (isSplitCluster) {
+        let hasUpper = false;
+        let hasLower = false;
+        for (const note of cluster) {
+          const staff = note.key >= STAFF_SPLIT_C4 ? 1 : 2;
+          staffByNoteId.set(note.id, staff);
+          hasUpper = hasUpper || staff === 1;
+          hasLower = hasLower || staff === 2;
+        }
+        if (previousStaff && (previousStaff === 1 && hasUpper || previousStaff === 2 && hasLower)) {
+        } else {
+          previousStaff = hasUpper ? 1 : 2;
+        }
+        continue;
+      }
+      for (const note of cluster) {
+        staffByNoteId.set(note.id, clusterStaff);
+      }
+      previousStaff = clusterStaff;
+    }
+    return { useGrandStaff: true, staffByNoteId };
+  }
+  function renderAttributes(measure, divisions, clef, keyFifths, includeTimeSignature, options) {
     const ts = measure.timeSignature;
-    return `<attributes><divisions>${divisions}</divisions><key><fifths>${clampFifths2(keyFifths)}</fifths></key>${includeTimeSignature ? `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` : ""}<clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef></attributes>`;
+    const useGrandStaff = options?.grandStaff === true;
+    return `<attributes><divisions>${divisions}</divisions><key><fifths>${clampFifths2(keyFifths)}</fifths></key>${includeTimeSignature ? `<time><beats>${ts.numerator}</beats><beat-type>${ts.denominator}</beat-type></time>` : ""}${useGrandStaff ? `<staves>2</staves>` : ""}${useGrandStaff ? `<clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef>` : `<clef><sign>${clef.sign}</sign><line>${clef.line}</line></clef>`}</attributes>`;
   }
   function renderTempoDirections(measure, tempos) {
     const endTick = measure.startTick + measure.lengthTick;
@@ -1674,18 +1733,18 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       return `<direction>${offset > 0 ? `<offset>${offset}</offset>` : ""}<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${tempo.bpm}</per-minute></metronome></direction-type><sound tempo="${tempo.bpm}"/></direction>`;
     }).join("");
   }
-  function renderRest(duration, voice, divisions) {
+  function renderRest(duration, voice, divisions, staff) {
     const specs = decomposeDuration(duration, divisions);
     if (!specs || specs.length === 0) {
-      return `<note><rest/><duration>${duration}</duration><voice>${voice}</voice></note>`;
+      return `<note><rest/><duration>${duration}</duration><voice>${voice}</voice>${staff ? `<staff>${staff}</staff>` : ""}</note>`;
     }
     return specs.map((spec) => {
-      return `<note><rest/><duration>${spec.duration}</duration><voice>${voice}</voice><type>${spec.type}</type>${"<dot/>".repeat(spec.dots)}</note>`;
+      return `<note><rest/><duration>${spec.duration}</duration><voice>${voice}</voice>${staff ? `<staff>${staff}</staff>` : ""}<type>${spec.type}</type>${"<dot/>".repeat(spec.dots)}</note>`;
     }).join("");
   }
   function renderSingleNote(pitch, duration, voice, noteType, tieStart, tieStop, lyric, syllabic, accidentalText, options) {
     const isChordTone = options?.chord === true;
-    return `<note>${isChordTone ? `<chord/>` : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>${accidentalText ? `<accidental>${accidentalText}</accidental>` : ""}<duration>${duration}</duration><voice>${voice}</voice>${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}` : ""}${tieStart ? `<tie type="start"/>` : ""}${tieStop ? `<tie type="stop"/>` : ""}${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}</note>`;
+    return `<note>${isChordTone ? `<chord/>` : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>${accidentalText ? `<accidental>${accidentalText}</accidental>` : ""}<duration>${duration}</duration><voice>${voice}</voice>${options?.staff ? `<staff>${options.staff}</staff>` : ""}${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}` : ""}${tieStart ? `<tie type="start"/>` : ""}${tieStop ? `<tie type="stop"/>` : ""}${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}</note>`;
   }
   function renderNoteSegment(project, note, startTick, endTick, divisions, voice, spellingContext, options) {
     const duration = Math.max(1, endTick - startTick);
@@ -1808,7 +1867,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     }
     return lanes;
   }
-  function renderVoiceLane(project, clusters, measure, divisions, voiceNumber, keyFifths) {
+  function renderVoiceLane(project, clusters, measure, divisions, voiceNumber, keyFifths, staff) {
     const spellingContext = {
       accidentalState: /* @__PURE__ */ new Map(),
       previousKey: null,
@@ -1820,40 +1879,55 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     let out = "";
     for (const cluster of clusters) {
       if (cluster.startTick > cursor) {
-        out += renderRest(cluster.startTick - cursor, voiceNumber, divisions);
+        out += renderRest(cluster.startTick - cursor, voiceNumber, divisions, staff);
       }
       for (let i = 0; i < cluster.slices.length; i += 1) {
         const slice = cluster.slices[i];
         out += renderNoteSegment(project, slice.note, slice.startTick, slice.endTick, divisions, voiceNumber, spellingContext, {
           chord: i > 0,
-          lyric: i === 0
+          lyric: i === 0,
+          staff
         });
       }
       cursor = Math.max(cursor, cluster.endTick);
     }
     if (cursor < measureEnd) {
-      out += renderRest(measureEnd - cursor, voiceNumber, divisions);
+      out += renderRest(measureEnd - cursor, voiceNumber, divisions, staff);
     }
     return out;
   }
-  function renderMeasureNotesWithKey(project, trackNotes, measure, keyFifths) {
+  function renderMeasureNotesForStaff(project, trackNotes, measure, keyFifths, voiceStart, staff) {
     const divisions = project.ppq > 0 ? project.ppq : 480;
     const slices = sliceNotesForMeasure(trackNotes, measure);
     const lanes = assignVoices(toClusters(slices));
     if (lanes.length === 0) {
-      return renderRest(measure.lengthTick, 1, divisions);
+      return renderRest(measure.lengthTick, voiceStart, divisions, staff);
     }
     if (lanes.length === 1) {
-      return renderVoiceLane(project, lanes[0], measure, divisions, 1, keyFifths);
+      return renderVoiceLane(project, lanes[0], measure, divisions, voiceStart, keyFifths, staff);
     }
     let out = "";
     for (let i = 0; i < lanes.length; i += 1) {
-      out += renderVoiceLane(project, lanes[i], measure, divisions, i + 1, keyFifths);
+      out += renderVoiceLane(project, lanes[i], measure, divisions, voiceStart + i, keyFifths, staff);
       if (i < lanes.length - 1) {
         out += `<backup><duration>${measure.lengthTick}</duration></backup>`;
       }
     }
     return out;
+  }
+  function renderMeasureNotesWithKey(project, trackNotes, measure, keyFifths, layout) {
+    if (!layout?.useGrandStaff) {
+      return renderMeasureNotesForStaff(project, trackNotes, measure, keyFifths, 1);
+    }
+    const upper = trackNotes.filter((note) => layout.staffByNoteId.get(note.id) !== 2);
+    const lower = trackNotes.filter((note) => layout.staffByNoteId.get(note.id) === 2);
+    const upperXml = renderMeasureNotesForStaff(project, upper, measure, keyFifths, 1, 1);
+    const lowerXml = renderMeasureNotesForStaff(project, lower, measure, keyFifths, 10, 2);
+    return `${upperXml}<backup><duration>${measure.lengthTick}</duration></backup>${lowerXml}`;
+  }
+  function renderFinalBarline(isLastMeasure) {
+    if (!isLastMeasure) return "";
+    return `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
   }
   function generateMusicXmlFromProject(project, options) {
     const ppq = project.ppq > 0 ? project.ppq : 480;
@@ -1887,6 +1961,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       const partId = `P${index + 1}`;
       const partTempos = index === 0 ? tempos : [];
       const clef = chooseClef(track);
+      const staffLayout = buildGrandStaffLayout(track);
       const trackKeyFifths = resolveTrackKeyFifths(project, track, index, options);
       const notes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff);
       const estimatedByMeasure = options?.estimateKeyFifthsByMeasure ? estimateMeasureKeyFifthsSequence(notes, measures, trackKeyFifths) : null;
@@ -1910,7 +1985,8 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         const hasKeyChange = measureIndex === 0 || keyFifths !== previousKeyFifths;
         const hasTimeSigChange = tsList.some((ts) => ts.measurePosition === measure.index);
         const needsAttributes = measure.index === 0 || hasTimeSigChange || hasKeyChange;
-        return `<measure number="${measureNumberBase + measure.index}">${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths, measure.index === 0 || hasTimeSigChange) : ""}${renderTempoDirections(measure, partTempos)}${renderMeasureNotesWithKey(project, notes, measure, keyFifths)}</measure>`;
+        const isLastMeasure = measureIndex === measures.length - 1;
+        return `<measure number="${measureNumberBase + measure.index}">${needsAttributes ? renderAttributes(measure, ppq, clef, keyFifths, measure.index === 0 || hasTimeSigChange, { grandStaff: staffLayout.useGrandStaff }) : ""}${renderTempoDirections(measure, partTempos)}${renderMeasureNotesWithKey(project, notes, measure, keyFifths, staffLayout)}${renderFinalBarline(isLastMeasure)}</measure>`;
       }).join("");
       return `<part id="${partId}">${measuresXml}</part>`;
     }).join("");
@@ -2045,6 +2121,10 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   function estimateTrackKeyFifthsByMeasure(trackNotes, measures, trackFifths) {
     return estimateMeasureKeyFifthsSequence(trackNotes, measures, trackFifths);
   }
+  function hasNoteInMeasure(trackNotes, measure) {
+    const measureEnd = measure.startTick + measure.lengthTick;
+    return trackNotes.some((note) => note.tickOff > measure.startTick && note.tickOn < measureEnd);
+  }
   function normalizeTempoStream(input) {
     const valid = input.filter((tempo) => Number.isFinite(tempo.tickPosition) && Number.isFinite(tempo.bpm) && tempo.bpm > 0).map((tempo) => ({
       tickPosition: Math.max(0, Math.trunc(tempo.tickPosition)),
@@ -2160,12 +2240,38 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     };
   }
   function enrichProjectWithEstimatedMusicXmlKeyFifths(project) {
-    const maxNoteTick = Math.max(0, ...project.tracks.flatMap((track) => track.notes.map((note) => note.tickOff)));
+    const allNotes = project.tracks.flatMap((track) => track.notes);
+    const maxNoteTick = Math.max(0, ...allNotes.map((note) => note.tickOff));
     const measures = buildMeasures2(project, maxNoteTick);
-    const keyFifthsByTrack = project.tracks.map((track) => estimateTrackKeyFifths(track.notes));
-    const keyFifthsByMeasure = project.tracks.map(
-      (track, index) => estimateTrackKeyFifthsByMeasure(track.notes, measures, keyFifthsByTrack[index] ?? 0)
+    const globalTrackFifths = estimateTrackKeyFifths(allNotes);
+    const keyFifthsByTrack = project.tracks.map(() => globalTrackFifths);
+    const perTrackEstimatedByMeasure = project.tracks.map(
+      (track) => estimateTrackKeyFifthsByMeasure(track.notes, measures, globalTrackFifths)
     );
+    const globalEstimatedByMeasure = estimateTrackKeyFifthsByMeasure(allNotes, measures, globalTrackFifths);
+    const synchronizedByMeasure = [];
+    let previous = globalTrackFifths;
+    for (const [measureIndex, measure] of measures.entries()) {
+      const candidate = globalEstimatedByMeasure[measureIndex] ?? previous;
+      let allActiveTracksAgree = true;
+      let activeTrackCount = 0;
+      for (const [trackIndex, track] of project.tracks.entries()) {
+        if (!hasNoteInMeasure(track.notes, measure)) continue;
+        activeTrackCount += 1;
+        if ((perTrackEstimatedByMeasure[trackIndex]?.[measureIndex] ?? previous) !== candidate) {
+          allActiveTracksAgree = false;
+          break;
+        }
+      }
+      if (activeTrackCount === 0) {
+        synchronizedByMeasure.push(previous);
+        continue;
+      }
+      previous = allActiveTracksAgree ? candidate : previous;
+      synchronizedByMeasure.push(previous);
+    }
+    const hasGlobalModulation = synchronizedByMeasure.some((fifths) => fifths !== globalTrackFifths);
+    const keyFifthsByMeasure = hasGlobalModulation ? project.tracks.map(() => [...synchronizedByMeasure]) : void 0;
     const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
     const extrasRecord = extrasBase;
     const musicxmlBase = extrasRecord.musicxml && typeof extrasRecord.musicxml === "object" ? extrasRecord.musicxml : {};
@@ -2175,9 +2281,10 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         ...extrasRecord,
         musicxml: {
           ...musicxmlBase,
+          keyFifths: globalTrackFifths,
           keyFifthsByTrack,
-          keyFifthsByMeasure,
-          keyFifthsSource: "estimated-from-vsqx-notes"
+          ...keyFifthsByMeasure ? { keyFifthsByMeasure } : {},
+          keyFifthsSource: hasGlobalModulation ? "estimated-from-vsqx-notes-global-synchronized" : "estimated-from-vsqx-notes-global-static"
         }
       }
     };

@@ -158,6 +158,7 @@ const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
 const DEFAULT_GRACE_TIMING_MODE = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE = "subtle";
+const DEFAULT_VSQX_LYRIC = "ら";
 const normalizeMidiProgram = (value) => {
     switch (value) {
         case "acoustic_grand_piano":
@@ -1794,7 +1795,7 @@ const onLoadClick = async () => {
             debugMetadata: keepMetadata,
         }),
         convertVsqxToMusicXml: (vsqxSource) => (0, vsqx_io_1.convertVsqxToMusicXml)(vsqxSource, {
-            defaultLyric: "あ",
+            defaultLyric: DEFAULT_VSQX_LYRIC,
         }),
         convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
             sourceMetadata: keepMetadata,
@@ -2365,7 +2366,7 @@ const onDownloadVsqx = () => {
         failExport("VSQX", "No valid saved XML is available.");
         return;
     }
-    const converted = (0, vsqx_io_1.convertMusicXmlToVsqx)(xmlText);
+    const converted = (0, vsqx_io_1.convertMusicXmlToVsqx)(xmlText, { musicXml: { defaultLyric: DEFAULT_VSQX_LYRIC } });
     if (!converted.ok) {
         failExport("VSQX", (_b = (_a = converted.diagnostic) === null || _a === void 0 ? void 0 : _a.message) !== null && _b !== void 0 ? _b : "MusicXML to VSQX conversion failed.");
         return;
