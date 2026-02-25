@@ -598,6 +598,10 @@ body {
   gap: 0.7rem;
 }
 
+.ms-settings-card .ms-field:not(.ms-field--switch) {
+  margin: 0.45rem 0;
+}
+
 .ms-settings-card .ms-field .md-select {
   flex: 0 1 300px;
   min-width: 180px;

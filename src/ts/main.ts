@@ -39,6 +39,7 @@ import {
   createVsqxDownloadPayload,
   triggerFileDownload,
 } from "./download-flow";
+import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
 import { resolveLoadFlow } from "./load-flow";
 import {
   createBasicWaveSynthEngine,
@@ -139,6 +140,7 @@ const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
 const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
 const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
+const midiExportProfileSelect = q<HTMLSelectElement>("#midiExportProfile");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
 const exportMusicXmlAsXmlExtension = q<HTMLInputElement>("#exportMusicXmlAsXmlExtension");
@@ -212,6 +214,7 @@ const DEFAULT_MIDI_PROGRAM: MidiProgramPreset = "electric_piano_2";
 const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
+const DEFAULT_MIDI_EXPORT_PROFILE: MidiExportProfile = "safe";
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
 const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
 const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
@@ -232,6 +235,7 @@ type PlaybackSettings = {
   graceTimingMode: GraceTimingMode;
   metricAccentEnabled: boolean;
   metricAccentProfile: MetricAccentProfile;
+  midiExportProfile: MidiExportProfile;
   forceMidiProgramOverride: boolean;
   keepMetadataInMusicXml: boolean;
   exportMusicXmlAsXmlExtension: boolean;
@@ -311,6 +315,7 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       graceTimingMode: normalizeGraceTimingMode(parsed.graceTimingMode),
       metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
       metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
+      midiExportProfile: normalizeMidiExportProfile(parsed.midiExportProfile),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
       exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
@@ -333,6 +338,7 @@ const writePlaybackSettings = (): void => {
       graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
       metricAccentEnabled: metricAccentEnabledInput.checked,
       metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+      midiExportProfile: normalizeMidiExportProfile(midiExportProfileSelect.value),
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
       exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
@@ -361,6 +367,7 @@ const applyInitialPlaybackSettings = (): void => {
   graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
   metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
+  midiExportProfileSelect.value = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
@@ -380,6 +387,7 @@ const onResetPlaybackSettings = (): void => {
   graceTimingModeSelect.value = DEFAULT_GRACE_TIMING_MODE;
   metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
   metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
+  midiExportProfileSelect.value = DEFAULT_MIDI_EXPORT_PROFILE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
   exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
@@ -2506,7 +2514,8 @@ const onDownloadMidi = (): void => {
     forceMidiProgramOverride.checked,
     normalizeGraceTimingMode(graceTimingModeSelect.value),
     metricAccentEnabledInput.checked,
-    normalizeMetricAccentProfile(metricAccentProfileSelect.value)
+    normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+    normalizeMidiExportProfile(midiExportProfileSelect.value)
   );
   if (!payload) {
     failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
@@ -2762,6 +2771,7 @@ downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
 downloadSvgBtn.addEventListener("click", onDownloadSvg);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
+midiExportProfileSelect.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
 playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
