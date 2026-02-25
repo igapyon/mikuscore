@@ -1,0 +1,9 @@
+{
+  "cases": [
+    {
+      "id": "local-private-example",
+      "sourcePath": "tests/fixtures-local/roundtrip/musescore/private.musicxml",
+      "firstMeasuresToCompare": 5
+    }
+  ]
+}

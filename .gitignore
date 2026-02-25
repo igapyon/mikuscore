@@ -1,3 +1,6 @@
 node_modules/
 coverage/
 .DS_Store
+tests/fixtures-local/
+tests/artifacts/roundtrip/
+tests/roundtrip/musescore/cases.local.json

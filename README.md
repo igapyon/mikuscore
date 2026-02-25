@@ -62,6 +62,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/PLAYBACK.md`
 - `docs/spec/ABC_IO.md`
 - `docs/spec/TEST_MATRIX.md`
+- `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`
 - `docs/spec/ARCHITECTURE.md`
 - `docs/spec/UI_SPEC.md`
@@ -141,6 +142,7 @@ Debugging note:
 - `docs/spec/PLAYBACK.md`
 - `docs/spec/ABC_IO.md`
 - `docs/spec/TEST_MATRIX.md`
+- `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`
 - `docs/spec/ARCHITECTURE.md`
 - `docs/spec/UI_SPEC.md`

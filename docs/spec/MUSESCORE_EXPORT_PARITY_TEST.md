@@ -9,6 +9,11 @@
 - mikuscore の MuseScore インポート機能が、MuseScore公式エクスポート相当の再現力を持つか検証する。
 - 仕様上の表現差（XML順序やID差）ではなく、楽譜意味（記譜意味）の一致を評価する。
 
+## 運用レベル（必須/任意）
+- 本戦略は **オプショナル検証** として扱う（通常の最小品質ゲート外）。
+- 目的は、回帰テストで見えにくい「実データ由来の差分」をトレースし、改善優先度を決めること。
+- 日常の必須ゲートは `docs/spec/LOCAL_WORKFLOW.md` の `typecheck + test:all` を優先する。
+
 ## テスト基本フロー
 1. 同一曲について以下を準備する。
    - `source.mscz`（または `source.mscx`）
@@ -62,7 +67,7 @@
 
 ## 当面の運用（CI未導入・repo外）
 - ライセンスや再配布条件が未確定な間は、実曲fixtureをリポジトリに置かない。
-- 比較データは repo 外ディレクトリで管理する（例: `~/mikuscore-private-fixtures/`）。
+- 比較データは Git 非管理ディレクトリで管理する（例: `tests/fixtures-local/roundtrip/musescore/` または `~/mikuscore-private-fixtures/`）。
 - 当面はローカル実行で次を行う。
   1. `MuseScore -> candidate_from_musescore.musicxml`
   2. `MIDI -> candidate_from_midi.musicxml`
@@ -75,6 +80,16 @@
   - 差分カテゴリ
   - 影響小節/記譜要素
   - 対応方針（fix / wontfix / backlog）
+
+### ローカル実行例（Git非管理 fixture）
+
+- 例: `tests/fixtures-local/roundtrip/musescore/paganini/` に `source.mscx` と `reference.musicxml` を置く。
+- 実行コマンド:
+  - `npm run test:all -- tests/spot/local-musescore-reference-parity.spot.spec.ts`
+- 出力:
+  - `tests/artifacts/roundtrip/musescore/paganini/candidate.musicxml`
+  - pitch-only / pitch+accidental の差分件数とサンプル差分
+- 現在の同梱 spot テストでは、`diff pitch-only=0` かつ `diff pitch+acc=0` を成功条件とする。
 
 ## 期待効果
 - 「MuseScoreでは出るのにmikuscoreでは欠ける」不具合を早期検出できる。

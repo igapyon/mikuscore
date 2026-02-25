@@ -170,11 +170,14 @@ const divisionToTypeAndDots = (divisions: number, durationDiv: number): { type: 
   return { type: nearest.type, dots: 0 };
 };
 
-const midiToPitch = (midiNumber: number): { step: string; alter: number; octave: number } => {
+const midiToPitch = (
+  midiNumber: number,
+  options?: { keyFifths?: number | null; preferAccidental?: string | null }
+): { step: string; alter: number; octave: number } => {
   const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
   const octave = Math.floor(n / 12) - 1;
   const semitone = n % 12;
-  const table: Array<{ step: string; alter: number }> = [
+  const sharpTable: Array<{ step: string; alter: number }> = [
     { step: "C", alter: 0 },
     { step: "C", alter: 1 },
     { step: "D", alter: 0 },
@@ -188,6 +191,27 @@ const midiToPitch = (midiNumber: number): { step: string; alter: number; octave:
     { step: "A", alter: 1 },
     { step: "B", alter: 0 },
   ];
+  const flatTable: Array<{ step: string; alter: number }> = [
+    { step: "C", alter: 0 },
+    { step: "D", alter: -1 },
+    { step: "D", alter: 0 },
+    { step: "E", alter: -1 },
+    { step: "E", alter: 0 },
+    { step: "F", alter: 0 },
+    { step: "G", alter: -1 },
+    { step: "G", alter: 0 },
+    { step: "A", alter: -1 },
+    { step: "A", alter: 0 },
+    { step: "B", alter: -1 },
+    { step: "B", alter: 0 },
+  ];
+  const pref = String(options?.preferAccidental ?? "").trim().toLowerCase();
+  const preferFlatByAccidental = pref === "flat" || pref === "flat-flat";
+  const preferSharpByAccidental = pref === "sharp" || pref === "double-sharp";
+  const keyFifths = Number(options?.keyFifths ?? 0);
+  const preferFlatByKey = Number.isFinite(keyFifths) && keyFifths < 0;
+  const preferFlat = preferFlatByAccidental || (!preferSharpByAccidental && preferFlatByKey);
+  const table = preferFlat ? flatTable : sharpTable;
   const mapped = table[semitone] ?? { step: "C", alter: 0 };
   return { step: mapped.step, alter: mapped.alter, octave };
 };
@@ -1576,7 +1600,10 @@ export const convertMuseScoreToMusicXml = (
             }
             for (let ni = 0; ni < event.notes.length; ni += 1) {
               const note = event.notes[ni];
-              const pitch = midiToPitch(note.midi);
+              const pitch = midiToPitch(note.midi, {
+                keyFifths: measure.fifths,
+                preferAccidental: note.accidentalText,
+              });
               const accidentalXml = note.accidentalText
                 ? `<accidental>${note.accidentalText}</accidental>`
                 : "";
@@ -1662,13 +1689,36 @@ const divisionsToMuseDurationType = (divisions: number, durationDiv: number): { 
   }
 };
 
-const makeMuseChordXml = (durationDiv: number, divisions: number, pitches: number[]): string => {
+const makeMuseChordXml = (
+  durationDiv: number,
+  divisions: number,
+  notes: Array<{ midi: number; tieStart: boolean; tieStop: boolean; accidentalSubtype: string | null }>,
+  slurStarts?: number[],
+  slurStops?: number[],
+  articulationSubtypes?: string[]
+): string => {
   const duration = divisionsToMuseDurationType(divisions, durationDiv);
   let xml = "<Chord>";
   xml += `<durationType>${duration.durationType}</durationType>`;
   if (duration.dots > 0) xml += `<dots>${duration.dots}</dots>`;
-  for (const pitch of pitches) {
-    xml += `<Note><pitch>${Math.max(0, Math.min(127, Math.round(pitch)))}</pitch></Note>`;
+  for (const no of slurStarts ?? []) {
+    xml += `<Slur type="start" id="${Math.max(1, Math.round(no))}"/>`;
+  }
+  for (const no of slurStops ?? []) {
+    xml += `<Slur type="stop" id="${Math.max(1, Math.round(no))}"/>`;
+  }
+  for (const subtype of articulationSubtypes ?? []) {
+    xml += `<Articulation><subtype>${xmlEscape(subtype)}</subtype></Articulation>`;
+  }
+  for (const note of notes) {
+    xml += "<Note>";
+    xml += `<pitch>${Math.max(0, Math.min(127, Math.round(note.midi)))}</pitch>`;
+    if (note.accidentalSubtype) {
+      xml += `<Accidental><subtype>${xmlEscape(note.accidentalSubtype)}</subtype></Accidental>`;
+    }
+    if (note.tieStart) xml += "<Tie/>";
+    if (note.tieStop) xml += "<endSpanner/>";
+    xml += "</Note>";
   }
   xml += "</Chord>";
   return xml;
@@ -1708,7 +1758,147 @@ const getPartStaffCountFromMusicXml = (part: Element): number => {
 type MuseVoiceEvent = {
   atDiv: number;
   durationDiv: number;
-  pitches: number[] | null;
+  pitches: Array<{
+    midi: number;
+    tieStart: boolean;
+    tieStop: boolean;
+    accidentalSubtype: string | null;
+  }> | null;
+  slurStarts?: number[];
+  slurStops?: number[];
+  articulationSubtypes?: string[];
+};
+
+type ClefSign = "G" | "F";
+
+const parseMusicXmlPitchToMidi = (note: Element): number | null => {
+  const step = (note.querySelector(":scope > pitch > step")?.textContent ?? "").trim().toUpperCase();
+  const octaveRaw = (note.querySelector(":scope > pitch > octave")?.textContent ?? "").trim();
+  if (!step || !octaveRaw) return null;
+  const octave = Number(octaveRaw);
+  if (!Number.isFinite(octave)) return null;
+  const alter = Number(note.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "0");
+  const semitoneBase: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const base = semitoneBase[step];
+  if (base === undefined) return null;
+  const midi = Math.round((octave + 1) * 12 + base + (Number.isFinite(alter) ? alter : 0));
+  if (!Number.isFinite(midi)) return null;
+  return Math.max(0, Math.min(127, midi));
+};
+
+const parseMusicXmlTieFlags = (note: Element): { tieStart: boolean; tieStop: boolean } => {
+  const hasStart =
+    note.querySelector(':scope > tie[type="start"]') !== null
+    || note.querySelector(':scope > notations > tied[type="start"]') !== null;
+  const hasStop =
+    note.querySelector(':scope > tie[type="stop"]') !== null
+    || note.querySelector(':scope > notations > tied[type="stop"]') !== null;
+  return { tieStart: hasStart, tieStop: hasStop };
+};
+
+const parseMusicXmlAccidentalSubtype = (note: Element): string | null => {
+  const accidental = (note.querySelector(":scope > accidental")?.textContent ?? "").trim().toLowerCase();
+  if (!accidental) return null;
+  if (accidental === "natural") return "accidentalNatural";
+  if (accidental === "sharp") return "accidentalSharp";
+  if (accidental === "flat") return "accidentalFlat";
+  if (accidental === "double-sharp") return "accidentalDoubleSharp";
+  if (accidental === "flat-flat") return "accidentalDoubleFlat";
+  return null;
+};
+
+const parseMusicXmlSlurNumbers = (note: Element): { starts: number[]; stops: number[] } => {
+  const starts: number[] = [];
+  const stops: number[] = [];
+  for (const slur of Array.from(note.querySelectorAll(":scope > notations > slur[type]"))) {
+    const type = (slur.getAttribute("type") ?? "").trim().toLowerCase();
+    const rawNumber = (slur.getAttribute("number") ?? "").trim();
+    const number = Number(rawNumber);
+    const normalized = Number.isFinite(number) && number > 0 ? Math.round(number) : 1;
+    if (type === "start") starts.push(normalized);
+    if (type === "stop") stops.push(normalized);
+  }
+  return { starts, stops };
+};
+
+const mergeUniqueNumbers = (base: number[] | undefined, incoming: number[]): number[] | undefined => {
+  if (!incoming.length) return base;
+  const merged = new Set<number>(base ?? []);
+  for (const no of incoming) merged.add(Math.max(1, Math.round(no)));
+  return Array.from(merged.values()).sort((a, b) => a - b);
+};
+
+const parseMusicXmlArticulationSubtypes = (note: Element): string[] => {
+  const out = new Set<string>();
+  for (const node of Array.from(note.querySelectorAll(":scope > notations > articulations > *"))) {
+    const tag = node.tagName.toLowerCase();
+    if (tag === "staccato") out.add("articStaccatoAbove");
+    if (tag === "accent") out.add("articAccentAbove");
+    if (tag === "tenuto") out.add("articTenutoAbove");
+  }
+  for (const node of Array.from(note.querySelectorAll(":scope > notations > technical > *"))) {
+    const tag = node.tagName.toLowerCase();
+    if (tag === "stopped") out.add("articLhPizzicatoAbove");
+    if (tag === "snap-pizzicato") out.add("snapPizzicato");
+  }
+  return Array.from(out.values());
+};
+
+const mergeUniqueStrings = (base: string[] | undefined, incoming: string[]): string[] | undefined => {
+  if (!incoming.length) return base;
+  const merged = new Set<string>(base ?? []);
+  for (const s of incoming) merged.add(s);
+  return Array.from(merged.values());
+};
+
+const normalizeMusicXmlClefSign = (raw: string | null | undefined): ClefSign | null => {
+  const v = String(raw ?? "").trim().toUpperCase();
+  if (!v) return null;
+  if (v.includes("F")) return "F";
+  if (v.includes("G")) return "G";
+  return null;
+};
+
+const readMusicXmlMeasureClefSign = (measure: Element, staffNo: number): ClefSign | null => {
+  const numbered = measure.querySelector(`:scope > attributes > clef[number="${staffNo}"] > sign`);
+  const numberedSign = normalizeMusicXmlClefSign(numbered?.textContent);
+  if (numberedSign) return numberedSign;
+  if (staffNo === 1) {
+    const unnumbered = measure.querySelector(":scope > attributes > clef:not([number]) > sign");
+    const unnumberedSign = normalizeMusicXmlClefSign(unnumbered?.textContent);
+    if (unnumberedSign) return unnumberedSign;
+  }
+  return null;
+};
+
+const collectMusicXmlPitchesByStaff = (part: Element): Map<number, number[]> => {
+  const byStaff = new Map<number, number[]>();
+  for (const note of Array.from(part.querySelectorAll(":scope > measure > note"))) {
+    if (note.querySelector(":scope > rest")) continue;
+    const midi = parseMusicXmlPitchToMidi(note);
+    if (midi === null) continue;
+    const staffNo = getNoteStaffNo(note);
+    const list = byStaff.get(staffNo) ?? [];
+    list.push(midi);
+    byStaff.set(staffNo, list);
+  }
+  return byStaff;
+};
+
+const inferClefSignFromPitches = (midiList: number[]): ClefSign => {
+  if (!midiList.length) return "G";
+  const sorted = midiList.slice().sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return median < 60 ? "F" : "G";
+};
+
+const readFirstExplicitClefInPart = (part: Element, staffNo: number): ClefSign | null => {
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const clef = readMusicXmlMeasureClefSign(measure, staffNo);
+    if (clef) return clef;
+  }
+  return null;
 };
 
 const buildMuseVoiceEventsByStaff = (
@@ -1746,32 +1936,43 @@ const buildMuseVoiceEventsByStaff = (
 
     if (isChordFollow && !isRest && events.length > 0) {
       const prev = events[events.length - 1];
-      if (prev.pitches !== null && prev.atDiv === cursorDiv) {
-        const step = (child.querySelector(":scope > pitch > step")?.textContent ?? "").trim();
-        const octave = firstNumber(child, ":scope > pitch > octave");
-        if (step && octave !== null) {
-          const alter = Math.round(firstNumber(child, ":scope > pitch > alter") ?? 0);
-          const map: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-          const base = map[step];
-          if (base !== undefined) prev.pitches.push(base + alter + (Math.round(octave) + 1) * 12);
+      // In MusicXML, <chord/> notes share onset with the previous note.
+      // cursorDiv is already advanced past the previous non-chord note, so compare against prev end time.
+      if (prev.pitches !== null && prev.atDiv + prev.durationDiv === cursorDiv) {
+        const midi = parseMusicXmlPitchToMidi(child);
+        if (midi !== null) {
+          const tie = parseMusicXmlTieFlags(child);
+          const accidentalSubtype = parseMusicXmlAccidentalSubtype(child);
+          const slur = parseMusicXmlSlurNumbers(child);
+          const articulations = parseMusicXmlArticulationSubtypes(child);
+          prev.pitches.push({
+            midi,
+            tieStart: tie.tieStart,
+            tieStop: tie.tieStop,
+            accidentalSubtype,
+          });
+          prev.slurStarts = mergeUniqueNumbers(prev.slurStarts, slur.starts);
+          prev.slurStops = mergeUniqueNumbers(prev.slurStops, slur.stops);
+          prev.articulationSubtypes = mergeUniqueStrings(prev.articulationSubtypes, articulations);
         }
       }
     } else if (isRest) {
       events.push({ atDiv: cursorDiv, durationDiv, pitches: null });
     } else {
-      const step = (child.querySelector(":scope > pitch > step")?.textContent ?? "").trim();
-      const octave = firstNumber(child, ":scope > pitch > octave");
-      if (step && octave !== null) {
-        const alter = Math.round(firstNumber(child, ":scope > pitch > alter") ?? 0);
-        const map: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-        const base = map[step];
-        if (base !== undefined) {
-          events.push({
-            atDiv: cursorDiv,
-            durationDiv,
-            pitches: [base + alter + (Math.round(octave) + 1) * 12],
-          });
-        }
+      const midi = parseMusicXmlPitchToMidi(child);
+      if (midi !== null) {
+        const tie = parseMusicXmlTieFlags(child);
+        const accidentalSubtype = parseMusicXmlAccidentalSubtype(child);
+        const slur = parseMusicXmlSlurNumbers(child);
+        const articulations = parseMusicXmlArticulationSubtypes(child);
+        events.push({
+          atDiv: cursorDiv,
+          durationDiv,
+          pitches: [{ midi, tieStart: tie.tieStart, tieStop: tie.tieStop, accidentalSubtype }],
+          slurStarts: slur.starts.length ? slur.starts : undefined,
+          slurStops: slur.stops.length ? slur.stops : undefined,
+          articulationSubtypes: articulations.length ? articulations : undefined,
+        });
       }
     }
 
@@ -1826,6 +2027,13 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
     const partId = (part.getAttribute("id") ?? "").trim();
     const partName = partNameById.get(partId) ?? (partId || `P${pi + 1}`);
     const laneCount = getPartStaffCountFromMusicXml(part);
+    const pitchByStaff = collectMusicXmlPitchesByStaff(part);
+    const initialClefByStaff = new Map<number, ClefSign>();
+    for (let staffNo = 1; staffNo <= laneCount; staffNo += 1) {
+      const explicit = readFirstExplicitClefInPart(part, staffNo);
+      const fallback = inferClefSignFromPitches(pitchByStaff.get(staffNo) ?? []);
+      initialClefByStaff.set(staffNo, explicit ?? fallback);
+    }
     const staffIds = Array.from({ length: laneCount }, () => nextStaffId++);
     partDefs.push(
       `<Part><trackName>${xmlEscape(partName)}</trackName>${staffIds
@@ -1843,6 +2051,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
 
     const staffXmlByLane = Array.from({ length: laneCount }, (_unused, laneIndex) => {
       const staffNo = laneIndex + 1;
+      let currentClef: ClefSign = initialClefByStaff.get(staffNo) ?? "G";
       let staffXml = `<Staff id="${staffIds[laneIndex]}">`;
 
       for (let mi = 0; mi < measures.length; mi += 1) {
@@ -1875,8 +2084,14 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
           const voiceNo = voiceNos[vi];
           let voiceXml = "<voice>";
           if (vi === 0) {
+            const measureClef = readMusicXmlMeasureClefSign(measure, staffNo);
+            const targetClef = measureClef ?? currentClef;
+            const shouldWriteClef = mi === 0 || targetClef !== currentClef || measureClef !== null;
             const shouldWriteTime = mi === 0 || measureBeats !== currentBeats || measureBeatType !== currentBeatType;
             const shouldWriteKey = mi === 0 || measureFifths !== currentFifths;
+            if (shouldWriteClef) {
+              voiceXml += `<Clef><concertClefType>${targetClef}</concertClefType></Clef>`;
+            }
             if (shouldWriteTime) {
               voiceXml += `<TimeSig><sigN>${measureBeats}</sigN><sigD>${measureBeatType}</sigD></TimeSig>`;
             }
@@ -1892,6 +2107,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
             if (measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]')) {
               voiceXml += "<startRepeat/>";
             }
+            currentClef = targetClef;
           }
 
           const events = (byVoice.get(voiceNo) ?? []).slice().sort((a, b) => a.atDiv - b.atDiv);
@@ -1904,7 +2120,14 @@ export const exportMusicXmlDomToMuseScore = (doc: Document): string => {
             if (event.pitches === null) {
               voiceXml += makeMuseRestXml(event.durationDiv, divisions);
             } else {
-              voiceXml += makeMuseChordXml(event.durationDiv, divisions, event.pitches);
+              voiceXml += makeMuseChordXml(
+                event.durationDiv,
+                divisions,
+                event.pitches,
+                event.slurStarts,
+                event.slurStops,
+                event.articulationSubtypes
+              );
             }
             cursorDiv += event.durationDiv;
           }
