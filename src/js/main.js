@@ -154,7 +154,7 @@ const DEFAULT_MIDI_PROGRAM = "electric_piano_2";
 const DEFAULT_PLAYBACK_WAVEFORM = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
-const DEFAULT_MIDI_EXPORT_PROFILE = "safe";
+const DEFAULT_MIDI_EXPORT_PROFILE = "musescore_parity";
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
 const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
 const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
@@ -3146,7 +3146,9 @@ const normalizeMidiProgramNumber = (value) => {
         return null;
     return rounded;
 };
-const normalizeMidiImportQuantizeGrid = (value) => {
+const normalizeMidiImportQuantizeGridOption = (value) => {
+    if (value === "auto")
+        return "auto";
     if (value === "1/8" || value === "1/32")
         return value;
     return DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
@@ -3194,6 +3196,53 @@ const hasTripletLikeTiming = (notes, ticksPerQuarter) => {
             return true;
     }
     return false;
+};
+const resolveImportQuantizeTick = (notes, ticksPerQuarter, grid, tripletAwareQuantize) => {
+    const subdivision = quantizeGridToDivisions(grid);
+    const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+    const useTripletAwareQuantize = tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
+    const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
+    const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
+    const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
+    return { qTick, divisions };
+};
+const scoreImportQuantization = (notes, qTick) => {
+    let score = 0;
+    for (const note of notes) {
+        const start = Math.max(0, Math.round(note.startTick));
+        const end = Math.max(start + 1, Math.round(note.endTick));
+        const duration = Math.max(1, end - start);
+        const quantizedStart = Math.round(start / qTick) * qTick;
+        const quantizedEnd = Math.round(end / qTick) * qTick;
+        const quantizedDuration = Math.max(qTick, Math.round(duration / qTick) * qTick);
+        const startError = Math.abs(start - quantizedStart);
+        const endError = Math.abs(end - quantizedEnd);
+        const durationError = Math.abs(duration - quantizedDuration);
+        // Prioritize onset stability over duration shaping.
+        score += startError * 2 + endError + durationError;
+    }
+    return score;
+};
+const chooseBestImportQuantizeGrid = (notes, ticksPerQuarter, tripletAwareQuantize) => {
+    var _a;
+    const candidates = ["1/8", "1/16", "1/32"];
+    let best = null;
+    for (const grid of candidates) {
+        const resolved = resolveImportQuantizeTick(notes, ticksPerQuarter, grid, tripletAwareQuantize);
+        const score = scoreImportQuantization(notes, resolved.qTick);
+        if (!best) {
+            best = { grid, score, divisions: resolved.divisions };
+            continue;
+        }
+        if (score < best.score) {
+            best = { grid, score, divisions: resolved.divisions };
+            continue;
+        }
+        if (score === best.score && resolved.divisions < best.divisions) {
+            best = { grid, score, divisions: resolved.divisions };
+        }
+    }
+    return (_a = best === null || best === void 0 ? void 0 : best.grid) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
 };
 const readAscii = (bytes, start, length) => {
     if (start < 0 || length < 0 || start + length > bytes.length)
@@ -3705,12 +3754,9 @@ const midiToDrumDisplay = (midiNumber) => {
 };
 const quantizeImportedNotes = (notes, ticksPerQuarter, grid, tripletAwareQuantize) => {
     const warnings = [];
-    const subdivision = quantizeGridToDivisions(grid);
-    const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
-    const useTripletAwareQuantize = tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
-    const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
-    const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
-    const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
+    const resolved = resolveImportQuantizeTick(notes, ticksPerQuarter, grid, tripletAwareQuantize);
+    const qTick = resolved.qTick;
+    const divisions = resolved.divisions;
     const quantized = [];
     for (const note of notes) {
         const startTick = Math.max(0, Math.round(note.startTick / qTick) * qTick);
@@ -5546,7 +5592,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const diagnostics = [];
     const warnings = [];
-    const quantizeGrid = normalizeMidiImportQuantizeGrid(options.quantizeGrid);
+    const quantizeGridOption = normalizeMidiImportQuantizeGridOption(options.quantizeGrid);
     const title = String((_a = options.title) !== null && _a !== void 0 ? _a : "").trim() || "Imported MIDI";
     const debugImportMetadata = (_b = options.debugMetadata) !== null && _b !== void 0 ? _b : true;
     const sourceImportMetadata = (_c = options.sourceMetadata) !== null && _c !== void 0 ? _c : true;
@@ -5614,6 +5660,9 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         warnings.push(...summary.parseWarnings);
         offset += 8 + trackLength;
     }
+    const quantizeGrid = quantizeGridOption === "auto"
+        ? chooseBestImportQuantizeGrid(collectedNotes, header.ticksPerQuarter, tripletAwareQuantize)
+        : quantizeGridOption;
     const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid, tripletAwareQuantize);
     warnings.push(...quantized.warnings);
     const velocityScaledNotes = applyImportedControllerVelocityScale(quantized.notes, controllerEvents);
