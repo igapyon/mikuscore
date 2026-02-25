@@ -63,7 +63,7 @@ type ParsedMuseScoreEvent =
     grace?: boolean;
     graceSlash?: boolean;
   }
-  | { kind: "dynamic"; mark: string; voice: number; atDiv: number }
+  | { kind: "dynamic"; mark: string; voice: number; atDiv: number; soundDynamics?: number }
   | { kind: "directionXml"; xml: string; voice: number; atDiv: number };
 
 type ParsedMuseScoreChordNote = {
@@ -71,6 +71,8 @@ type ParsedMuseScoreChordNote = {
   accidentalText: string | null;
   tieStart: boolean;
   tieStop: boolean;
+  fingeringText: string | undefined;
+  stringNumber: number | undefined;
 };
 
 type ParsedMuseScoreMeasure = {
@@ -295,6 +297,19 @@ const parseMuseDynamicMark = (value: string): string | null => {
   return allow.has(v) ? v : null;
 };
 
+const parseMuseDynamicSoundValue = (dynamicEl: Element): number | null => {
+  const velocity = firstNumber(dynamicEl, ":scope > velocity");
+  if (velocity === null || velocity <= 0) return null;
+  // MuseScore dynamic velocity uses a MIDI-like scale where 90 ~= 100%.
+  return (velocity / 90) * 100;
+};
+
+const isMuseElementVisible = (el: Element): boolean => {
+  const visible = firstNumber(el, ":scope > visible");
+  if (visible === null) return true;
+  return visible !== 0;
+};
+
 const museArticulationSubtypeToMusicXmlTag = (
   raw: string | null | undefined
 ): { group: "articulations" | "technical"; tag: string } | null => {
@@ -306,11 +321,27 @@ const museArticulationSubtypeToMusicXmlTag = (
   }
   if (v.includes("stopped")) return { group: "technical", tag: "stopped" };
   if (v.includes("snap") && v.includes("pizz")) return { group: "technical", tag: "snap-pizzicato" };
+  if (v.includes("upbow") || (v.includes("up") && v.includes("bow"))) return { group: "technical", tag: "up-bow" };
+  if (v.includes("downbow") || (v.includes("down") && v.includes("bow"))) return { group: "technical", tag: "down-bow" };
+  if (v.includes("open") && v.includes("string")) return { group: "technical", tag: "open-string" };
+  if (v.includes("harmonic")) return { group: "technical", tag: "harmonic" };
   if (v.includes("staccatissimo")) return { group: "articulations", tag: "staccatissimo" };
   if (v.includes("staccato")) return { group: "articulations", tag: "staccato" };
   if (v.includes("tenuto")) return { group: "articulations", tag: "tenuto" };
   if (v.includes("accent")) return { group: "articulations", tag: "accent" };
   if (v.includes("marcato")) return { group: "articulations", tag: "strong-accent" };
+  return null;
+};
+
+const museOrnamentSubtypeToMusicXmlTag = (
+  raw: string | null | undefined
+): { group: "articulations" | "technical"; tag: string } | null => {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  // MuseScore uses brassMuteClosed ornament for left-hand pizzicato in some scores.
+  if (v === "brassmuteclosed" || (v.includes("brass") && v.includes("mute") && v.includes("closed"))) {
+    return { group: "technical", tag: "stopped" };
+  }
   return null;
 };
 
@@ -345,8 +376,10 @@ const readGlobalMuseKeyMode = (score: Element): "major" | "minor" => {
   return inferred || "major";
 };
 
-const buildDynamicDirectionXml = (mark: string): string => {
-  return `<direction><direction-type><dynamics><${mark}/></dynamics></direction-type></direction>`;
+const buildDynamicDirectionXml = (mark: string, options?: { soundDynamics?: number }): string => {
+  const value = options?.soundDynamics;
+  const soundXml = Number.isFinite(value) ? `<sound dynamics="${Number(value).toFixed(2)}"/>` : "";
+  return `<direction><direction-type><dynamics><${mark}/></dynamics></direction-type>${soundXml}</direction>`;
 };
 
 const museAccidentalSubtypeToMusicXml = (raw: string | null | undefined): string | null => {
@@ -362,12 +395,13 @@ const museAccidentalSubtypeToMusicXml = (raw: string | null | undefined): string
 
 const buildWordsDirectionXml = (
   text: string,
-  options?: { placement?: "above" | "below"; soundTempo?: number | null }
+  options?: { placement?: "above" | "below"; soundTempo?: number | null; fontStyle?: "italic" | "normal" }
 ): string => {
   const placementAttr = options?.placement ? ` placement="${options.placement}"` : "";
+  const fontStyleAttr = options?.fontStyle ? ` font-style="${options.fontStyle}"` : "";
   const soundTempo = options?.soundTempo ?? null;
   const soundXml = soundTempo !== null ? `<sound tempo="${soundTempo}"/>` : "";
-  return `<direction${placementAttr}><direction-type><words>${xmlEscape(text)}</words></direction-type>${soundXml}</direction>`;
+  return `<direction${placementAttr}><direction-type><words${fontStyleAttr}>${xmlEscape(text)}</words></direction-type>${soundXml}</direction>`;
 };
 
 const buildSegnoDirectionXml = (): string => {
@@ -406,6 +440,27 @@ const parseJumpDirectionXml = (jump: Element): { xml: string; mapped: boolean } 
     xml: `<direction><direction-type><words>${xmlEscape(words)}</words></direction-type>${soundXml}</direction>`,
     mapped: attrs.length > 0,
   };
+};
+
+const parseExpressionDirectionXml = (expression: Element): string | null => {
+  const textNode = expression.querySelector(":scope > text");
+  const text = (textNode?.textContent ?? expression.textContent ?? "").trim();
+  if (!text) return null;
+  const hasItalic = textNode?.querySelector(":scope > i") !== null;
+  return buildWordsDirectionXml(text, { fontStyle: hasItalic ? "italic" : undefined });
+};
+
+const parseTempoDirectionXml = (tempoEl: Element): string | null => {
+  const qps = firstNumber(tempoEl, ":scope > tempo");
+  const bpm = qps !== null && qps > 0 ? Math.max(20, Math.min(300, Math.round(qps * 60))) : null;
+  const text = (tempoEl.querySelector(":scope > text")?.textContent ?? "").trim();
+  if (text) {
+    return buildWordsDirectionXml(text, { placement: "above", soundTempo: bpm });
+  }
+  if (bpm !== null) {
+    return `<direction><sound tempo="${bpm}"/></direction>`;
+  }
+  return null;
 };
 
 const parseMeasureValue = (measure: Element, selectors: string[], fallback: number): number => {
@@ -635,6 +690,13 @@ const parseMuseTieFlags = (noteEl: Element): { tieStart: boolean; tieStop: boole
   const tieStart = tieEl !== null && (tieHasNext || !tieHasPrev);
   const tieStop = hasEndSpanner || (tieEl !== null && tieHasPrev);
   return { tieStart, tieStop };
+};
+
+const parseMuseStringText = (noteNode: Element, tag: "Fingering" | "String"): string | null => {
+  const container = noteNode.querySelector(`:scope > ${tag}`);
+  if (!container) return null;
+  const text = (container.querySelector(":scope > text")?.textContent ?? container.textContent ?? "").trim();
+  return text || null;
 };
 
 const parseTrillSpannerTransition = (spannerEl: Element): { start: boolean; stop: boolean } => {
@@ -948,16 +1010,8 @@ export const convertMuseScoreToMusicXml = (
         ?? measure.querySelector(":scope > voice > keysig > mode")?.textContent
       );
       const mode = modeRaw ?? currentMode;
-      const tempoQps = firstNumber(measure, ":scope > Tempo > tempo")
-        ?? firstNumber(measure, ":scope > voice > Tempo > tempo")
-        ?? firstNumber(measure, ":scope > voice > tempo > tempo");
-      const tempoBpm = tempoQps !== null && tempoQps > 0 ? Math.max(20, Math.min(300, Math.round(tempoQps * 60))) : null;
-      const tempoText = (
-        measure.querySelector(":scope > Tempo > text")?.textContent
-        ?? measure.querySelector(":scope > voice > Tempo > text")?.textContent
-        ?? measure.querySelector(":scope > voice > tempo > text")?.textContent
-        ?? ""
-      ).trim() || null;
+      const tempoBpm = null;
+      const tempoText = null;
       const repeatForward = parseTruthyFlag(measure.getAttribute("startRepeat"))
         || measure.querySelector(":scope > startRepeat, :scope > voice > startRepeat") !== null;
       const repeatBackward = parseTruthyFlag(measure.getAttribute("endRepeat"))
@@ -1161,10 +1215,14 @@ export const convertMuseScoreToMusicXml = (
             const articulationMappings = Array.from(event.querySelectorAll(":scope > Articulation > subtype"))
               .map((node) => museArticulationSubtypeToMusicXmlTag(node.textContent))
               .filter((mapped): mapped is { group: "articulations" | "technical"; tag: string } => mapped !== null);
-            const articulationTags = articulationMappings
+            const ornamentMappings = Array.from(event.querySelectorAll(":scope > Ornament > subtype, :scope > ornament > subtype"))
+              .map((node) => museOrnamentSubtypeToMusicXmlTag(node.textContent))
+              .filter((mapped): mapped is { group: "articulations" | "technical"; tag: string } => mapped !== null);
+            const allMappings = [...articulationMappings, ...ornamentMappings];
+            const articulationTags = allMappings
               .filter((mapped) => mapped.group === "articulations")
               .map((mapped) => mapped.tag);
-            const technicalTags = articulationMappings
+            const technicalTags = allMappings
               .filter((mapped) => mapped.group === "technical")
               .map((mapped) => mapped.tag);
             const notes = noteNodes
@@ -1174,12 +1232,17 @@ export const convertMuseScoreToMusicXml = (
                 const accidentalText = museAccidentalSubtypeToMusicXml(
                   noteNode.querySelector(":scope > Accidental > subtype")?.textContent
                 );
+                const fingeringText = parseMuseStringText(noteNode, "Fingering") ?? undefined;
+                const stringRaw = parseMuseStringText(noteNode, "String");
+                const stringValue = stringRaw !== null ? Number.parseInt(stringRaw, 10) : NaN;
                 const tieFlags = parseMuseTieFlags(noteNode);
                 return {
                   midi: Math.max(0, Math.min(127, Math.round(midi + ottavaDisplayShift))),
                   accidentalText,
                   tieStart: tieFlags.tieStart,
                   tieStop: tieFlags.tieStop,
+                  fingeringText,
+                  stringNumber: Number.isFinite(stringValue) && stringValue > 0 ? Math.round(stringValue) : undefined,
                 };
               })
               .filter((note): note is ParsedMuseScoreChordNote => note !== null);
@@ -1272,11 +1335,18 @@ export const convertMuseScoreToMusicXml = (
             continue;
           }
           if (tag === "dynamic") {
+            if (!isMuseElementVisible(event)) continue;
             const mark = parseMuseDynamicMark(
               (event.querySelector(":scope > subtype")?.textContent ?? event.textContent ?? "").trim()
             );
             if (mark) {
-              events.push({ kind: "dynamic", mark, voice: voiceNo, atDiv: voicePosDiv });
+              events.push({
+                kind: "dynamic",
+                mark,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                soundDynamics: parseMuseDynamicSoundValue(event) ?? undefined,
+              });
             } else {
               pushWarning({
                 code: "MUSESCORE_IMPORT_WARNING",
@@ -1288,6 +1358,32 @@ export const convertMuseScoreToMusicXml = (
                 action: "skipped",
                 reason: "unsupported",
                 tag: "Dynamic",
+              });
+            }
+            continue;
+          }
+          if (tag === "tempo") {
+            const directionXml = parseTempoDirectionXml(event);
+            if (directionXml) {
+              events.push({ kind: "directionXml", xml: directionXml, voice: voiceNo, atDiv: voicePosDiv });
+            }
+            continue;
+          }
+          if (tag === "expression") {
+            const directionXml = parseExpressionDirectionXml(event);
+            if (directionXml) {
+              events.push({ kind: "directionXml", xml: directionXml, voice: voiceNo, atDiv: voicePosDiv });
+            } else {
+              pushWarning({
+                code: "MUSESCORE_IMPORT_WARNING",
+                message: `measure ${mi + 1}: unsupported expression skipped.`,
+                measure: mi + 1,
+                staff: localStaffIndex + 1,
+                voice: voiceNo,
+                atDiv: voicePosDiv,
+                action: "skipped",
+                reason: "unsupported",
+                tag: "Expression",
               });
             }
             continue;
@@ -1346,7 +1442,6 @@ export const convertMuseScoreToMusicXml = (
           if (
             tag === "timesig"
             || tag === "keysig"
-            || tag === "tempo"
             || tag === "layoutbreak"
             || tag === "clef"
             || tag === "beam"
@@ -1551,13 +1646,17 @@ export const convertMuseScoreToMusicXml = (
           const beatDiv = Math.max(1, Math.round(measure.capacityDiv / Math.max(1, measure.beats)));
           const beamXmlByEventIndex = buildBeamXmlByVoiceEvents(voiceEvents, divisions, beatDiv);
           for (const event of voiceEvents) {
-            if (event.kind === "dynamic") {
+          if (event.kind === "dynamic") {
               const lead = Math.max(0, Math.round(event.atDiv) - occupied);
               if (lead > 0) {
                 body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${staffNo}</staff></forward>`;
                 occupied += lead;
               }
-              body += withDirectionPlacement(buildDynamicDirectionXml(event.mark), staffNo, partVoiceNo);
+              body += withDirectionPlacement(
+                buildDynamicDirectionXml(event.mark, { soundDynamics: event.soundDynamics }),
+                staffNo,
+                partVoiceNo
+              );
               continue;
             }
           if (event.kind === "directionXml") {
@@ -1613,8 +1712,18 @@ export const convertMuseScoreToMusicXml = (
               const articulationXml = ni === 0 && (event.articulationTags?.length ?? 0) > 0
                 ? `<articulations>${(event.articulationTags ?? []).map((tag) => `<${tag}/>`).join("")}</articulations>`
                 : "";
-              const technicalXml = ni === 0 && (event.technicalTags?.length ?? 0) > 0
-                ? `<technical>${(event.technicalTags ?? []).map((tag) => `<${tag}/>`).join("")}</technical>`
+              const noteTechnicalItems: string[] = [];
+              if (ni === 0 && (event.technicalTags?.length ?? 0) > 0) {
+                noteTechnicalItems.push(...(event.technicalTags ?? []).map((tag) => `<${tag}/>`));
+              }
+              if (note.fingeringText && note.fingeringText.trim()) {
+                noteTechnicalItems.push(`<fingering>${xmlEscape(note.fingeringText.trim())}</fingering>`);
+              }
+              if (note.stringNumber && note.stringNumber > 0) {
+                noteTechnicalItems.push(`<string>${Math.round(note.stringNumber)}</string>`);
+              }
+              const technicalXml = noteTechnicalItems.length
+                ? `<technical>${noteTechnicalItems.join("")}</technical>`
                 : "";
               const notationItems = [
                 ...(ni === 0 ? tupletXml.notationItems : []),
@@ -1692,7 +1801,14 @@ const divisionsToMuseDurationType = (divisions: number, durationDiv: number): { 
 const makeMuseChordXml = (
   durationDiv: number,
   divisions: number,
-  notes: Array<{ midi: number; tieStart: boolean; tieStop: boolean; accidentalSubtype: string | null }>,
+  notes: Array<{
+    midi: number;
+    tieStart: boolean;
+    tieStop: boolean;
+    accidentalSubtype: string | null;
+    fingeringText?: string;
+    stringNumber?: number;
+  }>,
   slurStarts?: number[],
   slurStops?: number[],
   articulationSubtypes?: string[]
@@ -1715,6 +1831,12 @@ const makeMuseChordXml = (
     xml += `<pitch>${Math.max(0, Math.min(127, Math.round(note.midi)))}</pitch>`;
     if (note.accidentalSubtype) {
       xml += `<Accidental><subtype>${xmlEscape(note.accidentalSubtype)}</subtype></Accidental>`;
+    }
+    if (note.fingeringText && note.fingeringText.trim()) {
+      xml += `<Fingering>${xmlEscape(note.fingeringText.trim())}</Fingering>`;
+    }
+    if (note.stringNumber && note.stringNumber > 0) {
+      xml += `<String>${Math.round(note.stringNumber)}</String>`;
     }
     if (note.tieStart) xml += "<Tie/>";
     if (note.tieStop) xml += "<endSpanner/>";
@@ -1763,6 +1885,8 @@ type MuseVoiceEvent = {
     tieStart: boolean;
     tieStop: boolean;
     accidentalSubtype: string | null;
+    fingeringText?: string;
+    stringNumber?: number;
   }> | null;
   slurStarts?: number[];
   slurStops?: number[];
@@ -1840,8 +1964,25 @@ const parseMusicXmlArticulationSubtypes = (note: Element): string[] => {
     const tag = node.tagName.toLowerCase();
     if (tag === "stopped") out.add("articLhPizzicatoAbove");
     if (tag === "snap-pizzicato") out.add("snapPizzicato");
+    if (tag === "up-bow") out.add("articUpBowAbove");
+    if (tag === "down-bow") out.add("articDownBowAbove");
+    if (tag === "open-string") out.add("articOpenStringAbove");
+    if (tag === "harmonic") out.add("articHarmonicAbove");
   }
   return Array.from(out.values());
+};
+
+const parseMusicXmlTechnicalFingering = (note: Element): string | null => {
+  const text = (note.querySelector(":scope > notations > technical > fingering")?.textContent ?? "").trim();
+  return text || null;
+};
+
+const parseMusicXmlTechnicalString = (note: Element): number | null => {
+  const raw = (note.querySelector(":scope > notations > technical > string")?.textContent ?? "").trim();
+  if (!raw) return null;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
 };
 
 const mergeUniqueStrings = (base: string[] | undefined, incoming: string[]): string[] | undefined => {
@@ -1950,6 +2091,8 @@ const buildMuseVoiceEventsByStaff = (
             tieStart: tie.tieStart,
             tieStop: tie.tieStop,
             accidentalSubtype,
+            fingeringText: parseMusicXmlTechnicalFingering(child) ?? undefined,
+            stringNumber: parseMusicXmlTechnicalString(child) ?? undefined,
           });
           prev.slurStarts = mergeUniqueNumbers(prev.slurStarts, slur.starts);
           prev.slurStops = mergeUniqueNumbers(prev.slurStops, slur.stops);
@@ -1968,7 +2111,14 @@ const buildMuseVoiceEventsByStaff = (
         events.push({
           atDiv: cursorDiv,
           durationDiv,
-          pitches: [{ midi, tieStart: tie.tieStart, tieStop: tie.tieStop, accidentalSubtype }],
+          pitches: [{
+            midi,
+            tieStart: tie.tieStart,
+            tieStop: tie.tieStop,
+            accidentalSubtype,
+            fingeringText: parseMusicXmlTechnicalFingering(child) ?? undefined,
+            stringNumber: parseMusicXmlTechnicalString(child) ?? undefined,
+          }],
           slurStarts: slur.starts.length ? slur.starts : undefined,
           slurStops: slur.stops.length ? slur.stops : undefined,
           articulationSubtypes: articulations.length ? articulations : undefined,
