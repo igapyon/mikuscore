@@ -3158,6 +3158,43 @@ const quantizeGridToDivisions = (grid) => {
         return 8;
     return 4;
 };
+const gcdInt = (a, b) => {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    if (x === 0)
+        return Math.max(1, y);
+    if (y === 0)
+        return Math.max(1, x);
+    while (y !== 0) {
+        const t = x % y;
+        x = y;
+        y = t;
+    }
+    return Math.max(1, x);
+};
+const isNearMultiple = (value, base, tolerance) => {
+    if (!Number.isFinite(value) || !Number.isFinite(base) || base <= 0)
+        return false;
+    const nearest = Math.round(value / base) * base;
+    return Math.abs(value - nearest) <= tolerance;
+};
+const hasTripletLikeTiming = (notes, ticksPerQuarter) => {
+    if (!notes.length || !Number.isFinite(ticksPerQuarter) || ticksPerQuarter <= 0)
+        return false;
+    const tripletTick = ticksPerQuarter / 3;
+    const tolerance = Math.max(1, Math.round(ticksPerQuarter / 96));
+    let evidence = 0;
+    for (const note of notes) {
+        const duration = Math.max(1, Math.round(note.endTick) - Math.round(note.startTick));
+        if (isNearMultiple(note.startTick, tripletTick, tolerance))
+            evidence += 1;
+        if (isNearMultiple(duration, tripletTick, tolerance))
+            evidence += 1;
+        if (evidence >= 4)
+            return true;
+    }
+    return false;
+};
 const readAscii = (bytes, start, length) => {
     if (start < 0 || length < 0 || start + length > bytes.length)
         return "";
@@ -3666,10 +3703,14 @@ const midiToDrumDisplay = (midiNumber) => {
     const p = midiToPitchComponents(midiNumber);
     return { step: p.step, octave: p.octave };
 };
-const quantizeImportedNotes = (notes, ticksPerQuarter, grid) => {
+const quantizeImportedNotes = (notes, ticksPerQuarter, grid, tripletAwareQuantize) => {
     const warnings = [];
     const subdivision = quantizeGridToDivisions(grid);
-    const qTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+    const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+    const useTripletAwareQuantize = tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
+    const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
+    const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
+    const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
     const quantized = [];
     for (const note of notes) {
         const startTick = Math.max(0, Math.round(note.startTick / qTick) * qTick);
@@ -3690,7 +3731,7 @@ const quantizeImportedNotes = (notes, ticksPerQuarter, grid) => {
             velocity: note.velocity,
         });
     }
-    return { notes: quantized, warnings, qTick };
+    return { notes: quantized, warnings, qTick, divisions };
 };
 const applyImportedControllerVelocityScale = (notes, controllerEvents) => {
     var _a;
@@ -4336,8 +4377,8 @@ const buildPartMusicXml = (params) => {
 };
 const buildImportSkeletonMusicXml = (params) => {
     var _a, _b, _c;
-    const { title, quantizeGrid, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, pickupTicks = 0, partGroups, notesByTrackChannel, programByTrackChannel, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
-    const divisions = quantizeGridToDivisions(quantizeGrid);
+    const { title, quantizeGrid, divisionsOverride, ticksPerQuarter, beats, beatType, keyFifths, keyMode, tempoEvents, pickupTicks = 0, partGroups, notesByTrackChannel, programByTrackChannel, warnings, debugImportMetadata, mksSysExMetadataXml, sourceMetadataXml, } = params;
+    const divisions = Math.max(1, Math.round(divisionsOverride !== null && divisionsOverride !== void 0 ? divisionsOverride : quantizeGridToDivisions(quantizeGrid)));
     const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
     const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
     const mapTickToMeasureOffsetDiv = (tickRaw) => {
@@ -5509,6 +5550,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     const title = String((_a = options.title) !== null && _a !== void 0 ? _a : "").trim() || "Imported MIDI";
     const debugImportMetadata = (_b = options.debugMetadata) !== null && _b !== void 0 ? _b : true;
     const sourceImportMetadata = (_c = options.sourceMetadata) !== null && _c !== void 0 ? _c : true;
+    const tripletAwareQuantize = options.tripletAwareQuantize === true;
     if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
         diagnostics.push({
             code: "MIDI_INVALID_FILE",
@@ -5572,7 +5614,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         warnings.push(...summary.parseWarnings);
         offset += 8 + trackLength;
     }
-    const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid);
+    const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid, tripletAwareQuantize);
     warnings.push(...quantized.warnings);
     const velocityScaledNotes = applyImportedControllerVelocityScale(quantized.notes, controllerEvents);
     const notesByTrackChannel = new Map();
@@ -5642,6 +5684,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     const xml = buildImportSkeletonMusicXml({
         title,
         quantizeGrid,
+        divisionsOverride: quantized.divisions,
         ticksPerQuarter: header.ticksPerQuarter,
         beats,
         beatType,
@@ -15541,8 +15584,10 @@ class ScoreCore {
                         const consumed = consumedAfter + consumedBefore;
                         if (consumed < overflow) {
                             const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, projected);
-                            if (result.diagnostic)
+                            if (result.diagnostic) {
+                                this.restoreFrom(snapshot);
                                 return this.failWith(result.diagnostic);
+                            }
                         }
                     }
                     const timingAfterRestAdjust = (0, timeIndex_1.getMeasureTimingForVoice)(target, command.voice);
@@ -15550,8 +15595,10 @@ class ScoreCore {
                         ? timingAfterRestAdjust.occupied - oldDuration + command.duration
                         : projected;
                     const result = (0, validators_1.validateProjectedMeasureTiming)(target, command.voice, adjustedProjected);
-                    if (result.diagnostic)
+                    if (result.diagnostic) {
+                        this.restoreFrom(snapshot);
                         return this.failWith(result.diagnostic);
+                    }
                     projectedWarning = result.warning;
                     if (adjustedProjected < timing.capacity) {
                         underfullDelta = timing.capacity - adjustedProjected;

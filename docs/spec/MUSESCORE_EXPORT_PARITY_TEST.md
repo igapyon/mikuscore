@@ -159,10 +159,17 @@
 
 ### 運用メモ（2026-02-25, moonlight）
 - `safe (cand(midi)) practical diff = 307`
-- `musescore_parity (cand(parity)) practical diff = 172`
+- `musescore_parity (cand(parity)) practical diff = 173`
 - `playback practical diff = 183`（比較参考）
 - MIDI import の同tick同pitch再発音で、`note-off` を最古 `note-on` に対応づける FIFO ペアリングを採用。
   - これにより、イベント順（`on->off` / `off->on`）依存の崩れを抑制できる。
+- 比較サンプリング方針:
+  - `m12-m16` は既知の局所乖離として、スポット診断サンプリングから除外する。
+  - 代わりに `m1-m4` を固定サンプル区間として確認する。
+  - `m1-m4` の最新ホットスポット（safe/parity共通傾向）: `m1=2, m2=2, m3=4, m4=4`
+- 発音・長さの評価方針:
+  - 発音タイミング（onset）は厳格一致。
+  - 長さ（duration）は比率許容（`1/2`〜`2`倍）を別軸で併記する。
 
 ## 生成AIレビュー運用メモ
 - 生成AIに渡す入力は「正規化済みdiff」と「小節/声部インデックス付きの意味差分」を優先する。

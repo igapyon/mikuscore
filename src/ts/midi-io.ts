@@ -73,6 +73,7 @@ export type MidiImportOptions = {
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
   sourceMetadata?: boolean;
+  tripletAwareQuantize?: boolean;
 };
 export type MidiImportResult = {
   ok: boolean;
@@ -711,6 +712,39 @@ const quantizeGridToDivisions = (grid: MidiImportQuantizeGrid): number => {
   return 4;
 };
 
+const gcdInt = (a: number, b: number): number => {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  if (x === 0) return Math.max(1, y);
+  if (y === 0) return Math.max(1, x);
+  while (y !== 0) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return Math.max(1, x);
+};
+
+const isNearMultiple = (value: number, base: number, tolerance: number): boolean => {
+  if (!Number.isFinite(value) || !Number.isFinite(base) || base <= 0) return false;
+  const nearest = Math.round(value / base) * base;
+  return Math.abs(value - nearest) <= tolerance;
+};
+
+const hasTripletLikeTiming = (notes: SmfImportedNote[], ticksPerQuarter: number): boolean => {
+  if (!notes.length || !Number.isFinite(ticksPerQuarter) || ticksPerQuarter <= 0) return false;
+  const tripletTick = ticksPerQuarter / 3;
+  const tolerance = Math.max(1, Math.round(ticksPerQuarter / 96));
+  let evidence = 0;
+  for (const note of notes) {
+    const duration = Math.max(1, Math.round(note.endTick) - Math.round(note.startTick));
+    if (isNearMultiple(note.startTick, tripletTick, tolerance)) evidence += 1;
+    if (isNearMultiple(duration, tripletTick, tolerance)) evidence += 1;
+    if (evidence >= 4) return true;
+  }
+  return false;
+};
+
 const readAscii = (bytes: Uint8Array, start: number, length: number): string => {
   if (start < 0 || length < 0 || start + length > bytes.length) return "";
   let out = "";
@@ -1254,11 +1288,17 @@ const midiToDrumDisplay = (midiNumber: number): { step: string; octave: number }
 const quantizeImportedNotes = (
   notes: SmfImportedNote[],
   ticksPerQuarter: number,
-  grid: MidiImportQuantizeGrid
-): { notes: ImportedQuantizedNote[]; warnings: MidiImportDiagnostic[]; qTick: number } => {
+  grid: MidiImportQuantizeGrid,
+  tripletAwareQuantize: boolean
+): { notes: ImportedQuantizedNote[]; warnings: MidiImportDiagnostic[]; qTick: number; divisions: number } => {
   const warnings: MidiImportDiagnostic[] = [];
   const subdivision = quantizeGridToDivisions(grid);
-  const qTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+  const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+  const useTripletAwareQuantize =
+    tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
+  const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
+  const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
+  const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
   const quantized: ImportedQuantizedNote[] = [];
   for (const note of notes) {
     const startTick = Math.max(0, Math.round(note.startTick / qTick) * qTick);
@@ -1279,7 +1319,7 @@ const quantizeImportedNotes = (
       velocity: note.velocity,
     });
   }
-  return { notes: quantized, warnings, qTick };
+  return { notes: quantized, warnings, qTick, divisions };
 };
 
 const applyImportedControllerVelocityScale = (
@@ -2001,6 +2041,7 @@ const buildPartMusicXml = (params: {
 const buildImportSkeletonMusicXml = (params: {
   title: string;
   quantizeGrid: MidiImportQuantizeGrid;
+  divisionsOverride?: number;
   ticksPerQuarter: number;
   beats: number;
   beatType: number;
@@ -2019,6 +2060,7 @@ const buildImportSkeletonMusicXml = (params: {
   const {
     title,
     quantizeGrid,
+    divisionsOverride,
     ticksPerQuarter,
     beats,
     beatType,
@@ -2034,7 +2076,7 @@ const buildImportSkeletonMusicXml = (params: {
     mksSysExMetadataXml,
     sourceMetadataXml,
   } = params;
-  const divisions = quantizeGridToDivisions(quantizeGrid);
+  const divisions = Math.max(1, Math.round(divisionsOverride ?? quantizeGridToDivisions(quantizeGrid)));
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
   const pickupMeasureTicks = Math.max(0, Math.min(measureTicks - 1, Math.round(pickupTicks)));
   const mapTickToMeasureOffsetDiv = (tickRaw: number): { measureIndex: number; offsetDiv: number } => {
@@ -3392,6 +3434,7 @@ export const convertMidiToMusicXml = (
   const title = String(options.title ?? "").trim() || "Imported MIDI";
   const debugImportMetadata = options.debugMetadata ?? true;
   const sourceImportMetadata = options.sourceMetadata ?? true;
+  const tripletAwareQuantize = options.tripletAwareQuantize === true;
 
   if (!(midiBytes instanceof Uint8Array) || midiBytes.length === 0) {
     diagnostics.push({
@@ -3467,7 +3510,12 @@ export const convertMidiToMusicXml = (
     offset += 8 + trackLength;
   }
 
-  const quantized = quantizeImportedNotes(collectedNotes, header.ticksPerQuarter, quantizeGrid);
+  const quantized = quantizeImportedNotes(
+    collectedNotes,
+    header.ticksPerQuarter,
+    quantizeGrid,
+    tripletAwareQuantize
+  );
   warnings.push(...quantized.warnings);
   const velocityScaledNotes = applyImportedControllerVelocityScale(quantized.notes, controllerEvents);
   const notesByTrackChannel = new Map<TrackChannelKey, ImportedQuantizedNote[]>();
@@ -3542,6 +3590,7 @@ export const convertMidiToMusicXml = (
   const xml = buildImportSkeletonMusicXml({
     title,
     quantizeGrid,
+    divisionsOverride: quantized.divisions,
     ticksPerQuarter: header.ticksPerQuarter,
     beats,
     beatType,

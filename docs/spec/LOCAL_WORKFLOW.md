@@ -32,16 +32,17 @@
   - `npm run test:all`
 - ビルド:
   - `npm run build`
+- フルビルド（テスト含む）:
+  - `npm run check:all`
+  - （内訳: `typecheck + test:all + build`）
 
 ## 3. 日常フロー
 
 1. 仕様文書（`README.md` / `TODO.md` / `docs/spec/*`）を更新
 2. 実装変更（`src/ts/` / `core/`）
 3. fixture・テスト更新（必要時）
-4. `npm run typecheck` 実行
-5. `npm run test:all` 実行
-6. 必要に応じて `npm run build` 実行
-7. 差分確認
+4. `npm run check:all` 実行
+5. 差分確認
 
 補足:
 
@@ -50,7 +51,7 @@
 
 ## 4. 品質ゲート方針
 
-- 最小品質ゲートは `typecheck + test:all` とする。
+- 最小品質ゲートは `check:all`（`typecheck + test:all + build`）とする。
 - 失敗時は修正完了まで次工程へ進まない。
 - roundtrip 系テスト（例: `*-roundtrip-golden.spec.ts`）の失敗を放置しない。
 

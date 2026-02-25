@@ -561,7 +561,7 @@ describe("midi-io MIDI import MVP", () => {
       ...vlq(360), 0x80, 60, 0,
       ...vlq(120), 0x80, 64, 0,
     ]);
-    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16" });
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16", tripletAwareQuantize: true });
     const doc = parseDoc(result.xml);
     const voices = Array.from(doc.querySelectorAll("part > measure > note > voice"))
       .map((voice) => Number(voice.textContent ?? "0"))
@@ -672,6 +672,26 @@ describe("midi-io MIDI import MVP", () => {
     expect(beats).toBe("3");
     expect(beatType).toBe("8");
     expect(result.warnings.some((warning) => warning.code === "MIDI_TIME_SIGNATURE_PICKUP_NORMALIZED")).toBe(true);
+  });
+
+  it("uses triplet-aware divisions for 1/16 import when triplet-like timing is detected", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(160), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 100,
+      ...vlq(160), 0x80, 62, 0,
+      ...vlq(0), 0x90, 64, 100,
+      ...vlq(160), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16", tripletAwareQuantize: true });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const divisions = doc.querySelector("part > measure > attributes > divisions")?.textContent?.trim();
+    expect(divisions).toBe("12");
+    const tripletLikeDuration = Array.from(doc.querySelectorAll("part > measure > note > duration"))
+      .map((node) => node.textContent?.trim() ?? "")
+      .some((value) => value === "4");
+    expect(tripletLikeDuration).toBe(true);
   });
 
   it("keeps pickup measure as implicit when leading FF58 encodes anacrusis", () => {
