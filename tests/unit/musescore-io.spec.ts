@@ -1,7 +1,67 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "../../src/ts/musescore-io";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
+
+type MeasureNoteEvent = {
+  measure: number;
+  onset: number;
+  duration: number;
+  staff: string;
+  step: string;
+  alter: string;
+  octave: string;
+  accidental: string;
+};
+
+const collectMeasurePitchEvents = (doc: Document, from: number, to: number): MeasureNoteEvent[] => {
+  const out: MeasureNoteEvent[] = [];
+  for (const measure of Array.from(doc.querySelectorAll("score-partwise > part > measure"))) {
+    const measureNo = Number(measure.getAttribute("number") ?? "");
+    if (!Number.isFinite(measureNo) || measureNo < from || measureNo > to) continue;
+    let cursor = 0;
+    for (const child of Array.from(measure.children)) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "backup") {
+        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        if (Number.isFinite(d) && d > 0) cursor = Math.max(0, cursor - Math.round(d));
+        continue;
+      }
+      if (tag === "forward") {
+        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        if (Number.isFinite(d) && d > 0) cursor += Math.round(d);
+        continue;
+      }
+      if (tag !== "note") continue;
+      if (child.querySelector(":scope > rest")) {
+        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        if (child.querySelector(":scope > chord") === null && Number.isFinite(d) && d > 0) cursor += Math.round(d);
+        continue;
+      }
+      const step = child.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+      const octave = child.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+      if (!step || !octave) continue;
+      const duration = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+      const roundedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+      const isChord = child.querySelector(":scope > chord") !== null;
+      const onset = isChord ? Math.max(0, cursor - roundedDuration) : cursor;
+      out.push({
+        measure: measureNo,
+        onset,
+        duration: roundedDuration,
+        staff: child.querySelector(":scope > staff")?.textContent?.trim() ?? "1",
+        step,
+        alter: child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "",
+        octave,
+        accidental: child.querySelector(":scope > accidental")?.textContent?.trim() ?? "",
+      });
+      if (!isChord) cursor += roundedDuration;
+    }
+  }
+  return out;
+};
 
 describe("musescore-io", () => {
   it("converts basic mscx chord/rest content into MusicXML", () => {
@@ -174,6 +234,40 @@ describe("musescore-io", () => {
     expect(accidentalValues).toContain("sharp");
     expect(accidentalValues).toContain("natural");
     expect(accidentalValues).toContain("flat");
+    const flatNote = doc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(flatNote?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
+    expect(flatNote?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("-1");
+  });
+
+  it("prefers MuseScore accidental subtype for pitch spelling even in flat key context", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <KeySig><accidental>-3</accidental></KeySig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Note>
+              <Accidental><subtype>accidentalSharp</subtype></Accidental>
+              <pitch>63</pitch>
+            </Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const note = doc.querySelector("part > measure > note");
+    expect(note?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("D");
+    expect(note?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("1");
+    expect(note?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("sharp");
   });
 
   it("imports marker/jump as MusicXML directions and emits diag when playback mapping is incomplete", () => {
@@ -235,6 +329,106 @@ describe("musescore-io", () => {
     expect(mscx).toContain("<Tempo><tempo>2.000000</tempo></Tempo>");
     expect(mscx).toContain("<Dynamic><subtype>mf</subtype></Dynamic>");
     expect(mscx).toContain("<endRepeat/>");
+  });
+
+  it("exports MusicXML tie/slur into MuseScore note/chord markers", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <tie type="start"/>
+        <notations>
+          <tied type="start"/>
+          <slur type="start" number="3"/>
+        </notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <tie type="stop"/>
+        <notations>
+          <tied type="stop"/>
+          <slur type="stop" number="3"/>
+        </notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Slur type=\"start\" id=\"3\"/>");
+    expect(mscx).toContain("<Slur type=\"stop\" id=\"3\"/>");
+    expect(mscx).toContain("<Tie/>");
+    expect(mscx).toContain("<endSpanner/>");
+  });
+
+  it("exports MusicXML articulations into MuseScore Articulation subtypes", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><tenuto/></articulations></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Articulation><subtype>articStaccatoAbove</subtype></Articulation>");
+    expect(mscx).toContain("<Articulation><subtype>articAccentAbove</subtype></Articulation>");
+    expect(mscx).toContain("<Articulation><subtype>articTenutoAbove</subtype></Articulation>");
+  });
+
+  it("exports MusicXML technical stopped into MuseScore left-hand pizzicato articulation", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><technical><stopped/></technical></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Articulation><subtype>articLhPizzicatoAbove</subtype></Articulation>");
   });
 
   it("exports multi-staff MusicXML part into MuseScore Part with multiple Staff refs", () => {
@@ -1028,5 +1222,42 @@ describe("musescore-io", () => {
     expect(m2Oct).toBe("5");
     expect(doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type=\"start\"]")).not.toBeNull();
     expect(doc.querySelector("part > measure:nth-of-type(3) > direction > direction-type > octave-shift[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("keeps sample2 measure 3-4 pitch spelling and accidentals on roundtrip", () => {
+    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample2.musicxml"), "utf-8");
+    const srcDoc = parseMusicXmlDocument(srcXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+
+    const srcEvents = collectMeasurePitchEvents(srcDoc, 3, 4);
+    const dstEvents = collectMeasurePitchEvents(dstDoc, 3, 4);
+    expect(dstEvents).toEqual(srcEvents);
+  });
+
+  it("keeps sample2 measure 7 staff 4 natural accidental on roundtrip", () => {
+    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample2.musicxml"), "utf-8");
+    const srcDoc = parseMusicXmlDocument(srcXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+
+    const srcEvents = collectMeasurePitchEvents(srcDoc, 7, 7).filter((e) => e.staff === "4");
+    const dstEvents = collectMeasurePitchEvents(dstDoc, 7, 7).filter((e) => e.staff === "4");
+    const srcNatural = srcEvents.find((e) => e.step === "B" && e.octave === "3" && e.accidental === "natural");
+    const dstNatural = dstEvents.find((e) => e.step === "B" && e.octave === "3" && e.accidental === "natural");
+    expect(srcNatural).toBeDefined();
+    expect(dstNatural).toBeDefined();
   });
 });

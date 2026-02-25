@@ -1192,6 +1192,308 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     delete getGlobalLike().__utaformatix3TsPlusMikuscoreHooks;
   }
 
+  // src/musicxml/ParseMusicXmlPlus.ts
+  var DEFAULT_PPQ = 480;
+  function extractFirstTagValue(source, tag) {
+    const match = source.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`));
+    return match ? match[1].trim() : null;
+  }
+  function extractTagBlocks(source, tag) {
+    return Array.from(source.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "g"))).map(
+      (m) => m[1]
+    );
+  }
+  function decodeXml(text) {
+    return String(text ?? "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  }
+  function stepToSemitone(step) {
+    switch (step) {
+      case "C":
+        return 0;
+      case "D":
+        return 2;
+      case "E":
+        return 4;
+      case "F":
+        return 5;
+      case "G":
+        return 7;
+      case "A":
+        return 9;
+      case "B":
+        return 11;
+      default:
+        return 0;
+    }
+  }
+  function ticksPerMeasure(ppq, ts) {
+    return Math.round(ppq * 4 * ts.numerator / ts.denominator);
+  }
+  function parsePitchToKey(noteBlock) {
+    const step = (extractFirstTagValue(noteBlock, "step") ?? "").trim();
+    const octave = Number(extractFirstTagValue(noteBlock, "octave") ?? "");
+    const alter = Number(extractFirstTagValue(noteBlock, "alter") ?? "0");
+    if (!step || !Number.isFinite(octave)) {
+      throw new Error("MusicXML pitch not found");
+    }
+    const normalizedAlter = Number.isFinite(alter) ? alter : 0;
+    return (octave + 1) * 12 + stepToSemitone(step) + normalizedAlter;
+  }
+  function parsePartIdOrder(xml) {
+    return Array.from(xml.matchAll(/<score-part\b[^>]*\bid="([^"]+)"/g)).map((m) => m[1]);
+  }
+  function parsePartNameMap(xml) {
+    const map = /* @__PURE__ */ new Map();
+    for (const match of xml.matchAll(/<score-part\b[^>]*\bid="([^"]+)"[^>]*>([\s\S]*?)<\/score-part>/g)) {
+      const id = match[1];
+      const body = match[2];
+      const name = decodeXml(extractFirstTagValue(body, "part-name") ?? "").trim();
+      if (name.length > 0) map.set(id, name);
+    }
+    return map;
+  }
+  function parsePartBlocks(xml) {
+    return Array.from(xml.matchAll(/<part\b([^>]*)>([\s\S]*?)<\/part>/g)).map((m) => {
+      const attr = m[1] ?? "";
+      const id = attr.match(/\bid="([^"]+)"/)?.[1] ?? null;
+      return { id, body: m[2] };
+    });
+  }
+  function parseMasterTrack(firstPartBlock) {
+    const measureBlocks = extractTagBlocks(firstPartBlock, "measure");
+    const firstMeasure = measureBlocks[0] ?? "";
+    const divisions = Number(
+      extractFirstTagValue(firstMeasure, "divisions") ?? extractFirstTagValue(firstPartBlock, "divisions") ?? `${DEFAULT_PPQ}`
+    );
+    const normalizedDivisions = Number.isFinite(divisions) && divisions > 0 ? divisions : DEFAULT_PPQ;
+    const importTickRate = DEFAULT_PPQ / normalizedDivisions;
+    const timeSignatures = [];
+    const tempos = [];
+    const measureBorders = [0];
+    let activeTs = { measurePosition: 0, numerator: 4, denominator: 4 };
+    let tick = 0;
+    let firstMeasureActualTick;
+    for (let measureIndex = 0; measureIndex < measureBlocks.length; measureIndex += 1) {
+      const block = measureBlocks[measureIndex];
+      const timeBlock = extractFirstTagValue(block, "time") ?? "";
+      const beats = Number(extractFirstTagValue(timeBlock, "beats") ?? "");
+      const beatType = Number(extractFirstTagValue(timeBlock, "beat-type") ?? "");
+      if (Number.isFinite(beats) && beats > 0 && Number.isFinite(beatType) && beatType > 0) {
+        activeTs = {
+          measurePosition: measureIndex,
+          numerator: Math.trunc(beats),
+          denominator: Math.trunc(beatType)
+        };
+        timeSignatures.push(activeTs);
+      }
+      const tempoMatch = block.match(/<sound[^>]*tempo="([^"]+)"/);
+      const tempoBpm = Number(tempoMatch?.[1] ?? "");
+      if (Number.isFinite(tempoBpm) && tempoBpm > 0) {
+        tempos.push({
+          tickPosition: tick,
+          bpm: tempoBpm
+        });
+      }
+      const nominalTick = ticksPerMeasure(DEFAULT_PPQ, activeTs);
+      let lengthTick = nominalTick;
+      if (measureIndex === 0) {
+        const consumedDivisions = (() => {
+          const tokenRegex = /<attributes(?:\s[^>]*)?>[\s\S]*?<\/attributes>|<backup(?:\s[^>]*)?>[\s\S]*?<\/backup>|<forward(?:\s[^>]*)?>[\s\S]*?<\/forward>|<note(?:\s[^>]*)?>[\s\S]*?<\/note>/g;
+          const tokens = Array.from(block.matchAll(tokenRegex)).map((m) => m[0]);
+          let localDivisions = normalizedDivisions;
+          let cursor = 0;
+          let previousOnset = 0;
+          let maxCursor = 0;
+          for (const token of tokens) {
+            if (token.startsWith("<attributes")) {
+              const divisionsRaw = Number(extractFirstTagValue(token, "divisions") ?? "");
+              if (Number.isFinite(divisionsRaw) && divisionsRaw > 0) localDivisions = divisionsRaw;
+              continue;
+            }
+            if (token.startsWith("<backup")) {
+              const durationRaw2 = Number(extractFirstTagValue(token, "duration") ?? "");
+              if (Number.isFinite(durationRaw2)) cursor = Math.max(0, cursor - Math.max(0, durationRaw2));
+              continue;
+            }
+            if (token.startsWith("<forward")) {
+              const durationRaw2 = Number(extractFirstTagValue(token, "duration") ?? "");
+              if (Number.isFinite(durationRaw2)) {
+                cursor += Math.max(0, durationRaw2);
+                maxCursor = Math.max(maxCursor, cursor);
+              }
+              continue;
+            }
+            const noteBlock = token;
+            if (/<grace(\s|\/|>)/.test(noteBlock)) continue;
+            const durationRaw = Number(extractFirstTagValue(noteBlock, "duration") ?? "");
+            const duration = Number.isFinite(durationRaw) ? Math.max(0, durationRaw) : 0;
+            const isChord = /<chord(\s|\/|>)/.test(noteBlock);
+            const onset = isChord ? previousOnset : cursor;
+            const end = onset + duration;
+            maxCursor = Math.max(maxCursor, end);
+            previousOnset = onset;
+            if (!isChord) cursor = end;
+            if (!(localDivisions > 0)) localDivisions = normalizedDivisions;
+          }
+          return { maxCursor, divisions: localDivisions };
+        })();
+        if (consumedDivisions.maxCursor > 0 && consumedDivisions.maxCursor < normalizedDivisions * 4 * activeTs.numerator / activeTs.denominator) {
+          const consumedTick = Math.round(consumedDivisions.maxCursor * DEFAULT_PPQ / consumedDivisions.divisions);
+          if (consumedTick > 0 && consumedTick < nominalTick) {
+            lengthTick = consumedTick;
+            firstMeasureActualTick = consumedTick;
+          }
+        }
+      }
+      tick += lengthTick;
+      measureBorders.push(tick);
+    }
+    return {
+      importTickRate,
+      tempos: tempos.length > 0 ? tempos : [{ tickPosition: 0, bpm: 120 }],
+      timeSignatures: timeSignatures.length > 0 ? timeSignatures : [{ measurePosition: 0, numerator: 4, denominator: 4 }],
+      measureBorders,
+      firstMeasureActualTick
+    };
+  }
+  function parseTieTypes(noteBlock) {
+    const types = Array.from(noteBlock.matchAll(/<tie\b[^>]*\btype="([^"]+)"/g)).map((m) => m[1]);
+    return {
+      start: types.includes("start"),
+      stop: types.includes("stop")
+    };
+  }
+  function parsePositiveInt(value, fallback) {
+    const n = Number(value ?? "");
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    return Math.trunc(n);
+  }
+  function parseTrackFromPart(partBlock, trackIndex, defaultLyric, masterTrack, fallbackTrackName) {
+    const measureBlocks = extractTagBlocks(partBlock, "measure");
+    const notes = [];
+    const tieHeads = /* @__PURE__ */ new Map();
+    let divisions = 1;
+    let previousOnsetInMeasure = 0;
+    for (let measureIndex = 0; measureIndex < measureBlocks.length; measureIndex += 1) {
+      const measureBlock = measureBlocks[measureIndex];
+      const measureStart = masterTrack.measureBorders[measureIndex] ?? 0;
+      const tokenRegex = /<attributes(?:\s[^>]*)?>[\s\S]*?<\/attributes>|<backup(?:\s[^>]*)?>[\s\S]*?<\/backup>|<forward(?:\s[^>]*)?>[\s\S]*?<\/forward>|<note(?:\s[^>]*)?>[\s\S]*?<\/note>/g;
+      const tokens = Array.from(measureBlock.matchAll(tokenRegex)).map((m) => m[0]);
+      let cursor = measureStart;
+      previousOnsetInMeasure = measureStart;
+      for (const token of tokens) {
+        if (token.startsWith("<attributes")) {
+          const divisionsRaw = Number(extractFirstTagValue(token, "divisions") ?? "");
+          if (Number.isFinite(divisionsRaw) && divisionsRaw > 0) {
+            divisions = divisionsRaw;
+          }
+          continue;
+        }
+        if (token.startsWith("<backup")) {
+          const durationRaw2 = Number(extractFirstTagValue(token, "duration") ?? "");
+          const duration = Number.isFinite(durationRaw2) ? Math.max(0, durationRaw2) : 0;
+          const delta = Math.round(duration * DEFAULT_PPQ / divisions);
+          cursor = Math.max(measureStart, cursor - delta);
+          continue;
+        }
+        if (token.startsWith("<forward")) {
+          const durationRaw2 = Number(extractFirstTagValue(token, "duration") ?? "");
+          const duration = Number.isFinite(durationRaw2) ? Math.max(0, durationRaw2) : 0;
+          const delta = Math.round(duration * DEFAULT_PPQ / divisions);
+          cursor += delta;
+          continue;
+        }
+        const noteBlock = token;
+        const durationText = extractFirstTagValue(noteBlock, "duration");
+        if (durationText == null) {
+          if (/<grace(\s|\/|>)/.test(noteBlock)) continue;
+          throw new Error("MusicXML duration not found");
+        }
+        const durationRaw = Number(durationText);
+        const durationDiv = Number.isFinite(durationRaw) ? Math.max(0, durationRaw) : 0;
+        const durationTick = Math.round(durationDiv * DEFAULT_PPQ / divisions);
+        const isChord = /<chord(\s|\/|>)/.test(noteBlock);
+        const isRest = /<rest(\s|\/|>)/.test(noteBlock);
+        const voice = parsePositiveInt(extractFirstTagValue(noteBlock, "voice"), 1);
+        const staff = parsePositiveInt(extractFirstTagValue(noteBlock, "staff"), 1);
+        const onset = isChord ? previousOnsetInMeasure : cursor;
+        if (!isRest) {
+          const key = parsePitchToKey(noteBlock);
+          const lyricText = extractFirstTagValue(extractFirstTagValue(noteBlock, "lyric") ?? "", "text");
+          const lyric = decodeXml((lyricText ?? defaultLyric).trim() || defaultLyric);
+          const tie = parseTieTypes(noteBlock);
+          const tieKey = `${voice}:${staff}:${key}`;
+          const existingIndex = tie.stop ? tieHeads.get(tieKey) : void 0;
+          if (existingIndex != null) {
+            const head = notes[existingIndex];
+            notes[existingIndex] = {
+              ...head,
+              tickOff: Math.max(head.tickOff, onset + durationTick)
+            };
+            if (!tie.start) {
+              tieHeads.delete(tieKey);
+            }
+          } else {
+            notes.push({
+              id: notes.length,
+              key,
+              lyric,
+              tickOn: onset,
+              tickOff: onset + durationTick
+            });
+            if (tie.start) {
+              tieHeads.set(tieKey, notes.length - 1);
+            }
+          }
+        }
+        previousOnsetInMeasure = onset;
+        if (!isChord) {
+          cursor += durationTick;
+        }
+      }
+    }
+    return {
+      id: trackIndex,
+      name: fallbackTrackName,
+      notes: notes.sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key).map((note, index) => ({ ...note, id: index }))
+    };
+  }
+  function parseMusicXmlPlus(text, options) {
+    const partBlocks = parsePartBlocks(text);
+    if (partBlocks.length === 0) {
+      throw new Error("MusicXML part not found");
+    }
+    const partNameMap = parsePartNameMap(text);
+    const orderedPartIds = parsePartIdOrder(text);
+    const master = parseMasterTrack(partBlocks[0].body);
+    const defaultLyric = options?.defaultLyric ?? "\u3042";
+    const tracks = partBlocks.map((part, index) => {
+      const partId = part.id ?? orderedPartIds[index] ?? null;
+      const fallbackName = partId && partNameMap.get(partId) ? partNameMap.get(partId) : `Track ${index + 1}`;
+      return parseTrackFromPart(part.body, index, defaultLyric, master, fallbackName);
+    });
+    return {
+      format: "MusicXml",
+      inputFiles: [],
+      name: "musicxml",
+      tracks,
+      timeSignatures: master.timeSignatures,
+      tempos: master.tempos,
+      ppq: DEFAULT_PPQ,
+      measurePrefix: 0,
+      importWarnings: [],
+      japaneseLyricsType: "Unknown",
+      extras: {
+        musicxml: {
+          parser: "plus",
+          ...typeof master.firstMeasureActualTick === "number" ? { firstMeasureActualTick: master.firstMeasureActualTick } : {},
+          originalXml: text,
+          preservedAt: (/* @__PURE__ */ new Date()).toISOString()
+        }
+      }
+    };
+  }
+
   // src/musicxml/KeyFifthsEstimator.ts
   var SHARP_ORDER = ["F", "C", "G", "D", "A", "E", "B"];
   var FLAT_ORDER = ["B", "E", "A", "D", "G", "C", "F"];
@@ -1397,6 +1699,48 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     if (spec) return { type: spec.type, dots: spec.dots };
     return null;
   }
+  function noteTypeFromTupletDuration(duration, divisions) {
+    const bases = [
+      { type: "whole", base: divisions * 4 },
+      { type: "half", base: divisions * 2 },
+      { type: "quarter", base: divisions },
+      { type: "eighth", base: divisions / 2 },
+      { type: "16th", base: divisions / 4 },
+      { type: "32nd", base: divisions / 8 },
+      { type: "64th", base: divisions / 16 },
+      { type: "128th", base: divisions / 32 }
+    ];
+    const tuplets = [
+      { actualNotes: 3, normalNotes: 2 },
+      { actualNotes: 5, normalNotes: 4 },
+      { actualNotes: 6, normalNotes: 4 },
+      { actualNotes: 7, normalNotes: 4 },
+      { actualNotes: 9, normalNotes: 8 }
+    ];
+    const normalizedDuration = Math.max(1, Math.trunc(duration));
+    for (const base of bases) {
+      if (!(base.base > 0) || !Number.isInteger(base.base)) continue;
+      for (const tuplet of tuplets) {
+        if (base.base * tuplet.normalNotes % tuplet.actualNotes !== 0) continue;
+        const tupletDuration = base.base * tuplet.normalNotes / tuplet.actualNotes;
+        if (tupletDuration !== normalizedDuration) continue;
+        return {
+          type: base.type,
+          dots: 0,
+          timeModification: {
+            actualNotes: tuplet.actualNotes,
+            normalNotes: tuplet.normalNotes
+          }
+        };
+      }
+    }
+    return null;
+  }
+  function noteTypeRenderSpecFromDuration(duration, divisions) {
+    const plain = noteTypeFromDuration(duration, divisions);
+    if (plain) return plain;
+    return noteTypeFromTupletDuration(duration, divisions);
+  }
   function decomposeDuration(duration, divisions) {
     const specs = buildDurationSpecs(divisions);
     const memo = /* @__PURE__ */ new Map();
@@ -1595,7 +1939,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     }
     return sorted;
   }
-  function ticksPerMeasure(ppq, ts) {
+  function ticksPerMeasure2(ppq, ts) {
     return Math.round(ppq * 4 * ts.numerator / ts.denominator);
   }
   function getMeasureTimeSignature(index, list) {
@@ -1610,7 +1954,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     const safePosition = Math.max(0, Math.trunc(position));
     let tick = 0;
     for (let index = 0; index < safePosition; index += 1) {
-      tick += Math.max(1, ticksPerMeasure(ppq, getMeasureTimeSignature(index, tsList)));
+      tick += Math.max(1, ticksPerMeasure2(ppq, getMeasureTimeSignature(index, tsList)));
     }
     return tick;
   }
@@ -1639,20 +1983,33 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   function buildMeasures(project, maxTick) {
     const ppq = project.ppq > 0 ? project.ppq : 480;
     const tsList = sortTimeSignatures(project);
+    const firstMeasureActualTick = (() => {
+      const extras = project.extras;
+      if (!extras || typeof extras !== "object") return void 0;
+      const root = extras;
+      const musicxml = root.musicxml && typeof root.musicxml === "object" ? root.musicxml : null;
+      const value = musicxml?.firstMeasureActualTick;
+      if (typeof value !== "number" || !Number.isFinite(value)) return void 0;
+      const normalized = Math.max(1, Math.trunc(value));
+      const nominal = Math.max(1, ticksPerMeasure2(ppq, getMeasureTimeSignature(0, tsList)));
+      if (normalized >= nominal) return void 0;
+      return normalized;
+    })();
     const measures = [];
     let startTick = 0;
     let index = 0;
     const hardLimit = 1e4;
     while (startTick <= maxTick && index < hardLimit) {
       const ts = getMeasureTimeSignature(index, tsList);
-      const lengthTick = Math.max(1, ticksPerMeasure(ppq, ts));
+      const nominalLength = Math.max(1, ticksPerMeasure2(ppq, ts));
+      const lengthTick = index === 0 && typeof firstMeasureActualTick === "number" ? firstMeasureActualTick : nominalLength;
       measures.push({ index, startTick, lengthTick, timeSignature: ts });
       startTick += lengthTick;
       index += 1;
     }
     if (measures.length === 0) {
       const ts = getMeasureTimeSignature(0, tsList);
-      measures.push({ index: 0, startTick: 0, lengthTick: Math.max(1, ticksPerMeasure(ppq, ts)), timeSignature: ts });
+      measures.push({ index: 0, startTick: 0, lengthTick: Math.max(1, ticksPerMeasure2(ppq, ts)), timeSignature: ts });
     }
     return measures;
   }
@@ -1744,7 +2101,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
   function renderSingleNote(pitch, duration, voice, noteType, tieStart, tieStop, lyric, syllabic, accidentalText, options) {
     const isChordTone = options?.chord === true;
-    return `<note>${isChordTone ? `<chord/>` : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>${accidentalText ? `<accidental>${accidentalText}</accidental>` : ""}<duration>${duration}</duration><voice>${voice}</voice>${options?.staff ? `<staff>${options.staff}</staff>` : ""}${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}` : ""}${tieStart ? `<tie type="start"/>` : ""}${tieStop ? `<tie type="stop"/>` : ""}${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}</note>`;
+    return `<note>${isChordTone ? `<chord/>` : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>${accidentalText ? `<accidental>${accidentalText}</accidental>` : ""}<duration>${duration}</duration><voice>${voice}</voice>${options?.staff ? `<staff>${options.staff}</staff>` : ""}${noteType ? `<type>${noteType.type}</type>${"<dot/>".repeat(noteType.dots)}${noteType.timeModification ? `<time-modification><actual-notes>${noteType.timeModification.actualNotes}</actual-notes><normal-notes>${noteType.timeModification.normalNotes}</normal-notes></time-modification>` : ""}` : ""}${tieStart ? `<tie type="start"/>` : ""}${tieStop ? `<tie type="stop"/>` : ""}${tieStart || tieStop ? `<notations>${tieStart ? `<tied type="start"/>` : ""}${tieStop ? `<tied type="stop"/>` : ""}</notations>` : ""}${lyric ? `<lyric>${syllabic ? `<syllabic>${syllabic}</syllabic>` : ""}<text>${lyric}</text></lyric>` : ""}</note>`;
   }
   function renderNoteSegment(project, note, startTick, endTick, divisions, voice, spellingContext, options) {
     const duration = Math.max(1, endTick - startTick);
@@ -1765,7 +2122,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         pitch,
         duration,
         voice,
-        noteTypeFromDuration(duration, divisions),
+        noteTypeRenderSpecFromDuration(duration, divisions),
         extTieStart,
         extTieStop,
         lyric,
@@ -1780,7 +2137,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         pitch,
         duration,
         voice,
-        noteTypeFromDuration(duration, divisions),
+        noteTypeRenderSpecFromDuration(duration, divisions),
         extTieStart,
         extTieStop,
         lyric,
@@ -2062,6 +2419,10 @@ var UtaFormatix3TsPlusMikuscore = (() => {
         } catch {
         }
       }
+      try {
+        return parseMusicXmlPlus(normalized, options);
+      } catch {
+      }
       return wr(normalized, {
         defaultLyric: options?.defaultLyric
       });
@@ -2081,7 +2442,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
 
   // src/converters/vsqxToMusicXml.ts
-  function ticksPerMeasure2(ppq, ts) {
+  function ticksPerMeasure3(ppq, ts) {
     return Math.round(ppq * 4 * ts.numerator / ts.denominator);
   }
   function sortTimeSignatures2(project) {
@@ -2108,13 +2469,13 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     const hardLimit = 1e4;
     while (startTick <= maxTick && index < hardLimit) {
       const ts = getMeasureTimeSignature2(index, tsList);
-      const lengthTick = Math.max(1, ticksPerMeasure2(ppq, ts));
+      const lengthTick = Math.max(1, ticksPerMeasure3(ppq, ts));
       measures.push({ index, startTick, lengthTick });
       startTick += lengthTick;
       index += 1;
     }
     if (measures.length === 0) {
-      measures.push({ index: 0, startTick: 0, lengthTick: Math.max(1, ticksPerMeasure2(ppq, tsList[0])) });
+      measures.push({ index: 0, startTick: 0, lengthTick: Math.max(1, ticksPerMeasure3(ppq, tsList[0])) });
     }
     return measures;
   }
@@ -2289,6 +2650,29 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       }
     };
   }
+  function extractVsqxPickupHint(vsqxText) {
+    const match = vsqxText.match(/<!--\s*utaformatix3-ts-plus:firstMeasureActualTick=(\d+)\s*-->/);
+    if (!match) return void 0;
+    const value = Number(match[1]);
+    if (!Number.isFinite(value) || value <= 0) return void 0;
+    return Math.trunc(value);
+  }
+  function enrichProjectWithVsqxPickupHint(project, firstMeasureActualTick) {
+    if (firstMeasureActualTick == null) return project;
+    const extrasBase = project.extras && typeof project.extras === "object" ? project.extras : {};
+    const extrasRecord = extrasBase;
+    const musicxmlBase = extrasRecord.musicxml && typeof extrasRecord.musicxml === "object" ? extrasRecord.musicxml : {};
+    return {
+      ...project,
+      extras: {
+        ...extrasRecord,
+        musicxml: {
+          ...musicxmlBase,
+          firstMeasureActualTick
+        }
+      }
+    };
+  }
   function collectProjectWarnings(project) {
     const issues = [];
     for (const warning of project.importWarnings ?? []) {
@@ -2358,6 +2742,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     const issues = [];
     let parsed;
     const defaultLyric = options?.defaultLyric ?? "\u3042";
+    const hintedFirstMeasureActualTick = extractVsqxPickupHint(vsqxText);
     try {
       parsed = Er(vsqxText, {
         defaultLyric
@@ -2374,7 +2759,8 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     issues.push(...collectProjectWarnings(parsed));
     const stabilized = stabilizeImportedVsqxProject(parsed, defaultLyric);
     issues.push(...stabilized.normalizedIssues);
-    const project = enrichProjectWithEstimatedMusicXmlKeyFifths(stabilized.project);
+    const pickupHinted = enrichProjectWithVsqxPickupHint(stabilized.project, hintedFirstMeasureActualTick);
+    const project = enrichProjectWithEstimatedMusicXmlKeyFifths(pickupHinted);
     try {
       const musicXml = getMusicXmlAdapter().write(project, options?.musicXml);
       return { musicXml, issues };
@@ -2396,11 +2782,11 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
 
   // src/converters/musicXmlToVsqx.ts
-  function extractFirstTagValue(source, tag) {
+  function extractFirstTagValue2(source, tag) {
     const match = source.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`));
     return match ? match[1].trim() : null;
   }
-  function extractTagBlocks(source, tag) {
+  function extractTagBlocks2(source, tag) {
     return Array.from(source.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "g"))).map(
       (match) => match[1]
     );
@@ -2416,22 +2802,22 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : fallback;
   }
   function analyzePartStaffSplit(partBlock) {
-    const measureBlocks = extractTagBlocks(partBlock, "measure");
+    const measureBlocks = extractTagBlocks2(partBlock, "measure");
     const stavesDeclaredInPart = Array.from(partBlock.matchAll(/<staves>(\d+)<\/staves>/g)).map((m) => Number(m[1]));
     const declaredStaves = stavesDeclaredInPart.length > 0 ? Math.max(...stavesDeclaredInPart) : 1;
     const noteStaffByIndex = [];
     let maxObservedStaff = 1;
     let isInsideTieNote = false;
     for (const measureBlock of measureBlocks) {
-      const noteBlocks = extractTagBlocks(measureBlock, "note");
+      const noteBlocks = extractTagBlocks2(measureBlock, "note");
       for (const noteBlock of noteBlocks) {
-        const durationText = extractFirstTagValue(noteBlock, "duration");
+        const durationText = extractFirstTagValue2(noteBlock, "duration");
         if (durationText == null) {
           if (/<grace(\s|\/|>)/.test(noteBlock)) continue;
           continue;
         }
         if (/<rest(\s|\/|>)/.test(noteBlock)) continue;
-        const staffNo = parsePositiveIntOr(extractFirstTagValue(noteBlock, "staff"), 1);
+        const staffNo = parsePositiveIntOr(extractFirstTagValue2(noteBlock, "staff"), 1);
         maxObservedStaff = Math.max(maxObservedStaff, staffNo);
         if (!isInsideTieNote) {
           noteStaffByIndex.push(staffNo);
@@ -2451,7 +2837,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     };
   }
   function splitTracksByPartAndStaff(project, musicXmlText) {
-    const partBlocks = extractTagBlocks(musicXmlText, "part");
+    const partBlocks = extractTagBlocks2(musicXmlText, "part");
     if (partBlocks.length === 0 || partBlocks.length !== project.tracks.length) {
       return project;
     }
@@ -2503,7 +2889,29 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       tracks: nextTracks
     };
   }
-  function stepToSemitone(step) {
+  function extractFirstMeasureActualTickFromProject(project) {
+    const extras = project.extras;
+    if (!extras || typeof extras !== "object") return void 0;
+    const root = extras;
+    const musicxml = root.musicxml && typeof root.musicxml === "object" ? root.musicxml : null;
+    const value = musicxml?.firstMeasureActualTick;
+    if (typeof value !== "number" || !Number.isFinite(value)) return void 0;
+    const normalized = Math.max(1, Math.trunc(value));
+    return normalized;
+  }
+  function injectVsqxPickupHint(vsqxText, firstMeasureActualTick) {
+    if (!(typeof firstMeasureActualTick === "number" && Number.isFinite(firstMeasureActualTick) && firstMeasureActualTick > 0)) {
+      return vsqxText;
+    }
+    const hint = `<!--utaformatix3-ts-plus:firstMeasureActualTick=${Math.trunc(firstMeasureActualTick)}-->`;
+    if (/^<\?xml[^>]*\?>/.test(vsqxText)) {
+      return vsqxText.replace(/^<\?xml[^>]*\?>/, (m) => `${m}
+${hint}`);
+    }
+    return `${hint}
+${vsqxText}`;
+  }
+  function stepToSemitone2(step) {
     switch (step) {
       case "C":
         return 0;
@@ -2566,7 +2974,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
           if (Number.isFinite(octaveRaw)) {
             const alterRaw = Number(noteBlock.match(/<alter>(-?\d+)<\/alter>/)?.[1] ?? "0");
             const alter = Number.isFinite(alterRaw) ? alterRaw : 0;
-            const key = (octaveRaw + 1) * 12 + stepToSemitone(step) + alter;
+            const key = (octaveRaw + 1) * 12 + stepToSemitone2(step) + alter;
             const tickOn = Math.round(onsetDiv * ppq / divisions);
             const tickOff = Math.round((onsetDiv + durationDiv) * ppq / divisions);
             events.push({ key, tickOn, tickOff });
@@ -2581,7 +2989,7 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     return events;
   }
   function normalizeChordOnsetsFromSource(project, musicXmlText) {
-    const partBlocks = extractTagBlocks(musicXmlText, "part");
+    const partBlocks = extractTagBlocks2(musicXmlText, "part");
     if (partBlocks.length === 0 || partBlocks.length !== project.tracks.length) {
       return project;
     }
@@ -2617,6 +3025,14 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       ...project,
       tracks
     };
+  }
+  function shouldNormalizeChordOnsets(project) {
+    const extras = project.extras;
+    if (!extras || typeof extras !== "object") return true;
+    const root = extras;
+    const musicxml = root.musicxml && typeof root.musicxml === "object" ? root.musicxml : null;
+    const parser = typeof musicxml?.parser === "string" ? musicxml.parser : null;
+    return parser !== "plus";
   }
   function splitTrackIntoMonophonicLanes(track) {
     const sortedNotes = [...track.notes].sort((a, b) => a.tickOn - b.tickOn || a.tickOff - b.tickOff || a.key - b.key);
@@ -2726,9 +3142,17 @@ var UtaFormatix3TsPlusMikuscore = (() => {
   }
   function detectUnsupportedNotationIssues(xml) {
     const issues = [];
+    const hasGrace = /<grace(\s|>|\/)/i.test(xml);
     const hasSlur = /<slur(\s|>|\/)/i.test(xml);
     const hasOrnaments = /<ornaments(\s|>|\/)/i.test(xml);
     const hasArticulations = /<articulations(\s|>|\/)/i.test(xml);
+    if (hasGrace) {
+      issues.push({
+        level: "warning",
+        code: "MUSICXML_UNSUPPORTED_NOTATION",
+        message: "MusicXML grace notes are not preserved in VSQX conversion."
+      });
+    }
     if (hasSlur) {
       issues.push({
         level: "warning",
@@ -2753,12 +3177,14 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     return issues;
   }
   function detectUnsupportedNotationSummary(xml) {
+    const graceCount = (xml.match(/<grace(\s|>|\/)/gi) ?? []).length;
     const slurCount = (xml.match(/<slur(\s|>|\/)/gi) ?? []).length;
     const ornamentsCount = (xml.match(/<ornaments(\s|>|\/)/gi) ?? []).length;
     const articulationsCount = (xml.match(/<articulations(\s|>|\/)/gi) ?? []).length;
-    const total = slurCount + ornamentsCount + articulationsCount;
+    const total = graceCount + slurCount + ornamentsCount + articulationsCount;
     if (total === 0) return null;
     return {
+      graceCount,
       slurCount,
       ornamentsCount,
       articulationsCount,
@@ -2827,7 +3253,9 @@ var UtaFormatix3TsPlusMikuscore = (() => {
       });
       return { vsqx: null, issues, retainedExtras: void 0 };
     }
-    project = normalizeChordOnsetsFromSource(project, musicXmlText);
+    if (shouldNormalizeChordOnsets(project)) {
+      project = normalizeChordOnsetsFromSource(project, musicXmlText);
+    }
     if (options?.splitPartStaves === true) {
       project = splitTracksByPartAndStaff(project, musicXmlText);
     }
@@ -2837,7 +3265,9 @@ var UtaFormatix3TsPlusMikuscore = (() => {
     const normalized = normalizeProjectForVsqxExport(enriched);
     try {
       const result = _r(normalized);
-      return { vsqx: result.content, issues, retainedExtras: result.retainedExtras };
+      const firstMeasureActualTick = extractFirstMeasureActualTickFromProject(normalized);
+      const contentWithHint = injectVsqxPickupHint(result.content, firstMeasureActualTick);
+      return { vsqx: contentWithHint, issues, retainedExtras: result.retainedExtras };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       issues.push({

@@ -117,4 +117,45 @@ describe("musicxml-io normalizeImportedMusicXmlText", () => {
     expect(scorePart).not.toBeNull();
     expect(scorePart?.querySelector(":scope > part-name")).not.toBeNull();
   });
+
+  it("adds final right barline when the last measure has no explicit barline", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const normalized = normalizeImportedMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(normalized);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const finalBarStyle = doc.querySelector('score-partwise > part > measure:last-of-type > barline[location="right"] > bar-style');
+    expect(finalBarStyle?.textContent?.trim()).toBe("light-heavy");
+  });
+
+  it("keeps existing final right barline as-is", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>whole</type></note>
+      <barline location="right"><bar-style>heavy-light</bar-style></barline>
+    </measure>
+  </part>
+</score-partwise>`;
+    const normalized = normalizeImportedMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(normalized);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const finalBarlines = doc.querySelectorAll('score-partwise > part > measure:last-of-type > barline[location="right"]');
+    expect(finalBarlines.length).toBe(1);
+    const finalBarStyle = doc.querySelector('score-partwise > part > measure:last-of-type > barline[location="right"] > bar-style');
+    expect(finalBarStyle?.textContent?.trim()).toBe("heavy-light");
+  });
 });

@@ -13,6 +13,7 @@ body {
 
 .md-shell {
   width: 100%;
+  max-width: none;
 }
 
 .ms-app {

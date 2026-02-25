@@ -180,11 +180,29 @@ const normalizePartListAndPartIds = (doc: Document): void => {
   }
 };
 
+const ensureFinalBarlineInEachPart = (doc: Document): void => {
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  for (const part of parts) {
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const lastMeasure = measures[measures.length - 1];
+    if (!lastMeasure) continue;
+    const rightBarline = lastMeasure.querySelector(':scope > barline[location="right"]');
+    if (rightBarline) continue;
+    const barline = doc.createElement("barline");
+    barline.setAttribute("location", "right");
+    const barStyle = doc.createElement("bar-style");
+    barStyle.textContent = "light-heavy";
+    barline.appendChild(barStyle);
+    lastMeasure.appendChild(barline);
+  }
+};
+
 export const normalizeImportedMusicXmlText = (xml: string): string => {
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
   normalizePartListAndPartIds(doc);
   enrichTupletNotationsInDocument(doc);
+  ensureFinalBarlineInEachPart(doc);
   return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
 };
 
