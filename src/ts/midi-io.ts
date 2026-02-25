@@ -68,7 +68,7 @@ export type MidiImportDiagnostic = {
   message: string;
 };
 export type MidiImportOptions = {
-  quantizeGrid?: MidiImportQuantizeGrid;
+  quantizeGrid?: MidiImportQuantizeGrid | "auto";
   title?: string;
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
@@ -701,7 +701,8 @@ const normalizeMidiProgramNumber = (value: number): number | null => {
   return rounded;
 };
 
-const normalizeMidiImportQuantizeGrid = (value: unknown): MidiImportQuantizeGrid => {
+const normalizeMidiImportQuantizeGridOption = (value: unknown): MidiImportQuantizeGrid | "auto" => {
+  if (value === "auto") return "auto";
   if (value === "1/8" || value === "1/32") return value;
   return DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
 };
@@ -743,6 +744,65 @@ const hasTripletLikeTiming = (notes: SmfImportedNote[], ticksPerQuarter: number)
     if (evidence >= 4) return true;
   }
   return false;
+};
+
+const resolveImportQuantizeTick = (
+  notes: SmfImportedNote[],
+  ticksPerQuarter: number,
+  grid: MidiImportQuantizeGrid,
+  tripletAwareQuantize: boolean
+): { qTick: number; divisions: number } => {
+  const subdivision = quantizeGridToDivisions(grid);
+  const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
+  const useTripletAwareQuantize =
+    tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
+  const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
+  const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
+  const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
+  return { qTick, divisions };
+};
+
+const scoreImportQuantization = (notes: SmfImportedNote[], qTick: number): number => {
+  let score = 0;
+  for (const note of notes) {
+    const start = Math.max(0, Math.round(note.startTick));
+    const end = Math.max(start + 1, Math.round(note.endTick));
+    const duration = Math.max(1, end - start);
+    const quantizedStart = Math.round(start / qTick) * qTick;
+    const quantizedEnd = Math.round(end / qTick) * qTick;
+    const quantizedDuration = Math.max(qTick, Math.round(duration / qTick) * qTick);
+    const startError = Math.abs(start - quantizedStart);
+    const endError = Math.abs(end - quantizedEnd);
+    const durationError = Math.abs(duration - quantizedDuration);
+    // Prioritize onset stability over duration shaping.
+    score += startError * 2 + endError + durationError;
+  }
+  return score;
+};
+
+const chooseBestImportQuantizeGrid = (
+  notes: SmfImportedNote[],
+  ticksPerQuarter: number,
+  tripletAwareQuantize: boolean
+): MidiImportQuantizeGrid => {
+  const candidates: MidiImportQuantizeGrid[] = ["1/8", "1/16", "1/32"];
+  let best: { grid: MidiImportQuantizeGrid; score: number; divisions: number } | null = null;
+  for (const grid of candidates) {
+    const resolved = resolveImportQuantizeTick(notes, ticksPerQuarter, grid, tripletAwareQuantize);
+    const score = scoreImportQuantization(notes, resolved.qTick);
+    if (!best) {
+      best = { grid, score, divisions: resolved.divisions };
+      continue;
+    }
+    if (score < best.score) {
+      best = { grid, score, divisions: resolved.divisions };
+      continue;
+    }
+    if (score === best.score && resolved.divisions < best.divisions) {
+      best = { grid, score, divisions: resolved.divisions };
+    }
+  }
+  return best?.grid ?? DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
 };
 
 const readAscii = (bytes: Uint8Array, start: number, length: number): string => {
@@ -1292,13 +1352,9 @@ const quantizeImportedNotes = (
   tripletAwareQuantize: boolean
 ): { notes: ImportedQuantizedNote[]; warnings: MidiImportDiagnostic[]; qTick: number; divisions: number } => {
   const warnings: MidiImportDiagnostic[] = [];
-  const subdivision = quantizeGridToDivisions(grid);
-  const baseQTick = Math.max(1, Math.round(ticksPerQuarter / subdivision));
-  const useTripletAwareQuantize =
-    tripletAwareQuantize && grid === "1/16" && hasTripletLikeTiming(notes, ticksPerQuarter);
-  const tripletQTick = Math.max(1, Math.round(ticksPerQuarter / 3));
-  const qTick = useTripletAwareQuantize ? gcdInt(baseQTick, tripletQTick) : baseQTick;
-  const divisions = Math.max(1, Math.round(ticksPerQuarter / qTick));
+  const resolved = resolveImportQuantizeTick(notes, ticksPerQuarter, grid, tripletAwareQuantize);
+  const qTick = resolved.qTick;
+  const divisions = resolved.divisions;
   const quantized: ImportedQuantizedNote[] = [];
   for (const note of notes) {
     const startTick = Math.max(0, Math.round(note.startTick / qTick) * qTick);
@@ -3430,7 +3486,7 @@ export const convertMidiToMusicXml = (
 ): MidiImportResult => {
   const diagnostics: MidiImportDiagnostic[] = [];
   const warnings: MidiImportDiagnostic[] = [];
-  const quantizeGrid = normalizeMidiImportQuantizeGrid(options.quantizeGrid);
+  const quantizeGridOption = normalizeMidiImportQuantizeGridOption(options.quantizeGrid);
   const title = String(options.title ?? "").trim() || "Imported MIDI";
   const debugImportMetadata = options.debugMetadata ?? true;
   const sourceImportMetadata = options.sourceMetadata ?? true;
@@ -3509,6 +3565,11 @@ export const convertMidiToMusicXml = (
     warnings.push(...summary.parseWarnings);
     offset += 8 + trackLength;
   }
+
+  const quantizeGrid =
+    quantizeGridOption === "auto"
+      ? chooseBestImportQuantizeGrid(collectedNotes, header.ticksPerQuarter, tripletAwareQuantize)
+      : quantizeGridOption;
 
   const quantized = quantizeImportedNotes(
     collectedNotes,

@@ -157,9 +157,9 @@
   - 仕様限界（対応不要）
 - 対応可能カテゴリを優先して修正し、同一fixtureで回帰確認する。
 
-### 運用メモ（2026-02-25, moonlight）
+### 運用メモ（2026-02-26, moonlight）
 - `safe (cand(midi)) practical diff = 307`
-- `musescore_parity (cand(parity)) practical diff = 173`
+- `musescore_parity (cand(parity)) practical diff = 172`
 - `playback practical diff = 183`（比較参考）
 - MIDI import の同tick同pitch再発音で、`note-off` を最古 `note-on` に対応づける FIFO ペアリングを採用。
   - これにより、イベント順（`on->off` / `off->on`）依存の崩れを抑制できる。
@@ -170,6 +170,7 @@
 - 発音・長さの評価方針:
   - 発音タイミング（onset）は厳格一致。
   - 長さ（duration）は比率許容（`1/2`〜`2`倍）を別軸で併記する。
+  - 最新実測: `onset-strict + durationRatio[1/2..2]` は `parity=167`。
 
 ## 生成AIレビュー運用メモ
 - 生成AIに渡す入力は「正規化済みdiff」と「小節/声部インデックス付きの意味差分」を優先する。

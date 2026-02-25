@@ -694,6 +694,38 @@ describe("midi-io MIDI import MVP", () => {
     expect(tripletLikeDuration).toBe(true);
   });
 
+  it("chooses 1/8 grid on auto mode for straight eighth-note timing", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(240), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 96,
+      ...vlq(240), 0x80, 62, 0,
+      ...vlq(0), 0x90, 64, 96,
+      ...vlq(240), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "auto" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const divisions = doc.querySelector("part > measure > attributes > divisions")?.textContent?.trim();
+    expect(divisions).toBe("2");
+  });
+
+  it("keeps triplet-aware grid behavior on auto mode when triplet-like timing is dominant", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(160), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 100,
+      ...vlq(160), 0x80, 62, 0,
+      ...vlq(0), 0x90, 64, 100,
+      ...vlq(160), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "auto", tripletAwareQuantize: true });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const divisions = doc.querySelector("part > measure > attributes > divisions")?.textContent?.trim();
+    expect(divisions).toBe("12");
+  });
+
   it("keeps pickup measure as implicit when leading FF58 encodes anacrusis", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0xff, 0x58, 0x04, 0x01, 0x03, 0x18, 0x08, // 1/8 at tick 0

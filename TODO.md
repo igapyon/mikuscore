@@ -44,7 +44,15 @@
   - `musescore_parity (cand(parity)) practical diff = 172`
   - `playback practical diff = 183` (reference only; different path from export)
   - `musescore_parity raw-on practical diff = 172` (was `378`; stabilized by FIFO note pairing on MIDI import)
+  - `onset-strict + durationRatio[1/2..2] (cand(parity)) = 167` (reference metric for MIDI->MusicXML practical restoration)
   - Add focused fixes so export parity (`safe`/`musescore_parity`) improves without semantic regressions.
+- [ ] MIDI -> MusicXML improvement pack (next 6 items):
+  - 1. Auto-select quantize grid (`1/8`,`1/16`,`1/32`) from note timing evidence (started).
+  - 2. Add section-aware quantize fallback (allow local grid override by measure window).
+  - 3. Strengthen same-tick same-pitch retrigger pairing policy with explicit mode switch and diagnostics.
+  - 4. Improve voice/staff reconstruction using register continuity and overlap minimization.
+  - 5. Keep onset-strict comparator as primary metric and duration-ratio metric as secondary gate in spot runs.
+  - 6. Add import preset profiles (`safe` / `musescore_parity`) for MIDI->MusicXML and document default intent.
 - [ ] Investigate MuseScore OSS MIDI export implementation files and map transferable diff points for mikuscore:
   - Identify concrete source files/functions for `MSCX/MSCZ -> MIDI` in MuseScore.
   - Compare note event ordering, tie/retrigger handling, and quantization/rounding policies against mikuscore.
@@ -143,7 +151,15 @@
   - `musescore_parity (cand(parity)) practical diff = 172`
   - `playback practical diff = 183`（参考値。export とは別経路）
   - `musescore_parity raw-on practical diff = 172`（以前 `378`。MIDI import の FIFO ペアリングで安定化）
+  - `onset厳格 + duration比率[1/2..2] (cand(parity)) = 167`（MIDI->MusicXML 復元品質の参照値）
   - 意味保存回帰を起こさない範囲で、export 側（`safe`/`musescore_parity`）の差分を段階的に削減する。
+- [ ] MIDI -> MusicXML 改善パック（次の6項目）。
+  - 1. 音価グリッド（`1/8`,`1/16`,`1/32`）をノート時刻の証拠から自動選択する（着手済み）。
+  - 2. 小節単位で量子化を切り替えられる区間フォールバックを追加する。
+  - 3. 同tick同pitchの再発音ペアリングをモード化し、診断と合わせて強化する。
+  - 4. 音域連続性と重なり最小化に基づく voice/staff 再構成を改善する。
+  - 5. spot 比較で onset 厳格一致を主指標、duration 比率許容を副指標として固定する。
+  - 6. MIDI->MusicXML に `safe` / `musescore_parity` の入力プリセットを追加し、既定意図を明文化する。
 - [ ] MuseScore OSS の MIDI export 実装ファイルを調査し、mikuscore に取り込める差分観点を一覧化する。
   - MuseScore 側の `MSCX/MSCZ -> MIDI` の具体ファイル/関数を特定する。
   - ノートイベント順序、tie/retrigger、量子化/丸め規則を mikuscore と比較する。
