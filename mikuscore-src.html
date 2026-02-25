@@ -35,11 +35,14 @@
               </svg>
             </span>
             <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-              mikuscore is a local editor focused on preserving existing MusicXML structure while editing.
-              From input (file/source), score preview, note editing, playback, and export/download are handled in one screen.
+              mikuscore is a browser-based local score editor focused on preserving existing MusicXML structure while editing.
+              It supports loading MusicXML/ABC/MIDI, score preview, note editing, playback, and export/download as MusicXML/ABC/MEI/MIDI in one screen.
+              MEI support is currently experimental.
+              mikuscore intentionally keeps the feature set small to make score editing practical and fast, especially on smartphones.
+              It is smartphone-centered, but it can also be used on PCs.
               Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
               After loading, click notes in the score to select targets, then adjust pitch and duration.
-              Use tools like MuseScore for complex work. mikuscore aims to be practical on mobile devices.
+              Use tools like MuseScore for large-scale or complex work, and use mikuscore for quick input or focused partial tasks.
             </span>
           </span>
           <a
@@ -78,25 +81,46 @@
 
       <div class="ms-flow">
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
-          <h2 class="md-section-title"><span class="ms-step-no">1</span>Input</h2>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">1</span>Input
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="Input help">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                To use mikuscore, first load your score here (from file/source) or create a new score.
+                Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), VSQX (`.vsqx`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
+                You can move to Score/Edit/Export after completing this step.
+              </span>
+            </span>
+          </h2>
 
           <div class="ms-radio-group-wrap">
-            <div class="ms-radio-group" role="radiogroup" aria-label="Input format">
-              <label class="md-radio"><input id="inputTypeXml" type="radio" name="inputType" value="xml" checked /> MusicXML Input</label>
-              <label class="md-radio"><input id="inputTypeAbc" type="radio" name="inputType" value="abc" /> ABC Input</label>
-              <label class="md-radio"><input id="inputTypeNew" type="radio" name="inputType" value="new" /> New Score</label>
+            <div class="ms-radio-group" role="radiogroup" aria-label="Input entry mode">
+              <label class="md-radio"><input id="inputEntryFile" type="radio" name="inputEntry" value="file" checked /> File input</label>
+              <label class="md-radio"><input id="inputEntrySource" type="radio" name="inputEntry" value="source" /> Source input</label>
+              <label class="md-radio"><input id="inputEntryNew" type="radio" name="inputEntry" value="new" /> New Score</label>
             </div>
           </div>
 
-          <div class="ms-radio-group-wrap">
-            <div class="ms-radio-group" role="radiogroup" aria-label="Import mode">
-              <label class="md-radio"><input id="inputModeFile" type="radio" name="inputMode" value="file" checked /> File input</label>
-              <label class="md-radio"><input id="inputModeSource" type="radio" name="inputMode" value="source" /> Source input</label>
+          <div id="sourceTypeBlock" class="ms-radio-group-wrap md-hidden">
+            <div class="ms-radio-group" role="radiogroup" aria-label="Source input format">
+              <label class="md-radio"><input id="sourceTypeXml" type="radio" name="sourceType" value="xml" checked /> MusicXML Input</label>
+              <label class="md-radio"><input id="sourceTypeAbc" type="radio" name="sourceType" value="abc" /> ABC Input</label>
             </div>
           </div>
 
           <div id="newInputBlock" class="ms-block md-hidden">
             <div class="ms-stack-sm">
+              <label class="md-switch-label ms-switch-field" for="newTemplatePianoGrandStaff">
+                <input id="newTemplatePianoGrandStaff" type="checkbox" class="md-switch-input" />
+                <span class="md-switch" aria-hidden="true"></span>
+                <span>Use Piano Grand Staff template (treble + bass, single part)</span>
+              </label>
               <label class="ms-field">Track count (parts)
                 <input id="newPartCount" type="number" min="1" max="16" step="1" value="1" class="md-input" />
               </label>
@@ -136,16 +160,10 @@
           </div>
 
           <div id="fileInputBlock" class="ms-block">
-            <button id="fileSelectBtn" type="button" class="md-button md-button--tonal ms-icon-button ms-file-select-button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
-                <path d="M12 10v6"></path>
-                <path d="M9 13l3 3 3-3"></path>
-              </svg>
-              <span>Choose file</span>
-            </button>
-            <span id="fileNameText" class="ms-file-name">No file selected</span>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.abc,text/plain,text/xml,application/xml" hidden />
+            <div class="ms-file-meta">
+              <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
+            </div>
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,text/plain,text/xml,application/xml,application/mei+xml" hidden />
           </div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
@@ -159,7 +177,15 @@
           </div>
 
           <div class="ms-actions">
-            <button id="loadBtn" type="button" class="md-button md-button--primary ms-icon-button">
+            <button id="fileSelectBtn" type="button" class="md-button md-button--primary ms-icon-button ms-file-select-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
+                <path d="M12 10v6"></path>
+                <path d="M9 13l3 3 3-3"></path>
+              </svg>
+              <span>Load from file</span>
+            </button>
+            <button id="loadBtn" type="button" class="md-button md-button--primary ms-icon-button md-hidden">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7.5h6.2l2 2H21v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                 <path d="M12.2 13.4V9.8"></path>
@@ -167,8 +193,10 @@
               </svg>
               <span>Load</span>
             </button>
-            <button id="loadSampleBtn" type="button" class="md-button md-button--tonal">Load sample</button>
+            <button id="loadSampleBtn1" type="button" class="md-button md-button--tonal">Load sample 1</button>
+            <button id="loadSample2Btn" type="button" class="md-button md-button--tonal">Load sample 2</button>
           </div>
+          <div id="inputUiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
           <div id="localDraftNotice" class="ms-local-draft md-hidden" role="status" aria-live="polite">
             <div id="localDraftText" class="ms-local-draft-text"></div>
           </div>
@@ -185,8 +213,9 @@
                   <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
                 </svg>
               </span>
-              <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-                Click a note to select it for editing.
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                This screen is for checking the loaded score, trying quick playback, and selecting the measure to edit.
+                Select a note in the target measure here, then go to Edit to apply actual note changes in that selected measure.
               </span>
             </span>
           </h2>
@@ -203,14 +232,56 @@
               </svg>
               <span>Stop</span>
             </button>
+            <button id="scoreEditBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 20h4l10-10a2 2 0 0 0-4-4L4 16z"></path>
+                <path d="m12 6 6 6"></path>
+              </svg>
+              <span>Edit</span>
+            </button>
           </div>
           <div id="debugScoreWrap" class="ms-debug-wrap">
             <div id="debugScoreArea" class="ms-debug-score"></div>
           </div>
+          <div class="ms-actions ms-preview-actions">
+            <button id="appendMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14"></path>
+                <path d="M5 12h14"></path>
+              </svg>
+              <span>Add Measure (End)</span>
+            </button>
+          </div>
+          <p id="playbackText" class="ms-playback-status" aria-live="polite">Playback: idle</p>
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
-          <h2 class="md-section-title"><span class="ms-step-no">3</span>Edit</h2>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">3</span>Edit
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="Edit help">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                In Edit, start by converting a rest to a note, then adjust notes in the selected measure:
+                split notes, change pitch, add accidentals, and change duration. You can also try quick playback.
+                Press Apply to reflect your edits back to Score, or Discard to cancel current measure edits.
+                Use the arrow buttons to move between measures.
+                Editing is intentionally limited to avoid breaking MusicXML structure, so use a dedicated notation app for fine-grained editing.
+              </span>
+            </span>
+            <span id="measurePartNameText" class="ms-edit-part-name md-hidden">Track: -</span>
+            <span class="ms-edit-nav" role="group" aria-label="Measure navigation">
+              <button id="measureNavLeftBtn" type="button" class="md-button md-button--surface ms-nav-arrow-btn" aria-label="Previous measure in this track">←</button>
+              <button id="measureNavDownBtn" type="button" class="md-button md-button--surface ms-nav-arrow-btn" aria-label="Same measure in next track">↓</button>
+              <button id="measureNavUpBtn" type="button" class="md-button md-button--surface ms-nav-arrow-btn" aria-label="Same measure in previous track">↑</button>
+              <button id="measureNavRightBtn" type="button" class="md-button md-button--surface ms-nav-arrow-btn" aria-label="Next measure in this track">→</button>
+            </span>
+          </h2>
           <div id="measureEmptyState" class="ms-empty-state" role="status" aria-live="polite">
             <div class="ms-empty-state-inner">
               <div class="ms-empty-state-title">No measure selected</div>
@@ -224,6 +295,22 @@
           </div>
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
+          </div>
+          <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
+          <div class="ms-actions">
+            <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 7L9 18l-5-5"></path>
+              </svg>
+              <span>Apply</span>
+            </button>
+            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 6L6 18"></path>
+                <path d="M6 6l12 12"></path>
+              </svg>
+              <span>Discard</span>
+            </button>
           </div>
           <div class="ms-actions">
             <button id="convertRestBtn" type="button" class="md-button md-button--tonal ms-icon-button">
@@ -297,30 +384,29 @@
               <select id="durationPreset" class="md-select" aria-label="Duration preset">
                 <option value="">(Select duration)</option>
               </select>
-              <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
             </label>
-          </div>
-
-          <p id="measurePartNameText" class="ms-track-label md-hidden">Track: -</p>
-          <div class="ms-actions">
-            <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 7L9 18l-5-5"></path>
-              </svg>
-              <span>Apply</span>
-            </button>
-            <button id="measureDiscardBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 6L6 18"></path>
-                <path d="M6 6l12 12"></path>
-              </svg>
-              <span>Discard</span>
-            </button>
           </div>
         </section>
 
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
-          <h2 class="md-section-title"><span class="ms-step-no">4</span>Export</h2>
+          <h2 class="md-section-title">
+            <span class="ms-step-no">4</span>Export
+            <span class="md-tooltip-group">
+              <span class="md-info-chip" aria-label="Export help">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                </svg>
+              </span>
+              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                Export is where you take your work out of mikuscore.
+                The main flow is exporting your edited result as MusicXML.
+                In addition, mikuscore also supports ABC/MEI/LilyPond/MuseScore export and lightweight MIDI output for quick checks.
+                MIDI export is handy for simple confirmation, while complex production/export work is best done in dedicated software.
+              </span>
+            </span>
+          </h2>
           <div class="ms-actions">
             <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -328,18 +414,16 @@
                 <path d="M8 11l4 4 4-4"></path>
                 <path d="M4 19h16"></path>
               </svg>
-              <span>Export MusicXML</span>
+              <span>MusicXML</span>
             </button>
-            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+            <button id="downloadMuseScoreBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect>
-                <path d="M8 9l-1.4 5"></path>
-                <path d="M6.7 11.8h2.6"></path>
-                <path d="M12.2 9h2.3a1.7 1.7 0 0 1 0 3.4h-2.3z"></path>
-                <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
-                <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8 8h8"></path>
+                <path d="M8 12h8"></path>
+                <path d="M8 16h5"></path>
               </svg>
-              <span>Export ABC</span>
+              <span>MuseScore</span>
             </button>
             <button id="downloadMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -351,10 +435,67 @@
                 <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
                 <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
               </svg>
-              <span>Export MIDI</span>
+              <span>MIDI</span>
+            </button>
+            <button id="downloadVsqxBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8 8l8 8"></path>
+                <path d="M16 8l-8 8"></path>
+              </svg>
+              <span>VSQX</span>
+            </button>
+            <button id="downloadAbcBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect>
+                <path d="M8 9l-1.4 5"></path>
+                <path d="M6.7 11.8h2.6"></path>
+                <path d="M12.2 9h2.3a1.7 1.7 0 0 1 0 3.4h-2.3z"></path>
+                <path d="M12.2 12.4h2.5a1.7 1.7 0 0 1 0 3.4h-2.5z"></path>
+                <path d="M18.2 10.2a2.3 2.3 0 1 0 0 4.6"></path>
+              </svg>
+              <span>ABC</span>
+            </button>
+            <button id="downloadMeiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8 15V9l2.5 3 2.5-3v6"></path>
+                <path d="M15.5 9v6"></path>
+              </svg>
+              <span>MEI</span>
+            </button>
+            <button id="downloadLilyPondBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4.5" y="4.5" width="15" height="15" rx="2.5"></rect>
+                <path d="M8.5 9.5v5"></path>
+                <path d="M8.5 14.5h6"></path>
+                <path d="M14.5 9.5v5"></path>
+              </svg>
+              <span>LilyPond</span>
             </button>
           </div>
-          <div class="ms-actions">
+          <div class="ms-export-divider" role="separator" aria-hidden="true"></div>
+          <div class="ms-actions ms-preview-actions">
+            <button id="exportPlayBtn" type="button" class="md-button md-button--primary ms-icon-button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <path d="M8 6.5v11l9-5.5z"></path>
+              </svg>
+              <span>Play</span>
+            </button>
+            <button id="exportStopBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
+                <rect x="7" y="7" width="10" height="10" rx="1.5"></rect>
+              </svg>
+              <span>Stop</span>
+            </button>
+            <button id="downloadSvgBtn" type="button" class="md-button md-button--surface ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v10"></path>
+                <path d="M8.5 9.5 12 13l3.5-3.5"></path>
+                <rect x="4" y="15" width="16" height="6" rx="2"></rect>
+              </svg>
+              <span>SVG</span>
+            </button>
             <button id="discardDraftExportBtn" type="button" class="md-button md-button--surface ms-icon-button md-hidden">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 7h16"></path>
@@ -365,7 +506,305 @@
               </svg>
               <span>Discard Draft</span>
             </button>
+            <button id="resetPlaybackSettingsBtn" type="button" class="md-button md-button--surface ms-icon-button">
+              <span>Reset to defaults</span>
+            </button>
           </div>
+          <section class="ms-settings-card" aria-label="General settings">
+            <details id="generalSettingsAccordion" class="ms-settings-accordion">
+              <summary class="ms-settings-summary">General Settings</summary>
+              <div class="ms-settings-body">
+                <div class="ms-settings-block">
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Keep source/extension metadata (`src:*`, `mks:*`)</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MusicXML source metadata help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          When enabled, metadata is preserved during import and kept in MusicXML output/export.
+                          When disabled, metadata generation on import is turned off, and existing `src:*` / `mks:*` fields are omitted from MusicXML output/export.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMetadataInMusicXml">
+                      <input
+                        id="keepMetadataInMusicXml"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Keep source and extension metadata"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Export MusicXML text as `.xml` extension</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MusicXML extension export help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Default is OFF (`.musicxml`). When enabled, plain MusicXML export uses `.xml`.
+                          While this is ON, `Compress MusicXML / MuseScore export` is forced OFF.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="exportMusicXmlAsXmlExtension">
+                      <input
+                        id="exportMusicXmlAsXmlExtension"
+                        type="checkbox"
+                        class="md-switch-input"
+                        aria-label="Export MusicXML text as xml extension"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Compress MusicXML / MuseScore export</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Compression export help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          When enabled, MusicXML export uses `.mxl` and MuseScore export uses `.mscz` (ZIP container).
+                          When disabled, plain `.musicxml` / `.mscx` text files are exported.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="compressXmlMuseScoreExport">
+                      <input
+                        id="compressXmlMuseScoreExport"
+                        type="checkbox"
+                        class="md-switch-input"
+                        aria-label="Compress MusicXML and MuseScore export"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </section>
+          <section class="ms-settings-card" aria-label="MIDI and playback settings">
+            <details id="settingsAccordion" class="ms-settings-accordion">
+              <summary class="ms-settings-summary">MIDI &amp; Playback Settings</summary>
+              <div class="ms-settings-body">
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">MIDI &amp; Playback Shared Settings</h4>
+                  <label class="ms-field" for="graceTimingMode">
+                    <span class="ms-field-label">
+                      <span>Grace Timing Mode</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Grace timing mode help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Applies to MIDI-like playback and MIDI export.
+                        </span>
+                      </span>
+                    </span>
+                    <select id="graceTimingMode" class="md-select">
+                      <option value="before_beat" selected>Before beat (appoggiatura-like)</option>
+                      <option value="on_beat">On beat (principal delayed)</option>
+                      <option value="classical_equal">Classical equal split</option>
+                    </select>
+                  </label>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Use metric beat accents</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Metric beat accents help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Adds subtle beat emphasis in MIDI-like playback and MIDI export.
+                          4/4: strong-weak-medium-weak, 6/8: strong-weak-weak-medium-weak-weak,
+                          3-beat: strong-weak-weak, 5-beat: strong-weak-medium-weak-weak,
+                          others: strong-weak-weak-...
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="metricAccentEnabled">
+                      <input
+                        id="metricAccentEnabled"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Use metric beat accents"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <label class="ms-field" for="metricAccentProfile">
+                    <span class="ms-field-label">
+                      <span>Accent amount</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Accent amount help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Controls the velocity gap of metric accents when enabled.
+                        </span>
+                      </span>
+                    </span>
+                    <select id="metricAccentProfile" class="md-select">
+                      <option value="subtle" selected>Subtle</option>
+                      <option value="balanced">Balanced</option>
+                      <option value="strong">Strong</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">MIDI Settings</h4>
+                  <label class="ms-field" for="midiProgramSelect">
+                    <span class="ms-field-label">
+                      <span>MIDI Export Instrument</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MIDI export instrument help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Used when MusicXML does not specify an instrument for the part.
+                        </span>
+                      </span>
+                    </span>
+                    <select id="midiProgramSelect" class="md-select">
+                      <option value="acoustic_grand_piano">Acoustic Grand Piano</option>
+                      <option value="acoustic_guitar_nylon">Acoustic Guitar (nylon)</option>
+                      <option value="acoustic_bass">Acoustic Bass</option>
+                      <option value="clavinet">Clavinet</option>
+                      <option value="drawbar_organ">Drawbar Organ</option>
+                      <option value="electric_piano_1">Electric Piano 1</option>
+                      <option value="electric_piano_2" selected>Electric Piano 2</option>
+                      <option value="harpsichord">Harpsichord</option>
+                      <option value="honky_tonk_piano">Honky-tonk Piano</option>
+                      <option value="string_ensemble_1">String Ensemble 1</option>
+                      <option value="synth_brass_1">Synth Brass 1</option>
+                      <option value="violin">Violin</option>
+                    </select>
+                  </label>
+                  <label class="ms-field" for="midiExportProfile">
+                    <span class="ms-field-label">
+                      <span>MIDI Export Profile</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MIDI export profile help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Safe keeps current semantic-preserving behavior.
+                          MuseScore parity uses higher PPQ and parity-focused normalization to better match MuseScore-style MIDI.
+                        </span>
+                      </span>
+                    </span>
+                    <select id="midiExportProfile" class="md-select">
+                      <option value="safe" selected>safe (semantic-first)</option>
+                      <option value="musescore_parity">musescore_parity (closer rendering)</option>
+                    </select>
+                  </label>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Always override instrument</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="Always override instrument help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Always override MusicXML instrument with selected export instrument.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="forceMidiProgramOverride">
+                      <input
+                        id="forceMidiProgramOverride"
+                        type="checkbox"
+                        class="md-switch-input"
+                        aria-label="Always override instrument"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                </div>
+                <div class="ms-settings-block">
+                  <h4 class="ms-settings-subtitle">Playback Settings</h4>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Use MIDI-like playback</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MIDI-like playback help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Uses MIDI-style timing and expression (articulation, grace placement, and related nuance) in quick playback.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="playbackUseMidiLike">
+                      <input
+                        id="playbackUseMidiLike"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Use MIDI-like playback"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <label class="ms-field" for="playbackWaveform">
+                    <span class="ms-field-label">Quick Playback Tone</span>
+                    <select id="playbackWaveform" class="md-select">
+                      <option value="sine">Sine</option>
+                      <option value="triangle" selected>Triangle</option>
+                      <option value="square">Square</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            </details>
+          </section>
         </section>
       </div>
 
@@ -374,6 +813,7 @@
 
   <script src="src/js/verovio.js"></script>
   <script src="src/js/midi-writer.js"></script>
+  <script src="src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js"></script>
   <script src="src/js/main.js"></script>
 </body>
 </html>

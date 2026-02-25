@@ -37,6 +37,14 @@ Top-level flow is a 4-step tabbed stepper:
   - `elementsFromPoint` fallback
 - Playback controls are provided (`Play`, `Stop`).
 
+## Playback Behavior (iPhone Safari Considerations)
+- iPhone Safari autoplay policy requires user gesture for sound start.
+- UI SHOULD unlock audio on early gesture events (`pointerdown` / `touchstart`) before `click`.
+- Synth engine MUST resume `AudioContext` in gesture-linked flow before scheduling notes.
+- Runtime SHOULD fallback to `webkitAudioContext` when `AudioContext` is unavailable.
+- Unlock SHOULD use a very short near-silent buffer playback to stabilize first audible playback.
+- Playback failure (no Web Audio API / resume failure) MUST NOT crash UI and SHOULD surface status text.
+
 ## Edit Behavior
 - If no measure selected, show empty-state card with `Go to Score` action.
 - If selected:
@@ -56,8 +64,13 @@ Top-level flow is a 4-step tabbed stepper:
   - `MusicXML Export`
   - `ABC Export`
   - `MIDI Export`
+- General settings:
+  - `Export MusicXML text as .xml extension` (default: OFF)
+  - `Compress MusicXML / MuseScore export`
+  - If `Export MusicXML text as .xml extension` is ON, compression is forced OFF.
+  - If compression is turned ON, `Export MusicXML text as .xml extension` is turned OFF.
 - Download names include timestamp suffix:
-  - `mikuscore-YYYYMMDDhhmm.musicxml`
+  - MusicXML text export: `mikuscore-YYYYMMDDhhmm.musicxml` (default) or `mikuscore-YYYYMMDDhhmm.xml` (when enabled)
   - `mikuscore-YYYYMMDDhhmm.abc`
   - `mikuscore-YYYYMMDDhhmm.mid`
 
@@ -110,6 +123,14 @@ UI は操作レイヤのみで、譜面変更の正本は Core とする。
   - `elementsFromPoint` フォールバック
 - 再生コントロール（`再生`, `停止`）を提供。
 
+## 再生仕様（iPhone Safari 配慮）
+- iPhone Safari の autoplay 制約上、音の開始にはユーザー操作起点が必要。
+- UI は `click` 前段の `pointerdown` / `touchstart` で先行アンロックを行う。
+- シンセ再生前に、ユーザー操作に紐づく経路で `AudioContext.resume()` を実行する。
+- `AudioContext` が無い実行環境では `webkitAudioContext` フォールバックを使う。
+- 初回再生安定化のため、極短いほぼ無音バッファ再生でアンロックする。
+- Web Audio 非対応や resume 失敗時は UI を壊さず、状態テキストで失敗を通知する。
+
 ## 編集仕様
 - 小節未選択時は empty-state カードを表示し、`譜面へ移動` を提供。
 - 小節選択時:
@@ -129,8 +150,13 @@ UI は操作レイヤのみで、譜面変更の正本は Core とする。
   - `MusicXML出力`
   - `ABC出力`
   - `MIDI出力`
+- General Settings:
+  - `Export MusicXML text as .xml extension`（デフォルト: OFF）
+  - `Compress MusicXML / MuseScore export`
+  - `Export MusicXML text as .xml extension` が ON の間は、圧縮出力は強制 OFF。
+  - 圧縮出力を ON にした場合、`Export MusicXML text as .xml extension` は OFF になる。
 - ファイル名は衝突緩和のためタイムスタンプを付与:
-  - `mikuscore-YYYYMMDDhhmm.musicxml`
+  - MusicXMLテキスト出力: デフォルト `mikuscore-YYYYMMDDhhmm.musicxml`、オプション有効時 `mikuscore-YYYYMMDDhhmm.xml`
   - `mikuscore-YYYYMMDDhhmm.abc`
   - `mikuscore-YYYYMMDDhhmm.mid`
 

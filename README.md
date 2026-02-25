@@ -1,9 +1,16 @@
 # mikuscore
 
 ## English
-mikuscore is a browser-only MusicXML sheet editor.
+mikuscore is a browser-based local score editor.
 
 Its primary goal is reliability, not feature volume: edit while preserving existing MusicXML as much as possible.
+
+### Product Positioning
+- Focus on the following two smartphone-centered workflows (PC use is also supported):
+  - Quick and easy entry for simple scores on a smartphone.
+  - Execute part of a large score workflow (prepared on PC) on a smartphone.
+- Keep an intentionally small feature set and optimize for mobile usability and editing speed.
+- Use MusicXML as the core data structure and avoid unnecessary transformations.
 
 ### Core Principles
 - Prioritize preserving existing MusicXML with minimal patch editing.
@@ -11,7 +18,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - Preserve `<backup>`, `<forward>`, and existing `<beam>` nodes.
 - Roll back atomically on failure.
 - Keep Core/UI separated so UI can be replaced later.
-- Support smartphones.
+- Keep smartphone-centered workflows practical, with PC use also supported.
 
 ### MVP Highlights
 - If `dirty === false`, save returns original XML text (`original_noop`).
@@ -24,6 +31,12 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ### Supported MusicXML Version
 - **MusicXML 4.0**
 
+### Format Support Note
+- `utaformatix3-ts-plus` is bundled as a vendored integration (`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`) for VSQX <-> MusicXML conversion.
+- We sincerely appreciate the UtaFormatix / utaformatix3 ecosystem and contributors for making this VSQX interoperability possible.
+- MEI support is currently experimental.
+- LilyPond (`.ly`) support is currently experimental.
+
 ### Distribution and Development
 - Distribution: **single-file web app** (`mikuscore.html`).
 - Runtime: offline, no external network dependency.
@@ -32,11 +45,13 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 
 ### Development Commands
 - `npm run build`
+- `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:property`
 - `npm run test:all`
+- `npm run build:vendor:utaformatix3` (sync vendored `utaformatix3-ts-plus` JS/doc from upstream)
 
 ### Documents
 - `docs/spec/SPEC.md`
@@ -44,12 +59,19 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/COMMANDS.md`
 - `docs/spec/COMMAND_CATALOG.md`
 - `docs/spec/DIAGNOSTICS.md`
+- `docs/spec/MIDI_IO.md`
+- `docs/spec/PLAYBACK.md`
+- `docs/spec/ABC_IO.md`
 - `docs/spec/TEST_MATRIX.md`
+- `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`
 - `docs/spec/ARCHITECTURE.md`
 - `docs/spec/UI_SPEC.md`
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
+
+Debugging note:
+- For import-side incident analysis, check `docs/spec/MIDI_IO.md` and `docs/spec/ABC_IO.md` sections about `attributes > miscellaneous > miscellaneous-field` (`mks:*` debug fields).
 
 ### Screenshots
 ![mikuscore screenshot 1](screenshots/screen1.png)
@@ -63,6 +85,13 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ブラウザ上で完結する MusicXML 譜面エディタです。
 
 このアプリの主眼は「多機能化」ではなく、極力既存 MusicXML を壊さずに編集する信頼性です。
+
+### プロダクトの位置づけ
+- 利用シーンは次の2つを中心に据えます（スマホ中心ですが、PC利用も可能です）。
+  - 簡単な譜面入力をスマホ上で手軽に行う。
+  - PCで進めている大規模な譜面作業の一部を切り出し、スマホで一部実施する。
+- 機能は意図的に絞り、スマホ上での使いやすさと入力スピードを優先します。
+- MusicXML を基軸データ構造として扱い、不要な変換を避けます。
 
 ### 基本方針
 - 既存 MusicXML の保全を最優先に最小パッチ編集を実現。
@@ -83,6 +112,12 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 ### 対応 MusicXML バージョン
 - **MusicXML 4.0**
 
+### フォーマット対応メモ
+- VSQX <-> MusicXML 変換のため、`utaformatix3-ts-plus` を同梱連携しています（`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`）。
+- VSQX 相互運用を実現する基盤を築いてくださった UtaFormatix / utaformatix3 のエコシステムと貢献者の皆さまに、深く感謝します。
+- MEI 対応は現在 Experimental（試験対応）です。
+- LilyPond（`.ly`）対応は現在 Experimental（試験対応）です。
+
 ### 配布と開発方針
 - 配布形態: 単一 HTML（`mikuscore.html`）。
 - 実行条件: オフライン動作、外部依存なし。
@@ -91,11 +126,13 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 
 ### 開発コマンド
 - `npm run build`
+- `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
 - `npm run test:unit`
 - `npm run test:property`
 - `npm run test:all`
+- `npm run build:vendor:utaformatix3`（upstream から `utaformatix3-ts-plus` の同梱JS/ドキュメントを同期）
 
 ### ドキュメント
 - `docs/spec/SPEC.md`
@@ -103,12 +140,19 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/COMMANDS.md`
 - `docs/spec/COMMAND_CATALOG.md`
 - `docs/spec/DIAGNOSTICS.md`
+- `docs/spec/MIDI_IO.md`
+- `docs/spec/PLAYBACK.md`
+- `docs/spec/ABC_IO.md`
 - `docs/spec/TEST_MATRIX.md`
+- `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`
 - `docs/spec/ARCHITECTURE.md`
 - `docs/spec/UI_SPEC.md`
 - `docs/spec/SCREEN_SPEC.md`
 - `TODO.md`
+
+デバッグメモ:
+- インポート時の事象解析は `docs/spec/MIDI_IO.md` と `docs/spec/ABC_IO.md` の `attributes > miscellaneous > miscellaneous-field`（`mks:*` デバッグ項目）を参照してください。
 
 ### スクリーンショット
 ![mikuscore スクリーンショット 1](screenshots/screen1.png)

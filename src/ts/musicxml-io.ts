@@ -13,6 +13,199 @@ export const serializeMusicXmlDocument = (doc: Document): string => {
   return new XMLSerializer().serializeToString(doc);
 };
 
+export const prettyPrintMusicXmlText = (xml: string): string => {
+  const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indent = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indent = Math.max(0, indent - 1);
+    lines.push(`${" ".repeat(indent)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indent += 1;
+  }
+  return lines.join("\n");
+};
+
+const ensureTupletNotation = (
+  note: Element,
+  type: "start" | "stop",
+  number: number,
+  withDisplayAttrs: boolean
+): void => {
+  let notations = note.querySelector(":scope > notations");
+  if (!notations) {
+    notations = note.ownerDocument.createElement("notations");
+    note.appendChild(notations);
+  }
+  const existing = notations.querySelector(`:scope > tuplet[type="${type}"]`);
+  if (existing) {
+    if (!existing.getAttribute("number")) existing.setAttribute("number", String(number));
+    if (type === "start" && withDisplayAttrs) {
+      if (!existing.getAttribute("bracket")) existing.setAttribute("bracket", "yes");
+      if (!existing.getAttribute("show-number")) existing.setAttribute("show-number", "actual");
+    }
+    return;
+  }
+  const tuplet = note.ownerDocument.createElement("tuplet");
+  tuplet.setAttribute("type", type);
+  tuplet.setAttribute("number", String(number));
+  if (type === "start" && withDisplayAttrs) {
+    tuplet.setAttribute("bracket", "yes");
+    tuplet.setAttribute("show-number", "actual");
+  }
+  notations.appendChild(tuplet);
+};
+
+const hasChordTag = (note: Element): boolean => note.querySelector(":scope > chord") !== null;
+const laneKeyForNote = (note: Element): string => {
+  const voice = note.querySelector(":scope > voice")?.textContent?.trim() ?? "1";
+  const staff = note.querySelector(":scope > staff")?.textContent?.trim() ?? "1";
+  return `${voice}::${staff}`;
+};
+const tupletSignatureForNote = (note: Element): string | null => {
+  const tm = note.querySelector(":scope > time-modification");
+  if (!tm) return null;
+  const actual = Number(tm.querySelector(":scope > actual-notes")?.textContent?.trim() ?? "");
+  const normal = Number(tm.querySelector(":scope > normal-notes")?.textContent?.trim() ?? "");
+  if (!Number.isFinite(actual) || !Number.isFinite(normal) || actual <= 0 || normal <= 0) return null;
+  return `${Math.round(actual)}/${Math.round(normal)}`;
+};
+
+const enrichTupletNotationsInDocument = (doc: Document): void => {
+  for (const measure of Array.from(doc.querySelectorAll("part > measure"))) {
+    const children = Array.from(measure.children);
+    const activeByLane = new Map<string, { sig: string; notes: Element[] }>();
+    const nextTupletNoByLane = new Map<string, number>();
+    const flushLane = (lane: string): void => {
+      const group = activeByLane.get(lane);
+      activeByLane.delete(lane);
+      if (!group || group.notes.length < 2) return;
+      const number = nextTupletNoByLane.get(lane) ?? 1;
+      nextTupletNoByLane.set(lane, number + 1);
+      ensureTupletNotation(group.notes[0], "start", number, true);
+      ensureTupletNotation(group.notes[group.notes.length - 1], "stop", number, false);
+    };
+    const flushAll = (): void => {
+      for (const lane of Array.from(activeByLane.keys())) flushLane(lane);
+    };
+
+    for (const child of children) {
+      if (child.tagName === "backup" || child.tagName === "forward") {
+        flushAll();
+        continue;
+      }
+      if (child.tagName !== "note") continue;
+      const note = child as Element;
+      if (hasChordTag(note)) continue;
+      const lane = laneKeyForNote(note);
+      const sig = tupletSignatureForNote(note);
+      const current = activeByLane.get(lane);
+      if (!sig) {
+        flushLane(lane);
+        continue;
+      }
+      if (!current || current.sig !== sig) {
+        flushLane(lane);
+        activeByLane.set(lane, { sig, notes: [note] });
+      } else {
+        current.notes.push(note);
+      }
+    }
+    flushAll();
+  }
+};
+
+const normalizePartListAndPartIds = (doc: Document): void => {
+  const root = doc.querySelector("score-partwise");
+  if (!root) return;
+  const parts = Array.from(root.querySelectorAll(":scope > part"));
+  if (parts.length === 0) return;
+
+  const usedIds = new Set<string>();
+  let seq = 1;
+  const nextPartId = (): string => {
+    while (usedIds.has(`P${seq}`)) seq += 1;
+    const id = `P${seq}`;
+    seq += 1;
+    return id;
+  };
+
+  for (const part of parts) {
+    const current = (part.getAttribute("id") ?? "").trim();
+    if (!current || usedIds.has(current)) {
+      const assigned = nextPartId();
+      part.setAttribute("id", assigned);
+      usedIds.add(assigned);
+      continue;
+    }
+    usedIds.add(current);
+  }
+
+  let partList = root.querySelector(":scope > part-list");
+  if (!partList) {
+    partList = doc.createElement("part-list");
+    root.insertBefore(partList, parts[0]);
+  }
+
+  const scorePartById = new Map<string, Element>();
+  for (const scorePart of Array.from(partList.querySelectorAll(":scope > score-part"))) {
+    const id = (scorePart.getAttribute("id") ?? "").trim();
+    if (!id || scorePartById.has(id)) continue;
+    scorePartById.set(id, scorePart);
+  }
+
+  for (const part of parts) {
+    const id = (part.getAttribute("id") ?? "").trim();
+    if (!id) continue;
+    const existing = scorePartById.get(id);
+    if (existing) {
+      if (!existing.querySelector(":scope > part-name")) {
+        const partName = doc.createElement("part-name");
+        partName.textContent = "Music";
+        existing.appendChild(partName);
+      }
+      continue;
+    }
+    const scorePart = doc.createElement("score-part");
+    scorePart.setAttribute("id", id);
+    const partName = doc.createElement("part-name");
+    partName.textContent = "Music";
+    scorePart.appendChild(partName);
+    partList.appendChild(scorePart);
+    scorePartById.set(id, scorePart);
+  }
+};
+
+const ensureFinalBarlineInEachPart = (doc: Document): void => {
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  for (const part of parts) {
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const lastMeasure = measures[measures.length - 1];
+    if (!lastMeasure) continue;
+    const rightBarline = lastMeasure.querySelector(':scope > barline[location="right"]');
+    if (rightBarline) continue;
+    const barline = doc.createElement("barline");
+    barline.setAttribute("location", "right");
+    const barStyle = doc.createElement("bar-style");
+    barStyle.textContent = "light-heavy";
+    barline.appendChild(barStyle);
+    lastMeasure.appendChild(barline);
+  }
+};
+
+export const normalizeImportedMusicXmlText = (xml: string): string => {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return xml;
+  normalizePartListAndPartIds(doc);
+  enrichTupletNotationsInDocument(doc);
+  ensureFinalBarlineInEachPart(doc);
+  return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
+};
+
 const cloneXmlDocument = (doc: Document): Document => {
   const cloned = document.implementation.createDocument("", "", null);
   const root = cloned.importNode(doc.documentElement, true);

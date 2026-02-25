@@ -428,8 +428,8 @@
 }
 
 .md-switch-input:checked + .md-switch {
-  background: rgba(98, 0, 238, 0.32);
-  box-shadow: inset 0 0 0 1px rgba(98, 0, 238, 0.6);
+  background: rgba(98, 0, 238, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(98, 0, 238, 0.9);
 }
 
 .md-switch-input:checked + .md-switch::after {

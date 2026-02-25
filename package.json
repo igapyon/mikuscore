@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "check:all": "npm run typecheck && npm run test:all && npm run build",
+    "build:vendor:utaformatix3": "bash scripts/sync-utaformatix3-vendor.sh",
     "clean": "rm -f mikuscore.html src/js/main.js",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run tests/unit",

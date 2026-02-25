@@ -12,6 +12,7 @@ import { getMeasureTimingForVoice } from "./timeIndex";
 import {
   createRestElement,
   createNoteElement,
+  ensureVoiceValue,
   findAncestorMeasure,
   getDurationValue,
   getVoiceText,
@@ -104,8 +105,17 @@ export class ScoreCore {
     const affectedMeasureNumbers = this.collectAffectedMeasureNumbers(target);
 
     try {
+      if (
+        command.type === "change_to_pitch" ||
+        command.type === "change_duration" ||
+        command.type === "delete_note" ||
+        command.type === "split_note"
+      ) {
+        ensureVoiceValue(target, command.voice);
+      }
       if (command.type === "change_to_pitch") {
         setPitch(target, command.pitch);
+        autoAssignGrandStaffByPitch(target);
       } else if (command.type === "change_duration") {
         const durationNotation = getDurationNotationHint(target, command.duration);
         if (
@@ -137,7 +147,10 @@ export class ScoreCore {
             const consumed = consumedAfter + consumedBefore;
             if (consumed < overflow) {
               const result = validateProjectedMeasureTiming(target, command.voice, projected);
-              if (result.diagnostic) return this.failWith(result.diagnostic);
+              if (result.diagnostic) {
+                this.restoreFrom(snapshot);
+                return this.failWith(result.diagnostic);
+              }
             }
           }
           const timingAfterRestAdjust = getMeasureTimingForVoice(target, command.voice);
@@ -149,7 +162,10 @@ export class ScoreCore {
             command.voice,
             adjustedProjected
           );
-          if (result.diagnostic) return this.failWith(result.diagnostic);
+          if (result.diagnostic) {
+            this.restoreFrom(snapshot);
+            return this.failWith(result.diagnostic);
+          }
           projectedWarning = result.warning;
           if (adjustedProjected < timing.capacity) {
             underfullDelta = timing.capacity - adjustedProjected;
@@ -165,6 +181,7 @@ export class ScoreCore {
           warnings.push(projectedWarning);
         }
       } else if (command.type === "split_note") {
+        const timingBeforeSplit = getMeasureTimingForVoice(target, command.voice);
         const currentDuration = getDurationValue(target);
         if (!Number.isInteger(currentDuration) || (currentDuration ?? 0) <= 1) {
           return this.fail(
@@ -185,6 +202,29 @@ export class ScoreCore {
         setDurationValue(target, half);
         setDurationValue(duplicated, half);
         insertedNode = duplicated;
+        if (timingBeforeSplit) {
+          const timingAfterSplit = getMeasureTimingForVoice(target, command.voice);
+          if (!timingAfterSplit) {
+            this.restoreFrom(snapshot);
+            return this.fail("MVP_COMMAND_EXECUTION_FAILED", "Failed to validate split timing.");
+          }
+          if (timingAfterSplit.occupied !== timingBeforeSplit.occupied) {
+            this.restoreFrom(snapshot);
+            return this.fail(
+              "MVP_COMMAND_EXECUTION_FAILED",
+              "Split changed lane timing unexpectedly near backup/forward boundary."
+            );
+          }
+          const timingValidation = validateProjectedMeasureTiming(
+            target,
+            command.voice,
+            timingAfterSplit.occupied
+          );
+          if (timingValidation.diagnostic) {
+            this.restoreFrom(snapshot);
+            return this.failWith(timingValidation.diagnostic);
+          }
+        }
       } else if (command.type === "insert_note_after") {
         const timing = getMeasureTimingForVoice(target, command.voice);
         if (timing) {
@@ -247,7 +287,24 @@ export class ScoreCore {
       };
     }
 
-    const integrity = this.findInvalidNoteDiagnostic();
+    if (!this.dirty) {
+      const integrityNoVoice = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: true });
+      if (integrityNoVoice) {
+        return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrityNoVoice] };
+      }
+      const overfullNoop = this.findOverfullDiagnostic();
+      if (overfullNoop) {
+        return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfullNoop] };
+      }
+      return {
+        ok: true,
+        mode: "original_noop",
+        xml: this.originalXml,
+        diagnostics: [],
+      };
+    }
+
+    const integrity = this.findInvalidNoteDiagnostic({ ignoreMissingVoice: false });
     if (integrity) {
       return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [integrity] };
     }
@@ -255,15 +312,6 @@ export class ScoreCore {
     const overfull = this.findOverfullDiagnostic();
     if (overfull) {
       return { ok: false, mode: "serialized_dirty", xml: "", diagnostics: [overfull] };
-    }
-
-    if (!this.dirty) {
-      return {
-        ok: true,
-        mode: "original_noop",
-        xml: this.originalXml,
-        diagnostics: [],
-      };
     }
 
     return {
@@ -324,7 +372,8 @@ export class ScoreCore {
       for (const voice of voices) {
         const timing = getMeasureTimingForVoice(note, voice);
         if (!timing) continue;
-        if (timing.occupied > timing.capacity) {
+        const tolerance = this.computeTupletRoundingTolerance(measure, voice);
+        if (timing.occupied > timing.capacity + tolerance) {
           return {
             code: "MEASURE_OVERFULL",
             message: `Occupied time ${timing.occupied} exceeds capacity ${timing.capacity}.`,
@@ -335,22 +384,29 @@ export class ScoreCore {
     return null;
   }
 
-  private findInvalidNoteDiagnostic(): Diagnostic | null {
+  private findInvalidNoteDiagnostic(options?: { ignoreMissingVoice?: boolean }): Diagnostic | null {
     if (!this.doc) return null;
+    const ignoreMissingVoice = Boolean(options?.ignoreMissingVoice);
     const notes = this.doc.querySelectorAll("note");
     for (const note of notes) {
       const voice = getVoiceText(note);
-      if (!voice) {
+      if (!voice && !ignoreMissingVoice) {
         return {
           code: "MVP_INVALID_NOTE_VOICE",
           message: "Note is missing a valid <voice> value.",
         };
       }
       const duration = getDurationValue(note);
-      if (duration === null || duration <= 0) {
+      const hasGrace = Array.from(note.children).some((c) => c.tagName === "grace");
+      if (!hasGrace && (duration === null || duration <= 0)) {
+        const context = this.describeNoteContext(note);
+        const noteXml = this.compactNodeXml(note);
+        if (typeof console !== "undefined") {
+          console.error("[mikuscore][save][invalid-duration]", context, noteXml);
+        }
         return {
           code: "MVP_INVALID_NOTE_DURATION",
-          message: "Note is missing a valid positive <duration> value.",
+          message: `Note is missing a valid positive <duration> value. ${context}`,
         };
       }
       const pitchDiagnostic = this.validateNotePitch(note);
@@ -359,8 +415,46 @@ export class ScoreCore {
     return null;
   }
 
+  private computeTupletRoundingTolerance(measure: Element, voice: string): number {
+    // Tuplet durations are integer-rounded in many MusicXML files.
+    // Allow a small overrun proportional to the number of non-chord tuplet onsets.
+    let tupletOnsetCount = 0;
+    for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
+      const noteVoice = getVoiceText(note);
+      if (noteVoice !== voice) continue;
+      if (note.querySelector(":scope > chord")) continue;
+      if (note.querySelector(":scope > time-modification") === null) continue;
+      const duration = getDurationValue(note);
+      if (duration === null || duration <= 0) continue;
+      tupletOnsetCount += 1;
+    }
+    if (tupletOnsetCount <= 0) return 0;
+    return Math.floor(tupletOnsetCount / 2);
+  }
+
   private fail(code: Diagnostic["code"], message: string): DispatchResult {
     return this.failWith({ code, message });
+  }
+
+  private describeNoteContext(note: Element): string {
+    const measure = findAncestorMeasure(note);
+    const part = note.closest("part");
+    const partId = part?.getAttribute("id")?.trim() || "(unknown-part)";
+    const measureNo = measure?.getAttribute("number")?.trim() || "(unknown-measure)";
+    const voice = getVoiceText(note) || "(missing-voice)";
+    const nodeId = this.nodeToId.get(note) ?? "(no-node-id)";
+    const hasGrace = Array.from(note.children).some((c) => c.tagName === "grace");
+    const hasCue = Array.from(note.children).some((c) => c.tagName === "cue");
+    const hasChord = Array.from(note.children).some((c) => c.tagName === "chord");
+    const hasRest = Array.from(note.children).some((c) => c.tagName === "rest");
+    return `part=${partId} measure=${measureNo} voice=${voice} nodeId=${nodeId} grace=${hasGrace} cue=${hasCue} rest=${hasRest} chord=${hasChord}`;
+  }
+
+  private compactNodeXml(node: Element): string {
+    const raw = node.outerHTML || "";
+    const compact = raw.replace(/\s+/g, " ").trim();
+    if (compact.length <= 280) return compact;
+    return `${compact.slice(0, 280)}...`;
   }
 
   private failWith(diagnostic: Diagnostic): DispatchResult {
@@ -595,4 +689,70 @@ const measureVoiceHasTupletContext = (target: Element, voice: string): boolean =
     if (note.querySelector(":scope > notations > tuplet")) return true;
   }
   return false;
+};
+
+const autoAssignGrandStaffByPitch = (note: Element): void => {
+  const context = resolveGrandStaffContext(note);
+  if (!context) return;
+  const midi = notePitchToMidi(note);
+  if (midi === null) return;
+  const desiredStaff = midi < 60 ? "2" : "1";
+  let staffNode = note.querySelector(":scope > staff");
+  if (!staffNode) {
+    staffNode = note.ownerDocument.createElement("staff");
+    note.appendChild(staffNode);
+  }
+  staffNode.textContent = desiredStaff;
+};
+
+const resolveGrandStaffContext = (note: Element): { part: Element; measure: Element } | null => {
+  const measure = findAncestorMeasure(note);
+  if (!measure) return null;
+  const part = measure.parentElement;
+  if (!part || part.tagName !== "part") return null;
+  const measures = Array.from(part.children).filter((child): child is Element => child.tagName === "measure");
+  const targetIndex = measures.indexOf(measure);
+  if (targetIndex < 0) return null;
+
+  let staves = 1;
+  let clef1 = "";
+  let clef2 = "";
+  for (let i = 0; i <= targetIndex; i += 1) {
+    const attrs = measures[i].querySelector(":scope > attributes");
+    if (!attrs) continue;
+    const stavesText = attrs.querySelector(":scope > staves")?.textContent?.trim() ?? "";
+    const parsedStaves = Number(stavesText);
+    if (Number.isInteger(parsedStaves) && parsedStaves > 0) {
+      staves = parsedStaves;
+    }
+    const nextClef1 = attrs.querySelector(':scope > clef[number="1"] > sign')?.textContent?.trim() ?? "";
+    const nextClef2 = attrs.querySelector(':scope > clef[number="2"] > sign')?.textContent?.trim() ?? "";
+    if (nextClef1) clef1 = nextClef1;
+    if (nextClef2) clef2 = nextClef2;
+  }
+  if (staves < 2) return null;
+  if (clef1 !== "G" || clef2 !== "F") return null;
+  return { part, measure };
+};
+
+const notePitchToMidi = (note: Element): number | null => {
+  const pitch = note.querySelector(":scope > pitch");
+  if (!pitch) return null;
+  const step = pitch.querySelector(":scope > step")?.textContent?.trim() ?? "";
+  const octaveText = pitch.querySelector(":scope > octave")?.textContent?.trim() ?? "";
+  const alterText = pitch.querySelector(":scope > alter")?.textContent?.trim() ?? "0";
+  const semitoneByStep: Record<string, number> = {
+    C: 0,
+    D: 2,
+    E: 4,
+    F: 5,
+    G: 7,
+    A: 9,
+    B: 11,
+  };
+  const base = semitoneByStep[step];
+  const octave = Number(octaveText);
+  const alter = Number(alterText);
+  if (base === undefined || !Number.isInteger(octave) || !Number.isFinite(alter)) return null;
+  return (octave + 1) * 12 + base + Math.round(alter);
 };

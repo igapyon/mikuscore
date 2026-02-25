@@ -11,19 +11,35 @@ import type {
   SaveResult,
 } from "../../core/interfaces";
 import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
+import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
+import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
+import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
+import {
+  convertMusicXmlToVsqx,
+  convertVsqxToMusicXml,
+  installVsqxMusicXmlNormalizationHook,
+} from "./vsqx-io";
 import {
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
+  normalizeImportedMusicXmlText,
   parseMusicXmlDocument,
+  prettyPrintMusicXmlText,
   replaceMeasureInMainDocument,
   serializeMusicXmlDocument,
 } from "./musicxml-io";
 import {
   createAbcDownloadPayload,
+  createLilyPondDownloadPayload,
+  createMuseScoreDownloadPayload,
+  createMeiDownloadPayload,
   createMidiDownloadPayload,
   createMusicXmlDownloadPayload,
+  createSvgDownloadPayload,
+  createVsqxDownloadPayload,
   triggerFileDownload,
 } from "./download-flow";
+import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
 import { resolveLoadFlow } from "./load-flow";
 import {
   createBasicWaveSynthEngine,
@@ -38,6 +54,14 @@ import {
   renderScorePreview as renderScorePreviewFlow,
 } from "./preview-flow";
 import { sampleXml } from "./sampleXml";
+import { sampleXml2 } from "./sampleXml2";
+import {
+  buildPlaybackEventsFromMusicXmlDoc,
+  convertMidiToMusicXml,
+  type GraceTimingMode,
+  type MetricAccentProfile,
+  type MidiProgramPreset,
+} from "./midi-io";
 
 type UiState = {
   loaded: boolean;
@@ -64,12 +88,14 @@ const qo = <T extends Element>(selector: string): T | null => {
   return document.querySelector(selector) as T | null;
 };
 
-const inputTypeXml = q<HTMLInputElement>("#inputTypeXml");
-const inputTypeAbc = q<HTMLInputElement>("#inputTypeAbc");
-const inputTypeNew = q<HTMLInputElement>("#inputTypeNew");
-const inputModeFile = q<HTMLInputElement>("#inputModeFile");
-const inputModeSource = q<HTMLInputElement>("#inputModeSource");
+const inputEntryFile = q<HTMLInputElement>("#inputEntryFile");
+const inputEntrySource = q<HTMLInputElement>("#inputEntrySource");
+const inputEntryNew = q<HTMLInputElement>("#inputEntryNew");
+const sourceTypeBlock = q<HTMLDivElement>("#sourceTypeBlock");
+const sourceTypeXml = q<HTMLInputElement>("#sourceTypeXml");
+const sourceTypeAbc = q<HTMLInputElement>("#sourceTypeAbc");
 const newInputBlock = q<HTMLDivElement>("#newInputBlock");
+const newTemplatePianoGrandStaff = q<HTMLInputElement>("#newTemplatePianoGrandStaff");
 const newPartCountInput = q<HTMLInputElement>("#newPartCount");
 const newKeyFifthsSelect = q<HTMLSelectElement>("#newKeyFifths");
 const newTimeBeatsInput = q<HTMLInputElement>("#newTimeBeats");
@@ -83,7 +109,8 @@ const abcInput = q<HTMLTextAreaElement>("#abcInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
-const loadSampleBtn = q<HTMLButtonElement>("#loadSampleBtn");
+const loadSampleBtn1 = q<HTMLButtonElement>("#loadSampleBtn1");
+const loadSample2Btn = q<HTMLButtonElement>("#loadSample2Btn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
@@ -103,15 +130,38 @@ const convertRestBtn = q<HTMLButtonElement>("#convertRestBtn");
 const deleteBtn = q<HTMLButtonElement>("#deleteBtn");
 const playBtn = q<HTMLButtonElement>("#playBtn");
 const stopBtn = q<HTMLButtonElement>("#stopBtn");
+const scoreEditBtn = q<HTMLButtonElement>("#scoreEditBtn");
+const exportPlayBtn = q<HTMLButtonElement>("#exportPlayBtn");
+const exportStopBtn = q<HTMLButtonElement>("#exportStopBtn");
+const downloadSvgBtn = q<HTMLButtonElement>("#downloadSvgBtn");
+const playbackWaveform = q<HTMLSelectElement>("#playbackWaveform");
+const playbackUseMidiLike = q<HTMLInputElement>("#playbackUseMidiLike");
+const graceTimingModeSelect = q<HTMLSelectElement>("#graceTimingMode");
+const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
+const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
+const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
+const midiExportProfileSelect = q<HTMLSelectElement>("#midiExportProfile");
+const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
+const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
+const exportMusicXmlAsXmlExtension = q<HTMLInputElement>("#exportMusicXmlAsXmlExtension");
+const compressXmlMuseScoreExport = q<HTMLInputElement>("#compressXmlMuseScoreExport");
+const generalSettingsAccordion = q<HTMLDetailsElement>("#generalSettingsAccordion");
+const settingsAccordion = q<HTMLDetailsElement>("#settingsAccordion");
+const resetPlaybackSettingsBtn = q<HTMLButtonElement>("#resetPlaybackSettingsBtn");
 const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
+const downloadVsqxBtn = q<HTMLButtonElement>("#downloadVsqxBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
+const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
+const downloadLilyPondBtn = q<HTMLButtonElement>("#downloadLilyPondBtn");
+const downloadMuseScoreBtn = q<HTMLButtonElement>("#downloadMuseScoreBtn");
 const saveModeText = qo<HTMLSpanElement>("#saveModeText");
 const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
 const diagArea = qo<HTMLDivElement>("#diagArea");
 const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
+const inputUiMessage = q<HTMLDivElement>("#inputUiMessage");
 const uiMessage = q<HTMLDivElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
 const measureEmptyState = q<HTMLDivElement>("#measureEmptyState");
@@ -120,6 +170,11 @@ const measureEditorWrap = q<HTMLDivElement>("#measureEditorWrap");
 const measureEditorArea = q<HTMLDivElement>("#measureEditorArea");
 const measureApplyBtn = q<HTMLButtonElement>("#measureApplyBtn");
 const measureDiscardBtn = q<HTMLButtonElement>("#measureDiscardBtn");
+const measureNavLeftBtn = q<HTMLButtonElement>("#measureNavLeftBtn");
+const measureNavDownBtn = q<HTMLButtonElement>("#measureNavDownBtn");
+const measureNavUpBtn = q<HTMLButtonElement>("#measureNavUpBtn");
+const measureNavRightBtn = q<HTMLButtonElement>("#measureNavRightBtn");
+const appendMeasureBtn = q<HTMLButtonElement>("#appendMeasureBtn");
 const playMeasureBtn = q<HTMLButtonElement>("#playMeasureBtn");
 const topTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-top-tab"));
 const topTabPanels = Array.from(document.querySelectorAll<HTMLElement>(".ms-tab-panel"));
@@ -140,6 +195,8 @@ let verovioRenderSeq = 0;
 let currentSvgIdToNodeId = new Map<string, string>();
 let nodeIdToLocation = new Map<string, NoteLocation>();
 let partIdToName = new Map<string, string>();
+let partOrder: string[] = [];
+let measureNumbersByPart = new Map<string, string[]>();
 let selectedMeasure: NoteLocation | null = null;
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
@@ -152,10 +209,220 @@ const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
 const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
+const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
+const DEFAULT_MIDI_PROGRAM: MidiProgramPreset = "electric_piano_2";
+const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
+const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
+const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
+const DEFAULT_MIDI_EXPORT_PROFILE: MidiExportProfile = "musescore_parity";
+const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
+const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
+const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
+const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
+const DEFAULT_METRIC_ACCENT_ENABLED = true;
+const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
+const DEFAULT_VSQX_LYRIC = "ら";
 
 type LocalDraft = {
   xml: string;
   updatedAt: number;
+};
+
+type PlaybackSettings = {
+  midiProgram: MidiProgramPreset;
+  waveform: "sine" | "triangle" | "square";
+  useMidiLikePlayback: boolean;
+  graceTimingMode: GraceTimingMode;
+  metricAccentEnabled: boolean;
+  metricAccentProfile: MetricAccentProfile;
+  midiExportProfile: MidiExportProfile;
+  forceMidiProgramOverride: boolean;
+  keepMetadataInMusicXml: boolean;
+  exportMusicXmlAsXmlExtension: boolean;
+  compressXmlMuseScoreExport: boolean;
+  generalSettingsExpanded: boolean;
+  settingsExpanded: boolean;
+};
+
+const normalizeMidiProgram = (value: string): PlaybackSettings["midiProgram"] => {
+  switch (value) {
+    case "acoustic_grand_piano":
+    case "electric_piano_1":
+    case "electric_piano_2":
+    case "honky_tonk_piano":
+    case "harpsichord":
+    case "clavinet":
+    case "drawbar_organ":
+    case "acoustic_guitar_nylon":
+    case "acoustic_bass":
+    case "violin":
+    case "string_ensemble_1":
+    case "synth_brass_1":
+      return value;
+    default:
+      return DEFAULT_MIDI_PROGRAM;
+  }
+};
+
+const normalizeWaveformSetting = (value: string): PlaybackSettings["waveform"] => {
+  if (value === "triangle" || value === "square") return value;
+  return DEFAULT_PLAYBACK_WAVEFORM;
+};
+
+const normalizeForceMidiProgramOverride = (value: unknown): boolean => {
+  return value === true;
+};
+
+const normalizeKeepMetadataInMusicXml = (value: unknown): boolean => {
+  return value !== false;
+};
+
+const normalizeCompressXmlMuseScoreExport = (value: unknown): boolean => {
+  return value === true;
+};
+
+const normalizeExportMusicXmlAsXmlExtension = (value: unknown): boolean => {
+  return value === true;
+};
+
+const normalizeUseMidiLikePlayback = (value: unknown): boolean => {
+  return value !== false;
+};
+
+const normalizeGraceTimingMode = (value: unknown): GraceTimingMode => {
+  if (value === "on_beat" || value === "classical_equal") return value;
+  return DEFAULT_GRACE_TIMING_MODE;
+};
+
+const normalizeMetricAccentEnabled = (value: unknown): boolean => {
+  return value === true;
+};
+
+const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
+  if (value === "balanced" || value === "strong") return value;
+  return DEFAULT_METRIC_ACCENT_PROFILE;
+};
+
+const readPlaybackSettings = (): PlaybackSettings | null => {
+  try {
+    const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PlaybackSettings>;
+    return {
+      midiProgram: normalizeMidiProgram(String(parsed.midiProgram ?? "")),
+      waveform: normalizeWaveformSetting(String(parsed.waveform ?? "")),
+      useMidiLikePlayback: normalizeUseMidiLikePlayback(parsed.useMidiLikePlayback),
+      graceTimingMode: normalizeGraceTimingMode(parsed.graceTimingMode),
+      metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
+      metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
+      midiExportProfile: normalizeMidiExportProfile(parsed.midiExportProfile),
+      forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
+      keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+      exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
+      compressXmlMuseScoreExport: normalizeCompressXmlMuseScoreExport(parsed.compressXmlMuseScoreExport),
+      generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
+      settingsExpanded: Boolean(parsed.settingsExpanded),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writePlaybackSettings = (): void => {
+  syncGeneralExportSettings();
+  try {
+    const payload: PlaybackSettings = {
+      midiProgram: normalizeMidiProgram(midiProgramSelect.value),
+      waveform: normalizeWaveformSetting(playbackWaveform.value),
+      useMidiLikePlayback: playbackUseMidiLike.checked,
+      graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+      metricAccentEnabled: metricAccentEnabledInput.checked,
+      metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+      midiExportProfile: normalizeMidiExportProfile(midiExportProfileSelect.value),
+      forceMidiProgramOverride: forceMidiProgramOverride.checked,
+      keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+      exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
+      compressXmlMuseScoreExport: compressXmlMuseScoreExport.checked,
+      generalSettingsExpanded: generalSettingsAccordion.open,
+      settingsExpanded: settingsAccordion.open,
+    };
+    localStorage.setItem(PLAYBACK_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore quota/security errors in MVP.
+  }
+};
+
+const syncGeneralExportSettings = (): void => {
+  const useXmlExtension = exportMusicXmlAsXmlExtension.checked;
+  if (useXmlExtension) {
+    compressXmlMuseScoreExport.checked = false;
+  }
+};
+
+const applyInitialPlaybackSettings = (): void => {
+  const stored = readPlaybackSettings();
+  midiProgramSelect.value = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
+  playbackWaveform.value = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
+  playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
+  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
+  midiExportProfileSelect.value = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
+  forceMidiProgramOverride.checked =
+    stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+  keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  exportMusicXmlAsXmlExtension.checked =
+    stored?.exportMusicXmlAsXmlExtension ?? DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
+  compressXmlMuseScoreExport.checked =
+    stored?.compressXmlMuseScoreExport ?? DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+  syncGeneralExportSettings();
+  generalSettingsAccordion.open = stored?.generalSettingsExpanded ?? false;
+  settingsAccordion.open = stored?.settingsExpanded ?? false;
+};
+
+const onResetPlaybackSettings = (): void => {
+  midiProgramSelect.value = DEFAULT_MIDI_PROGRAM;
+  playbackWaveform.value = DEFAULT_PLAYBACK_WAVEFORM;
+  playbackUseMidiLike.checked = DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = DEFAULT_GRACE_TIMING_MODE;
+  metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
+  midiExportProfileSelect.value = DEFAULT_MIDI_EXPORT_PROFILE;
+  forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
+  keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
+  compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+  syncGeneralExportSettings();
+  writePlaybackSettings();
+  renderControlState();
+};
+
+const stripMetadataFromMusicXml = (xml: string, keepMetadata: boolean): string => {
+  if (keepMetadata) return xml;
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return xml;
+  const fields = Array.from(
+    doc.querySelectorAll(
+      'part > measure > attributes > miscellaneous > miscellaneous-field[name^="src:"], part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'
+    )
+  );
+  for (const field of fields) {
+    field.remove();
+  }
+  for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
+    if (misc.querySelector("miscellaneous-field")) continue;
+    misc.remove();
+  }
+  for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
+    if (attributes.children.length > 0) continue;
+    attributes.remove();
+  }
+  return serializeMusicXmlDocument(doc);
+};
+
+const resolveMusicXmlOutput = (): string => {
+  if (!state.lastSuccessfulSaveXml) return "";
+  return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, keepMetadataInMusicXml.checked);
 };
 
 const logDiagnostics = (
@@ -326,24 +593,25 @@ const applyInitialXmlInputValue = (): void => {
 };
 
 const renderInputMode = (): void => {
-  const isAbcType = inputTypeAbc.checked;
-  const isNewType = inputTypeNew.checked;
-  const fileMode = inputModeFile.checked;
-  newInputBlock.classList.toggle("md-hidden", !isNewType);
-  fileInputBlock.classList.toggle("md-hidden", isNewType || !fileMode);
-  sourceXmlInputBlock.classList.toggle("md-hidden", isNewType || fileMode || isAbcType);
-  abcInputBlock.classList.toggle("md-hidden", isNewType || fileMode || !isAbcType);
+  const isNewEntry = inputEntryNew.checked;
+  const isFileEntry = inputEntryFile.checked;
+  const isSourceEntry = inputEntrySource.checked;
+  const isAbcSource = sourceTypeAbc.checked;
+  newInputBlock.classList.toggle("md-hidden", !isNewEntry);
+  sourceTypeBlock.classList.toggle("md-hidden", !isSourceEntry);
+  fileInputBlock.classList.toggle("md-hidden", !isFileEntry);
+  sourceXmlInputBlock.classList.toggle("md-hidden", !isSourceEntry || isAbcSource);
+  abcInputBlock.classList.toggle("md-hidden", !isSourceEntry || !isAbcSource);
 
-  inputModeFile.disabled = isNewType;
-  inputModeSource.disabled = isNewType;
+  sourceTypeXml.disabled = !isSourceEntry;
+  sourceTypeAbc.disabled = !isSourceEntry;
+  fileSelectBtn.classList.toggle("md-hidden", !isFileEntry);
+  loadBtn.classList.toggle("md-hidden", isFileEntry);
   const loadLabel = loadBtn.querySelector("span");
   if (loadLabel) {
-    loadLabel.textContent = isNewType ? "Create" : "Load";
+    loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
-  fileInput.accept = isAbcType
-    ? ".abc,text/plain"
-    : ".musicxml,.xml,text/xml,application/xml";
 };
 
 const normalizeNewPartCount = (): number => {
@@ -381,6 +649,16 @@ const listCurrentNewPartClefs = (): string[] => {
 };
 
 const renderNewPartClefControls = (): void => {
+  const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
+  newPartCountInput.disabled = usePianoGrandStaffTemplate;
+  if (usePianoGrandStaffTemplate) {
+    newPartClefList.innerHTML = "";
+    const message = document.createElement("div");
+    message.className = "ms-field-label";
+    message.textContent = "Template: single part with 2 staves (staff 1: treble, staff 2: bass).";
+    newPartClefList.appendChild(message);
+    return;
+  }
   const count = normalizeNewPartCount();
   const previous = listCurrentNewPartClefs();
   newPartClefList.innerHTML = "";
@@ -738,7 +1016,7 @@ const syncStepFromSelectedDraftNote = (): void => {
 
 const renderMeasureEditorState = (): void => {
   if (!selectedMeasure || !draftCore) {
-    measurePartNameText.textContent = "Track: -";
+    measurePartNameText.textContent = "";
     measurePartNameText.classList.add("md-hidden");
     measureEmptyState.classList.remove("md-hidden");
     measureEditorWrap.classList.add("md-hidden");
@@ -748,13 +1026,13 @@ const renderMeasureEditorState = (): void => {
   }
 
   const partName = partIdToName.get(selectedMeasure.partId) ?? selectedMeasure.partId;
-  measurePartNameText.textContent =
-    `Track: ${partName} / Selected: track=${selectedMeasure.partId}  / measure=${selectedMeasure.measureNumber}`;
+  measurePartNameText.textContent = partName;
   measurePartNameText.classList.remove("md-hidden");
   measureEmptyState.classList.add("md-hidden");
   measureEditorWrap.classList.remove("md-hidden");
-  measureDiscardBtn.disabled = false;
-  measureApplyBtn.disabled = !draftCore.isDirty();
+  const hasDirtyDraft = draftCore.isDirty();
+  measureDiscardBtn.disabled = !hasDirtyDraft;
+  measureApplyBtn.disabled = !hasDirtyDraft;
 };
 
 const highlightSelectedDraftNoteInEditor = (): void => {
@@ -841,23 +1119,31 @@ const renderDiagnostics = (): void => {
 };
 
 const renderUiMessage = (): void => {
-  uiMessage.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
-  uiMessage.textContent = "";
+  const messageTargets = [inputUiMessage, uiMessage];
+  for (const target of messageTargets) {
+    target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
+    target.textContent = "";
+  }
+
+  const showMessage = (kind: "error" | "warning", text: string): void => {
+    const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
+    for (const target of messageTargets) {
+      target.textContent = text;
+      target.classList.add(className);
+      target.classList.remove("md-hidden");
+    }
+  };
 
   const dispatch = state.lastDispatchResult;
   if (dispatch) {
     if (!dispatch.ok && dispatch.diagnostics.length > 0) {
       const d = dispatch.diagnostics[0];
-      uiMessage.textContent = `Error: ${d.message} (${d.code})`;
-      uiMessage.classList.add("ms-ui-message--error");
-      uiMessage.classList.remove("md-hidden");
+      showMessage("error", `Error: ${d.message} (${d.code})`);
       return;
     }
     if (dispatch.warnings.length > 0) {
       const w = dispatch.warnings[0];
-      uiMessage.textContent = `Warning: ${w.message} (${w.code})`;
-      uiMessage.classList.add("ms-ui-message--warning");
-      uiMessage.classList.remove("md-hidden");
+      showMessage("warning", `Warning: ${w.message} (${w.code})`);
       return;
     }
   }
@@ -865,13 +1151,13 @@ const renderUiMessage = (): void => {
   const save = state.lastSaveResult;
   if (save && !save.ok && save.diagnostics.length > 0) {
     const d = save.diagnostics[0];
-    uiMessage.textContent = `Error: ${d.message} (${d.code})`;
-    uiMessage.classList.add("ms-ui-message--error");
-    uiMessage.classList.remove("md-hidden");
+    showMessage("error", `Error: ${d.message} (${d.code})`);
     return;
   }
 
-  uiMessage.classList.add("md-hidden");
+  for (const target of messageTargets) {
+    target.classList.add("md-hidden");
+  }
 };
 
 const renderOutput = (): void => {
@@ -879,11 +1165,15 @@ const renderOutput = (): void => {
     saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
   }
   if (outputXml) {
-    outputXml.value = state.lastSaveResult?.ok ? state.lastSaveResult.xml : "";
+    outputXml.value = state.lastSaveResult?.ok ? resolveMusicXmlOutput() : "";
   }
   downloadBtn.disabled = !state.lastSaveResult?.ok;
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
+  downloadVsqxBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
+  downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
+  downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
+  downloadMuseScoreBtn.disabled = !state.lastSaveResult?.ok;
 };
 
 const renderControlState = (): void => {
@@ -903,6 +1193,23 @@ const renderControlState = (): void => {
   playMeasureBtn.disabled = !hasDraft || isPlaying;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
+  scoreEditBtn.disabled = !state.loaded || !selectedMeasure;
+  exportPlayBtn.disabled = !state.loaded || isPlaying;
+  exportStopBtn.disabled = !isPlaying;
+  downloadSvgBtn.disabled = !state.loaded;
+  playbackWaveform.disabled = isPlaying;
+  playbackUseMidiLike.disabled = isPlaying;
+  metricAccentEnabledInput.disabled = isPlaying;
+  metricAccentProfileSelect.disabled = isPlaying || !metricAccentEnabledInput.checked;
+  appendMeasureBtn.disabled = !state.loaded || isPlaying;
+  const navLeftTarget = getMeasureNavigationTarget(selectedMeasure, "left");
+  const navRightTarget = getMeasureNavigationTarget(selectedMeasure, "right");
+  const navUpTarget = getMeasureNavigationTarget(selectedMeasure, "up");
+  const navDownTarget = getMeasureNavigationTarget(selectedMeasure, "down");
+  measureNavLeftBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navLeftTarget;
+  measureNavRightBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navRightTarget;
+  measureNavUpBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navUpTarget;
+  measureNavDownBtn.disabled = !state.loaded || isPlaying || !selectedMeasure || !navDownTarget;
 };
 
 const renderAll = (): void => {
@@ -963,6 +1270,72 @@ const rebuildPartNameMap = (doc: Document): void => {
       partId;
     partIdToName.set(partId, partName);
   }
+};
+
+const rebuildMeasureStructureMap = (doc: Document): void => {
+  partOrder = [];
+  measureNumbersByPart = new Map<string, string[]>();
+  for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+    const partId = part.getAttribute("id")?.trim() ?? "";
+    if (!partId) continue;
+    partOrder.push(partId);
+    const numbers = Array.from(part.querySelectorAll(":scope > measure"))
+      .map((measure) => measure.getAttribute("number")?.trim() ?? "")
+      .filter((number) => number.length > 0);
+    measureNumbersByPart.set(partId, Array.from(new Set(numbers)));
+  }
+};
+
+type MeasureNavDirection = "left" | "right" | "up" | "down";
+
+const getMeasureNavigationTarget = (
+  current: NoteLocation | null,
+  direction: MeasureNavDirection
+): NoteLocation | null => {
+  if (!current) return null;
+  if (direction === "left" || direction === "right") {
+    const measures = measureNumbersByPart.get(current.partId) ?? [];
+    const index = measures.indexOf(current.measureNumber);
+    if (index < 0) return null;
+    const nextIndex = direction === "left" ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= measures.length) return null;
+    return { partId: current.partId, measureNumber: measures[nextIndex] };
+  }
+
+  const partIndex = partOrder.indexOf(current.partId);
+  if (partIndex < 0) return null;
+  const nextPartIndex = direction === "up" ? partIndex - 1 : partIndex + 1;
+  if (nextPartIndex < 0 || nextPartIndex >= partOrder.length) return null;
+  const nextPartId = partOrder[nextPartIndex];
+  const nextMeasures = measureNumbersByPart.get(nextPartId) ?? [];
+  if (!nextMeasures.includes(current.measureNumber)) return null;
+  return { partId: nextPartId, measureNumber: current.measureNumber };
+};
+
+const navigateSelectedMeasure = (direction: MeasureNavDirection): void => {
+  if (!state.loaded || !selectedMeasure) return;
+  if (draftCore && draftCore.isDirty()) {
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [
+        {
+          code: "MVP_COMMAND_EXECUTION_FAILED",
+          message: "Apply or discard current measure edits before moving to another measure.",
+        },
+      ],
+      warnings: [],
+    };
+    renderAll();
+    return;
+  }
+  const next = getMeasureNavigationTarget(selectedMeasure, direction);
+  if (!next) return;
+  initializeMeasureEditor(next);
+  // Keep Score-tab measure highlight synced even while navigating from Edit tab.
+  highlightSelectedMeasureInMainPreview();
 };
 
 const stripPartNamesInRenderDoc = (doc: Document): void => {
@@ -1297,21 +1670,49 @@ const refreshNotesFromCore = (): void => {
     if (currentDoc) {
       rebuildNodeLocationMap(currentDoc);
       rebuildPartNameMap(currentDoc);
+      rebuildMeasureStructureMap(currentDoc);
     } else {
       nodeIdToLocation = new Map<string, NoteLocation>();
       partIdToName = new Map<string, string>();
+      partOrder = [];
+      measureNumbersByPart = new Map<string, string[]>();
     }
   } else {
     nodeIdToLocation = new Map<string, NoteLocation>();
     partIdToName = new Map<string, string>();
+    partOrder = [];
+    measureNumbersByPart = new Map<string, string[]>();
   }
 };
 
 const synthEngine = createBasicWaveSynthEngine({ ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER });
+const unlockAudioOnGesture = (): void => {
+  void synthEngine.unlockFromUserGesture();
+};
+const installGlobalAudioUnlock = (): void => {
+  const unlockOnce = (): void => {
+    void synthEngine.unlockFromUserGesture().then((ok) => {
+      if (!ok) return;
+      window.removeEventListener("pointerdown", unlockOnce);
+      window.removeEventListener("touchstart", unlockOnce);
+      window.removeEventListener("keydown", unlockOnce);
+    });
+  };
+  window.addEventListener("pointerdown", unlockOnce, { passive: true });
+  window.addEventListener("touchstart", unlockOnce, { passive: true });
+  window.addEventListener("keydown", unlockOnce);
+};
 const playbackFlowOptions: PlaybackFlowOptions = {
   engine: synthEngine,
   ticksPerQuarter: PLAYBACK_TICKS_PER_QUARTER,
   editableVoice: DEFAULT_VOICE,
+  getPlaybackWaveform: () => {
+    return normalizeWaveformSetting(playbackWaveform.value);
+  },
+  getUseMidiLikePlayback: () => playbackUseMidiLike.checked,
+  getGraceTimingMode: () => normalizeGraceTimingMode(graceTimingModeSelect.value),
+  getMetricAccentEnabled: () => metricAccentEnabledInput.checked,
+  getMetricAccentProfile: () => normalizeMetricAccentProfile(metricAccentProfileSelect.value),
   debugLog: DEBUG_LOG,
   getIsPlaying: () => isPlaying,
   setIsPlaying: (playing) => {
@@ -1347,11 +1748,23 @@ const stopPlayback = (): void => {
   stopPlaybackFlow(playbackFlowOptions);
 };
 
+const unlockAudioForPlayback = async (): Promise<boolean> => {
+  const ok = await synthEngine.unlockFromUserGesture();
+  if (!ok && playbackText) {
+    playbackText.textContent = "Playback: audio unlock failed";
+  }
+  return ok;
+};
+
 const startPlayback = async (): Promise<void> => {
+  const ok = await unlockAudioForPlayback();
+  if (!ok) return;
   await startPlaybackFlow(playbackFlowOptions, { isLoaded: state.loaded, core });
 };
 
 const startMeasurePlayback = async (): Promise<void> => {
+  const ok = await unlockAudioForPlayback();
+  if (!ok) return;
   await startMeasurePlaybackFlow(playbackFlowOptions, { draftCore });
 };
 
@@ -1502,15 +1915,45 @@ const loadFromText = (xml: string): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
+  const keepMetadata = keepMetadataInMusicXml.checked;
   const result = await resolveLoadFlow({
-    isNewType: inputTypeNew.checked,
-    isAbcType: inputTypeAbc.checked,
-    isFileMode: inputModeFile.checked,
+    isNewType: inputEntryNew.checked,
+    isAbcType: inputEntrySource.checked && sourceTypeAbc.checked,
+    isFileMode: inputEntryFile.checked,
     selectedFile: fileInput.files?.[0] ?? null,
     xmlSourceText: xmlInput.value,
     abcSourceText: abcInput.value,
     createNewMusicXml,
-    convertAbcToMusicXml,
+    formatImportedMusicXml: normalizeImportedMusicXmlText,
+    convertAbcToMusicXml: (abcSource) =>
+      convertAbcToMusicXml(abcSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertMeiToMusicXml: (meiSource) =>
+      convertMeiToMusicXml(meiSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertLilyPondToMusicXml: (lilySource) =>
+      convertLilyPondToMusicXml(lilySource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertMuseScoreToMusicXml: (musescoreSource) =>
+      convertMuseScoreToMusicXml(musescoreSource, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
+    convertVsqxToMusicXml: (vsqxSource) =>
+      convertVsqxToMusicXml(vsqxSource, {
+        defaultLyric: DEFAULT_VSQX_LYRIC,
+      }),
+    convertMidiToMusicXml: (midiBytes) =>
+      convertMidiToMusicXml(midiBytes, {
+        sourceMetadata: keepMetadata,
+        debugMetadata: keepMetadata,
+      }),
   });
 
   if (!result.ok) {
@@ -1535,6 +1978,7 @@ const onLoadClick = async (): Promise<void> => {
   // Persist immediately on explicit load actions (Load / Load sample).
   writeLocalDraft(result.xmlToLoad);
   loadFromText(result.xmlToLoad);
+  activateTopTab("score");
 };
 
 const onDiscardLocalDraft = (): void => {
@@ -1543,7 +1987,8 @@ const onDiscardLocalDraft = (): void => {
 };
 
 const createNewMusicXml = (): string => {
-  const partCount = normalizeNewPartCount();
+  const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
+  const partCount = usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount();
   const parsedFifths = Number(newKeyFifthsSelect.value);
   const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
   const beats = normalizeNewTimeBeats();
@@ -1551,17 +1996,19 @@ const createNewMusicXml = (): string => {
   const divisions = 960;
   const measureCount = 8;
   const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
-  const clefs = listCurrentNewPartClefs();
+  const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();
 
   const partListXml = Array.from({ length: partCount }, (_, i) => {
     const partId = `P${i + 1}`;
     const midiChannel = ((i % 16) + 1 === 10) ? 11 : ((i % 16) + 1);
+    const midiProgram = usePianoGrandStaffTemplate ? 1 : 6;
+    const partName = usePianoGrandStaffTemplate ? "Piano" : `Part ${i + 1}`;
     return [
       `<score-part id="${partId}">`,
-      `<part-name>Part ${i + 1}</part-name>`,
+      `<part-name>${partName}</part-name>`,
       `<midi-instrument id="${partId}-I1">`,
       `<midi-channel>${midiChannel}</midi-channel>`,
-      `<midi-program>6</midi-program>`,
+      `<midi-program>${midiProgram}</midi-program>`,
       "</midi-instrument>",
       "</score-part>",
     ].join("");
@@ -1579,14 +2026,19 @@ const createNewMusicXml = (): string => {
             `<divisions>${divisions}</divisions>`,
             `<key><fifths>${fifths}</fifths><mode>major</mode></key>`,
             `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`,
-            clefXml,
+            usePianoGrandStaffTemplate
+              ? "<staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef>"
+              : clefXml,
             "</attributes>",
           ].join("")
         : "";
+      const measureBody = usePianoGrandStaffTemplate
+        ? `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${measureDuration}</duration></backup><note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>2</staff></note>`
+        : `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`;
       return [
         `<measure number="${number}">`,
         attrs,
-        `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`,
+        measureBody,
         "</measure>",
       ].join("");
     }).join("");
@@ -1731,6 +2183,134 @@ const replaceMeasureInMainXml = (sourceXml: string, partId: string, measureNumbe
   return serializeMusicXmlDocument(mergedDoc);
 };
 
+const toPositiveInteger = (value: number | null | undefined): number | null => {
+  if (!Number.isFinite(value)) return null;
+  const rounded = Math.round(value as number);
+  return rounded > 0 ? rounded : null;
+};
+
+const resolveEffectiveStavesAtEnd = (part: Element): number => {
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  let staves = 1;
+  for (const measure of measures) {
+    const text = measure.querySelector(":scope > attributes > staves")?.textContent?.trim() ?? "";
+    const parsed = Number(text);
+    if (Number.isInteger(parsed) && parsed > 0) staves = parsed;
+  }
+  return staves;
+};
+
+const resolveHasTrebleBassGrandStaffAtEnd = (part: Element): boolean => {
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  let clef1 = "";
+  let clef2 = "";
+  for (const measure of measures) {
+    const nextClef1 = measure.querySelector(':scope > attributes > clef[number="1"] > sign')?.textContent?.trim() ?? "";
+    const nextClef2 = measure.querySelector(':scope > attributes > clef[number="2"] > sign')?.textContent?.trim() ?? "";
+    if (nextClef1) clef1 = nextClef1;
+    if (nextClef2) clef2 = nextClef2;
+  }
+  return clef1 === "G" && clef2 === "F";
+};
+
+const createMeasureRestNoteXml = (duration: number, voice: string, staff: string | null): string => {
+  return [
+    "<note>",
+    '<rest measure="yes"/>',
+    `<duration>${duration}</duration>`,
+    `<voice>${voice}</voice>`,
+    staff ? `<staff>${staff}</staff>` : "",
+    "</note>",
+  ].join("");
+};
+
+const deriveNextMeasureNumber = (part: Element): string => {
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  const lastMeasure = measures[measures.length - 1] ?? null;
+  if (!lastMeasure) return "1";
+  const raw = lastMeasure.getAttribute("number")?.trim() ?? "";
+  const numeric = Number(raw);
+  if (Number.isInteger(numeric) && numeric >= 0) return String(numeric + 1);
+  return String(measures.length + 1);
+};
+
+const appendMeasureToMainXml = (sourceXml: string): string | null => {
+  const doc = parseMusicXmlDocument(sourceXml);
+  if (!doc) return null;
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  if (!parts.length) return null;
+
+  for (const part of parts) {
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const lastMeasure = measures[measures.length - 1] ?? null;
+    if (!lastMeasure) continue;
+    const capacity = toPositiveInteger(getMeasureCapacity(lastMeasure)) ?? 3840;
+    const nextNumber = deriveNextMeasureNumber(part);
+    const staves = resolveEffectiveStavesAtEnd(part);
+    const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
+
+    const measure = doc.createElement("measure");
+    measure.setAttribute("number", nextNumber);
+    if (isGrandStaff) {
+      const lane1 = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", "1"))?.querySelector("note");
+      const backup = doc.createElement("backup");
+      const backupDur = doc.createElement("duration");
+      backupDur.textContent = String(capacity);
+      backup.appendChild(backupDur);
+      const lane2 = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", "2"))?.querySelector("note");
+      if (lane1) measure.appendChild(doc.importNode(lane1, true));
+      measure.appendChild(backup);
+      if (lane2) measure.appendChild(doc.importNode(lane2, true));
+    } else {
+      const rest = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", null))?.querySelector("note");
+      if (rest) measure.appendChild(doc.importNode(rest, true));
+    }
+    part.appendChild(measure);
+  }
+  return serializeMusicXmlDocument(doc);
+};
+
+const onAppendMeasureAtEnd = (): void => {
+  if (!state.loaded) return;
+  if (draftCore && draftCore.isDirty()) {
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [
+        {
+          code: "MVP_COMMAND_EXECUTION_FAILED",
+          message: "Apply or discard current measure edits before adding a new measure.",
+        },
+      ],
+      warnings: [],
+    };
+    renderAll();
+    return;
+  }
+  const mainXml = core.debugSerializeCurrentXml();
+  if (!mainXml) return;
+  const nextXml = appendMeasureToMainXml(mainXml);
+  if (!nextXml) {
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [{ code: "MVP_COMMAND_EXECUTION_FAILED", message: "Failed to append measure." }],
+      warnings: [],
+    };
+    renderAll();
+    return;
+  }
+  loadFromText(nextXml);
+  writeLocalDraft(nextXml);
+  if (selectedMeasure) {
+    initializeMeasureEditor(selectedMeasure);
+  }
+};
+
 const onMeasureApply = (): void => {
   if (!draftCore || !selectedMeasure) return;
   const draftSave = draftCore.save();
@@ -1872,23 +2452,188 @@ const onConvertRestToNote = (): void => {
   runCommand(command);
 };
 
-const onDownload = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
-  triggerFileDownload(createMusicXmlDownloadPayload(state.lastSuccessfulSaveXml));
+const failExport = (
+  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "SVG",
+  reason: string
+): void => {
+  const message = `${format} export failed: ${reason}`;
+  console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
+  state.lastDispatchResult = {
+    ok: false,
+    dirtyChanged: false,
+    changedNodeIds: [],
+    affectedMeasureNumbers: [],
+    diagnostics: [{ code: "MVP_COMMAND_EXECUTION_FAILED", message }],
+    warnings: [],
+  };
+  renderAll();
+};
+
+const onDownload = async (): Promise<void> => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("MusicXML", "No valid saved XML is available.");
+    return;
+  }
+  try {
+    const payload = await createMusicXmlDownloadPayload(xmlText, {
+      compressed: compressXmlMuseScoreExport.checked,
+      useXmlExtension: exportMusicXmlAsXmlExtension.checked,
+    });
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const onDownloadMidi = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
-  const payload = createMidiDownloadPayload(state.lastSuccessfulSaveXml, PLAYBACK_TICKS_PER_QUARTER);
-  if (!payload) return;
-  triggerFileDownload(payload);
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("MIDI", "No valid saved XML is available.");
+    return;
+  }
+  const sourceDoc = parseMusicXmlDocument(xmlText);
+  if (!sourceDoc) {
+    failExport("MIDI", "Current MusicXML could not be parsed.");
+    return;
+  }
+  const parsedForCheck = buildPlaybackEventsFromMusicXmlDoc(sourceDoc, PLAYBACK_TICKS_PER_QUARTER, {
+    mode: "midi",
+    graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabled: metricAccentEnabledInput.checked,
+    metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+  });
+  if (parsedForCheck.events.length === 0) {
+    failExport("MIDI", "No notes to export (MIDI events are empty).");
+    return;
+  }
+  const payload = createMidiDownloadPayload(
+    xmlText,
+    PLAYBACK_TICKS_PER_QUARTER,
+    normalizeMidiProgram(midiProgramSelect.value),
+    forceMidiProgramOverride.checked,
+    normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabledInput.checked,
+    normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+    normalizeMidiExportProfile(midiExportProfileSelect.value)
+  );
+  if (!payload) {
+    failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadVsqx = (): void => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("VSQX", "No valid saved XML is available.");
+    return;
+  }
+
+  const converted = convertMusicXmlToVsqx(xmlText, { musicXml: { defaultLyric: DEFAULT_VSQX_LYRIC } });
+  if (!converted.ok) {
+    failExport("VSQX", converted.diagnostic?.message ?? "MusicXML to VSQX conversion failed.");
+    return;
+  }
+
+  try {
+    triggerFileDownload(createVsqxDownloadPayload(converted.vsqx));
+  } catch (err) {
+    failExport("VSQX", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const onDownloadAbc = (): void => {
-  if (!state.lastSuccessfulSaveXml) return;
-  const payload = createAbcDownloadPayload(state.lastSuccessfulSaveXml, exportMusicXmlDomToAbc);
-  if (!payload) return;
-  triggerFileDownload(payload);
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("ABC", "No valid saved XML is available.");
+    return;
+  }
+  const payload = createAbcDownloadPayload(xmlText, exportMusicXmlDomToAbc);
+  if (!payload) {
+    failExport("ABC", "Could not build ABC payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadMei = (): void => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("MEI", "No valid saved XML is available.");
+    return;
+  }
+  const payload = createMeiDownloadPayload(xmlText, exportMusicXmlDomToMei);
+  if (!payload) {
+    failExport("MEI", "Could not build MEI payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MEI", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadLilyPond = (): void => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("LilyPond", "No valid saved XML is available.");
+    return;
+  }
+  const payload = createLilyPondDownloadPayload(xmlText, exportMusicXmlDomToLilyPond);
+  if (!payload) {
+    failExport("LilyPond", "Could not build LilyPond payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("LilyPond", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadMuseScore = async (): Promise<void> => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("MuseScore", "No valid saved XML is available.");
+    return;
+  }
+  const payload = await createMuseScoreDownloadPayload(xmlText, exportMusicXmlDomToMuseScore, {
+    compressed: compressXmlMuseScoreExport.checked,
+  });
+  if (!payload) {
+    failExport("MuseScore", "Could not build MuseScore payload from current MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MuseScore", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadSvg = (): void => {
+  const svgNode = debugScoreArea.querySelector("svg");
+  if (!svgNode) {
+    failExport("SVG", "No rendered SVG preview is available.");
+    return;
+  }
+  try {
+    const svgText = new XMLSerializer().serializeToString(svgNode);
+    triggerFileDownload(createSvgDownloadPayload(svgText));
+  } catch (err) {
+    failExport("SVG", err instanceof Error ? err.message : "Unknown download error.");
+  }
 };
 
 const activateTopTab = (tabName: string): void => {
@@ -1925,32 +2670,51 @@ measureSelectGuideBtn.addEventListener("click", () => {
   activateTopTab("score");
 });
 
-inputTypeXml.addEventListener("change", renderInputMode);
-inputTypeAbc.addEventListener("change", renderInputMode);
-inputTypeNew.addEventListener("change", renderInputMode);
-inputModeFile.addEventListener("change", renderInputMode);
-inputModeSource.addEventListener("change", renderInputMode);
+inputEntryFile.addEventListener("change", renderInputMode);
+inputEntrySource.addEventListener("change", renderInputMode);
+inputEntryNew.addEventListener("change", renderInputMode);
+sourceTypeXml.addEventListener("change", renderInputMode);
+sourceTypeAbc.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => fileInput.click());
+newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
+fileSelectBtn.addEventListener("click", () => {
+  // Clear selection so choosing the same file again still fires `change`.
+  fileInput.value = "";
+  fileInput.click();
+});
 fileInput.addEventListener("change", () => {
   const f = fileInput.files?.[0];
   fileNameText.textContent = f ? f.name : "No file selected";
+  fileNameText.classList.toggle("md-hidden", !f);
+  if (!f) return;
+  inputEntryFile.checked = true;
+  inputEntrySource.checked = false;
+  inputEntryNew.checked = false;
+  renderInputMode();
+  if (inputEntryNew.checked || !inputEntryFile.checked) return;
+  void onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
   void onLoadClick();
 });
 discardDraftExportBtn.addEventListener("click", onDiscardLocalDraft);
-loadSampleBtn.addEventListener("click", () => {
-  inputTypeXml.checked = true;
-  inputTypeAbc.checked = false;
-  inputTypeNew.checked = false;
-  inputModeSource.checked = true;
-  inputModeFile.checked = false;
-  xmlInput.value = sampleXml;
+const loadBuiltInSample = (xml: string): void => {
+  inputEntryFile.checked = false;
+  inputEntrySource.checked = true;
+  inputEntryNew.checked = false;
+  sourceTypeXml.checked = true;
+  sourceTypeAbc.checked = false;
+  xmlInput.value = xml;
   renderInputMode();
   renderLocalDraftUi();
   void onLoadClick();
+};
+loadSampleBtn1.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml);
+});
+loadSample2Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml2);
 });
 if (noteSelect) {
   noteSelect.addEventListener("change", () => {
@@ -1984,18 +2748,70 @@ convertRestBtn.addEventListener("click", onConvertRestToNote);
 playBtn.addEventListener("click", () => {
   void startPlayback();
 });
+playBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
+exportPlayBtn.addEventListener("click", () => {
+  void startPlayback();
+});
+exportPlayBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+exportPlayBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 stopBtn.addEventListener("click", stopPlayback);
+scoreEditBtn.addEventListener("click", () => {
+  if (!selectedMeasure) return;
+  activateTopTab("edit");
+});
+exportStopBtn.addEventListener("click", stopPlayback);
 downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
+downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+downloadMeiBtn.addEventListener("click", onDownloadMei);
+downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
+downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
+downloadSvgBtn.addEventListener("click", onDownloadSvg);
+resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
+midiProgramSelect.addEventListener("change", writePlaybackSettings);
+midiExportProfileSelect.addEventListener("change", writePlaybackSettings);
+forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
+playbackWaveform.addEventListener("change", writePlaybackSettings);
+playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
+graceTimingModeSelect.addEventListener("change", writePlaybackSettings);
+metricAccentEnabledInput.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderControlState();
+});
+metricAccentProfileSelect.addEventListener("change", writePlaybackSettings);
+keepMetadataInMusicXml.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderOutput();
+});
+exportMusicXmlAsXmlExtension.addEventListener("change", writePlaybackSettings);
+compressXmlMuseScoreExport.addEventListener("change", () => {
+  if (compressXmlMuseScoreExport.checked) {
+    exportMusicXmlAsXmlExtension.checked = false;
+  }
+  writePlaybackSettings();
+});
+generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
+settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
 measureApplyBtn.addEventListener("click", onMeasureApply);
 measureDiscardBtn.addEventListener("click", onMeasureDiscard);
+measureNavLeftBtn.addEventListener("click", () => navigateSelectedMeasure("left"));
+measureNavRightBtn.addEventListener("click", () => navigateSelectedMeasure("right"));
+measureNavUpBtn.addEventListener("click", () => navigateSelectedMeasure("up"));
+measureNavDownBtn.addEventListener("click", () => navigateSelectedMeasure("down"));
+appendMeasureBtn.addEventListener("click", onAppendMeasureAtEnd);
 playMeasureBtn.addEventListener("click", () => {
   void startMeasurePlayback();
 });
+playMeasureBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
+playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 
 renderNewPartClefControls();
 applyInitialXmlInputValue();
+applyInitialPlaybackSettings();
+installVsqxMusicXmlNormalizationHook(normalizeImportedMusicXmlText);
+installGlobalAudioUnlock();
 loadFromText(xmlInput.value);

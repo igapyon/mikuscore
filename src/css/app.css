@@ -7,8 +7,13 @@ body {
   font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+.md-hidden {
+  display: none !important;
+}
+
 .md-shell {
   width: 100%;
+  max-width: none;
 }
 
 .ms-app {
@@ -198,9 +203,55 @@ body {
 .ms-flow-step .md-section-title {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  column-gap: 0.3rem;
+  row-gap: 0.25rem;
   margin-top: 0;
   margin-bottom: 0.55rem;
+}
+
+.ms-flow-step .md-section-title .md-tooltip-group {
+  line-height: 1;
+}
+
+.ms-flow-step .md-section-title .md-info-chip {
+  margin-left: 0;
+}
+
+.ms-section-help-tooltip {
+  width: min(22rem, calc(100vw - 1.5rem));
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  white-space: normal;
+}
+
+.ms-edit-nav {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ms-nav-arrow-btn {
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.ms-edit-part-name {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.15rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid #ddd2f0;
+  background: #f4f0fb;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: #5a4b79;
 }
 
 .ms-step-no {
@@ -268,20 +319,27 @@ body {
 
 .ms-file-name {
   display: inline-block;
-  margin-top: 0.5rem;
   color: var(--md-sys-color-on-surface-variant);
   font-size: 0.9rem;
 }
 
+.ms-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .ms-file-select-button {
-  background: #b7ece6;
-  color: #0d4a42;
-  border: 1px solid #8fd8cf;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: #6200ee;
+  color: #ffffff;
+  border: 1px solid #4f00c6;
+  box-shadow: 0 2px 6px rgba(98, 0, 238, 0.35);
 }
 
 .ms-file-select-button:hover {
-  background: #a5e4dc;
+  background: #5400d6;
 }
 
 .ms-actions {
@@ -297,6 +355,118 @@ body {
 
 .ms-preview-actions {
   margin-bottom: 0.7rem;
+}
+
+#exportPlayBtn {
+  background: var(--md-sys-color-secondary);
+  color: var(--md-sys-color-on-secondary);
+  border-color: color-mix(in srgb, var(--md-sys-color-secondary) 80%, #000 20%);
+}
+
+#exportPlayBtn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-secondary) 88%, #000 12%);
+}
+
+.ms-export-divider {
+  height: 1px;
+  background: #d9d3e5;
+  margin: 0.65rem 0 0.85rem;
+}
+
+.ms-playback-status {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 0.92rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.ms-settings-card {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e3deeb;
+  background: transparent;
+}
+
+.ms-settings-accordion {
+  border: 1px solid #d6d1e0;
+  border-radius: 12px;
+  background: #f4f1f8;
+  overflow: visible;
+}
+
+.ms-settings-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #575163;
+  padding: 0.85rem 1rem;
+  background: #ece7f2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ms-settings-summary:focus,
+.ms-settings-summary:focus-visible {
+  outline: none;
+}
+
+.ms-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ms-settings-summary::after {
+  content: "";
+  width: 0.48rem;
+  height: 0.48rem;
+  border-right: 1.5px solid #766f86;
+  border-bottom: 1.5px solid #766f86;
+  transform: rotate(45deg);
+  transition: transform 150ms ease;
+}
+
+.ms-settings-accordion[open] > .ms-settings-summary::after {
+  transform: rotate(225deg);
+}
+
+.ms-settings-accordion[open] > .ms-settings-summary {
+  border-bottom: 1px solid #d9d3e5;
+}
+
+.ms-settings-body {
+  padding: 0.85rem 1rem 0.95rem;
+}
+
+.ms-settings-block + .ms-settings-block {
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #d9d3e5;
+}
+
+.ms-settings-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ms-settings-actions--section-divider {
+  padding-top: 0.8rem;
+  border-top: 1px solid #d9d3e5;
+}
+
+.ms-settings-subtitle {
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #4e495d;
+  letter-spacing: 0.01em;
+}
+
+.ms-settings-grid {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .ms-icon-button {
@@ -405,6 +575,71 @@ body {
 
 .ms-field-label {
   display: none;
+}
+
+.ms-settings-card .ms-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  line-height: 1.2;
+  color: #4f495a;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.ms-settings-card .ms-field-label .md-info-chip {
+  margin-left: 0;
+}
+
+.ms-settings-card .ms-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.ms-settings-card .ms-field:not(.ms-field--switch) {
+  margin: 0.45rem 0;
+}
+
+.ms-settings-card .ms-field .md-select {
+  flex: 0 1 300px;
+  min-width: 180px;
+}
+
+.ms-check-field {
+  margin-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+  color: #4f495a;
+}
+
+.ms-check-field input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #5f1ee6;
+}
+
+.ms-switch-field {
+  margin-top: 0.45rem;
+  font-size: 0.86rem;
+  color: #4f495a;
+}
+
+.ms-settings-card .ms-field--switch .ms-switch-field {
+  margin-top: 0;
+}
+
+.ms-settings-card .ms-field--switch {
+  margin: 0.65rem 0 0.45rem;
+}
+
+.ms-settings-card .ms-switch-field--control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* Keep duration selector on its own row for compact editing flow */
@@ -561,23 +796,23 @@ body {
 }
 
 .ms-measure-editor .ms-note-selected {
-  fill: #d32f2f !important;
-  stroke: #d32f2f !important;
+  fill: #ff0000 !important;
+  stroke: #ff0000 !important;
 }
 
 .ms-measure-editor .ms-note-selected * {
-  fill: #d32f2f !important;
-  stroke: #d32f2f !important;
+  fill: #ff0000 !important;
+  stroke: #ff0000 !important;
 }
 
 .ms-debug-score .ms-measure-selected {
-  fill: #c62828 !important;
-  stroke: #c62828 !important;
+  fill: #ff0000 !important;
+  stroke: #ff0000 !important;
 }
 
 .ms-debug-score .ms-measure-selected * {
-  fill: #c62828 !important;
-  stroke: #c62828 !important;
+  fill: #ff0000 !important;
+  stroke: #ff0000 !important;
 }
 
 .ms-dev {
@@ -636,6 +871,14 @@ body {
     border-radius: 14px;
   }
 
+  .ms-settings-card .ms-field {
+    flex-wrap: wrap;
+  }
+
+  .ms-settings-card .ms-field .md-select {
+    flex: 1 1 100%;
+  }
+
   .ms-app {
     margin: 8px auto;
   }
@@ -662,6 +905,12 @@ body {
   .ms-top-tab-label {
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .ms-edit-nav {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .ms-radio-group {
