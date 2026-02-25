@@ -147,7 +147,10 @@ export class ScoreCore {
             const consumed = consumedAfter + consumedBefore;
             if (consumed < overflow) {
               const result = validateProjectedMeasureTiming(target, command.voice, projected);
-              if (result.diagnostic) return this.failWith(result.diagnostic);
+              if (result.diagnostic) {
+                this.restoreFrom(snapshot);
+                return this.failWith(result.diagnostic);
+              }
             }
           }
           const timingAfterRestAdjust = getMeasureTimingForVoice(target, command.voice);
@@ -159,7 +162,10 @@ export class ScoreCore {
             command.voice,
             adjustedProjected
           );
-          if (result.diagnostic) return this.failWith(result.diagnostic);
+          if (result.diagnostic) {
+            this.restoreFrom(snapshot);
+            return this.failWith(result.diagnostic);
+          }
           projectedWarning = result.warning;
           if (adjustedProjected < timing.capacity) {
             underfullDelta = timing.capacity - adjustedProjected;

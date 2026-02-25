@@ -45,6 +45,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 
 ### Development Commands
 - `npm run build`
+- `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
 - `npm run test:unit`
@@ -125,6 +126,7 @@ Debugging note:
 
 ### 開発コマンド
 - `npm run build`
+- `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
 - `npm run test:unit`

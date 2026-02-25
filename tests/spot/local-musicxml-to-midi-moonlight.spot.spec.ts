@@ -134,6 +134,70 @@ const diffMultiset = (a: Map<string, number>, b: Map<string, number>): string[] 
   return out;
 };
 
+const diffWithDurationTolerance = (
+  refEvents: NoteEvent[],
+  candEvents: NoteEvent[],
+  durationMatcher: (refDuration: number, candDuration: number) => boolean
+): { count: number; sample: string[] } => {
+  type BucketKey = string;
+  const bucketOf = (e: NoteEvent): BucketKey => `${e.onsetAbs}|${e.step}|${e.alter}|${e.octave}`;
+  const refBuckets = new Map<BucketKey, number[]>();
+  const candBuckets = new Map<BucketKey, number[]>();
+
+  for (const e of refEvents) {
+    const key = bucketOf(e);
+    const arr = refBuckets.get(key) ?? [];
+    arr.push(e.duration);
+    refBuckets.set(key, arr);
+  }
+  for (const e of candEvents) {
+    const key = bucketOf(e);
+    const arr = candBuckets.get(key) ?? [];
+    arr.push(e.duration);
+    candBuckets.set(key, arr);
+  }
+
+  for (const values of refBuckets.values()) values.sort((a, b) => a - b);
+  for (const values of candBuckets.values()) values.sort((a, b) => a - b);
+
+  const keys = new Set<BucketKey>([...refBuckets.keys(), ...candBuckets.keys()]);
+  const sample: string[] = [];
+  let diff = 0;
+
+  for (const key of Array.from(keys).sort()) {
+    const ref = [...(refBuckets.get(key) ?? [])];
+    const cand = [...(candBuckets.get(key) ?? [])];
+    const used = new Array<boolean>(cand.length).fill(false);
+
+    for (const rd of ref) {
+      let bestIdx = -1;
+      let bestDelta = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < cand.length; i += 1) {
+        if (used[i]) continue;
+        const delta = Math.abs(cand[i] - rd);
+        if (durationMatcher(rd, cand[i]) && delta < bestDelta) {
+          bestDelta = delta;
+          bestIdx = i;
+          if (delta === 0) break;
+        }
+      }
+      if (bestIdx >= 0) {
+        used[bestIdx] = true;
+        continue;
+      }
+      diff += 1;
+      if (sample.length < 60) sample.push(`${key}|refDur=${rd} :: missing in candidate`);
+    }
+    for (let i = 0; i < cand.length; i += 1) {
+      if (used[i]) continue;
+      diff += 1;
+      if (sample.length < 60) sample.push(`${key}|candDur=${cand[i]} :: extra in candidate`);
+    }
+  }
+
+  return { count: diff, sample };
+};
+
 const summarizeDuplicatePitchAtSameTick = (events: NoteEvent[], maxMeasure: number): string[] => {
   const byKey = new Map<string, number>();
   for (const e of events) {
@@ -197,6 +261,14 @@ const extractPracticalDiffForMeasures = (
   const diff = diffMultiset(toMultisetPractical(filter(refEvents)), toMultisetPractical(filter(candEvents)));
   return diff.slice(0, limit);
 };
+
+const EXCLUDED_SAMPLING_MEASURES = new Set<number>([12, 13, 14, 15, 16]);
+
+const excludeSamplingMeasures = (events: NoteEvent[]): NoteEvent[] =>
+  events.filter((e) => {
+    const measureNo = Number.parseInt(e.measure, 10);
+    return !Number.isFinite(measureNo) || !EXCLUDED_SAMPLING_MEASURES.has(measureNo);
+  });
 
 describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
   it("exports MIDI from musicxml and reports semantic diffs against reference MIDI import", () => {
@@ -492,6 +564,11 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
       toMultisetPractical(refEvents),
       toMultisetPractical(candEventsParityClassical)
     );
+    const ratioMatch = (refDuration: number, candDuration: number): boolean =>
+      candDuration >= refDuration * 0.5 && candDuration <= refDuration * 2.0;
+    const diffToleranceMidi = diffWithDurationTolerance(refEvents, candEventsMidi, ratioMatch);
+    const diffTolerancePlayback = diffWithDurationTolerance(refEvents, candEventsPlayback, ratioMatch);
+    const diffToleranceParity = diffWithDurationTolerance(refEvents, candEventsParity, ratioMatch);
     const bestPractical = Math.min(
       diffPracticalMidi.length,
       diffPracticalPlayback.length,
@@ -507,9 +584,12 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
       diffPracticalParityClassical.length
     );
     const sourceDupHead = summarizeDuplicatePitchAtSameTick(sourceEvents, 8);
-    const measureHotspotsMidi = summarizePracticalDiffByMeasure(refEvents, candEventsMidi);
-    const measureHotspotsParity = summarizePracticalDiffByMeasure(refEvents, candEventsParity);
-    const focusedParityDiff = extractPracticalDiffForMeasures(refEvents, candEventsParity, [13, 14, 15, 16]);
+    const refEventsForSampling = excludeSamplingMeasures(refEvents);
+    const candEventsMidiForSampling = excludeSamplingMeasures(candEventsMidi);
+    const candEventsParityForSampling = excludeSamplingMeasures(candEventsParity);
+    const measureHotspotsMidi = summarizePracticalDiffByMeasure(refEventsForSampling, candEventsMidiForSampling);
+    const measureHotspotsParity = summarizePracticalDiffByMeasure(refEventsForSampling, candEventsParityForSampling);
+    const focusedParityDiff = extractPracticalDiffForMeasures(refEventsForSampling, candEventsParityForSampling, [1, 2, 3, 4]);
 
     // eslint-disable-next-line no-console
     console.log(
@@ -519,21 +599,29 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
     console.log(
       `moonlight midi diff strict(midi)=${diffStrictMidi.length} practical(midi)=${diffPracticalMidi.length} strict(playback)=${diffStrictPlayback.length} practical(playback)=${diffPracticalPlayback.length} strict(parity)=${diffStrictParity.length} practical(parity)=${diffPracticalParity.length} practical(parity-norm)=${diffPracticalParityNorm.length} practical(parity-norm-960)=${diffPracticalParityNorm960.length} practical(parity-norm-no-tie)=${diffPracticalParityNormNoTie.length} practical(parity-norm-detache)=${diffPracticalParityNormDetache.length} practical(parity-raw-off)=${diffPracticalParityRawOff.length} practical(parity-raw-on)=${diffPracticalParityRawOn.length} practical(parity-raw-pitch)=${diffPracticalParityRawPitch.length} practical(parity-onbeat)=${diffPracticalParityOnBeat.length} practical(parity-classical)=${diffPracticalParityClassical.length}`
     );
+    // eslint-disable-next-line no-console
+    console.log(
+      `moonlight midi diff onset-strict durationRatio[1/2..2](midi)=${diffToleranceMidi.count} playback=${diffTolerancePlayback.count} parity=${diffToleranceParity.count}`
+    );
     if (sourceDupHead.length > 0) {
       // eslint-disable-next-line no-console
       console.log("moonlight source duplicates first 8 measures:\n" + sourceDupHead.join("\n"));
     }
     if (measureHotspotsMidi.length > 0) {
       // eslint-disable-next-line no-console
-      console.log("moonlight practical diff hotspots (safe, first 16 measures):\n" + measureHotspotsMidi.join(", "));
+      console.log(
+        "moonlight practical diff hotspots (safe, excluding m12-m16 in sampling):\n" + measureHotspotsMidi.join(", ")
+      );
     }
     if (measureHotspotsParity.length > 0) {
       // eslint-disable-next-line no-console
-      console.log("moonlight practical diff hotspots (parity, first 16 measures):\n" + measureHotspotsParity.join(", "));
+      console.log(
+        "moonlight practical diff hotspots (parity, excluding m12-m16 in sampling):\n" + measureHotspotsParity.join(", ")
+      );
     }
     if (focusedParityDiff.length > 0) {
       // eslint-disable-next-line no-console
-      console.log("moonlight practical diff detail (parity m13-m16):\n" + focusedParityDiff.join("\n"));
+      console.log("moonlight practical diff detail (parity m1-m4, sampling):\n" + focusedParityDiff.join("\n"));
     }
     if (diffPracticalMidi.length > 0) {
       // eslint-disable-next-line no-console
@@ -546,6 +634,12 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
     if (diffPracticalParity.length > 0) {
       // eslint-disable-next-line no-console
       console.log("moonlight midi practical(parity) sample:\n" + diffPracticalParity.slice(0, 60).join("\n"));
+    }
+    if (diffToleranceParity.sample.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "moonlight midi onset-strict durationRatio[1/2..2] sample(parity):\n" + diffToleranceParity.sample.join("\n")
+      );
     }
 
     expect(refEvents.length).toBeGreaterThan(0);

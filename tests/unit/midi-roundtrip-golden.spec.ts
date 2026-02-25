@@ -67,6 +67,135 @@ const assertNoOverfull = (doc: Document): void => {
   }
 };
 
+type SimpleNoteEvent = {
+  onsetAbs: number;
+  duration: number;
+  step: string;
+  alter: string;
+  octave: string;
+};
+
+const collectSimpleNoteEvents = (doc: Document): SimpleNoteEvent[] => {
+  const out: SimpleNoteEvent[] = [];
+  const part = doc.querySelector("score-partwise > part");
+  if (!part) return out;
+  let partOffset = 0;
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    let cursor = 0;
+    let measureMax = 0;
+    for (const child of Array.from(measure.children)) {
+      const tag = child.tagName.toLowerCase();
+      if (tag === "backup") {
+        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        if (Number.isFinite(d) && d > 0) cursor = Math.max(0, cursor - Math.round(d));
+        continue;
+      }
+      if (tag === "forward") {
+        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        if (Number.isFinite(d) && d > 0) {
+          cursor += Math.round(d);
+          measureMax = Math.max(measureMax, cursor);
+        }
+        continue;
+      }
+      if (tag !== "note") continue;
+      if (child.querySelector(":scope > rest")) continue;
+      const duration = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+      const roundedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+      const isChord = child.querySelector(":scope > chord") !== null;
+      const onset = isChord ? Math.max(0, cursor - roundedDuration) : cursor;
+      const step = child.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+      const octave = child.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+      if (step && octave) {
+        out.push({
+          onsetAbs: partOffset + onset,
+          duration: roundedDuration,
+          step,
+          alter: child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "",
+          octave,
+        });
+      }
+      if (!isChord && roundedDuration > 0) {
+        cursor += roundedDuration;
+        measureMax = Math.max(measureMax, cursor);
+      }
+    }
+    if (measureMax > 0) partOffset += measureMax;
+  }
+  return out;
+};
+
+const practicalDiffCount = (source: SimpleNoteEvent[], target: SimpleNoteEvent[]): number => {
+  const toMap = (events: SimpleNoteEvent[]): Map<string, number> => {
+    const map = new Map<string, number>();
+    for (const e of events) {
+      const key = `${e.onsetAbs}|${e.duration}|${e.step}|${e.alter}|${e.octave}`;
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return map;
+  };
+  const a = toMap(source);
+  const b = toMap(target);
+  const keys = new Set<string>([...a.keys(), ...b.keys()]);
+  let diff = 0;
+  for (const key of keys) {
+    diff += Math.abs((a.get(key) ?? 0) - (b.get(key) ?? 0));
+  }
+  return diff;
+};
+
+const onsetStrictDurationRatioDiffCount = (
+  source: SimpleNoteEvent[],
+  target: SimpleNoteEvent[],
+  minRatio = 0.5,
+  maxRatio = 2
+): number => {
+  const bucketOf = (event: SimpleNoteEvent): string =>
+    `${event.onsetAbs}|${event.step}|${event.alter}|${event.octave}`;
+
+  const toBuckets = (events: SimpleNoteEvent[]): Map<string, number[]> => {
+    const buckets = new Map<string, number[]>();
+    for (const e of events) {
+      const key = bucketOf(e);
+      const arr = buckets.get(key) ?? [];
+      arr.push(e.duration);
+      buckets.set(key, arr);
+    }
+    for (const arr of buckets.values()) arr.sort((a, b) => a - b);
+    return buckets;
+  };
+
+  const srcBuckets = toBuckets(source);
+  const dstBuckets = toBuckets(target);
+  const keys = new Set<string>([...srcBuckets.keys(), ...dstBuckets.keys()]);
+  let diff = 0;
+
+  for (const key of keys) {
+    const srcDurations = [...(srcBuckets.get(key) ?? [])];
+    const dstDurations = [...(dstBuckets.get(key) ?? [])];
+    const used = new Array<boolean>(dstDurations.length).fill(false);
+
+    for (const srcDur of srcDurations) {
+      let matched = false;
+      for (let i = 0; i < dstDurations.length; i += 1) {
+        if (used[i]) continue;
+        const ratio = srcDur > 0 ? dstDurations[i] / srcDur : Number.POSITIVE_INFINITY;
+        if (ratio >= minRatio && ratio <= maxRatio) {
+          used[i] = true;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) diff += 1;
+    }
+    for (let i = 0; i < dstDurations.length; i += 1) {
+      if (!used[i]) diff += 1;
+    }
+  }
+
+  return diff;
+};
+
 const ensureMidiWriterLoaded = (): void => {
   const maybeWindow = window as Window & { MidiWriter?: unknown };
   if (maybeWindow.MidiWriter) return;
@@ -118,4 +247,31 @@ describe("MIDI roundtrip golden", () => {
       }
     });
   }
+
+  it("keeps practical note timing/pitch close on moonlight-like m13-m16 fragment", () => {
+    const fixtureName = "roundtrip_moonlight_m13_m16_like.musicxml";
+    const { srcDoc, dstDoc } = runRoundtrip(fixtureName);
+    const src = collectSimpleNoteEvents(srcDoc);
+    const dst = collectSimpleNoteEvents(dstDoc);
+    expect(src.length).toBeGreaterThan(0);
+    expect(dst.length).toBeGreaterThan(0);
+    // This fragment is triplet-heavy and used as a regression guard.
+    // Keep current behavior within a bounded envelope (worsening detection).
+    expect(practicalDiffCount(src, dst)).toBeLessThanOrEqual(90);
+  });
+
+  it("keeps onset/pitch close with duration ratio tolerance on triplet-heavy head fragment", () => {
+    const fixtureName = "roundtrip_triplet_m1_m4_like.musicxml";
+    const { srcDoc, dstDoc } = runRoundtrip(fixtureName);
+    const src = collectSimpleNoteEvents(srcDoc);
+    const dst = collectSimpleNoteEvents(dstDoc);
+    expect(src.length).toBeGreaterThan(0);
+    expect(dst.length).toBeGreaterThan(0);
+
+    const strictPractical = practicalDiffCount(src, dst);
+    const ratioTolerant = onsetStrictDurationRatioDiffCount(src, dst, 0.5, 2);
+    expect(ratioTolerant).toBeLessThanOrEqual(strictPractical);
+    // Guardrail for major onset/pitch regressions while allowing duration interpretation differences.
+    expect(ratioTolerant).toBeLessThanOrEqual(120);
+  });
 });
