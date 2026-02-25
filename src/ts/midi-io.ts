@@ -48,6 +48,7 @@ export type MidiProgramPreset =
 export type MidiProgramOverrideMap = ReadonlyMap<string, number>;
 export type GraceTimingMode = "before_beat" | "on_beat" | "classical_equal";
 export type MetricAccentProfile = "subtle" | "balanced" | "strong";
+export type RawMidiRetriggerPolicy = "off_before_on" | "on_before_off" | "pitch_order";
 export type MidiImportQuantizeGrid = "1/8" | "1/16" | "1/32";
 export type MidiImportDiagnosticCode =
   | "MIDI_UNSUPPORTED_DIVISION"
@@ -152,6 +153,9 @@ type MidiWriterRuntime = {
   }) => { data?: number[] };
   Writer: new (tracks: unknown[] | unknown) => {
     buildFile: () => Uint8Array | number[];
+  };
+  Constants?: {
+    HEADER_CHUNK_DIVISION?: number[];
   };
 };
 
@@ -682,6 +686,13 @@ const normalizeTicksPerQuarter = (ticksPerQuarter: number): number => {
   return Math.max(1, Math.round(ticksPerQuarter));
 };
 
+const setMidiWriterHeaderTicksPerQuarter = (midiWriter: MidiWriterRuntime, ticksPerQuarter: number): void => {
+  const constants = midiWriter.Constants;
+  if (!constants || !Array.isArray(constants.HEADER_CHUNK_DIVISION)) return;
+  const tpq = Math.max(1, Math.min(0x7fff, normalizeTicksPerQuarter(ticksPerQuarter)));
+  constants.HEADER_CHUNK_DIVISION = [(tpq >> 8) & 0xff, tpq & 0xff];
+};
+
 const normalizeMidiProgramNumber = (value: number): number | null => {
   if (!Number.isFinite(value)) return null;
   const rounded = Math.round(value);
@@ -1049,7 +1060,8 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
       continue;
     }
     const bucket = activeNoteStartTicks.get(key) ?? [];
-    const started = bucket.pop();
+    // Pair note-off with the oldest unmatched note-on to stabilize same-pitch retriggers.
+    const started = bucket.shift();
     if (bucket.length > 0) {
       activeNoteStartTicks.set(key, bucket);
     } else {
@@ -2263,9 +2275,273 @@ const buildKeySignatureMetaEventData = (
   ];
 };
 
+const toU16BeBytes = (value: number): number[] => {
+  const normalized = Math.max(0, Math.min(0xffff, Math.round(value)));
+  return [(normalized >> 8) & 0xff, normalized & 0xff];
+};
+
+const toU32BeBytes = (value: number): number[] => {
+  const normalized = Math.max(0, Math.min(0xffffffff, Math.round(value)));
+  return [(normalized >>> 24) & 0xff, (normalized >>> 16) & 0xff, (normalized >>> 8) & 0xff, normalized & 0xff];
+};
+
+const toMidiWriterVelocityByte = (velocity: number): number => {
+  const normalized = Math.max(1, Math.min(100, Math.round(velocity)));
+  return Math.max(0, Math.min(127, Math.round((normalized / 100) * 127)));
+};
+
+type RawTrackEvent = {
+  tick: number;
+  order: number;
+  sortKey?: number;
+  bytes: number[];
+};
+
+const encodeRawTrackChunk = (events: RawTrackEvent[]): number[] => {
+  const sorted = events
+    .slice()
+    .sort((a, b) =>
+      a.tick === b.tick
+        ? a.order === b.order
+          ? (a.sortKey ?? 0) - (b.sortKey ?? 0)
+          : a.order - b.order
+        : a.tick - b.tick
+    );
+  const body: number[] = [];
+  let prevTick = 0;
+  for (const event of sorted) {
+    const tick = Math.max(0, Math.round(event.tick));
+    const delta = Math.max(0, tick - prevTick);
+    body.push(...numberToVariableLength(delta), ...event.bytes);
+    prevTick = tick;
+  }
+  body.push(0x00, 0xff, 0x2f, 0x00);
+  return [
+    0x4d,
+    0x54,
+    0x72,
+    0x6b,
+    ...toU32BeBytes(body.length),
+    ...body,
+  ];
+};
+
+const buildRawMidiBytesForPlayback = (
+  sourceEvents: PlaybackEvent[],
+  trackProgramOverrides: MidiProgramOverrideMap,
+  controlEvents: MidiControlEvent[],
+  dedupedTempoEvents: MidiTempoEvent[],
+  dedupedTimeSignatureEvents: MidiTimeSignatureEvent[],
+  dedupedKeySignatureEvents: MidiKeySignatureEvent[],
+  writerTicksPerQuarter: number,
+  normalizedProgramPreset: MidiProgramPreset,
+  options: {
+    embedMksSysEx: boolean;
+    sysexChunkTexts: string[];
+    retriggerPolicy: RawMidiRetriggerPolicy;
+  }
+): Uint8Array => {
+  const tracksById = new Map<string, PlaybackEvent[]>();
+  for (const event of sourceEvents) {
+    const key = event.trackId || "__default__";
+    const bucket = tracksById.get(key) ?? [];
+    bucket.push(event);
+    tracksById.set(key, bucket);
+  }
+
+  const trackChunks: number[][] = [];
+
+  const tempoEvents: RawTrackEvent[] = [];
+  type MetaTimelineEntry =
+    | ({ kind: "tempo" } & MidiTempoEvent)
+    | ({ kind: "time" } & MidiTimeSignatureEvent)
+    | ({ kind: "key" } & MidiKeySignatureEvent);
+  const metaTimeline: MetaTimelineEntry[] = [];
+  metaTimeline.push(...dedupedTempoEvents.map((e) => ({ kind: "tempo" as const, ...e })));
+  metaTimeline.push(...dedupedTimeSignatureEvents.map((e) => ({ kind: "time" as const, ...e })));
+  metaTimeline.push(...dedupedKeySignatureEvents.map((e) => ({ kind: "key" as const, ...e })));
+  const kindPriority: Record<MetaTimelineEntry["kind"], number> = { tempo: 0, time: 1, key: 2 };
+  metaTimeline.sort((a, b) =>
+    a.startTicks === b.startTicks ? kindPriority[a.kind] - kindPriority[b.kind] : a.startTicks - b.startTicks
+  );
+  for (const metaEvent of metaTimeline) {
+    const tick = Math.max(0, Math.round(metaEvent.startTicks));
+    if (metaEvent.kind === "tempo") {
+      const bpm = clampTempo(metaEvent.bpm);
+      const microsPerQuarter = Math.max(1, Math.round(60000000 / bpm));
+      tempoEvents.push({
+        tick,
+        order: 0,
+        bytes: [0xff, 0x51, 0x03, (microsPerQuarter >> 16) & 0xff, (microsPerQuarter >> 8) & 0xff, microsPerQuarter & 0xff],
+      });
+    } else if (metaEvent.kind === "time") {
+      const beats = Math.max(1, Math.min(255, Math.round(metaEvent.beats)));
+      const beatType = Math.max(1, Math.round(metaEvent.beatType));
+      const dd = Math.max(0, Math.min(7, Math.round(Math.log2(beatType))));
+      tempoEvents.push({
+        tick,
+        order: 1,
+        bytes: [0xff, 0x58, 0x04, beats & 0xff, dd & 0xff, 24, 8],
+      });
+    } else {
+      const fifths = Math.max(-7, Math.min(7, Math.round(metaEvent.fifths)));
+      const sf = fifths < 0 ? fifths + 256 : fifths;
+      const mi = metaEvent.mode === "minor" ? 1 : 0;
+      tempoEvents.push({
+        tick,
+        order: 2,
+        bytes: [0xff, 0x59, 0x02, sf & 0xff, mi],
+      });
+    }
+  }
+  if (options.embedMksSysEx) {
+    for (const chunkText of options.sysexChunkTexts) {
+      const sysexBytes = buildMksSysexEventData(0, chunkText);
+      const body = sysexBytes.slice(numberToVariableLength(0).length);
+      tempoEvents.push({ tick: 0, order: 3, bytes: body });
+    }
+  }
+  trackChunks.push(encodeRawTrackChunk(tempoEvents));
+
+  const normalizedProgram = instrumentByPreset[normalizedProgramPreset];
+  const retriggerPolicy = options.retriggerPolicy;
+  const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
+  for (const trackId of sortedTrackIds) {
+    const trackEvents = (tracksById.get(trackId) ?? [])
+      .slice()
+      .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
+    if (!trackEvents.length) continue;
+    const noteEvents: RawTrackEvent[] = [];
+
+    const channels = Array.from(
+      new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
+    ).sort((a, b) => a - b);
+    const overrideProgram = normalizeMidiProgramNumber(trackProgramOverrides.get(trackId) ?? NaN);
+    const selectedProgram = Math.max(0, Math.min(127, (overrideProgram ?? normalizedProgram) & 0xff));
+    for (const channel of channels) {
+      if (channel === 10) continue;
+      noteEvents.push({
+        tick: 0,
+        order: 0,
+        bytes: [0xc0 + channel - 1, selectedProgram],
+      });
+    }
+
+    for (const event of trackEvents) {
+      const channel = Math.max(1, Math.min(16, Math.round(event.channel || 1)));
+      const midiNumber = Math.max(0, Math.min(127, Math.round(event.midiNumber)));
+      const startTick = Math.max(0, Math.round(event.startTicks));
+      const endTick = Math.max(startTick + 1, startTick + Math.max(1, Math.round(event.durTicks)));
+      const velocity = toMidiWriterVelocityByte(clampVelocity(event.velocity));
+      const offOrder = retriggerPolicy === "on_before_off" ? 2 : 1;
+      const onOrder = retriggerPolicy === "on_before_off" ? 1 : 2;
+      const pitchOrderKeyOff = midiNumber * 2;
+      const pitchOrderKeyOn = midiNumber * 2 + 1;
+      const isPitchOrder = retriggerPolicy === "pitch_order";
+      noteEvents.push({
+        tick: endTick,
+        order: isPitchOrder ? 1 : offOrder,
+        sortKey: isPitchOrder ? pitchOrderKeyOff : undefined,
+        bytes: [0x80 + channel - 1, midiNumber, velocity],
+      });
+      noteEvents.push({
+        tick: startTick,
+        order: isPitchOrder ? 1 : onOrder,
+        sortKey: isPitchOrder ? pitchOrderKeyOn : undefined,
+        bytes: [0x90 + channel - 1, midiNumber, velocity],
+      });
+    }
+    trackChunks.push(encodeRawTrackChunk(noteEvents));
+  }
+
+  const groupedControlEvents = new Map<string, MidiControlEvent[]>();
+  for (const controlEvent of controlEvents) {
+    const key = `${controlEvent.trackId}::${normalizeMidiChannel(controlEvent.channel)}`;
+    const bucket = groupedControlEvents.get(key) ?? [];
+    bucket.push(controlEvent);
+    groupedControlEvents.set(key, bucket);
+  }
+  const sortedControlKeys = Array.from(groupedControlEvents.keys()).sort((a, b) => a.localeCompare(b));
+  for (const controlKey of sortedControlKeys) {
+    const channelEvents = (groupedControlEvents.get(controlKey) ?? [])
+      .slice()
+      .sort((a, b) =>
+        a.startTicks === b.startTicks
+          ? a.controllerNumber === b.controllerNumber
+            ? a.controllerValue - b.controllerValue
+            : a.controllerNumber - b.controllerNumber
+          : a.startTicks - b.startTicks
+      );
+    if (!channelEvents.length) continue;
+    const ccEvents: RawTrackEvent[] = [];
+    for (const controlEvent of channelEvents) {
+      const channel = normalizeMidiChannel(controlEvent.channel);
+      const controllerNumber = Math.max(0, Math.min(127, Math.round(controlEvent.controllerNumber)));
+      const controllerValue = Math.max(0, Math.min(127, Math.round(controlEvent.controllerValue)));
+      ccEvents.push({
+        tick: Math.max(0, Math.round(controlEvent.startTicks)),
+        order: 1,
+        bytes: [0xb0 + channel - 1, controllerNumber, controllerValue],
+      });
+    }
+    trackChunks.push(encodeRawTrackChunk(ccEvents));
+  }
+
+  const header = [
+    0x4d,
+    0x54,
+    0x68,
+    0x64,
+    0x00,
+    0x00,
+    0x00,
+    0x06,
+    0x00,
+    0x01,
+    ...toU16BeBytes(trackChunks.length),
+    ...toU16BeBytes(writerTicksPerQuarter),
+  ];
+  const output = new Uint8Array(header.length + trackChunks.reduce((sum, chunk) => sum + chunk.length, 0));
+  let offset = 0;
+  output.set(header, offset);
+  offset += header.length;
+  for (const chunk of trackChunks) {
+    output.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return output;
+};
+
 const normalizeMidiChannel = (value: number): number => {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(16, Math.round(value)));
+};
+
+const normalizePlaybackEventsForParity = (events: PlaybackEvent[]): PlaybackEvent[] => {
+  const deduped = new Map<string, PlaybackEvent>();
+  for (const event of events) {
+    const channel = normalizeMidiChannel(event.channel);
+    const startTicks = Math.max(0, Math.round(event.startTicks));
+    const durTicks = Math.max(1, Math.round(event.durTicks));
+    const midiNumber = Math.round(event.midiNumber);
+    // Parity mode compares rendered MIDI semantics, so dedupe across track/staff boundaries.
+    const key = `${channel}|${midiNumber}|${startTicks}|${durTicks}`;
+    const prev = deduped.get(key);
+    if (!prev) {
+      deduped.set(key, {
+        ...event,
+        channel,
+        startTicks,
+        durTicks,
+        midiNumber,
+      });
+      continue;
+    }
+    if (event.velocity > prev.velocity) {
+      deduped.set(key, { ...prev, velocity: event.velocity });
+    }
+  }
+  return Array.from(deduped.values());
 };
 
 type DrumPartMap = {
@@ -2830,14 +3106,25 @@ export const buildMidiBytesForPlayback = (
     embedMksSysEx?: boolean;
     ticksPerQuarter?: number;
     diagnostics?: string[];
+    normalizeForParity?: boolean;
+    rawWriter?: boolean;
+    rawRetriggerPolicy?: RawMidiRetriggerPolicy;
   } = {}
 ): Uint8Array => {
-  const midiWriter = getMidiWriterRuntime();
-  if (!midiWriter) {
+  const rawWriter = options.rawWriter === true;
+  const midiWriter = rawWriter ? null : getMidiWriterRuntime();
+  if (!rawWriter && !midiWriter) {
     throw new Error("midi-writer.js is not loaded.");
   }
+  const writerTicksPerQuarter = normalizeTicksPerQuarter(options.ticksPerQuarter ?? 128);
+  if (midiWriter) {
+    setMidiWriterHeaderTicksPerQuarter(midiWriter, writerTicksPerQuarter);
+  }
+  const normalizeForParity = options.normalizeForParity === true;
+  const sourceEvents = normalizeForParity ? normalizePlaybackEventsForParity(events) : events;
+
   const tracksById = new Map<string, PlaybackEvent[]>();
-  for (const event of events) {
+  for (const event of sourceEvents) {
     const key = event.trackId || "__default__";
     const bucket = tracksById.get(key) ?? [];
     bucket.push(event);
@@ -2931,7 +3218,40 @@ export const buildMidiBytesForPlayback = (
       "level=info;code=MIDI_EXPORT_DEFAULT_KEYSIG_AT_ZERO_INSERTED;fmt=midi;startTick=0;fifths=0;mode=major"
     );
   }
-  const tempoTrack = new midiWriter.Track();
+  const embedMksSysEx = options.embedMksSysEx !== false;
+  const channelCount = new Set(sourceEvents.map((event) => normalizeMidiChannel(event.channel))).size;
+  const sysexChunks = buildMksSysexChunkTexts({
+    ticksPerQuarter: writerTicksPerQuarter,
+    eventCount: sourceEvents.length,
+    trackCount: tracksById.size,
+    tempoEventCount: dedupedTempoEvents.length,
+    timeSignatureEventCount: dedupedTimeSignatureEvents.length,
+    keySignatureEventCount: dedupedKeySignatureEvents.length,
+    controlEventCount: controlEvents.length,
+    channelCount,
+    diagnostics: exportDiagnostics,
+  });
+  const normalizedProgramPreset: MidiProgramPreset =
+    instrumentByPreset[programPreset] !== undefined ? programPreset : "electric_piano_2";
+  if (rawWriter) {
+    return buildRawMidiBytesForPlayback(
+      sourceEvents,
+      trackProgramOverrides,
+      controlEvents,
+      dedupedTempoEvents,
+      dedupedTimeSignatureEvents,
+      dedupedKeySignatureEvents,
+      writerTicksPerQuarter,
+      normalizedProgramPreset,
+      {
+        embedMksSysEx,
+        sysexChunkTexts: sysexChunks,
+        retriggerPolicy: options.rawRetriggerPolicy ?? "off_before_on",
+      }
+    );
+  }
+  const midiWriterRuntime = midiWriter as MidiWriterRuntime;
+  const tempoTrack = new midiWriterRuntime.Track();
   tempoTrack.addTrackName("Tempo Map");
   tempoTrack.addInstrumentName("Tempo Map");
   const metaTimeline: Array<
@@ -2963,26 +3283,12 @@ export const buildMidiBytesForPlayback = (
     }
     prevTempoTick = currentTick;
   }
-  if (options.embedMksSysEx !== false) {
-    const channelCount = new Set(events.map((event) => normalizeMidiChannel(event.channel))).size;
-    const sysexChunks = buildMksSysexChunkTexts({
-      ticksPerQuarter: normalizeTicksPerQuarter(options.ticksPerQuarter ?? 480),
-      eventCount: events.length,
-      trackCount: tracksById.size,
-      tempoEventCount: dedupedTempoEvents.length,
-      timeSignatureEventCount: dedupedTimeSignatureEvents.length,
-      keySignatureEventCount: dedupedKeySignatureEvents.length,
-      controlEventCount: controlEvents.length,
-      channelCount,
-      diagnostics: exportDiagnostics,
-    });
+  if (embedMksSysEx) {
     for (const chunk of sysexChunks) {
       tempoTrack.addEvent({ data: buildMksSysexEventData(0, chunk) });
     }
   }
   midiTracks.push(tempoTrack);
-  const normalizedProgramPreset: MidiProgramPreset =
-    instrumentByPreset[programPreset] !== undefined ? programPreset : "electric_piano_2";
   const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
   sortedTrackIds.forEach((trackId, index) => {
     const trackEvents = (tracksById.get(trackId) ?? [])
@@ -2990,7 +3296,7 @@ export const buildMidiBytesForPlayback = (
       .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
     if (!trackEvents.length) return;
 
-    const track = new midiWriter.Track();
+    const track = new midiWriterRuntime.Track();
     const first = trackEvents[0];
     const trackName = first.trackName?.trim() || trackId || `Track ${index + 1}`;
     track.addTrackName(trackName);
@@ -3004,7 +3310,7 @@ export const buildMidiBytesForPlayback = (
     for (const channel of channels) {
       if (channel === 10) continue;
       track.addEvent(
-        new midiWriter.ProgramChangeEvent({
+        new midiWriterRuntime.ProgramChangeEvent({
           channel,
           instrument: selectedInstrumentProgram,
           delta: 0,
@@ -3020,7 +3326,7 @@ export const buildMidiBytesForPlayback = (
         velocity: clampVelocity(event.velocity),
         channel: Math.max(1, Math.min(16, Math.round(event.channel || 1))),
       };
-      track.addEvent(new midiWriter.NoteEvent(fields));
+      track.addEvent(new midiWriterRuntime.NoteEvent(fields));
     }
 
     midiTracks.push(track);
@@ -3046,7 +3352,7 @@ export const buildMidiBytesForPlayback = (
       );
     if (!channelEvents.length) continue;
     const first = channelEvents[0];
-    const ccTrack = new midiWriter.Track();
+    const ccTrack = new midiWriterRuntime.Track();
     ccTrack.addTrackName(`${first.trackName} Pedal`);
     ccTrack.addInstrumentName(`${first.trackName} Pedal`);
     let prevTick = 0;
@@ -3055,7 +3361,7 @@ export const buildMidiBytesForPlayback = (
       const deltaTicks = Math.max(0, currentTick - prevTick);
       ccTrack.addEvent(
         createControllerChangeEventForChannel(
-          midiWriter,
+          midiWriterRuntime,
           controlEvent.channel,
           controlEvent.controllerNumber,
           controlEvent.controllerValue,
@@ -3071,7 +3377,7 @@ export const buildMidiBytesForPlayback = (
     throw new Error("No notes available for MIDI conversion.");
   }
 
-  const writer = new midiWriter.Writer(midiTracks);
+  const writer = new midiWriterRuntime.Writer(midiTracks);
   const built = writer.buildFile();
   return built instanceof Uint8Array ? built : Uint8Array.from(built);
 };
@@ -3268,11 +3574,19 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
     graceTimingMode?: GraceTimingMode;
     metricAccentEnabled?: boolean;
     metricAccentProfile?: MetricAccentProfile;
+    includeGraceInPlaybackLikeMode?: boolean;
+    includeOrnamentInPlaybackLikeMode?: boolean;
+    includeTieInPlaybackLikeMode?: boolean;
+    applyDefaultDetacheInPlaybackLikeMode?: boolean;
   } = {}
 ): { tempo: number; events: PlaybackEvent[] } => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
   const mode = options.mode ?? "playback";
   const applyMidiNuance = mode === "midi";
+  const includeGraceProcessing = applyMidiNuance || options.includeGraceInPlaybackLikeMode === true;
+  const includeOrnamentExpansion = applyMidiNuance || options.includeOrnamentInPlaybackLikeMode === true;
+  const includeTieProcessing = applyMidiNuance || options.includeTieInPlaybackLikeMode === true;
+  const applyDefaultDetache = applyMidiNuance || options.applyDefaultDetacheInPlaybackLikeMode === true;
   const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   const metricAccentEnabled = options.metricAccentEnabled === true;
   const metricAccentProfile = normalizeMetricAccentProfile(options.metricAccentProfile);
@@ -3504,9 +3818,9 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             const noteUnderSlur =
               applyMidiNuance &&
               (activeSlurSet.size > 0 || slurNumbers.starts.length > 0 || slurNumbers.stops.length > 0);
-            const tieFlags = applyMidiNuance ? getTieFlags(child) : { start: false, stop: false };
+            const tieFlags = includeTieProcessing ? getTieFlags(child) : { start: false, stop: false };
             const shouldApplyDefaultDetache =
-              applyMidiNuance &&
+              applyDefaultDetache &&
               !isGrace &&
               !isChord &&
               articulation.durationRatio >= 1 &&
@@ -3517,7 +3831,7 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             const effectiveDurationRatio = shouldApplyDefaultDetache
               ? DEFAULT_DETACHE_DURATION_RATIO
               : articulation.durationRatio;
-            if (applyMidiNuance && isGrace) {
+            if (includeGraceProcessing && isGrace) {
               const graceNode = child.querySelector("grace");
               const hasSlash =
                 (graceNode?.getAttribute("slash")?.trim().toLowerCase() ?? "") === "yes" ||
@@ -3546,7 +3860,7 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                 legatoOverlapTicks +
                 temporalAdjustments.durationExtraTicks
             );
-            const canExpandOrnament = applyMidiNuance && !isDrumContext && !tieFlags.start && !tieFlags.stop;
+            const canExpandOrnament = includeOrnamentExpansion && !isDrumContext && !tieFlags.start && !tieFlags.stop;
             const ornamentMidiSequence = canExpandOrnament
               ? buildOrnamentMidiSequence(child, soundingMidi, durTicks, normalizedTicksPerQuarter, {
                   step: melodicStep,
@@ -3556,10 +3870,10 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
                 })
               : [soundingMidi];
             const generatedEvents: PlaybackEvent[] = [];
-            const pendingGrace = applyMidiNuance ? pendingGraceByVoice.get(voice) ?? [] : [];
+            const pendingGrace = includeGraceProcessing ? pendingGraceByVoice.get(voice) ?? [] : [];
             let eventStartTick = startTicks;
             let effectiveDurTicks = durTicks;
-            if (applyMidiNuance && pendingGrace.length > 0) {
+            if (includeGraceProcessing && pendingGrace.length > 0) {
               const maxLeadByPrincipal = Math.max(pendingGrace.length, Math.round(baseDurTicks * 0.45));
               const maxLeadByTempo = Math.max(pendingGrace.length, Math.round(normalizedTicksPerQuarter / 2));
               const totalGraceTicks = Math.max(
@@ -3633,7 +3947,7 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             for (const wedgeKind of activeWedgeByNumber.values()) {
               currentVelocity = clampVelocity(currentVelocity + (wedgeKind === "crescendo" ? 4 : -4));
             }
-            if (applyMidiNuance) {
+            if (includeTieProcessing) {
               const tieKey = `${voice}|${channel}|${soundingMidi}`;
               if (tieFlags.stop) {
                 const chained = tieChainByKey.get(tieKey);

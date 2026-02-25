@@ -39,6 +39,16 @@
 - [ ] Add optional `%@mks ...` metadata compaction:
   - On `MusicXML -> ABC`, suppress consecutive `%@mks` comment lines when values are unchanged from the previous measure.
   - On `ABC -> MusicXML`, if `%@mks` metadata is omitted, inherit the previous measure's metadata for reconstruction.
+- [ ] Reduce MuseScore MIDI parity gap (`moonlight` baseline, 2026-02-25):
+  - `safe (cand(midi)) practical diff = 307`
+  - `musescore_parity (cand(parity)) practical diff = 172`
+  - `playback practical diff = 183` (reference only; different path from export)
+  - `musescore_parity raw-on practical diff = 172` (was `378`; stabilized by FIFO note pairing on MIDI import)
+  - Add focused fixes so export parity (`safe`/`musescore_parity`) improves without semantic regressions.
+- [ ] Investigate MuseScore OSS MIDI export implementation files and map transferable diff points for mikuscore:
+  - Identify concrete source files/functions for `MSCX/MSCZ -> MIDI` in MuseScore.
+  - Compare note event ordering, tie/retrigger handling, and quantization/rounding policies against mikuscore.
+  - Extract only implementable deltas and track expected parity impact per delta.
 
 #### P3: Feature expansion
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
@@ -128,6 +138,16 @@
 - [ ] `%@mks ...` メタコメントの省略最適化を追加。
   - `MusicXML -> ABC` では、前小節と同一内容が連続する場合、後続の `%@mks` コメント行を省略可能にする。
   - `ABC -> MusicXML` では、省略により不足した `%@mks` 情報を前小節の値で継承して復元する。
+- [ ] MuseScore MIDI パリティ差分の縮小（`moonlight` 実測, 2026-02-25）。
+  - `safe (cand(midi)) practical diff = 307`
+  - `musescore_parity (cand(parity)) practical diff = 172`
+  - `playback practical diff = 183`（参考値。export とは別経路）
+  - `musescore_parity raw-on practical diff = 172`（以前 `378`。MIDI import の FIFO ペアリングで安定化）
+  - 意味保存回帰を起こさない範囲で、export 側（`safe`/`musescore_parity`）の差分を段階的に削減する。
+- [ ] MuseScore OSS の MIDI export 実装ファイルを調査し、mikuscore に取り込める差分観点を一覧化する。
+  - MuseScore 側の `MSCX/MSCZ -> MIDI` の具体ファイル/関数を特定する。
+  - ノートイベント順序、tie/retrigger、量子化/丸め規則を mikuscore と比較する。
+  - 実装可能な差分のみを抽出し、差分ごとの期待パリティ改善量を管理する。
 
 #### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。

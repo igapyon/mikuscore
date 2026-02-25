@@ -10,6 +10,11 @@ import {
   type MetricAccentProfile,
   type MidiProgramPreset,
 } from "./midi-io";
+import {
+  resolveMidiExportRuntimeOptions,
+  resolvePlaybackBuildModeForMidiExport,
+  type MidiExportProfile,
+} from "./midi-musescore-io";
 import { parseMusicXmlDocument, prettyPrintMusicXmlText } from "./musicxml-io";
 
 export type DownloadFilePayload = {
@@ -263,25 +268,32 @@ export const createMidiDownloadPayload = (
   forceProgramPreset = false,
   graceTimingMode: GraceTimingMode = "before_beat",
   metricAccentEnabled = false,
-  metricAccentProfile: MetricAccentProfile = "subtle"
+  metricAccentProfile: MetricAccentProfile = "subtle",
+  exportProfile: MidiExportProfile = "safe"
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
+  const runtime = resolveMidiExportRuntimeOptions(exportProfile, ticksPerQuarter);
+  const exportTicksPerQuarter = runtime.ticksPerQuarter;
+  const buildMode = resolvePlaybackBuildModeForMidiExport(runtime.eventBuildPolicy);
 
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter, {
-    mode: "midi",
+  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter, {
+    mode: buildMode,
     graceTimingMode,
     metricAccentEnabled,
     metricAccentProfile,
+    includeGraceInPlaybackLikeMode: runtime.includeGraceInPlaybackLikeMode,
+    includeOrnamentInPlaybackLikeMode: runtime.includeOrnamentInPlaybackLikeMode,
+    includeTieInPlaybackLikeMode: runtime.includeTieInPlaybackLikeMode,
   });
   if (parsedPlayback.events.length === 0) return null;
   const midiProgramOverrides = forceProgramPreset
     ? new Map<string, number>()
     : collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
-  const midiControlEvents = collectMidiControlEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
-  const midiTempoEvents = collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
-  const midiTimeSignatureEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
-  const midiKeySignatureEvents = collectMidiKeySignatureEventsFromMusicXmlDoc(playbackDoc, ticksPerQuarter);
+  const midiControlEvents = collectMidiControlEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
+  const midiTempoEvents = collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
+  const midiTimeSignatureEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
+  const midiKeySignatureEvents = collectMidiKeySignatureEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
 
   let midiBytes: Uint8Array;
   try {
@@ -294,7 +306,13 @@ export const createMidiDownloadPayload = (
       midiTempoEvents,
       midiTimeSignatureEvents,
       midiKeySignatureEvents,
-      { embedMksSysEx: true, ticksPerQuarter }
+      {
+        embedMksSysEx: true,
+        ticksPerQuarter: exportTicksPerQuarter,
+        normalizeForParity: runtime.normalizeForParity,
+        rawWriter: runtime.rawWriter,
+        rawRetriggerPolicy: runtime.rawRetriggerPolicy,
+      }
     );
   } catch {
     return null;

@@ -157,6 +157,13 @@
   - 仕様限界（対応不要）
 - 対応可能カテゴリを優先して修正し、同一fixtureで回帰確認する。
 
+### 運用メモ（2026-02-25, moonlight）
+- `safe (cand(midi)) practical diff = 307`
+- `musescore_parity (cand(parity)) practical diff = 172`
+- `playback practical diff = 183`（比較参考）
+- MIDI import の同tick同pitch再発音で、`note-off` を最古 `note-on` に対応づける FIFO ペアリングを採用。
+  - これにより、イベント順（`on->off` / `off->on`）依存の崩れを抑制できる。
+
 ## 生成AIレビュー運用メモ
 - 生成AIに渡す入力は「正規化済みdiff」と「小節/声部インデックス付きの意味差分」を優先する。
 - 生の楽譜ファイル全文を毎回渡すより、差分抽出結果を渡すほうが精度と再現性が高い。

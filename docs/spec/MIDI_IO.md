@@ -162,6 +162,63 @@ Pattern table:
 
 If no playable note events exist, the function MUST throw an error.
 
+### Custom MIDI writer (raw SMF writer)
+
+The module includes a built-in raw SMF Type-1 writer path in addition to `midi-writer.js`.
+
+#### Entry points
+
+- `buildMidiBytesForPlayback(..., options)` with:
+  - `rawWriter?: boolean`
+  - `rawRetriggerPolicy?: "off_before_on" | "on_before_off" | "pitch_order"`
+- internal implementation:
+  - `buildRawMidiBytesForPlayback(...)`
+  - `encodeRawTrackChunk(...)`
+
+#### Output structure
+
+- `MThd`:
+  - format: `1`
+  - track count: computed from generated tracks
+  - division: `ticksPerQuarter`
+- `MTrk #1` (meta track):
+  - tempo meta (`FF 51`)
+  - time signature meta (`FF 58`)
+  - key signature meta (`FF 59`)
+  - optional mikuscore SysEx chunks
+- `MTrk #N` (note tracks by `trackId`):
+  - program change per used channel (except ch10)
+  - note-on / note-off events
+- additional CC tracks:
+  - grouped by `(trackId, channel)` for controller streams
+
+#### Retrigger order policy
+
+For same-tick same-pitch situations, event ordering is configurable:
+
+- `off_before_on`:
+  - note-off is emitted before note-on at the same tick
+  - default and recommended for stable retrigger behavior
+- `on_before_off`:
+  - note-on before note-off
+  - retained for parity experiments
+- `pitch_order`:
+  - same order bucket, sorted by pitch key
+  - retained for parity experiments
+
+#### Current usage policy
+
+- `safe` export profile:
+  - default writer path (`midi-writer.js`)
+- `musescore_parity` profile:
+  - raw writer path enabled
+  - retrigger policy defaults to `off_before_on`
+
+#### Known constraints
+
+- raw writer currently targets deterministic export parity behavior, not full DAW-grade rendering semantics.
+- parity quality still depends on import quantization and note pairing rules in `convertMidiToMusicXml`.
+
 ---
 
 ## MIDI binary import to MusicXML (MVP)
@@ -177,6 +234,12 @@ The import target is Standard MIDI File (SMF) binary input:
 Output format:
 
 - MusicXML `score-partwise` (MusicXML 4.0)
+
+### Note pairing policy (import)
+
+- Pairing unit is `(channel, midiNoteNumber)`.
+- For same-pitch retriggers, `note-off` MUST pair with the oldest unmatched `note-on` (FIFO).
+- This avoids order-dependent duration drift when equivalent streams differ only by same-tick event order (`on->off` / `off->on`).
 
 ### Quantization policy
 

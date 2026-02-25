@@ -520,6 +520,40 @@ describe("midi-io MIDI import MVP", () => {
     expect(notes.some((note) => note.querySelector("type")?.textContent === "quarter")).toBe(true);
   });
 
+  it("keeps same-pitch retrigger stable even when note-on appears before note-off at same tick", () => {
+    const midiOffThenOn = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x80, 60, 0,
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x80, 60, 0,
+    ]);
+    const midiOnThenOff = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x90, 60, 96,
+      ...vlq(0), 0x80, 60, 0,
+      ...vlq(120), 0x80, 60, 0,
+    ]);
+
+    const resultOffThenOn = convertMidiToMusicXml(midiOffThenOn, { quantizeGrid: "1/16" });
+    const resultOnThenOff = convertMidiToMusicXml(midiOnThenOff, { quantizeGrid: "1/16" });
+    expect(resultOffThenOn.ok).toBe(true);
+    expect(resultOnThenOff.ok).toBe(true);
+
+    const readDurations = (xml: string): string[] => {
+      const doc = parseDoc(xml);
+      return Array.from(doc.querySelectorAll("part > measure > note"))
+        .filter((note) => note.querySelector("pitch > step")?.textContent?.trim() === "C")
+        .map((note) => note.querySelector("duration")?.textContent?.trim() ?? "");
+    };
+    const offThenOnDurations = readDurations(resultOffThenOn.xml);
+    const onThenOffDurations = readDurations(resultOnThenOff.xml);
+
+    expect(offThenOnDurations.length).toBeGreaterThanOrEqual(2);
+    expect(onThenOffDurations.length).toBeGreaterThanOrEqual(2);
+    expect(onThenOffDurations).toEqual(offThenOnDurations);
+    expect(resultOnThenOff.warnings.some((warning) => warning.code === "MIDI_NOTE_PAIR_BROKEN")).toBe(false);
+  });
+
   it("auto-splits overlapping notes into multiple voices", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
