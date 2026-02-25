@@ -1,7 +1,12 @@
 # mikuscore
 
 ## English
-mikuscore is a browser-based local score editor.
+mikuscore is a browser-based score editor for importing and exporting MusicXML, MuseScore, MIDI, VSQX, ABC, MEI, and LilyPond, with notation preview and note editing.
+
+- Designed to preserve existing MusicXML as much as possible.
+- Works offline in a single HTML distribution.
+- Smartphone-centered workflows, with PC use also supported.
+- ABC, MEI, and LilyPond support is currently experimental.
 
 Its primary goal is reliability, not feature volume: edit while preserving existing MusicXML as much as possible.
 
@@ -82,7 +87,12 @@ Debugging note:
 ---
 
 ## 日本語
-ブラウザ上で完結する MusicXML 譜面エディタです。
+mikuscore は、MusicXML、MuseScore、MIDI、VSQX、ABC、MEI、LilyPond の入出力に対応し、譜面プレビューとノート編集をブラウザ上で行うスコアエディタです。
+
+- 既存 MusicXML を極力壊さない編集を重視しています。
+- 単一 HTML 配布でオフライン動作します。
+- スマホ中心のワークフローを重視しつつ、PC利用にも対応します。
+- ABC、MEI、LilyPond 対応は現在 Experimental（試験対応）です。
 
 このアプリの主眼は「多機能化」ではなく、極力既存 MusicXML を壊さずに編集する信頼性です。
 
