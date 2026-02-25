@@ -86,10 +86,31 @@
 - 例: `tests/fixtures-local/roundtrip/musescore/paganini/` に `source.mscx` と `reference.musicxml` を置く。
 - 実行コマンド:
   - `npm run test:all -- tests/spot/local-musescore-reference-parity.spot.spec.ts`
+  - `npm run test:all -- tests/spot/local-musicxml-reference-to-musescore.spot.spec.ts`
 - 出力:
   - `tests/artifacts/roundtrip/musescore/paganini/candidate.musicxml`
-  - pitch-only / pitch+accidental の差分件数とサンプル差分
+  - `tests/artifacts/roundtrip/musescore/paganini/candidate-from-reference.mscx`
+- pitch-only / pitch+accidental の差分件数とサンプル差分
 - 現在の同梱 spot テストでは、`diff pitch-only=0` かつ `diff pitch+acc=0` を成功条件とする。
+
+### 逆方向 spot（MusicXML -> MuseScore）判定
+
+- 対象テスト:
+  - `tests/spot/local-musicxml-reference-to-musescore.spot.spec.ts`
+- 目的:
+  - `reference.musicxml` から生成した `candidate-from-reference.mscx` が、主要意味要素を保持できることを確認する。
+- 判定:
+  - 全体件数一致:
+    - `technical/stopped` -> `articLhPizzicatoAbove`
+    - dynamics
+    - trill start/stop
+    - octave-shift start/stop
+    - marker, jump
+  - 位置一致（小節単位）:
+    - marker
+    - jump
+    - `Tema`（Tempo text）
+    - `sempre legato`（Expression text）
 
 ## 期待効果
 - 「MuseScoreでは出るのにmikuscoreでは欠ける」不具合を早期検出できる。

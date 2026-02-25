@@ -139,6 +139,84 @@ describe("musescore-io", () => {
     expect(doc.querySelector("miscellaneous-field[name=\"src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
+  it("imports MuseScore cut-time symbol as MusicXML time symbol", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.06">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>
+        <voice>
+          <Chord><durationType>whole</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const time = doc.querySelector("part > measure > attributes > time");
+    expect(time?.getAttribute("symbol")).toBe("cut");
+    expect(time?.querySelector(":scope > beats")?.textContent?.trim()).toBe("4");
+    expect(time?.querySelector(":scope > beat-type")?.textContent?.trim()).toBe("4");
+  });
+
+  it("optionally normalizes MuseScore cut-time to 2/2 in MusicXML", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.06">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>
+        <voice>
+          <Chord><durationType>whole</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, {
+      sourceMetadata: false,
+      debugMetadata: false,
+      normalizeCutTimeToTwoTwo: true,
+    });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const time = doc.querySelector("part > measure > attributes > time");
+    expect(time?.getAttribute("symbol")).toBe("cut");
+    expect(time?.querySelector(":scope > beats")?.textContent?.trim()).toBe("2");
+    expect(time?.querySelector(":scope > beat-type")?.textContent?.trim()).toBe("2");
+  });
+
+  it("keeps cut-time symbol on following measures without explicit TimeSig", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.06">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>
+        <voice><Chord><durationType>whole</durationType><Note><pitch>60</pitch></Note></Chord></voice>
+      </Measure>
+      <Measure>
+        <voice><Chord><durationType>whole</durationType><Note><pitch>62</pitch></Note></Chord></voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure:nth-of-type(1) > attributes > time")?.getAttribute("symbol")).toBe("cut");
+    expect(doc.querySelector("part > measure:nth-of-type(2) > attributes > time")).toBeNull();
+  });
+
   it("imports only measure-anchored tempo text as words direction", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="4.0">
@@ -240,6 +318,34 @@ describe("musescore-io", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     expect(doc.querySelector("part > measure > attributes > key > mode")?.textContent?.trim()).toBe("minor");
+  });
+
+  it("emits natural accidental when note cancels key-signature sharp", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.06">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <KeySig><accidental>4</accidental></KeySig>
+        <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+        <voice>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><durationType>quarter</durationType><Note><pitch>63</pitch></Note></Chord>
+          <Chord><durationType>quarter</durationType><Note><pitch>62</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("natural");
+    expect(notes[1]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("sharp");
+    expect(notes[2]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("natural");
   });
 
   it("imports note-level accidentals from MuseScore Accidental subtype", () => {
@@ -404,6 +510,202 @@ describe("musescore-io", () => {
     expect(mscx).toContain("<Tempo><tempo>2.000000</tempo></Tempo>");
     expect(mscx).toContain("<Dynamic><subtype>mf</subtype></Dynamic>");
     expect(mscx).toContain("<endRepeat/>");
+  });
+
+  it("exports MusicXML cut-time symbol into MuseScore TimeSig subtype", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time symbol="cut"><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<TimeSig><subtype>2</subtype><sigN>4</sigN><sigD>4</sigD></TimeSig>");
+  });
+
+  it("optionally normalizes MusicXML cut-time 4/4 into MuseScore 2/2", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time symbol="cut"><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc, { normalizeCutTimeToTwoTwo: true });
+    expect(mscx).toContain("<TimeSig><subtype>2</subtype><sigN>2</sigN><sigD>2</sigD></TimeSig>");
+  });
+
+  it("keeps cut-time subtype on following MuseScore measures without explicit time change", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time symbol="cut"><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    const timeSigCount = (mscx.match(/<TimeSig>/g) ?? []).length;
+    const cutTimeSigCount = (mscx.match(/<TimeSig><subtype>2<\/subtype><sigN>4<\/sigN><sigD>4<\/sigD><\/TimeSig>/g) ?? []).length;
+    expect(timeSigCount).toBe(1);
+    expect(cutTimeSigCount).toBe(1);
+  });
+
+  it("exports MusicXML words+sound tempo as MuseScore Tempo text and words-only as Expression", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction placement="above">
+        <direction-type><words>Tema</words></direction-type>
+        <sound tempo="130"/>
+      </direction>
+      <direction>
+        <direction-type><words font-style="italic">sempre legato</words></direction-type>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Tempo><tempo>2.166667</tempo><text>Tema</text></Tempo>");
+    expect(mscx).toContain("<Expression><text><i></i>sempre legato</text></Expression>");
+  });
+
+  it("exports MusicXML segno/coda/fine and sound jump attrs into MuseScore Marker/Jump", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction><direction-type><segno/></direction-type></direction>
+      <direction><direction-type><coda/></direction-type></direction>
+      <direction><direction-type><words>Fine</words></direction-type></direction>
+      <direction><direction-type><words>D.S.</words></direction-type><sound dalsegno="segno" fine="fine"/></direction>
+      <direction><direction-type><words>D.C.</words></direction-type><sound dacapo="yes" tocoda="coda"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Marker><subtype>segno</subtype><label>segno</label></Marker>");
+    expect(mscx).toContain("<Marker><subtype>coda</subtype><label>coda</label></Marker>");
+    expect(mscx).toContain("<Marker><subtype>fine</subtype><label>Fine</label></Marker>");
+    expect(mscx).toContain("<Jump><text>D.S.</text><jumpTo>segno</jumpTo><playUntil>fine</playUntil></Jump>");
+    expect(mscx).toContain("<Jump><text>D.C.</text><jumpTo>start</jumpTo><playUntil>coda</playUntil><continueAt>coda</continueAt></Jump>");
+  });
+
+  it("exports MusicXML sound dynamics into MuseScore Dynamic velocity", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction>
+        <direction-type><dynamics><f/></dynamics></direction-type>
+        <sound dynamics="106.67"/>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Dynamic><subtype>f</subtype><velocity>96</velocity></Dynamic>");
+  });
+
+  it("exports MusicXML octave-shift direction into MuseScore Ottava spanner", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction><direction-type><octave-shift type="up" size="8"/></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+    <measure number="2">
+      <direction><direction-type><octave-shift type="stop" size="8"/></direction-type></direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Spanner type=\"Ottava\"><Ottava><subtype>8va</subtype></Ottava><next>");
+    expect(mscx).toContain("<Spanner type=\"Ottava\"><prev>");
+  });
+
+  it("exports MusicXML trill ornaments into MuseScore Trill spanner", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration><voice>1</voice><type>whole</type>
+        <notations><ornaments><trill-mark/><wavy-line type="start" number="1"/></ornaments></notations>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>1920</duration><voice>1</voice><type>whole</type>
+        <notations><ornaments><wavy-line type="stop" number="1"/></ornaments></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Spanner type=\"Trill\"><Trill><subtype>trill</subtype></Trill><next>");
+    expect(mscx).toContain("<Spanner type=\"Trill\"><prev>");
   });
 
   it("exports MusicXML tie/slur into MuseScore note/chord markers", () => {
@@ -774,6 +1076,48 @@ describe("musescore-io", () => {
     expect(tupletStart).not.toBeNull();
     expect(tupletStart?.getAttribute("bracket")).toBe("yes");
     expect(thirdNote?.querySelector(":scope > notations > tuplet[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("handles MuseScore tuplet id references without nesting durations", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="2.06">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>2</sigN><sigD>4</sigD></TimeSig>
+          <Tuplet id="1"><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>
+          <Chord><Tuplet>1</Tuplet><durationType>eighth</durationType><Note><pitch>60</pitch></Note></Chord>
+          <Chord><Tuplet>1</Tuplet><durationType>eighth</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><Tuplet>1</Tuplet><durationType>eighth</durationType><Note><pitch>64</pitch></Note></Chord>
+          <Tuplet id="2"><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>
+          <Chord><Tuplet>2</Tuplet><durationType>eighth</durationType><Note><pitch>65</pitch></Note></Chord>
+          <Chord><Tuplet>2</Tuplet><durationType>eighth</durationType><Note><pitch>67</pitch></Note></Chord>
+          <Chord><Tuplet>2</Tuplet><durationType>eighth</durationType><Note><pitch>69</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    const pitched = notes.filter((n) => n.querySelector(":scope > rest") === null);
+    expect(pitched).toHaveLength(6);
+    const durations = notes.map((n) => n.querySelector(":scope > duration")?.textContent?.trim());
+    expect(durations.slice(0, 6)).toEqual(["160", "160", "160", "160", "160", "160"]);
+    const start1 = pitched[0]?.querySelector(":scope > notations > tuplet[type=\"start\"]");
+    const stop1 = pitched[2]?.querySelector(":scope > notations > tuplet[type=\"stop\"]");
+    const start2 = pitched[3]?.querySelector(":scope > notations > tuplet[type=\"start\"]");
+    const stop2 = pitched[5]?.querySelector(":scope > notations > tuplet[type=\"stop\"]");
+    expect(start1).not.toBeNull();
+    expect(stop1).not.toBeNull();
+    expect(start2).not.toBeNull();
+    expect(stop2).not.toBeNull();
+    expect(start1?.getAttribute("number")).not.toBe(start2?.getAttribute("number"));
   });
 
   it("imports pickup measure len as implicit short measure", () => {
