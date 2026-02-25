@@ -218,6 +218,7 @@ const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
+const DEFAULT_VSQX_LYRIC = "ら";
 
 type LocalDraft = {
   xml: string;
@@ -1938,7 +1939,7 @@ const onLoadClick = async (): Promise<void> => {
       }),
     convertVsqxToMusicXml: (vsqxSource) =>
       convertVsqxToMusicXml(vsqxSource, {
-        defaultLyric: "あ",
+        defaultLyric: DEFAULT_VSQX_LYRIC,
       }),
     convertMidiToMusicXml: (midiBytes) =>
       convertMidiToMusicXml(midiBytes, {
@@ -2525,7 +2526,7 @@ const onDownloadVsqx = (): void => {
     return;
   }
 
-  const converted = convertMusicXmlToVsqx(xmlText);
+  const converted = convertMusicXmlToVsqx(xmlText, { musicXml: { defaultLyric: DEFAULT_VSQX_LYRIC } });
   if (!converted.ok) {
     failExport("VSQX", converted.diagnostic?.message ?? "MusicXML to VSQX conversion failed.");
     return;

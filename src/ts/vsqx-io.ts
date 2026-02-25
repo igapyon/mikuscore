@@ -21,7 +21,14 @@ export type VsqxToMusicXmlResult = {
 type UtaFormatixBridge = {
   convertVsqxToMusicXml: (vsqxText: string, options?: { defaultLyric?: string }) => string;
   convertVsqxToMusicXmlWithReport: (vsqxText: string, options?: { defaultLyric?: string }) => VsqxToMusicXmlReport;
-  convertMusicXmlToVsqx: (musicXmlText: string, options?: Record<string, unknown>) => string;
+  convertMusicXmlToVsqx: (musicXmlText: string, options?: MusicXmlToVsqxOptions) => string;
+};
+
+export type MusicXmlToVsqxOptions = {
+  musicXml?: {
+    defaultLyric?: string;
+  };
+  splitPartStaves?: boolean;
 };
 
 type UtaFormatixHooks = {
@@ -130,7 +137,7 @@ export const convertVsqxToMusicXml = (
 
 export const convertMusicXmlToVsqx = (
   musicXmlText: string,
-  options?: Record<string, unknown>
+  options?: MusicXmlToVsqxOptions
 ): { ok: boolean; vsqx: string; diagnostic?: { code: string; message: string } } => {
   const runtime = bridge();
   if (!runtime) {
