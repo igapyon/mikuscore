@@ -106,14 +106,14 @@ describe("musescore-io", () => {
         <KeySig><accidental>-1</accidental><mode>minor</mode></KeySig>
         <voice>
           <Tempo><tempo>2.0</tempo></Tempo>
-          <Dynamic><subtype>mf</subtype></Dynamic>
+          <Dynamic><subtype>mf</subtype><velocity>90</velocity></Dynamic>
           <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
         </voice>
       </Measure>
       <Measure endRepeat="1">
         <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
         <voice>
-          <Dynamic><subtype>p</subtype></Dynamic>
+          <Dynamic><subtype>p</subtype><velocity>49</velocity></Dynamic>
           <Rest><durationType>quarter</durationType></Rest>
         </voice>
       </Measure>
@@ -134,6 +134,8 @@ describe("musescore-io", () => {
     expect(doc.querySelector("measure:nth-of-type(2) barline[location=\"right\"] repeat[direction=\"backward\"]")).not.toBeNull();
     expect(doc.querySelector("measure:nth-of-type(1) dynamics > mf")).not.toBeNull();
     expect(doc.querySelector("measure:nth-of-type(2) dynamics > p")).not.toBeNull();
+    expect(doc.querySelector("measure:nth-of-type(1) direction > sound[dynamics=\"100.00\"]")).not.toBeNull();
+    expect(doc.querySelector("measure:nth-of-type(2) direction > sound[dynamics=\"54.44\"]")).not.toBeNull();
     expect(doc.querySelector("miscellaneous-field[name=\"src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
@@ -166,6 +168,55 @@ describe("musescore-io", () => {
     expect(doc.querySelector("part > measure:nth-of-type(1) > direction[placement=\"above\"] > direction-type > words")?.textContent?.trim()).toBe("Quasi Presto");
     expect(doc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > metronome")).toBeNull();
     expect(doc.querySelector("part > measure:nth-of-type(1) > direction > sound")?.getAttribute("tempo")).toBe("130");
+  });
+
+  it("imports multiple Tempo events in one measure (e.g. Tema) as words directions", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Tempo><tempo>2.1666667</tempo><text>Quasi Presto</text></Tempo>
+          <Tempo><tempo>2.1666667</tempo><text>Tema</text></Tempo>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const words = Array.from(doc.querySelectorAll("part > measure:nth-of-type(1) > direction > direction-type > words"))
+      .map((node) => node.textContent?.trim() ?? "");
+    expect(words).toContain("Quasi Presto");
+    expect(words).toContain("Tema");
+  });
+
+  it("skips hidden MuseScore Dynamic (visible=0)", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Dynamic><subtype>f</subtype><velocity>96</velocity><visible>0</visible></Dynamic>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > direction > direction-type > dynamics")).toBeNull();
+    expect(doc.querySelector("part > measure > direction > sound[dynamics]")).toBeNull();
   });
 
   it("infers key mode from title when MuseScore key mode is not present", () => {
@@ -300,6 +351,30 @@ describe("musescore-io", () => {
     expect(diagText).toContain("jump mapped as text only; playback semantics may be incomplete");
   });
 
+  it("imports MuseScore Expression as MusicXML words direction", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Expression><text><i></i>sempre legato</text></Expression>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const words = doc.querySelector("part > measure > direction > direction-type > words");
+    expect(words?.textContent?.trim()).toBe("sempre legato");
+    expect(words?.getAttribute("font-style")).toBe("italic");
+  });
+
   it("exports basic MusicXML content into mscx", () => {
     const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
@@ -429,6 +504,41 @@ describe("musescore-io", () => {
     if (!doc) return;
     const mscx = exportMusicXmlDomToMuseScore(doc);
     expect(mscx).toContain("<Articulation><subtype>articLhPizzicatoAbove</subtype></Articulation>");
+  });
+
+  it("exports MusicXML technical bow/open/harmonic and fingering/string into MuseScore", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations>
+          <technical>
+            <up-bow/>
+            <open-string/>
+            <harmonic/>
+            <fingering>2</fingering>
+            <string>4</string>
+          </technical>
+        </notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Articulation><subtype>articUpBowAbove</subtype></Articulation>");
+    expect(mscx).toContain("<Articulation><subtype>articOpenStringAbove</subtype></Articulation>");
+    expect(mscx).toContain("<Articulation><subtype>articHarmonicAbove</subtype></Articulation>");
+    expect(mscx).toContain("<Fingering>2</Fingering>");
+    expect(mscx).toContain("<String>4</String>");
   });
 
   it("exports multi-staff MusicXML part into MuseScore Part with multiple Staff refs", () => {
@@ -1082,6 +1192,66 @@ describe("musescore-io", () => {
     if (!doc) return;
     const stopped = doc.querySelector("part > measure > note > notations > technical > stopped");
     expect(stopped).not.toBeNull();
+  });
+
+  it("maps MuseScore technical articulations and note fingering/string into MusicXML technical", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Articulation><subtype>articUpBowAbove</subtype></Articulation>
+            <Articulation><subtype>articDownBowAbove</subtype></Articulation>
+            <Articulation><subtype>articOpenStringAbove</subtype></Articulation>
+            <Articulation><subtype>articHarmonicAbove</subtype></Articulation>
+            <Note><pitch>60</pitch><Fingering>1</Fingering><String>3</String></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note > notations > technical > up-bow")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note > notations > technical > down-bow")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note > notations > technical > open-string")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note > notations > technical > harmonic")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note > notations > technical > fingering")?.textContent?.trim()).toBe("1");
+    expect(doc.querySelector("part > measure > note > notations > technical > string")?.textContent?.trim()).toBe("3");
+  });
+
+  it("maps MuseScore brassMuteClosed ornament into MusicXML technical stopped", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Ornament><subtype>brassMuteClosed</subtype></Ornament>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note > notations > technical > stopped")).not.toBeNull();
   });
 
   it("imports MuseScore Trill spanner into MusicXML ornaments trill-mark/wavy-line", () => {
