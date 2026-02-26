@@ -394,6 +394,277 @@ describe("LilyPond I/O", () => {
     ).toBe("light-light");
   });
 
+  it("exports and imports staccato/accent via %@mks articul metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/></articulations></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks articul voice=P1 measure=1 event=1 kind=staccato");
+    expect(lily).toContain("% %@mks articul voice=P1 measure=1 event=2 kind=accent");
+
+    const roundtrip = convertLilyPondToMusicXml(lily);
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(first?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
+    expect(second?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
+  });
+
+  it("exports and imports accidental display (natural/sharp/flat) via %@mks accidental metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>natural</accidental></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>sharp</accidental></note>
+      <note><pitch><step>E</step><alter>-1</alter><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>flat</accidental></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks accidental voice=P1 measure=1 event=1 value=natural");
+    expect(lily).toContain("% %@mks accidental voice=P1 measure=1 event=2 value=sharp");
+    expect(lily).toContain("% %@mks accidental voice=P1 measure=1 event=3 value=flat");
+
+    const roundtrip = convertLilyPondToMusicXml(lily);
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("natural");
+    expect(notes[1]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("sharp");
+    expect(notes[2]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("flat");
+  });
+
+  it("exports and imports grace notes via %@mks grace metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><grace slash="yes"/><pitch><step>C</step><octave>5</octave></pitch><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks grace voice=P1 measure=1 event=1 slash=1");
+
+    const roundtrip = convertLilyPondToMusicXml(lily);
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(first?.querySelector(":scope > grace")?.getAttribute("slash")).toBe("yes");
+    expect(first?.querySelector(":scope > duration")).toBeNull();
+    expect(second?.querySelector(":scope > duration")?.textContent?.trim()).toBe("480");
+  });
+
+  it("keeps grace + back-to-back triplets in the same 2/4 measure", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><grace slash="yes"/><pitch><step>A</step><octave>5</octave></pitch><voice>1</voice><type>16th</type></note>
+      <note><grace slash="yes"/><pitch><step>C</step><octave>6</octave></pitch><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>E</step><octave>6</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="start"/></notations></note>
+      <note><pitch><step>C</step><octave>6</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>
+      <note><pitch><step>A</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="stop"/></notations></note>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="start"/></notations></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>160</duration><voice>1</voice><type>eighth</type><time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification><notations><tuplet type="stop"/></notations></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    const roundtrip = convertLilyPondToMusicXml(lily);
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const m1 = outDoc.querySelector("part > measure:nth-of-type(1)");
+    const m2 = outDoc.querySelector("part > measure:nth-of-type(2)");
+    const notes = Array.from(m1?.querySelectorAll(":scope > note") ?? []);
+    expect(notes.length).toBe(8);
+    expect(notes[0]?.querySelector(":scope > grace")).not.toBeNull();
+    expect(notes[1]?.querySelector(":scope > grace")).not.toBeNull();
+    expect(notes[2]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(notes[7]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(m2).toBeNull();
+  });
+
+  it("exports and imports tuplet markers/time-modification via %@mks tuplet metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop" number="1"/></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks tuplet voice=P1 measure=1 event=1 actual=3 normal=2 start=1 number=1");
+    expect(lily).toContain("% %@mks tuplet voice=P1 measure=1 event=3 actual=3 normal=2 stop=1 number=1");
+
+    const roundtrip = convertLilyPondToMusicXml(lily);
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const third = outDoc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(first?.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(first?.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+    expect(first?.querySelector(':scope > notations > tuplet[type="start"]')?.getAttribute("number")).toBe("1");
+    expect(third?.querySelector(':scope > notations > tuplet[type="stop"]')?.getAttribute("number")).toBe("1");
+  });
+
+  it("currently degrades octave-shift directions on LilyPond roundtrip (policy explicit)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <direction><direction-type><octave-shift type="up" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+    <measure number="2">
+      <direction><direction-type><octave-shift type="stop" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    const outDoc = parseMusicXmlDocument(convertLilyPondToMusicXml(lily));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(outDoc.querySelector("part > measure:nth-of-type(2) > note > pitch > step")?.textContent?.trim()).toBe("D");
+    expect(outDoc.querySelector("direction > direction-type > octave-shift")).toBeNull();
+  });
+
+  it("currently degrades trill ornaments on LilyPond roundtrip (policy explicit)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><ornaments><trill-mark/><wavy-line type="start" number="1"/></ornaments></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><ornaments><wavy-line type="stop" number="1"/></ornaments></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    const outDoc = parseMusicXmlDocument(convertLilyPondToMusicXml(lily));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(1) > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(2) > pitch > step")?.textContent?.trim()).toBe("D");
+    expect(outDoc.querySelector("notations > ornaments > trill-mark")).toBeNull();
+    expect(outDoc.querySelector("notations > ornaments > wavy-line")).toBeNull();
+  });
+
   it("exported LilyPond does not overfill 3/4 when source has backup lanes", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

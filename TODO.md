@@ -60,6 +60,15 @@
   - Identify concrete source files/functions for `MSCX/MSCZ -> MIDI` in MuseScore.
   - Compare note event ordering, tie/retrigger handling, and quantization/rounding policies against mikuscore.
   - Extract only implementable deltas and track expected parity impact per delta.
+- [ ] Cross-format rollout gaps for MuseScore minimal tests:
+  - [x] LilyPond: articulation (`staccato` / `accent`) roundtrip-equivalent tests and preservation path.
+  - [x] LilyPond: grace-note minimal roundtrip-equivalent test.
+  - [x] LilyPond: tuplet start/stop and written-type equivalent checks.
+  - [x] LilyPond: trill/octave-shift equivalent policy tests (preserve/degrade explicit).
+  - [x] MEI: grace-note minimal roundtrip-equivalent test.
+  - [x] MEI: tuplet start/stop and written-type equivalent checks.
+  - [x] MEI: section-boundary double bar + explicit same-meter time equivalent test and metadata preservation.
+  - [x] MEI: articulation (`staccato` / `accent`) minimal roundtrip-equivalent test and preservation path.
 
 #### P3: Feature expansion
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
@@ -170,6 +179,15 @@
   - MuseScore 側の `MSCX/MSCZ -> MIDI` の具体ファイル/関数を特定する。
   - ノートイベント順序、tie/retrigger、量子化/丸め規則を mikuscore と比較する。
   - 実装可能な差分のみを抽出し、差分ごとの期待パリティ改善量を管理する。
+- [ ] MuseScore 最小テストの横展開ギャップ整理:
+  - [x] LilyPond: アーティキュレーション（`staccato` / `accent`）の同等テストと保持経路。
+  - [x] LilyPond: 前打音（grace）最小ケースの同等テスト。
+  - [x] LilyPond: 連符（tuplet start/stop・表記音価）同等テスト。
+  - [x] LilyPond: `trill` / `octave-shift` の同等ポリシーテスト（保持/劣化を明示）。
+  - [x] MEI: 前打音（grace）最小ケースの同等テスト。
+  - [x] MEI: 連符（tuplet start/stop・表記音価）同等テスト。
+  - [x] MEI: セクション境界ダブルバー + 同拍子再明示の同等テストとメタ保持。
+  - [x] MEI: アーティキュレーション（`staccato` / `accent`）最小同等テストと保持経路。
 
 #### P3: 仕様拡張
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。

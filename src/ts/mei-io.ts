@@ -65,6 +65,17 @@ const alterToAccid = (alterText: string | null): string | null => {
   return null;
 };
 
+const musicXmlAccidentalToAccid = (accidentalText: string | null): string | null => {
+  const normalized = String(accidentalText ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "sharp") return "s";
+  if (normalized === "flat") return "f";
+  if (normalized === "natural") return "n";
+  if (normalized === "double-sharp" || normalized === "sharp-sharp") return "ss";
+  if (normalized === "flat-flat" || normalized === "double-flat") return "ff";
+  return null;
+};
+
 const fifthsToMeiKeySig = (fifths: number): string => {
   if (!Number.isFinite(fifths) || fifths === 0) return "0";
   if (fifths > 0) return `${Math.min(7, Math.round(fifths))}s`;
@@ -153,14 +164,35 @@ const buildSimplePitchNote = (note: Element): string => {
   const step = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "C";
   const octaveText = note.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "4";
   const alterText = note.querySelector(":scope > pitch > alter")?.textContent ?? null;
-  const accid = alterToAccid(alterText);
+  const explicitAccid = musicXmlAccidentalToAccid(
+    note.querySelector(":scope > accidental")?.textContent ?? null
+  );
+  const accid = explicitAccid ?? alterToAccid(alterText);
   const attrs = [
     `pname="${esc(toPname(step))}"`,
     `oct="${esc(octaveText)}"`,
     `dur="${esc(dur)}"`,
   ];
+  const actual = parseIntSafe(note.querySelector(":scope > time-modification > actual-notes")?.textContent, NaN);
+  const normal = parseIntSafe(note.querySelector(":scope > time-modification > normal-notes")?.textContent, NaN);
+  const hasTupletStart = note.querySelector(':scope > notations > tuplet[type="start"]') !== null;
+  const hasTupletStop = note.querySelector(':scope > notations > tuplet[type="stop"]') !== null;
+  const arts: string[] = [];
+  if (note.querySelector(":scope > notations > articulations > staccato")) arts.push("stacc");
+  if (note.querySelector(":scope > notations > articulations > accent")) arts.push("acc");
   if (dots > 0) attrs.push(`dots="${dots}"`);
   if (accid) attrs.push(`accid="${accid}"`);
+  if (Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0) {
+    attrs.push(`num="${Math.round(actual)}"`);
+    attrs.push(`numbase="${Math.round(normal)}"`);
+  }
+  if (hasTupletStart) attrs.push('mks-tuplet-start="1"');
+  if (hasTupletStop) attrs.push('mks-tuplet-stop="1"');
+  if (note.querySelector(":scope > grace")) {
+    const slash = (note.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
+    attrs.push(`grace="${slash ? "acc" : "unacc"}"`);
+  }
+  if (arts.length) attrs.push(`artic="${esc(arts.join(" "))}"`);
   return `<note ${attrs.join(" ")}/>`;
 };
 
@@ -224,7 +256,10 @@ const buildLayerContent = (notes: Element[]): string => {
       const step = n.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "C";
       const octaveText = n.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "4";
       const alterText = n.querySelector(":scope > pitch > alter")?.textContent ?? null;
-      const accid = alterToAccid(alterText);
+      const explicitAccid = musicXmlAccidentalToAccid(
+        n.querySelector(":scope > accidental")?.textContent ?? null
+      );
+      const accid = explicitAccid ?? alterToAccid(alterText);
       const noteAttrs = [
         `pname="${esc(toPname(step))}"`,
         `oct="${esc(octaveText)}"`,
@@ -477,6 +512,17 @@ const accidToAlter = (accid: string): number | null => {
   return null;
 };
 
+const accidToMusicXmlAccidental = (accid: string): string | null => {
+  const normalized = String(accid || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "s" || normalized === "#") return "sharp";
+  if (normalized === "f" || normalized === "b") return "flat";
+  if (normalized === "n") return "natural";
+  if (normalized === "ss" || normalized === "x") return "double-sharp";
+  if (normalized === "ff" || normalized === "bb") return "flat-flat";
+  return null;
+};
+
 const parseMeiKeySigToFifths = (value: string): number => {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized || normalized === "0") return 0;
@@ -518,12 +564,39 @@ const buildMusicXmlNoteFromMeiNote = (
 ): string => {
   const pname = (meiNote.getAttribute("pname") || "c").trim().toUpperCase();
   const octave = parseIntSafe(meiNote.getAttribute("oct"), 4);
-  const alter = accidToAlter(meiNote.getAttribute("accid") || "");
+  const accid = meiNote.getAttribute("accid") || "";
+  const alter = accidToAlter(accid);
   const alterXml = alter === null ? "" : `<alter>${alter}</alter>`;
+  const accidentalText = accidToMusicXmlAccidental(accid);
+  const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
   const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
-  return `<note><pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch><duration>${durationTicks}</duration><voice>${xmlEscape(
+  const actual = parseIntSafe(meiNote.getAttribute("num"), NaN);
+  const normal = parseIntSafe(meiNote.getAttribute("numbase"), NaN);
+  const hasTimeModification = Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0;
+  const timeModificationXml = hasTimeModification
+    ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
+    : "";
+  const hasTupletStart =
+    (meiNote.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
+  const hasTupletStop =
+    (meiNote.getAttribute("mks-tuplet-stop") ?? "").trim() === "1";
+  const articRaw = (meiNote.getAttribute("artic") || "").trim().toLowerCase();
+  const articTokens = articRaw.split(/\s+/).filter(Boolean);
+  const arts: string[] = [];
+  if (articTokens.includes("stacc")) arts.push("<staccato/>");
+  if (articTokens.includes("acc")) arts.push("<accent/>");
+  const tupletXml = `${hasTupletStart ? '<tuplet type="start"/>' : ""}${hasTupletStop ? '<tuplet type="stop"/>' : ""}`;
+  const hasNotations = arts.length > 0 || tupletXml.length > 0;
+  const notationsXml = hasNotations
+    ? `<notations>${arts.length ? `<articulations>${arts.join("")}</articulations>` : ""}${tupletXml}</notations>`
+    : "";
+  const graceAttr = (meiNote.getAttribute("grace") || "").trim().toLowerCase();
+  const isGrace = graceAttr === "acc" || graceAttr === "unacc";
+  const graceXml = isGrace ? `<grace${graceAttr === "acc" ? ' slash="yes"' : ""}/>` : "";
+  const durationXml = isGrace ? "" : `<duration>${durationTicks}</duration>`;
+  return `<note>${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${durationXml}<voice>${xmlEscape(
     voice
-  )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}</note>`;
+  )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}</note>`;
 };
 
 const parseLayerEvents = (layer: Element, divisions: number, voice: string): ParsedMeiEvent[] => {
@@ -534,7 +607,17 @@ const parseLayerEvents = (layer: Element, divisions: number, voice: string): Par
       const durAttr = child.getAttribute("dur") || "4";
       const dots = parseIntSafe(child.getAttribute("dots"), 0);
       const typeText = meiDurToMusicXmlType(durAttr);
-      const ticks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions));
+      const graceAttr = (child.getAttribute("grace") || "").trim().toLowerCase();
+      const isGrace = graceAttr === "acc" || graceAttr === "unacc";
+      const actual = parseIntSafe(child.getAttribute("num"), NaN);
+      const normal = parseIntSafe(child.getAttribute("numbase"), NaN);
+      const tupletRatio =
+        Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
+          ? Math.max(0.0001, Math.round(normal) / Math.round(actual))
+          : 1;
+      const ticks = isGrace
+        ? 0
+        : Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions * tupletRatio));
       events.push({
         kind: "note",
         durationTicks: ticks,
@@ -561,20 +644,49 @@ const parseLayerEvents = (layer: Element, divisions: number, voice: string): Par
       const durAttr = child.getAttribute("dur") || "4";
       const dots = parseIntSafe(child.getAttribute("dots"), 0);
       const typeText = meiDurToMusicXmlType(durAttr);
-      const ticks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions));
+      const actual = parseIntSafe(child.getAttribute("num"), NaN);
+      const normal = parseIntSafe(child.getAttribute("numbase"), NaN);
+      const tupletRatio =
+        Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
+          ? Math.max(0.0001, Math.round(normal) / Math.round(actual))
+          : 1;
+      const ticks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions * tupletRatio));
       const noteChildren = childElementsByName(child, "note");
       if (noteChildren.length === 0) continue;
       const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
+      const chordTupletStart = (child.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
+      const chordTupletStop = (child.getAttribute("mks-tuplet-stop") ?? "").trim() === "1";
+      const timeModificationXml =
+        Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
+          ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
+          : "";
+      const chordArticRaw = (child.getAttribute("artic") || "").trim().toLowerCase();
       const noteXml = noteChildren
         .map((note, index) => {
           const pname = (note.getAttribute("pname") || "c").trim().toUpperCase();
           const octave = parseIntSafe(note.getAttribute("oct"), 4);
-          const alter = accidToAlter(note.getAttribute("accid") || "");
+          const accid = note.getAttribute("accid") || "";
+          const alter = accidToAlter(accid);
           const alterXml = alter === null ? "" : `<alter>${alter}</alter>`;
+          const accidentalText = accidToMusicXmlAccidental(accid);
+          const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
           const chordXml = index > 0 ? "<chord/>" : "";
+          const mergedArticRaw = `${chordArticRaw} ${(note.getAttribute("artic") || "").trim().toLowerCase()}`.trim();
+          const articTokens = mergedArticRaw.split(/\s+/).filter(Boolean);
+          const arts: string[] = [];
+          if (articTokens.includes("stacc")) arts.push("<staccato/>");
+          if (articTokens.includes("acc")) arts.push("<accent/>");
+          const tupletXml = index === 0
+            ? `${chordTupletStart ? '<tuplet type="start"/>' : ""}${chordTupletStop ? '<tuplet type="stop"/>' : ""}`
+            : "";
+          const notationsXml = index === 0 && arts.length
+            ? `<notations><articulations>${arts.join("")}</articulations>${tupletXml}</notations>`
+            : index === 0 && tupletXml.length
+              ? `<notations>${tupletXml}</notations>`
+            : "";
           return `<note>${chordXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch><duration>${ticks}</duration><voice>${xmlEscape(
             voice
-          )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}</note>`;
+          )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}</note>`;
         })
         .join("");
       events.push({ kind: "chord", durationTicks: ticks, xml: noteXml });

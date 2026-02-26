@@ -38,6 +38,7 @@ import {
   createMusicXmlDownloadPayload,
   createSvgDownloadPayload,
   createVsqxDownloadPayload,
+  createZipBundleDownloadPayload,
   triggerFileDownload,
 } from "./download-flow";
 import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
@@ -95,7 +96,11 @@ const inputEntrySource = q<HTMLInputElement>("#inputEntrySource");
 const inputEntryNew = q<HTMLInputElement>("#inputEntryNew");
 const sourceTypeBlock = q<HTMLDivElement>("#sourceTypeBlock");
 const sourceTypeXml = q<HTMLInputElement>("#sourceTypeXml");
+const sourceTypeMuseScore = q<HTMLInputElement>("#sourceTypeMuseScore");
+const sourceTypeVsqx = q<HTMLInputElement>("#sourceTypeVsqx");
 const sourceTypeAbc = q<HTMLInputElement>("#sourceTypeAbc");
+const sourceTypeMei = q<HTMLInputElement>("#sourceTypeMei");
+const sourceTypeLilyPond = q<HTMLInputElement>("#sourceTypeLilyPond");
 const newInputBlock = q<HTMLDivElement>("#newInputBlock");
 const newTemplatePianoGrandStaff = q<HTMLInputElement>("#newTemplatePianoGrandStaff");
 const newPartCountInput = q<HTMLInputElement>("#newPartCount");
@@ -106,8 +111,16 @@ const newPartClefList = q<HTMLDivElement>("#newPartClefList");
 const fileInputBlock = q<HTMLDivElement>("#fileInputBlock");
 const sourceXmlInputBlock = q<HTMLDivElement>("#sourceXmlInputBlock");
 const abcInputBlock = q<HTMLDivElement>("#abcInputBlock");
+const museScoreInputBlock = q<HTMLDivElement>("#museScoreInputBlock");
+const vsqxInputBlock = q<HTMLDivElement>("#vsqxInputBlock");
+const meiInputBlock = q<HTMLDivElement>("#meiInputBlock");
+const lilyPondInputBlock = q<HTMLDivElement>("#lilyPondInputBlock");
 const xmlInput = q<HTMLTextAreaElement>("#xmlInput");
 const abcInput = q<HTMLTextAreaElement>("#abcInput");
+const museScoreInput = q<HTMLTextAreaElement>("#museScoreInput");
+const vsqxInput = q<HTMLTextAreaElement>("#vsqxInput");
+const meiInput = q<HTMLTextAreaElement>("#meiInput");
+const lilyPondInput = q<HTMLTextAreaElement>("#lilyPondInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
@@ -159,6 +172,7 @@ const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
 const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
 const downloadLilyPondBtn = q<HTMLButtonElement>("#downloadLilyPondBtn");
 const downloadMuseScoreBtn = q<HTMLButtonElement>("#downloadMuseScoreBtn");
+const downloadAllBtn = q<HTMLButtonElement>("#downloadAllBtn");
 const saveModeText = qo<HTMLSpanElement>("#saveModeText");
 const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
@@ -619,19 +633,36 @@ const applyInitialXmlInputValue = (): void => {
   xmlInput.value = sampleXml;
 };
 
+const getSelectedSourceType = (): "xml" | "musescore" | "vsqx" | "abc" | "mei" | "lilypond" => {
+  if (sourceTypeMuseScore.checked) return "musescore";
+  if (sourceTypeVsqx.checked) return "vsqx";
+  if (sourceTypeAbc.checked) return "abc";
+  if (sourceTypeMei.checked) return "mei";
+  if (sourceTypeLilyPond.checked) return "lilypond";
+  return "xml";
+};
+
 const renderInputMode = (): void => {
   const isNewEntry = inputEntryNew.checked;
   const isFileEntry = inputEntryFile.checked;
   const isSourceEntry = inputEntrySource.checked;
-  const isAbcSource = sourceTypeAbc.checked;
+  const sourceType = getSelectedSourceType();
   newInputBlock.classList.toggle("md-hidden", !isNewEntry);
   sourceTypeBlock.classList.toggle("md-hidden", !isSourceEntry);
   fileInputBlock.classList.toggle("md-hidden", !isFileEntry);
-  sourceXmlInputBlock.classList.toggle("md-hidden", !isSourceEntry || isAbcSource);
-  abcInputBlock.classList.toggle("md-hidden", !isSourceEntry || !isAbcSource);
+  sourceXmlInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "xml");
+  museScoreInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "musescore");
+  vsqxInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "vsqx");
+  abcInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "abc");
+  meiInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "mei");
+  lilyPondInputBlock.classList.toggle("md-hidden", !isSourceEntry || sourceType !== "lilypond");
 
   sourceTypeXml.disabled = !isSourceEntry;
+  sourceTypeMuseScore.disabled = !isSourceEntry;
+  sourceTypeVsqx.disabled = !isSourceEntry;
   sourceTypeAbc.disabled = !isSourceEntry;
+  sourceTypeMei.disabled = !isSourceEntry;
+  sourceTypeLilyPond.disabled = !isSourceEntry;
   fileSelectBtn.classList.toggle("md-hidden", !isFileEntry);
   loadBtn.classList.toggle("md-hidden", isFileEntry);
   const loadLabel = loadBtn.querySelector("span");
@@ -1201,6 +1232,7 @@ const renderOutput = (): void => {
   downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
   downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
   downloadMuseScoreBtn.disabled = !state.lastSaveResult?.ok;
+  downloadAllBtn.disabled = !state.lastSaveResult?.ok;
 };
 
 const renderControlState = (): void => {
@@ -1945,11 +1977,15 @@ const onLoadClick = async (): Promise<void> => {
   const keepMetadata = keepMetadataInMusicXml.checked;
   const result = await resolveLoadFlow({
     isNewType: inputEntryNew.checked,
-    isAbcType: inputEntrySource.checked && sourceTypeAbc.checked,
+    sourceType: getSelectedSourceType(),
     isFileMode: inputEntryFile.checked,
     selectedFile: fileInput.files?.[0] ?? null,
     xmlSourceText: xmlInput.value,
+    museScoreSourceText: museScoreInput.value,
+    vsqxSourceText: vsqxInput.value,
     abcSourceText: abcInput.value,
+    meiSourceText: meiInput.value,
+    lilyPondSourceText: lilyPondInput.value,
     createNewMusicXml,
     formatImportedMusicXml: normalizeImportedMusicXmlText,
     convertAbcToMusicXml: (abcSource) =>
@@ -2482,7 +2518,7 @@ const onConvertRestToNote = (): void => {
 };
 
 const failExport = (
-  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "SVG",
+  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "All" | "SVG",
   reason: string
 ): void => {
   const message = `${format} export failed: ${reason}`;
@@ -2651,6 +2687,81 @@ const onDownloadMuseScore = async (): Promise<void> => {
   }
 };
 
+const onDownloadAll = async (): Promise<void> => {
+  const xmlText = resolveMusicXmlOutput();
+  if (!xmlText) {
+    failExport("All", "No valid saved XML is available.");
+    return;
+  }
+  try {
+    const musicXmlPayload = await createMusicXmlDownloadPayload(xmlText, {
+      compressed: compressXmlMuseScoreExport.checked,
+      useXmlExtension: exportMusicXmlAsXmlExtension.checked,
+    });
+    const museScorePayload = await createMuseScoreDownloadPayload(xmlText, exportMusicXmlDomToMuseScore, {
+      compressed: compressXmlMuseScoreExport.checked,
+    });
+    if (!museScorePayload) {
+      failExport("All", "Could not build MuseScore payload from current MusicXML.");
+      return;
+    }
+    const midiPayload = createMidiDownloadPayload(
+      xmlText,
+      PLAYBACK_TICKS_PER_QUARTER,
+      normalizeMidiProgram(midiProgramSelect.value),
+      forceMidiProgramOverride.checked,
+      normalizeGraceTimingMode(graceTimingModeSelect.value),
+      metricAccentEnabledInput.checked,
+      normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+      normalizeMidiExportProfile(midiExportProfileSelect.value)
+    );
+    if (!midiPayload) {
+      failExport("All", "Could not build MIDI payload from current MusicXML.");
+      return;
+    }
+    const convertedVsqx = convertMusicXmlToVsqx(xmlText, { musicXml: { defaultLyric: DEFAULT_VSQX_LYRIC } });
+    if (!convertedVsqx.ok) {
+      failExport("All", convertedVsqx.diagnostic?.message ?? "MusicXML to VSQX conversion failed.");
+      return;
+    }
+    const vsqxPayload = createVsqxDownloadPayload(convertedVsqx.vsqx);
+    const abcPayload = createAbcDownloadPayload(xmlText, exportMusicXmlDomToAbc);
+    if (!abcPayload) {
+      failExport("All", "Could not build ABC payload from current MusicXML.");
+      return;
+    }
+    const meiPayload = createMeiDownloadPayload(xmlText, exportMusicXmlDomToMei);
+    if (!meiPayload) {
+      failExport("All", "Could not build MEI payload from current MusicXML.");
+      return;
+    }
+    const lilyPondPayload = createLilyPondDownloadPayload(xmlText, exportMusicXmlDomToLilyPond);
+    if (!lilyPondPayload) {
+      failExport("All", "Could not build LilyPond payload from current MusicXML.");
+      return;
+    }
+    const svgNode = debugScoreArea.querySelector("svg");
+    if (!svgNode) {
+      failExport("All", "No rendered SVG preview is available.");
+      return;
+    }
+    const svgPayload = createSvgDownloadPayload(new XMLSerializer().serializeToString(svgNode));
+    const allPayload = await createZipBundleDownloadPayload([
+      musicXmlPayload,
+      museScorePayload,
+      midiPayload,
+      vsqxPayload,
+      abcPayload,
+      meiPayload,
+      lilyPondPayload,
+      svgPayload,
+    ]);
+    triggerFileDownload(allPayload);
+  } catch (err) {
+    failExport("All", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
 const onDownloadSvg = (): void => {
   const svgNode = debugScoreArea.querySelector("svg");
   if (!svgNode) {
@@ -2703,7 +2814,11 @@ inputEntryFile.addEventListener("change", renderInputMode);
 inputEntrySource.addEventListener("change", renderInputMode);
 inputEntryNew.addEventListener("change", renderInputMode);
 sourceTypeXml.addEventListener("change", renderInputMode);
+sourceTypeMuseScore.addEventListener("change", renderInputMode);
+sourceTypeVsqx.addEventListener("change", renderInputMode);
 sourceTypeAbc.addEventListener("change", renderInputMode);
+sourceTypeMei.addEventListener("change", renderInputMode);
+sourceTypeLilyPond.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
@@ -2733,7 +2848,11 @@ const loadBuiltInSample = (xml: string): void => {
   inputEntrySource.checked = true;
   inputEntryNew.checked = false;
   sourceTypeXml.checked = true;
+  sourceTypeMuseScore.checked = false;
+  sourceTypeVsqx.checked = false;
   sourceTypeAbc.checked = false;
+  sourceTypeMei.checked = false;
+  sourceTypeLilyPond.checked = false;
   xmlInput.value = xml;
   renderInputMode();
   renderLocalDraftUi();
@@ -2797,6 +2916,9 @@ downloadAbcBtn.addEventListener("click", onDownloadAbc);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
+downloadAllBtn.addEventListener("click", () => {
+  void onDownloadAll();
+});
 downloadSvgBtn.addEventListener("click", onDownloadSvg);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
