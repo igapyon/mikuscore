@@ -19,8 +19,36 @@ type LilyParsedPitch = {
 
 type LilyDirectEvent =
   | { kind: "rest"; durationDiv: number; type: string; dots: number }
-  | { kind: "note"; durationDiv: number; type: string; dots: number; pitch: LilyParsedPitch }
-  | { kind: "chord"; durationDiv: number; type: string; dots: number; pitches: LilyParsedPitch[] };
+  | {
+    kind: "note";
+    durationDiv: number;
+    type: string;
+    dots: number;
+    pitch: LilyParsedPitch;
+    articulationSubtypes?: string[];
+    graceSlash?: boolean;
+    tupletActual?: number;
+    tupletNormal?: number;
+    tupletStart?: boolean;
+    tupletStop?: boolean;
+    tupletNumber?: number;
+    accidentalText?: string;
+  }
+  | {
+    kind: "chord";
+    durationDiv: number;
+    type: string;
+    dots: number;
+    pitches: LilyParsedPitch[];
+    articulationSubtypes?: string[];
+    graceSlash?: boolean;
+    tupletActual?: number;
+    tupletNormal?: number;
+    tupletStart?: boolean;
+    tupletStop?: boolean;
+    tupletNumber?: number;
+    accidentalText?: string;
+  };
 
 type LilyTransposeHint = { chromatic?: number; diatonic?: number };
 type LilyMeasureHint = {
@@ -453,6 +481,170 @@ const parseMksMeasureHints = (source: string): Map<string, Map<number, LilyMeasu
   return out;
 };
 
+const parseMksArticulationHints = (source: string): Map<string, string[]> => {
+  const out = new Map<string, string[]>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+articul\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const eventNo = Number.parseInt(String(params.event || ""), 10);
+    const kindRaw = String(params.kind || "").trim().toLowerCase();
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0 || !kindRaw) {
+      continue;
+    }
+    const normalized = kindRaw
+      .split(",")
+      .map((k) => k.trim().toLowerCase())
+      .reduce<string[]>((acc, k) => {
+        if (k === "staccato") acc.push("staccato");
+        if (k === "accent") acc.push("accent");
+        return acc;
+      }, []);
+    if (!normalized.length) continue;
+    out.set(`${voiceId}#${measureNo}#${eventNo}`, Array.from(new Set(normalized)));
+  }
+  return out;
+};
+
+const parseMksGraceHints = (source: string): Map<string, { slash: boolean }> => {
+  const out = new Map<string, { slash: boolean }>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+grace\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const eventNo = Number.parseInt(String(params.event || ""), 10);
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0) continue;
+    const slashRaw = String(params.slash || "").trim().toLowerCase();
+    out.set(`${voiceId}#${measureNo}#${eventNo}`, { slash: slashRaw === "1" || slashRaw === "true" || slashRaw === "yes" });
+  }
+  return out;
+};
+
+const parseMksTupletHints = (source: string): Map<string, {
+  actual?: number;
+  normal?: number;
+  start?: boolean;
+  stop?: boolean;
+  number?: number;
+}> => {
+  const out = new Map<string, { actual?: number; normal?: number; start?: boolean; stop?: boolean; number?: number }>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+tuplet\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const eventNo = Number.parseInt(String(params.event || ""), 10);
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0) continue;
+    const actual = Number.parseInt(String(params.actual || ""), 10);
+    const normal = Number.parseInt(String(params.normal || ""), 10);
+    const number = Number.parseInt(String(params.number || ""), 10);
+    const startRaw = String(params.start || "").trim().toLowerCase();
+    const stopRaw = String(params.stop || "").trim().toLowerCase();
+    const hint: { actual?: number; normal?: number; start?: boolean; stop?: boolean; number?: number } = {};
+    if (Number.isFinite(actual) && actual > 0) hint.actual = Math.round(actual);
+    if (Number.isFinite(normal) && normal > 0) hint.normal = Math.round(normal);
+    if (Number.isFinite(number) && number > 0) hint.number = Math.round(number);
+    if (startRaw) hint.start = startRaw === "1" || startRaw === "true" || startRaw === "yes";
+    if (stopRaw) hint.stop = stopRaw === "1" || stopRaw === "true" || stopRaw === "yes";
+    if (hint.actual || hint.normal || hint.number || hint.start || hint.stop) {
+      out.set(`${voiceId}#${measureNo}#${eventNo}`, hint);
+    }
+  }
+  return out;
+};
+
+const parseMksAccidentalHints = (source: string): Map<string, string> => {
+  const out = new Map<string, string>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+accidental\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const eventNo = Number.parseInt(String(params.event || ""), 10);
+    const value = String(params.value || "").trim().toLowerCase();
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0 || !value) {
+      continue;
+    }
+    if (!["natural", "sharp", "flat", "double-sharp", "flat-flat"].includes(value)) continue;
+    out.set(`${voiceId}#${measureNo}#${eventNo}`, value);
+  }
+  return out;
+};
+
+const applyArticulationHintsToMeasures = (
+  measures: LilyDirectEvent[][],
+  voiceId: string,
+  articulationHintByKey: Map<string, string[]>,
+  graceHintByKey: Map<string, { slash: boolean }>,
+  tupletHintByKey: Map<string, { actual?: number; normal?: number; start?: boolean; stop?: boolean; number?: number }>,
+  accidentalHintByKey: Map<string, string>
+): LilyDirectEvent[][] => {
+  for (let mi = 0; mi < measures.length; mi += 1) {
+    let noteEventNo = 0;
+    for (const event of measures[mi] ?? []) {
+      if (event.kind === "rest") continue;
+      noteEventNo += 1;
+      const key = `${voiceId}#${mi + 1}#${noteEventNo}`;
+      const hints = articulationHintByKey.get(key);
+      if (event.kind === "note" || event.kind === "chord") {
+        if (hints?.length) {
+          event.articulationSubtypes = Array.from(new Set([...(event.articulationSubtypes ?? []), ...hints]));
+        }
+        const graceHint = graceHintByKey.get(key);
+        if (graceHint) {
+          event.graceSlash = graceHint.slash;
+          event.durationDiv = 0;
+        }
+        const tupletHint = tupletHintByKey.get(key);
+        if (tupletHint) {
+          if (Number.isFinite(tupletHint.actual) && (tupletHint.actual as number) > 0) event.tupletActual = Math.round(tupletHint.actual as number);
+          if (Number.isFinite(tupletHint.normal) && (tupletHint.normal as number) > 0) event.tupletNormal = Math.round(tupletHint.normal as number);
+          if (Number.isFinite(tupletHint.number) && (tupletHint.number as number) > 0) event.tupletNumber = Math.round(tupletHint.number as number);
+          if (tupletHint.start === true) event.tupletStart = true;
+          if (tupletHint.stop === true) event.tupletStop = true;
+        }
+        const accidentalText = accidentalHintByKey.get(key);
+        if (accidentalText) event.accidentalText = accidentalText;
+      }
+    }
+  }
+  return measures;
+};
+
 const extractAllStaffBlocks = (source: string): Array<{
   voiceId: string;
   body: string;
@@ -658,7 +850,11 @@ const parseLilyDirectBody = (
   warnings: string[],
   contextLabel: string,
   beats: number,
-  beatType: number
+  beatType: number,
+  options: {
+    voiceId?: string;
+    graceHintByKey?: Map<string, { slash: boolean }>;
+  } = {}
 ): LilyDirectEvent[][] => {
   const relative = unwrapRelativeBlock(body);
   let previousMidi: number | null = relative.relativeMidi;
@@ -677,6 +873,9 @@ const parseLilyDirectBody = (
   const safeBeats = Number.isFinite(beats) && beats > 0 ? Math.round(beats) : 4;
   const safeBeatType = Number.isFinite(beatType) && beatType > 0 ? Math.round(beatType) : 4;
   const measureCapacity = Math.max(1, Math.round((divisions * 4 * safeBeats) / safeBeatType));
+  const voiceId = options.voiceId ? normalizeVoiceId(options.voiceId, "") : "";
+  const graceHintByKey = options.graceHintByKey ?? new Map<string, { slash: boolean }>();
+  let noteEventNoInMeasure = 0;
 
   const pushEvent = (event: LilyDirectEvent): void => {
     const current = measures[measures.length - 1];
@@ -696,6 +895,7 @@ const parseLilyDirectBody = (
   for (const token of tokens) {
     if (token === "|") {
       measures.push([]);
+      noteEventNoInMeasure = 0;
       continue;
     }
     const chordExprMatch = token.match(/^<([^>]+)>((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
@@ -725,13 +925,22 @@ const parseLilyDirectBody = (
         warnings.push(`${contextLabel}: chord had no parseable pitches; skipped.`);
         continue;
       }
-      pushEvent({
+      const event: LilyDirectEvent = {
         kind: "chord",
         durationDiv: lilyDurationExprToDivisions(effectiveExpr, effectiveDots, divisions),
         type: lilyDurationToMusicXmlType(parseLilyDurationExpr(effectiveExpr).base),
         dots: effectiveDots,
         pitches,
-      });
+      };
+      noteEventNoInMeasure += 1;
+      if (voiceId && graceHintByKey.size > 0) {
+        const graceHint = graceHintByKey.get(`${voiceId}#${measures.length}#${noteEventNoInMeasure}`);
+        if (graceHint) {
+          event.graceSlash = graceHint.slash;
+          event.durationDiv = 0;
+        }
+      }
+      pushEvent(event);
       continue;
     }
     const m = token.match(/^([a-grs])(isis|eses|is|es)?([,']*)((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
@@ -766,7 +975,16 @@ const parseLilyDirectBody = (
       warnings.push(`${contextLabel}: note pitch parse failed; skipped.`);
       continue;
     }
-    pushEvent({ kind: "note", durationDiv, type, dots: effectiveDots, pitch: pitchResolved });
+    const event: LilyDirectEvent = { kind: "note", durationDiv, type, dots: effectiveDots, pitch: pitchResolved };
+    noteEventNoInMeasure += 1;
+    if (voiceId && graceHintByKey.size > 0) {
+      const graceHint = graceHintByKey.get(`${voiceId}#${measures.length}#${noteEventNoInMeasure}`);
+      if (graceHint) {
+        event.graceSlash = graceHint.slash;
+        event.durationDiv = 0;
+      }
+    }
+    pushEvent(event);
   }
 
   while (measures.length > 1 && measures[measures.length - 1].length === 0) {
@@ -790,6 +1008,32 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
     measureHintsByIndex?: Map<number, LilyMeasureHint>;
   }>;
 }): string => {
+  const buildNoteExtrasXml = (event: Extract<LilyDirectEvent, { kind: "note" | "chord" }>): string => {
+    const graceXml = event.graceSlash === undefined ? "" : `<grace${event.graceSlash ? ' slash="yes"' : ""}/>`;
+    const durationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
+    const timeModXml =
+      Number.isFinite(event.tupletActual)
+      && (event.tupletActual as number) > 0
+      && Number.isFinite(event.tupletNormal)
+      && (event.tupletNormal as number) > 0
+        ? `<time-modification><actual-notes>${Math.round(event.tupletActual as number)}</actual-notes><normal-notes>${Math.round(event.tupletNormal as number)}</normal-notes></time-modification>`
+        : "";
+    const tokens = Array.from(new Set(event.articulationSubtypes ?? []));
+    const nodes: string[] = [];
+    if (tokens.includes("staccato")) nodes.push("<staccato/>");
+    if (tokens.includes("accent")) nodes.push("<accent/>");
+    const tupletNodes: string[] = [];
+    const tupletNumberAttr =
+      Number.isFinite(event.tupletNumber) && (event.tupletNumber as number) > 0
+        ? ` number="${Math.round(event.tupletNumber as number)}"`
+        : "";
+    if (event.tupletStart) tupletNodes.push(`<tuplet type="start"${tupletNumberAttr}/>`);
+    if (event.tupletStop) tupletNodes.push(`<tuplet type="stop"${tupletNumberAttr}/>`);
+    const notationXml = nodes.length || tupletNodes.length
+      ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${tupletNodes.join("")}</notations>`
+      : "";
+    return `${graceXml}${durationXml}${timeModXml}${notationXml}`;
+  };
   const partList = params.staffs
     .map((staff, i) => `<score-part id="P${i + 1}"><part-name>${xmlEscape(staff.voiceId || `Part ${i + 1}`)}</part-name></score-part>`)
     .join("");
@@ -854,17 +1098,21 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
           continue;
         }
         for (const event of events) {
+          const accidentalXml = event.kind !== "rest" && event.accidentalText
+            ? `<accidental>${event.accidentalText}</accidental>`
+            : "";
           if (event.kind === "rest") {
             body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
             continue;
           }
           if (event.kind === "note") {
-            body += `<note><pitch><step>${event.pitch.step}</step>${event.pitch.alter !== 0 ? `<alter>${event.pitch.alter}</alter>` : ""}<octave>${event.pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
+            body += `<note>${buildNoteExtrasXml(event)}<pitch><step>${event.pitch.step}</step>${event.pitch.alter !== 0 ? `<alter>${event.pitch.alter}</alter>` : ""}<octave>${event.pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${accidentalXml}</note>`;
             continue;
           }
           for (let pi = 0; pi < event.pitches.length; pi += 1) {
             const pitch = event.pitches[pi];
-            body += `<note>${pi > 0 ? "<chord/>" : ""}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
+            const chordDurationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
+            body += `<note>${pi > 0 ? "<chord/>" : ""}${pi === 0 ? buildNoteExtrasXml(event) : chordDurationXml}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${pi === 0 ? accidentalXml : ""}</note>`;
           }
         }
         if (hint?.repeat === "forward") {
@@ -903,12 +1151,26 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
   const staffBlocks = extractAllStaffBlocks(source);
   const transposeHintByVoiceId = parseMksTransposeHints(source);
   const measureHintByVoiceId = parseMksMeasureHints(source);
+  const articulationHintByKey = parseMksArticulationHints(source);
+  const graceHintByKey = parseMksGraceHints(source);
+  const tupletHintByKey = parseMksTupletHints(source);
+  const accidentalHintByKey = parseMksAccidentalHints(source);
   if (!staffBlocks.length) return null;
   const warnings: string[] = [];
   const staffs = staffBlocks.map((staff, index) => ({
     voiceId: staff.voiceId || `P${index + 1}`,
     clef: normalizeAbcClefName(staff.clef || "treble"),
-    measures: parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType),
+    measures: applyArticulationHintsToMeasures(
+      parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
+        voiceId: normalizeVoiceId(staff.voiceId, `P${index + 1}`),
+        graceHintByKey,
+      }),
+      normalizeVoiceId(staff.voiceId, `P${index + 1}`),
+      articulationHintByKey,
+      graceHintByKey,
+      tupletHintByKey,
+      accidentalHintByKey
+    ),
     transpose: transposeHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || staff.transpose || null,
     measureHintsByIndex: measureHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || undefined,
   }));
@@ -1292,13 +1554,14 @@ const buildLilyBodyFromPart = (
       const durationDiv = Number.isFinite(durationDivRaw) && durationDivRaw > 0
         ? durationDivRaw
         : noteTypeToDivisionsFallback(note.querySelector(":scope > type")?.textContent || "", currentDivisions);
+      const timelineDurationDiv = note.querySelector(":scope > grace") ? 0 : durationDiv;
       const durWithDots = noteDurationToLilyToken(
         note.querySelector(":scope > type")?.textContent || "",
         dots,
         durationDiv,
         currentDivisions
       );
-      if (occupiedDiv + durationDiv > measureCapacityDiv) {
+      if (occupiedDiv + timelineDurationDiv > measureCapacityDiv) {
         warnings.push("export: dropped note/rest that would overfill a measure.");
         continue;
       }
@@ -1334,7 +1597,7 @@ const buildLilyBodyFromPart = (
       } else {
         measureTokens.push(`<${chordPitches.join(" ")}>${durWithDots}`);
       }
-      occupiedDiv += durationDiv;
+      occupiedDiv += timelineDurationDiv;
     }
     if (!measureTokens.length) {
       const safeBeats = Math.max(1, Math.round(currentBeats));
@@ -1422,7 +1685,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       if (Number.isFinite(partTranspose.diatonic)) fields.push(`diatonic=${Math.round(Number(partTranspose.diatonic))}`);
       return fields.length > 1 ? fields.join(" ") : null;
     };
-    const measureCommentsForVoice = (voiceId: string): string[] => {
+    const measureCommentsForVoice = (voiceId: string, targetStaffNo: number | null = null): string[] => {
       const out: string[] = [];
       const measures = Array.from(part.querySelectorAll(":scope > measure"));
       for (let mi = 0; mi < measures.length; mi += 1) {
@@ -1467,6 +1730,47 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
           fields.push("doubleBar=right");
         }
         out.push(fields.join(" "));
+
+        let eventNo = 0;
+        const children = Array.from(measure.children);
+        for (let ci = 0; ci < children.length; ci += 1) {
+          const child = children[ci];
+          if (child.tagName !== "note") continue;
+          if (targetStaffNo !== null) {
+            const noteStaff = Number.parseInt(child.querySelector(":scope > staff")?.textContent || "1", 10);
+            if (noteStaff !== targetStaffNo) continue;
+          }
+          if (child.querySelector(":scope > chord")) continue;
+          if (child.querySelector(":scope > rest")) continue;
+          eventNo += 1;
+          const kinds: string[] = [];
+          if (child.querySelector(":scope > notations > articulations > staccato")) kinds.push("staccato");
+          if (child.querySelector(":scope > notations > articulations > accent")) kinds.push("accent");
+          if (kinds.length) {
+            out.push(`%@mks articul voice=${voiceId} measure=${mi + 1} event=${eventNo} kind=${kinds.join(",")}`);
+          }
+          const accidentalText = child.querySelector(":scope > accidental")?.textContent?.trim().toLowerCase() || "";
+          if (accidentalText) {
+            out.push(`%@mks accidental voice=${voiceId} measure=${mi + 1} event=${eventNo} value=${accidentalText}`);
+          }
+          const grace = child.querySelector(":scope > grace");
+          if (grace) {
+            out.push(`%@mks grace voice=${voiceId} measure=${mi + 1} event=${eventNo} slash=${grace.getAttribute("slash") === "yes" ? 1 : 0}`);
+          }
+          const timeMod = child.querySelector(":scope > time-modification");
+          const actualNotes = Number.parseInt(timeMod?.querySelector(":scope > actual-notes")?.textContent || "", 10);
+          const normalNotes = Number.parseInt(timeMod?.querySelector(":scope > normal-notes")?.textContent || "", 10);
+          const tupletNode = child.querySelector(":scope > notations > tuplet");
+          const tupletType = tupletNode?.getAttribute("type")?.trim().toLowerCase() || "";
+          const tupletNumber = Number.parseInt(tupletNode?.getAttribute("number") || "", 10);
+          const tupletFields = [`%@mks tuplet voice=${voiceId} measure=${mi + 1} event=${eventNo}`];
+          if (Number.isFinite(actualNotes) && actualNotes > 0) tupletFields.push(`actual=${Math.round(actualNotes)}`);
+          if (Number.isFinite(normalNotes) && normalNotes > 0) tupletFields.push(`normal=${Math.round(normalNotes)}`);
+          if (tupletType === "start") tupletFields.push("start=1");
+          if (tupletType === "stop") tupletFields.push("stop=1");
+          if (Number.isFinite(tupletNumber) && tupletNumber > 0) tupletFields.push(`number=${Math.round(tupletNumber)}`);
+          if (tupletFields.length > 1) out.push(tupletFields.join(" "));
+        }
       }
       return out;
     };
@@ -1481,7 +1785,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       blocks.push(`\\new Staff = "${partId}" { ${clefPrefix}${body} }`);
       const transposeComment = transposeCommentForVoice(partId);
       if (transposeComment) transposeComments.push(transposeComment);
-      measureComments.push(...measureCommentsForVoice(partId));
+      measureComments.push(...measureCommentsForVoice(partId, staffNo));
       continue;
     }
     const staffBlocks = staffNumbers.map((staffNo) => {
@@ -1491,7 +1795,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       const voiceId = `${partId}_s${staffNo}`;
       const transposeComment = transposeCommentForVoice(voiceId);
       if (transposeComment) transposeComments.push(transposeComment);
-      measureComments.push(...measureCommentsForVoice(voiceId));
+      measureComments.push(...measureCommentsForVoice(voiceId, staffNo));
       return `\\new Staff = "${partId}_s${staffNo}" { ${clefPrefix}${body} }`;
     });
     blocks.push(`\\new PianoStaff = "${partId}" << ${staffBlocks.join(" ")} >>`);

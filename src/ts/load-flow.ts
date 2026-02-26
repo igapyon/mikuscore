@@ -2,11 +2,15 @@ import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "./mx
 
 export type LoadFlowParams = {
   isNewType: boolean;
-  isAbcType: boolean;
+  sourceType: "xml" | "musescore" | "vsqx" | "abc" | "mei" | "lilypond";
   isFileMode: boolean;
   selectedFile: File | null;
   xmlSourceText: string;
+  museScoreSourceText: string;
+  vsqxSourceText: string;
   abcSourceText: string;
+  meiSourceText: string;
+  lilyPondSourceText: string;
   createNewMusicXml: () => string;
   convertAbcToMusicXml: (abcSource: string) => string;
   convertMeiToMusicXml: (meiSource: string) => string;
@@ -105,7 +109,6 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     };
   }
 
-  const treatAsAbc = params.isAbcType;
   let sourceText = "";
 
   if (params.isFileMode) {
@@ -359,7 +362,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     };
   }
 
-  if (!treatAsAbc) {
+  if (params.sourceType === "xml") {
     const normalized = params.formatImportedMusicXml(params.xmlSourceText);
     return {
       ok: true,
@@ -369,9 +372,100 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     };
   }
 
-  sourceText = params.abcSourceText;
+  if (params.sourceType === "abc") {
+    sourceText = params.abcSourceText;
+    try {
+      const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
+      return {
+        ok: true,
+        xmlToLoad: convertedXml,
+        collapseInputSection: true,
+        nextXmlInputText: convertedXml,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+        diagnosticMessage: `Failed to parse ABC: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  if (params.sourceType === "vsqx") {
+    try {
+      const converted = params.convertVsqxToMusicXml(params.vsqxSourceText);
+      if (!converted.ok) {
+        const first = converted.diagnostics[0];
+        return {
+          ok: false,
+          diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+          diagnosticMessage: `Failed to parse VSQX: ${
+            first ? `${first.message} (${first.code})` : "Unknown parse error."
+          }`,
+        };
+      }
+      const convertedXml = params.formatImportedMusicXml(converted.xml);
+      return {
+        ok: true,
+        xmlToLoad: convertedXml,
+        collapseInputSection: true,
+        nextXmlInputText: convertedXml,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+        diagnosticMessage: `Failed to parse VSQX: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  if (params.sourceType === "mei") {
+    try {
+      const convertedXml = params.formatImportedMusicXml(params.convertMeiToMusicXml(params.meiSourceText));
+      return {
+        ok: true,
+        xmlToLoad: convertedXml,
+        collapseInputSection: true,
+        nextXmlInputText: convertedXml,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+        diagnosticMessage: `Failed to parse MEI: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
+  if (params.sourceType === "lilypond") {
+    try {
+      const convertedXml = params.formatImportedMusicXml(params.convertLilyPondToMusicXml(params.lilyPondSourceText));
+      return {
+        ok: true,
+        xmlToLoad: convertedXml,
+        collapseInputSection: true,
+        nextXmlInputText: convertedXml,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+        diagnosticMessage: `Failed to parse LilyPond: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+
   try {
-    const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
+    const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(params.museScoreSourceText));
     return {
       ok: true,
       xmlToLoad: convertedXml,
@@ -382,7 +476,7 @@ export const resolveLoadFlow = async (params: LoadFlowParams): Promise<LoadFlowR
     return {
       ok: false,
       diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-      diagnosticMessage: `Failed to parse ABC: ${
+      diagnosticMessage: `Failed to parse MuseScore: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };

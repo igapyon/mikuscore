@@ -309,4 +309,156 @@ describe("MEI export", () => {
       || m25LeftDouble?.textContent?.trim() === "light-light";
     expect(hasBoundaryDouble).toBe(true);
   });
+
+  it("roundtrips staccato/accent articulations between MusicXML and MEI", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/></articulations></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mei = exportMusicXmlDomToMei(srcDoc);
+    expect(mei).toContain('artic="stacc"');
+    expect(mei).toContain('artic="acc"');
+
+    const roundtripXml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(first?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
+    expect(second?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
+  });
+
+  it("roundtrips accidental display (natural/sharp/flat) between MusicXML and MEI", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>natural</accidental></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>sharp</accidental></note>
+      <note><pitch><step>E</step><alter>-1</alter><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type><accidental>flat</accidental></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const mei = exportMusicXmlDomToMei(srcDoc);
+    expect(mei).toContain('accid="n"');
+    expect(mei).toContain('accid="s"');
+    expect(mei).toContain('accid="f"');
+
+    const roundtripXml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("natural");
+    expect(notes[1]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("sharp");
+    expect(notes[2]?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("flat");
+  });
+
+  it("roundtrips grace notes between MusicXML and MEI", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><grace slash="yes"/><pitch><step>C</step><octave>5</octave></pitch><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mei = exportMusicXmlDomToMei(srcDoc);
+    expect(mei).toContain('grace="acc"');
+
+    const roundtripXml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(first?.querySelector(":scope > grace")).not.toBeNull();
+    expect(second?.querySelector(":scope > duration")?.textContent?.trim()).toBe("480");
+  });
+
+  it("roundtrips tuplet timing and start/stop markers between MusicXML and MEI", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop"/></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mei = exportMusicXmlDomToMei(srcDoc);
+    expect(mei).toContain('num="3"');
+    expect(mei).toContain('numbase="2"');
+    expect(mei).toContain('mks-tuplet-start="1"');
+    expect(mei).toContain('mks-tuplet-stop="1"');
+
+    const roundtripXml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
+    const third = outDoc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(first?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(second?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(third?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(first?.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(first?.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+    expect(first?.querySelector(':scope > notations > tuplet[type="start"]')).not.toBeNull();
+    expect(third?.querySelector(':scope > notations > tuplet[type="stop"]')).not.toBeNull();
+  });
 });
