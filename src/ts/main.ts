@@ -1993,7 +1993,7 @@ const createNewMusicXml = (): string => {
   const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
   const beats = normalizeNewTimeBeats();
   const beatType = normalizeNewTimeBeatType();
-  const divisions = 960;
+  const divisions = 480;
   const measureCount = 8;
   const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
   const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();

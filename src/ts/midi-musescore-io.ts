@@ -27,7 +27,7 @@ export const resolveMidiExportRuntimeOptions = (
   const normalizedBaseTicks =
     Number.isFinite(baseTicksPerQuarter) && Math.round(baseTicksPerQuarter) > 0
       ? Math.round(baseTicksPerQuarter)
-      : 128;
+      : 480;
   if (profile === "musescore_parity") {
     return {
       profile,
