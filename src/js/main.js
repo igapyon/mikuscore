@@ -1843,7 +1843,7 @@ const createNewMusicXml = () => {
     const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
     const beats = normalizeNewTimeBeats();
     const beatType = normalizeNewTimeBeatType();
-    const divisions = 960;
+    const divisions = 480;
     const measureCount = 8;
     const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
     const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();
@@ -3128,7 +3128,7 @@ const getMidiWriterRuntime = () => {
 };
 const normalizeTicksPerQuarter = (ticksPerQuarter) => {
     if (!Number.isFinite(ticksPerQuarter))
-        return 128;
+        return 480;
     return Math.max(1, Math.round(ticksPerQuarter));
 };
 const setMidiWriterHeaderTicksPerQuarter = (midiWriter, ticksPerQuarter) => {
@@ -5363,7 +5363,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     if (!rawWriter && !midiWriter) {
         throw new Error("midi-writer.js is not loaded.");
     }
-    const writerTicksPerQuarter = normalizeTicksPerQuarter((_a = options.ticksPerQuarter) !== null && _a !== void 0 ? _a : 128);
+    const writerTicksPerQuarter = normalizeTicksPerQuarter((_a = options.ticksPerQuarter) !== null && _a !== void 0 ? _a : 480);
     if (midiWriter) {
         setMidiWriterHeaderTicksPerQuarter(midiWriter, writerTicksPerQuarter);
     }
@@ -6858,7 +6858,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = exports.createBasicWaveSynthEngine = exports.PLAYBACK_TICKS_PER_QUARTER = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
-exports.PLAYBACK_TICKS_PER_QUARTER = 128;
+exports.PLAYBACK_TICKS_PER_QUARTER = 480;
 const summarizeDiagnostics = (diagnostics) => {
     if (!diagnostics.length)
         return "unknown reason";
@@ -6887,7 +6887,7 @@ const normalizeWaveform = (value) => {
 const createBasicWaveSynthEngine = (options) => {
     const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
         ? Math.max(1, Math.round(options.ticksPerQuarter))
-        : 128;
+        : 480;
     let audioContext = null;
     let activeSynthNodes = [];
     let synthStopTimer = null;
@@ -7816,7 +7816,7 @@ const resolveMidiExportRuntimeOptions = (profileValue, baseTicksPerQuarter) => {
     const profile = (0, exports.normalizeMidiExportProfile)(profileValue);
     const normalizedBaseTicks = Number.isFinite(baseTicksPerQuarter) && Math.round(baseTicksPerQuarter) > 0
         ? Math.round(baseTicksPerQuarter)
-        : 128;
+        : 480;
     if (profile === "musescore_parity") {
         return {
             profile,

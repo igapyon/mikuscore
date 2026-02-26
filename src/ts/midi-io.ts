@@ -683,7 +683,7 @@ const getMidiWriterRuntime = (): MidiWriterRuntime | null => {
 };
 
 const normalizeTicksPerQuarter = (ticksPerQuarter: number): number => {
-  if (!Number.isFinite(ticksPerQuarter)) return 128;
+  if (!Number.isFinite(ticksPerQuarter)) return 480;
   return Math.max(1, Math.round(ticksPerQuarter));
 };
 
@@ -3214,7 +3214,7 @@ export const buildMidiBytesForPlayback = (
   if (!rawWriter && !midiWriter) {
     throw new Error("midi-writer.js is not loaded.");
   }
-  const writerTicksPerQuarter = normalizeTicksPerQuarter(options.ticksPerQuarter ?? 128);
+  const writerTicksPerQuarter = normalizeTicksPerQuarter(options.ticksPerQuarter ?? 480);
   if (midiWriter) {
     setMidiWriterHeaderTicksPerQuarter(midiWriter, writerTicksPerQuarter);
   }

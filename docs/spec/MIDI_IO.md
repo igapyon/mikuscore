@@ -209,8 +209,10 @@ For same-tick same-pitch situations, event ordering is configurable:
 #### Current usage policy
 
 - `safe` export profile:
+  - TPQ defaults to `480`
   - default writer path (`midi-writer.js`)
 - `musescore_parity` profile:
+  - TPQ is fixed to `480`
   - raw writer path enabled
   - retrigger policy defaults to `off_before_on`
 

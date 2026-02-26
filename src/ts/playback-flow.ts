@@ -34,7 +34,7 @@ export type BasicWaveSynthEngine = {
   stop: () => void;
 };
 
-export const PLAYBACK_TICKS_PER_QUARTER = 128;
+export const PLAYBACK_TICKS_PER_QUARTER = 480;
 
 const summarizeDiagnostics = (diagnostics: Diagnostic[]): string => {
   if (!diagnostics.length) return "unknown reason";
@@ -65,7 +65,7 @@ const normalizeWaveform = (value: string): OscillatorType => {
 export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }): BasicWaveSynthEngine => {
   const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
     ? Math.max(1, Math.round(options.ticksPerQuarter))
-    : 128;
+    : 480;
   let audioContext: AudioContext | null = null;
   let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
   let synthStopTimer: number | null = null;

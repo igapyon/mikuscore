@@ -36,7 +36,7 @@ This file MUST remain side-effect free.
 
 ## Core constants and types
 
-- `PLAYBACK_TICKS_PER_QUARTER = 128`
+- `PLAYBACK_TICKS_PER_QUARTER = 480`
 - `SynthSchedule`
   - `tempo`
   - optional `tempoEvents`
