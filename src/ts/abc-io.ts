@@ -396,6 +396,7 @@ const abcCommon = AbcCommon;
       let lastEventNotes = [];
       let pendingTieToNext = false;
       let pendingTrill = false;
+      let pendingTurn: "" | "turn" | "inverted-turn" = "";
       let pendingStaccato = false;
       let pendingSlurStart = 0;
       let pendingRhythmScale = null;
@@ -505,6 +506,10 @@ const abcCommon = AbcCommon;
           const decoration = text.slice(idx + 1, endMark).trim().toLowerCase();
           if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
             pendingTrill = true;
+          } else if (decoration === "turn") {
+            pendingTurn = "turn";
+          } else if (decoration === "invertedturn" || decoration === "inverted-turn" || decoration === "lowerturn") {
+            pendingTurn = "inverted-turn";
           } else if (
             decoration === "staccato" ||
             decoration === "stacc" ||
@@ -614,6 +619,10 @@ const abcCommon = AbcCommon;
             if (chordIndex === 0 && pendingTrill && !note.isRest) {
               note.trill = true;
               pendingTrill = false;
+            }
+            if (chordIndex === 0 && pendingTurn && !note.isRest) {
+              note.turnType = pendingTurn;
+              pendingTurn = "";
             }
             if (chordIndex === 0 && pendingSlurStart > 0 && !note.isRest) {
               note.slurStart = true;
@@ -756,6 +765,10 @@ const abcCommon = AbcCommon;
           note.trill = true;
           pendingTrill = false;
         }
+        if (pendingTurn && !note.isRest) {
+          note.turnType = pendingTurn;
+          pendingTurn = "";
+        }
         if (pendingSlurStart > 0 && !note.isRest) {
           note.slurStart = true;
           pendingSlurStart = 0;
@@ -810,24 +823,29 @@ const abcCommon = AbcCommon;
       Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960)
     );
     const importDiagnostics = [];
+    const overfullCompatibilityMode = settings?.overfullCompatibilityMode !== false;
     const parts = orderedVoiceIds.map((voiceId, index) => {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
       const transpose =
         transposeHintByVoiceId.get(voiceId) ||
         voiceTransposeById[voiceId] ||
         (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
-      const normalized = normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity);
+      const normalized = overfullCompatibilityMode
+        ? normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity)
+        : { measures: measuresByVoice[voiceId] || [[]], diagnostics: [] };
       const normalizedMeasures = normalized.measures;
-      for (const diag of normalized.diagnostics) {
-        importDiagnostics.push({
-          level: "warn",
-          code: "OVERFULL_REFLOWED",
-          fmt: "abc",
-          voiceId,
-          measure: diag.sourceMeasure,
-          action: "reflowed",
-          movedEvents: diag.movedEvents,
-        });
+      if (overfullCompatibilityMode) {
+        for (const diag of normalized.diagnostics) {
+          importDiagnostics.push({
+            level: "warn",
+            code: "OVERFULL_REFLOWED",
+            fmt: "abc",
+            voiceId,
+            measure: diag.sourceMeasure,
+            action: "reflowed",
+            movedEvents: diag.movedEvents,
+          });
+        }
       }
       const keyByMeasure: Record<number, number> = {};
       const measureMetaByIndex: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }> = {};
@@ -1075,9 +1093,15 @@ const abcCommon = AbcCommon;
     const graceAccidentals = { ...measureAccidentals };
     const notes = [];
     let idx = 0;
+    let graceSlashPending = false;
     while (idx < inner.length) {
       const ch = inner[idx];
       if (ch === " " || ch === "\t") {
+        idx += 1;
+        continue;
+      }
+      if (ch === "/") {
+        graceSlashPending = true;
         idx += 1;
         continue;
       }
@@ -1119,6 +1143,8 @@ const abcCommon = AbcCommon;
       );
       note.voice = voiceId;
       note.grace = true;
+      note.graceSlash = graceSlashPending;
+      graceSlashPending = false;
       notes.push(note);
     }
     return { notes, nextIdx: closeIdx + 1 };
@@ -1670,6 +1696,8 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
           const hasTieStart = Boolean(child.querySelector(':scope > tie[type="start"]'));
           const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
+          const hasTurn = Boolean(child.querySelector(":scope > notations > ornaments > turn"));
+          const hasInvertedTurn = Boolean(child.querySelector(":scope > notations > ornaments > inverted-turn"));
           const hasWavyLineStart = Array.from(
             child.querySelectorAll(":scope > notations > ornaments > wavy-line")
           ).some((node) => {
@@ -1677,10 +1705,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             return type === "" || type === "start";
           });
           const hasTrill = hasTrillMark || hasWavyLineStart;
+          const turnType: "" | "turn" | "inverted-turn" = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
           const trillAccidentalText = child.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() || "";
           const hasStaccato = Boolean(child.querySelector(":scope > notations > articulations > staccato"));
           const hasSlurStart = Boolean(child.querySelector(':scope > notations > slur[type="start"]'));
           const hasSlurStop = Boolean(child.querySelector(':scope > notations > slur[type="stop"]'));
+          const hasGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
           const hasTupletStart = Boolean(child.querySelector(':scope > notations > tuplet[type="start"]'));
           const tmActual = Number(child.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() || "");
           const tmNormal = Number(child.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim() || "");
@@ -1732,13 +1762,14 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
           }
           if (isGrace) {
+            const graceSlashPrefix = hasGraceSlash ? "/" : "";
             if (!isChord || pendingGraceTokens.length === 0) {
-              pendingGraceTokens.push(`${pitchToken}${len}${hasTieStart ? "-" : ""}`);
+              pendingGraceTokens.push(`${graceSlashPrefix}${pitchToken}${len}${hasTieStart ? "-" : ""}`);
             } else {
               const last = pendingGraceTokens.pop() ?? "";
               const merged = last.startsWith("[")
-                ? last.replace("]", `${pitchToken}]`)
-                : `[${last}${pitchToken}]`;
+                ? last.replace("]", `${graceSlashPrefix}${pitchToken}]`)
+                : `[${last}${graceSlashPrefix}${pitchToken}]`;
               pendingGraceTokens.push(merged);
             }
             continue;
@@ -1760,9 +1791,10 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
                   : "")
               : "";
           const trillPrefix = hasTrill ? "!trill!" : "";
+          const turnPrefix = turnType === "inverted-turn" ? "!invertedturn!" : (turnType === "turn" ? "!turn!" : "");
           const staccatoPrefix = hasStaccato ? "!staccato!" : "";
           const slurStartPrefix = hasSlurStart ? "(" : "";
-          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${staccatoPrefix}`;
+          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${staccatoPrefix}`;
           if (pendingGraceTokens.length > 0) {
             pendingGraceTokens.length = 0;
           }
@@ -1881,8 +1913,10 @@ type AbcParsedNote = {
   slurStop?: boolean;
   chord?: boolean;
   grace?: boolean;
+  graceSlash?: boolean;
   trill?: boolean;
   trillAccidentalText?: string;
+  turnType?: "turn" | "inverted-turn";
   staccato?: boolean;
   timeModification?: { actual: number; normal: number };
   tupletStart?: boolean;
@@ -1921,6 +1955,7 @@ export type AbcImportOptions = {
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
   sourceMetadata?: boolean;
+  overfullCompatibilityMode?: boolean;
 };
 
 const toHex = (value: number, width = 2): string => {
@@ -2186,7 +2221,9 @@ const buildMusicXmlFromAbcParsed = (
                   .map((note, noteIndex) => {
                   const chunks: string[] = ["<note>"];
                   if (note.chord) chunks.push("<chord/>");
-                  if (note.grace) chunks.push("<grace/>");
+                  if (note.grace) {
+                    chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
+                  }
                   if (note.isRest) {
                     chunks.push("<rest/>");
                   } else {
@@ -2235,6 +2272,7 @@ const buildMusicXmlFromAbcParsed = (
                     note.slurStart ||
                     note.slurStop ||
                     note.trill ||
+                    note.turnType ||
                     note.staccato ||
                     note.tupletStart ||
                     note.tupletStop
@@ -2253,6 +2291,10 @@ const buildMusicXmlFromAbcParsed = (
                         trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
                       }
                       chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
+                    }
+                    if (note.turnType) {
+                      const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
+                      chunks.push(`<ornaments><${tag}/></ornaments>`);
                     }
                     if (note.staccato) chunks.push("<articulations><staccato/></articulations>");
                     chunks.push("</notations>");
@@ -2316,6 +2358,7 @@ export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOption
     defaultTitle: "mikuscore",
     defaultComposer: "Unknown",
     inferTransposeFromPartName: true,
+    overfullCompatibilityMode: options.overfullCompatibilityMode !== false,
   }) as AbcParsedResult;
   return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };

@@ -69,6 +69,12 @@ type LilyMeasureHint = {
   doubleBar?: "left" | "right" | "both";
 };
 
+type LilyOctaveShiftHint = {
+  type: "up" | "down" | "stop";
+  size?: number;
+  number?: number;
+};
+
 const xmlEscape = (value: string): string =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -723,6 +729,40 @@ const parseMksTrillHints = (
   return out;
 };
 
+const parseMksOctaveShiftHints = (source: string): Map<string, Map<number, LilyOctaveShiftHint[]>> => {
+  const out = new Map<string, Map<number, LilyOctaveShiftHint[]>>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+octshift\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const typeRaw = String(params.type || "").trim().toLowerCase();
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0) continue;
+    if (typeRaw !== "up" && typeRaw !== "down" && typeRaw !== "stop") continue;
+    const size = Number.parseInt(String(params.size || ""), 10);
+    const number = Number.parseInt(String(params.number || ""), 10);
+    const hint: LilyOctaveShiftHint = {
+      type: typeRaw,
+      size: Number.isFinite(size) && size > 0 ? Math.round(size) : undefined,
+      number: Number.isFinite(number) && number > 0 ? Math.round(number) : undefined,
+    };
+    const byMeasure = out.get(voiceId) ?? new Map<number, LilyOctaveShiftHint[]>();
+    const arr = byMeasure.get(measureNo) ?? [];
+    arr.push(hint);
+    byMeasure.set(measureNo, arr);
+    out.set(voiceId, byMeasure);
+  }
+  return out;
+};
+
 const inferMusicXmlTypeFromDurationDiv = (durationDiv: number, divisions: number): string => {
   const safeDivisions = Math.max(1, Math.round(divisions));
   const safeDuration = Math.max(1, Math.round(durationDiv));
@@ -1177,6 +1217,7 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
     measures: LilyDirectEvent[][];
     transpose?: LilyTransposeHint | null;
     measureHintsByIndex?: Map<number, LilyMeasureHint>;
+    octaveShiftHintsByMeasure?: Map<number, LilyOctaveShiftHint[]>;
   }>;
 }): string => {
   const buildNoteExtrasXml = (event: Extract<LilyDirectEvent, { kind: "note" | "chord" }>): string => {
@@ -1266,6 +1307,12 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         if (hint?.doubleBar === "left" || hint?.doubleBar === "both") {
           body += `<barline location="left"><bar-style>light-light</bar-style></barline>`;
         }
+        const octaveShiftHints = staff.octaveShiftHintsByMeasure?.get(index1) ?? [];
+        for (const octaveShiftHint of octaveShiftHints) {
+          const sizeAttr = Number.isFinite(octaveShiftHint.size) ? ` size="${Math.round(octaveShiftHint.size as number)}"` : "";
+          const numberAttr = Number.isFinite(octaveShiftHint.number) ? ` number="${Math.round(octaveShiftHint.number as number)}"` : "";
+          body += `<direction><direction-type><octave-shift type="${octaveShiftHint.type}"${sizeAttr}${numberAttr}/></direction-type></direction>`;
+        }
         if (!events.length) {
           body += `<note><rest/><duration>${measureCapacity}</duration><voice>1</voice><type>whole</type></note>`;
           if (hint?.repeat === "forward") {
@@ -1349,6 +1396,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
   const laneHintByVoiceId = parseMksLaneHints(source);
   const slurHintByKey = parseMksSlurHints(source);
   const trillHintByKey = parseMksTrillHints(source);
+  const octaveShiftHintByVoiceId = parseMksOctaveShiftHints(source);
   if (!staffBlocks.length) return null;
   const warnings: string[] = [];
   const staffs = staffBlocks.map((staff, index) => {
@@ -1403,6 +1451,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
       ),
       transpose: transposeHintByVoiceId.get(normalizedVoiceId) || staff.transpose || null,
       measureHintsByIndex: measureHintByVoiceId.get(normalizedVoiceId) || undefined,
+      octaveShiftHintsByMeasure: octaveShiftHintByVoiceId.get(normalizedVoiceId) || undefined,
     };
   });
   if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
@@ -2017,6 +2066,17 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
           fields.push("doubleBar=right");
         }
         out.push(fields.join(" "));
+        const octaveShiftNodes = Array.from(measure.querySelectorAll(":scope > direction > direction-type > octave-shift"));
+        for (const octaveShiftNode of octaveShiftNodes) {
+          const type = (octaveShiftNode.getAttribute("type") || "").trim().toLowerCase();
+          if (type !== "up" && type !== "down" && type !== "stop") continue;
+          const octFields = [`%@mks octshift voice=${voiceId} measure=${mi + 1} type=${type}`];
+          const size = Number.parseInt(octaveShiftNode.getAttribute("size") || "", 10);
+          if (Number.isFinite(size) && size > 0) octFields.push(`size=${Math.round(size)}`);
+          const number = Number.parseInt(octaveShiftNode.getAttribute("number") || "", 10);
+          if (Number.isFinite(number) && number > 0) octFields.push(`number=${Math.round(number)}`);
+          out.push(octFields.join(" "));
+        }
 
         let eventNo = 0;
         const children = Array.from(measure.children);

@@ -93,8 +93,103 @@
 - [ ] Add band score workflow support (common band instrumentation templates, part handling, and layout defaults).
 - [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
 - [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
-- [ ] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
+- [x] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
+- [x] Start CFFP (Cross-Format Focus Parity) with a minimal `trill` fixture (`MusicXML -> all supported formats -> MusicXML`).
+- [x] Expand CFFP series with focused minimal fixtures:
+  - [x] `octave-shift (8va/8vb)` cross-format policy test.
+  - [x] `slur` cross-format policy test.
+  - [x] `tie` cross-format policy test.
+  - [x] `staccato` cross-format policy test.
+  - [x] `accent` cross-format policy test.
+  - [x] `grace` cross-format policy test.
+  - [x] `tuplet` cross-format policy test.
+  - [x] `accidental spelling` cross-format policy test.
+  - [x] `accidental reset rule` cross-format policy test (same-measure carry and next-measure reset).
+  - [x] `courtesy accidental` cross-format policy test (display-only accidental handling policy).
+  - [x] `key change mid-score` cross-format policy test.
+  - [x] `time signature change` cross-format policy test.
+  - [x] `double barline mid-score` cross-format policy test.
+  - [x] `repeat/ending barline metadata` cross-format policy test.
+  - [x] `beam continuity` cross-format policy test (across rest / split by beat policy).
+  - [x] `multi-voice + backup` cross-format policy test (same-staff lane reconstruction).
+  - [x] `grand-staff voice/staff mapping` cross-format policy test.
+  - [x] `pickup implicit measure` cross-format policy test (`implicit=yes` and measure numbering).
+  - [x] `trill variants` cross-format policy test (`trill-mark` + `wavy-line` start/stop + accidental-mark).
+  - [x] `turn` cross-format policy test.
+  - [x] `turn variants` cross-format policy test (`inverted-turn` + `delayed-turn`).
+  - [x] `mordent variants` cross-format policy test (`mordent` + `inverted-mordent`).
+  - [x] `ornament accidental-mark` cross-format policy test.
+  - [x] `schleifer` cross-format policy test.
+  - [x] `shake` cross-format policy test.
+  - [x] `dynamics basic (pp/ff)` cross-format policy test.
+  - [x] `dynamics accented (mf/sfz)` cross-format policy test.
+  - [x] `dynamics wedge (crescendo/diminuendo)` cross-format policy test.
+  - [x] `fermata` cross-format policy test.
+  - [x] `arpeggiate` cross-format policy test.
+  - [x] `breath-mark / caesura` cross-format policy test.
+  - [x] `glissando start/stop` cross-format policy test.
+  - [x] `transpose` cross-format policy test (per-part / per-measure hint behavior).
+  - [x] `tempo map` cross-format policy test (single tempo + change event).
+  - [x] Document CFFP preserve/degrade matrix per format (`musescore/midi/vsqx/abc/mei/lilypond`).
+  - [x] `slide start/stop` cross-format policy test.
+  - [x] `tremolo` cross-format policy test (`single` / `start-stop`).
+  - [x] `triplet bracket/placement` display-info cross-format policy test.
+  - [x] `CFFP-TECHNIQUE-TEXT` cross-format policy test (`direction-type/words`: `pizz.` / `arco` / `con sord.`).
+  - [x] `CFFP-ARTICULATION-EXT` cross-format policy test (`tenuto` / `staccatissimo` / `marcato`).
+  - [x] `CFFP-NOTEHEAD` cross-format policy test (`notehead`: `cross` / `diamond` ...).
+  - [x] `CFFP-STEM-BEAM-DIR` cross-format policy test (`stem` direction + beam direction info).
+  - [x] `CFFP-VOICE-STAFF-SWAP` cross-format policy test (voice crossing staves within a measure).
+  - [x] `CFFP-OTTAVA-NUMBERING` cross-format policy test (`octave-shift` with multiple `number` lines).
+  - [x] `CFFP-MEASURE-STYLE` cross-format policy test (`measure-style`: `slash` / `multiple-rest`).
+  - [x] `CFFP-PRINT-LAYOUT-MIN` cross-format policy test (`print` minimal layout: system/page break).
+  - [x] `CFFP-CLEF-MIDMEASURE` cross-format policy test (mid-measure clef change).
+  - [x] `CFFP-KEY-MODE` cross-format policy test (`key/mode`: major/minor).
+  - [x] `CFFP-MIDMEASURE-REPEAT` cross-format policy test (mid-measure repeat semantics/marking).
+  - [x] `CFFP-LYRIC-BASIC` cross-format policy test (1 syllable + melisma).
+  - [x] `CFFP-PERCUSSION-UNPITCHED` cross-format policy test (`unpitched` + `display-step` / `display-octave`).
+  - [x] `CFFP-PERCUSSION-NOTEHEAD` cross-format policy test (percussion noteheads: `x` / `triangle` / `diamond`).
+  - [x] `CFFP-PERCUSSION-INSTRUMENT-ID` cross-format policy test (`instrument id` mapping and retention).
+  - [x] `CFFP-PERCUSSION-VOICE-LAYER` cross-format policy test (drumset lane/voice separation in one staff).
+  - [x] `CFFP-PERCUSSION-STAFF-LINE` cross-format policy test (1-line vs 5-line percussion staff policy).
+  - [x] `CFFP-TRANSPOSING-INSTRUMENT` cross-format policy test (e.g., Clarinet in A `transpose` + concert/written pitch intent).
+  - [x] `CFFP-LEFT-HAND-PIZZICATO` cross-format policy test.
+  - [x] `CFFP-BOWING-DIRECTION` cross-format policy test (`up-bow` / `down-bow`).
+  - [x] `CFFP-HARMONIC-NATURAL-ARTIFICIAL` cross-format policy test (`harmonic` natural/artificial).
+  - [x] `CFFP-OPEN-STRING` cross-format policy test (`technical/open-string`).
+  - [x] `CFFP-STOPPED` cross-format policy test (`technical/stopped`).
+  - [x] `CFFP-SNAP-PIZZICATO` cross-format policy test (`technical/snap-pizzicato`, Bartok pizz.).
+  - [x] `CFFP-FINGERING` cross-format policy test (`technical/fingering`: 1-4 and substitution patterns).
+  - [x] `CFFP-STRING` cross-format policy test (`technical/string`: I/II/III/IV).
+  - [x] `CFFP-DOUBLE-TRIPLE-TONGUE` cross-format policy test (`double-tongue` / `triple-tongue`).
+  - [x] `CFFP-HEEL-TOE` cross-format policy test (`technical/heel` / `technical/toe`).
+  - [x] `CFFP-PLUCK-TEXT` cross-format policy test (pluck text: `p`, `i`, `m`, `a`).
+  - [x] `CFFP-BREATH-VARIANTS` cross-format policy test (breath-mark variants: comma/tick/upbow-like differences).
+  - [x] `CFFP-BREATH-PLACEMENT` cross-format policy test (`placement`/`default-x`/`default-y` retention on breath marks).
+  - [x] `CFFP-CAESURA-STYLE` cross-format policy test (caesura style variants retention).
+  - [x] `CFFP-TIMEWISE-BACKUP-FORWARD` cross-format policy test (`backup` / `forward` complex time progression).
+  - [x] `CFFP-CROSS-STAFF-BEAM` cross-format policy test (cross-staff beam).
+  - [x] `CFFP-CHORD-SYMBOL-ALTER` cross-format policy test (`harmony` tension/alter: `#11`, `b9`, ...).
+  - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` cross-format policy test (cross-measure tie with same-pitch linkage).
+  - [x] `CFFP-MULTI-REST-COUNT` cross-format policy test (multiple-rest count retention).
+  - [x] `CFFP-REPEAT-JUMP-SOUND` cross-format policy test (`sound`: `fine` / `tocoda` / `coda` / `segno`).
+  - [x] `CFFP-CUE-GRACE-MIX` cross-format policy test (cue note + grace note mix).
+  - [x] `CFFP-ACCIDENTAL-COURTESY-MODE` cross-format policy test (courtesy accidental display-control variants).
+  - [x] `CFFP-LYRICS-MULTI-VERSE` cross-format policy test (multiple lyric verses: `number=1,2`).
+  - [x] `CFFP-TEXT-ENCODING` cross-format policy test (non-ASCII: Japanese lyrics / symbol-rich words).
+  - [x] `rehearsal mark` text-preservation cross-format policy test.
+  - [x] `segno/coda` symbol cross-format policy test.
+  - [x] `da capo / dal segno` jump words + sound-attributes cross-format policy test.
+  - [x] `pedal start/stop` cross-format policy test.
+  - [x] `harmony chord symbol` cross-format policy test (`root` / `bass` / `kind`).
+  - [x] `ending type` cross-format policy test (`start` / `stop` / `discontinue`).
+  - [x] CFFP practical priority queue:
+    - [x] `breath-mark / caesura`
+    - [x] `glissando`
+    - [x] `pedal`
+    - [x] `segno/coda`
+    - [x] `harmony chord symbol`
 - [ ] Add ABC import compatibility mode for overfull legacy exports and surface warning summary in UI.
+- [x] Add LilyPond octave-shift (`8va` / `8vb`) roundtrip preservation (currently degrade-policy).
 - [x] Add LilyPond (`.ly`) import/export support.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
@@ -212,8 +307,103 @@
 - [ ] バンド譜面への対応を追加（一般的な編成テンプレート、パート管理、レイアウト初期値を含む）。
 - [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
 - [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
-- [ ] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
+- [x] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
+- [x] CFFP（Cross-Format Focus Parity）を `trill` の最小断片で開始（`MusicXML -> 対応全形式 -> MusicXML`）。
+- [x] CFFP シリーズを最小断片で横展開する:
+  - [x] `octave-shift (8va/8vb)` の横断ポリシーテスト。
+  - [x] `slur` の横断ポリシーテスト。
+  - [x] `tie` の横断ポリシーテスト。
+  - [x] `staccato` の横断ポリシーテスト。
+  - [x] `accent` の横断ポリシーテスト。
+  - [x] `grace` の横断ポリシーテスト。
+  - [x] `tuplet` の横断ポリシーテスト。
+  - [x] `臨時記号スペリング` の横断ポリシーテスト。
+  - [x] `臨時記号の持ち越し/小節リセット規則` の横断ポリシーテスト。
+  - [x] `注意的臨時記号（courtesy accidental）` の横断ポリシーテスト（表示専用情報の扱い）。
+  - [x] `途中転調` の横断ポリシーテスト。
+  - [x] `途中拍子変更` の横断ポリシーテスト。
+  - [x] `曲途中の二重線` の横断ポリシーテスト。
+  - [x] `反復記号/エンディング線を伴う小節線メタ` の横断ポリシーテスト。
+  - [x] `ビーム連結` の横断ポリシーテスト（休符またぎ / 拍境界分割ポリシー）。
+  - [x] `複数voice + backup` の横断ポリシーテスト（同一五線レーン復元）。
+  - [x] `大譜表の staff/voice 対応` の横断ポリシーテスト。
+  - [x] `弱起（implicit小節）` の横断ポリシーテスト（`implicit=yes` と小節番号）。
+  - [x] `トリル派生` の横断ポリシーテスト（`trill-mark` + `wavy-line` start/stop + accidental-mark）。
+  - [x] `turn` の横断ポリシーテスト。
+  - [x] `turn派生` の横断ポリシーテスト（`inverted-turn` + `delayed-turn`）。
+  - [x] `mordent派生` の横断ポリシーテスト（`mordent` + `inverted-mordent`）。
+  - [x] `ornament accidental-mark` の横断ポリシーテスト。
+  - [x] `schleifer` の横断ポリシーテスト。
+  - [x] `shake` の横断ポリシーテスト。
+  - [x] `dynamics basic (pp/ff)` の横断ポリシーテスト。
+  - [x] `dynamics accented (mf/sfz)` の横断ポリシーテスト。
+  - [x] `dynamics wedge (crescendo/diminuendo)` の横断ポリシーテスト。
+  - [x] `fermata` の横断ポリシーテスト。
+  - [x] `arpeggiate` の横断ポリシーテスト。
+  - [x] `breath-mark / caesura` の横断ポリシーテスト。
+  - [x] `glissando start/stop` の横断ポリシーテスト。
+  - [x] `transpose` の横断ポリシーテスト（パート単位/小節単位ヒント）。
+  - [x] `テンポマップ` の横断ポリシーテスト（単一テンポ + 途中変更）。
+  - [x] 形式別（`musescore/midi/vsqx/abc/mei/lilypond`）の保持/劣化マトリクスを文書化。
+  - [x] `slide start/stop` の横断ポリシーテスト。
+  - [x] `tremolo` の横断ポリシーテスト（`single` / `start-stop`）。
+  - [x] `triplet bracket/placement` 表示情報の横断ポリシーテスト。
+  - [x] `CFFP-TECHNIQUE-TEXT` の横断ポリシーテスト（`direction-type/words`: `pizz.` / `arco` / `con sord.`）。
+  - [x] `CFFP-ARTICULATION-EXT` の横断ポリシーテスト（`tenuto` / `staccatissimo` / `marcato`）。
+  - [x] `CFFP-NOTEHEAD` の横断ポリシーテスト（`notehead`: `cross` / `diamond` など）。
+  - [x] `CFFP-STEM-BEAM-DIR` の横断ポリシーテスト（`stem` 方向 + beam 方向情報）。
+  - [x] `CFFP-VOICE-STAFF-SWAP` の横断ポリシーテスト（小節内で voice が staff をまたぐ）。
+  - [x] `CFFP-OTTAVA-NUMBERING` の横断ポリシーテスト（`octave-shift` の `number` 複数系）。
+  - [x] `CFFP-MEASURE-STYLE` の横断ポリシーテスト（`measure-style`: `slash` / `multiple-rest`）。
+  - [x] `CFFP-PRINT-LAYOUT-MIN` の横断ポリシーテスト（`print` の最小レイアウト: system/page break）。
+  - [x] `CFFP-CLEF-MIDMEASURE` の横断ポリシーテスト（小節途中 clef change）。
+  - [x] `CFFP-KEY-MODE` の横断ポリシーテスト（`key/mode`: major/minor）。
+  - [x] `CFFP-MIDMEASURE-REPEAT` の横断ポリシーテスト（小節途中の repeat セマンティクス/記号）。
+  - [x] `CFFP-LYRIC-BASIC` の横断ポリシーテスト（1音節 + melisma）。
+  - [x] `CFFP-PERCUSSION-UNPITCHED` の横断ポリシーテスト（`unpitched` + `display-step` / `display-octave`）。
+  - [x] `CFFP-PERCUSSION-NOTEHEAD` の横断ポリシーテスト（打楽器 notehead: `x` / `triangle` / `diamond`）。
+  - [x] `CFFP-PERCUSSION-INSTRUMENT-ID` の横断ポリシーテスト（`instrument id` の対応と保持）。
+  - [x] `CFFP-PERCUSSION-VOICE-LAYER` の横断ポリシーテスト（同一スタッフ内のドラムレーン/voice 分離）。
+  - [x] `CFFP-PERCUSSION-STAFF-LINE` の横断ポリシーテスト（1線/5線の打楽器五線ポリシー）。
+  - [x] `CFFP-TRANSPOSING-INSTRUMENT` の横断ポリシーテスト（例: Clarinet in A の `transpose` と実音/記譜音の意図）。
+  - [x] `CFFP-LEFT-HAND-PIZZICATO` の横断ポリシーテスト。
+  - [x] `CFFP-BOWING-DIRECTION` の横断ポリシーテスト（`up-bow` / `down-bow`）。
+  - [x] `CFFP-HARMONIC-NATURAL-ARTIFICIAL` の横断ポリシーテスト（`harmonic` の natural/artificial）。
+  - [x] `CFFP-OPEN-STRING` の横断ポリシーテスト（`technical/open-string`）。
+  - [x] `CFFP-STOPPED` の横断ポリシーテスト（`technical/stopped`）。
+  - [x] `CFFP-SNAP-PIZZICATO` の横断ポリシーテスト（`technical/snap-pizzicato`、バルトーク・ピチカート）。
+  - [x] `CFFP-FINGERING` の横断ポリシーテスト（`technical/fingering`: 1-4 と置換指）。
+  - [x] `CFFP-STRING` の横断ポリシーテスト（`technical/string`: I/II/III/IV）。
+  - [x] `CFFP-DOUBLE-TRIPLE-TONGUE` の横断ポリシーテスト（`double-tongue` / `triple-tongue`）。
+  - [x] `CFFP-HEEL-TOE` の横断ポリシーテスト（`technical/heel` / `technical/toe`）。
+  - [x] `CFFP-PLUCK-TEXT` の横断ポリシーテスト（プラック文字: `p` / `i` / `m` / `a`）。
+  - [x] `CFFP-BREATH-VARIANTS` の横断ポリシーテスト（comma/tick/upbow-like など breath-mark 変種）。
+  - [x] `CFFP-BREATH-PLACEMENT` の横断ポリシーテスト（breath-mark の `placement` / `default-x` / `default-y` 保持）。
+  - [x] `CFFP-CAESURA-STYLE` の横断ポリシーテスト（caesura の style 差保持）。
+  - [x] `CFFP-TIMEWISE-BACKUP-FORWARD` の横断ポリシーテスト（`backup` / `forward` を使う複雑時間進行）。
+  - [x] `CFFP-CROSS-STAFF-BEAM` の横断ポリシーテスト（cross-staff beam）。
+  - [x] `CFFP-CHORD-SYMBOL-ALTER` の横断ポリシーテスト（`harmony` のテンション/alter: `#11`, `b9` など）。
+  - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` の横断ポリシーテスト（小節跨ぎ tie + 同音連結）。
+  - [x] `CFFP-MULTI-REST-COUNT` の横断ポリシーテスト（multiple rest の小節数保持）。
+  - [x] `CFFP-REPEAT-JUMP-SOUND` の横断ポリシーテスト（`sound` の `fine` / `tocoda` / `coda` / `segno`）。
+  - [x] `CFFP-CUE-GRACE-MIX` の横断ポリシーテスト（cue note と grace note の混在）。
+  - [x] `CFFP-ACCIDENTAL-COURTESY-MODE` の横断ポリシーテスト（courtesy accidental の表示制御差）。
+  - [x] `CFFP-LYRICS-MULTI-VERSE` の横断ポリシーテスト（複数 verse: `lyric number=1,2`）。
+  - [x] `CFFP-TEXT-ENCODING` の横断ポリシーテスト（非ASCII: 日本語歌詞・記号付き words）。
+  - [x] `rehearsal mark` 文字保持の横断ポリシーテスト。
+  - [x] `segno/coda` 記号の横断ポリシーテスト。
+  - [x] `da capo / dal segno`（jump words + sound属性）の横断ポリシーテスト。
+  - [x] `pedal start/stop` の横断ポリシーテスト。
+  - [x] `harmony chord symbol` の横断ポリシーテスト（`root` / `bass` / `kind`）。
+  - [x] `ending type` の横断ポリシーテスト（`start` / `stop` / `discontinue`）。
+  - [x] CFFP 実用優先キュー:
+    - [x] `breath-mark / caesura`
+    - [x] `glissando`
+    - [x] `pedal`
+    - [x] `segno/coda`
+    - [x] `harmony chord symbol`
 - [ ] 旧ABC由来の小節過充填に対する互換モードを整備し、UIに警告サマリを表示。
+- [x] LilyPond の octave-shift（`8va` / `8vb`）往復保持を実装する（現状は劣化ポリシー）。
 - [x] LilyPond（`.ly`）の入出力対応を追加。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。

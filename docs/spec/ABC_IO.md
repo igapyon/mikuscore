@@ -72,6 +72,8 @@ Parser is intentionally lenient for real-world ABC:
 - tuplets (`(n[:q][:r]`)
 - broken rhythm (`>` / `<`)
 - barlines
+- decorations: `!trill!`, `!turn!`, `!invertedturn!`, `!staccato!`
+- grace groups `{...}` including slash grace variant (`{/g}`)
 
 ## Parse result characteristics
 
@@ -119,6 +121,12 @@ Exports:
 
 - supports rests, pitch notes, chords, durations, ties
 - supports tuplet roundtrip export (`(n:q:r` style) from MusicXML time-modification/tuplet notations
+- supports ornament export/import mapping:
+  - `trill-mark` / `wavy-line(start)` <-> `!trill!`
+  - `turn` <-> `!turn!`
+  - `inverted-turn` <-> `!invertedturn!`
+- supports grace slash mapping:
+  - MusicXML `<grace slash="yes"/>` <-> ABC grace token with leading slash (e.g. `{/g}`)
 - emits accidentals based on key signature + measure accidental memory
   - suppresses redundant naturals in-context
   - emits required naturals where key/measure context differs
