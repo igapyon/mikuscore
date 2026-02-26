@@ -34,6 +34,7 @@ import {
   validateTargetVoiceMatch,
   validateVoice,
 } from "./validators";
+import { pickStaffByPitchWithHysteresis } from "./staffClefPolicy";
 
 export class ScoreCore {
   private readonly editableVoice: string | null;
@@ -696,13 +697,15 @@ const autoAssignGrandStaffByPitch = (note: Element): void => {
   if (!context) return;
   const midi = notePitchToMidi(note);
   if (midi === null) return;
-  const desiredStaff = midi < 60 ? "2" : "1";
   let staffNode = note.querySelector(":scope > staff");
+  const existingStaffText = staffNode?.textContent?.trim() ?? "";
+  const previousStaff = existingStaffText === "1" ? 1 : existingStaffText === "2" ? 2 : null;
+  const desiredStaff = pickStaffByPitchWithHysteresis(midi, previousStaff);
   if (!staffNode) {
     staffNode = note.ownerDocument.createElement("staff");
     note.appendChild(staffNode);
   }
-  staffNode.textContent = desiredStaff;
+  staffNode.textContent = String(desiredStaff);
 };
 
 const resolveGrandStaffContext = (note: Element): { part: Element; measure: Element } | null => {

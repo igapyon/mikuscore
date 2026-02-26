@@ -1,4 +1,5 @@
 import {
+  applyImplicitBeamsToMusicXmlText,
   parseMusicXmlDocument,
   prettyPrintMusicXmlText,
   serializeMusicXmlDocument,
@@ -1323,7 +1324,12 @@ export const convertLilyPondToMusicXml = (
     ...(options.sourceMetadata === false ? [] : buildLilySourceMiscFields(source)),
   ];
   const xml = appendMiscFieldsToFirstMeasure(direct.xml, extraFields);
-  return options.debugPrettyPrint === false ? xml : prettyPrintMusicXmlText(xml);
+  const normalized = applyImplicitBeamsToMusicXmlText(xml);
+  if (options.debugPrettyPrint === false) {
+    const doc = parseMusicXmlDocument(normalized);
+    return doc ? serializeMusicXmlDocument(doc) : normalized;
+  }
+  return prettyPrintMusicXmlText(normalized);
 };
 
 export const exportMusicXmlDomToLilyPond = (doc: Document): string => {

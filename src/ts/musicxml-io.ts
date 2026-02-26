@@ -1,3 +1,5 @@
+import { computeBeamAssignments } from "./beam-common";
+
 export type RenderDocBundle = {
   renderDoc: Document;
   svgIdToNodeId: Map<string, string>;
@@ -197,6 +199,153 @@ const ensureFinalBarlineInEachPart = (doc: Document): void => {
   }
 };
 
+const beamLevelsFromType = (typeText: string): number => {
+  switch (String(typeText || "").trim().toLowerCase()) {
+    case "eighth":
+      return 1;
+    case "16th":
+      return 2;
+    case "32nd":
+      return 3;
+    case "64th":
+      return 4;
+    case "128th":
+      return 5;
+    case "256th":
+      return 6;
+    default:
+      return 0;
+  }
+};
+
+const laneKeyForTimelineNote = (note: Element): string => {
+  const voice = note.querySelector(":scope > voice")?.textContent?.trim() || "1";
+  const staff = note.querySelector(":scope > staff")?.textContent?.trim() || "1";
+  return `${voice}::${staff}`;
+};
+
+const appendBeamElement = (note: Element, number: number, state: "begin" | "continue" | "end"): void => {
+  const beam = note.ownerDocument.createElement("beam");
+  beam.setAttribute("number", String(number));
+  beam.textContent = state;
+  const before = note.querySelector(":scope > notations, :scope > lyric, :scope > play, :scope > listen, :scope > sound");
+  if (before) note.insertBefore(beam, before);
+  else note.appendChild(beam);
+};
+
+type BeamTimelineEntry = {
+  note: Element | null;
+  timed: boolean;
+  chord: boolean;
+  grace: boolean;
+  durationDiv: number;
+  levels: number;
+};
+
+const enrichImplicitBeamsInDocument = (doc: Document): void => {
+  for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+    let currentDivisions = 480;
+    let currentBeats = 4;
+    let currentBeatType = 4;
+
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+      const divisionsText = measure.querySelector(":scope > attributes > divisions")?.textContent?.trim();
+      const divisions = Number.parseInt(divisionsText || "", 10);
+      if (Number.isFinite(divisions) && divisions > 0) currentDivisions = divisions;
+
+      const beatsText = measure.querySelector(":scope > attributes > time > beats")?.textContent?.trim();
+      const beats = Number.parseInt(beatsText || "", 10);
+      if (Number.isFinite(beats) && beats > 0) currentBeats = beats;
+
+      const beatTypeText = measure.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim();
+      const beatType = Number.parseInt(beatTypeText || "", 10);
+      if (Number.isFinite(beatType) && beatType > 0) currentBeatType = beatType;
+
+      const beatDiv = Math.max(1, Math.round((currentDivisions * 4) / Math.max(1, currentBeatType)));
+      const laneHasExistingBeam = new Set<string>();
+      const lanes = new Set<string>();
+      for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
+        if (note.querySelector(":scope > chord")) continue;
+        const lane = laneKeyForTimelineNote(note);
+        lanes.add(lane);
+        if (note.querySelector(":scope > beam")) laneHasExistingBeam.add(lane);
+      }
+
+      if (!lanes.size) continue;
+      const children = Array.from(measure.children);
+      for (const lane of lanes) {
+        if (laneHasExistingBeam.has(lane)) continue;
+        const timeline: BeamTimelineEntry[] = [];
+        const noteIndexByTimelineIndex = new Map<number, Element>();
+        for (const child of children) {
+          if (child.tagName === "backup") {
+            timeline.push({
+              note: null,
+              timed: false,
+              chord: false,
+              grace: false,
+              durationDiv: 0,
+              levels: 0,
+            });
+            continue;
+          }
+          if (child.tagName === "forward") {
+            const duration = Number.parseInt(child.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
+            timeline.push({
+              note: null,
+              timed: true,
+              chord: false,
+              grace: false,
+              durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+              levels: 0,
+            });
+            continue;
+          }
+          if (child.tagName !== "note") continue;
+          const note = child as Element;
+          if (note.querySelector(":scope > chord")) continue;
+          if (laneKeyForTimelineNote(note) !== lane) continue;
+          const duration = Number.parseInt(note.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
+          const typeText = note.querySelector(":scope > type")?.textContent?.trim() || "";
+          const entry: BeamTimelineEntry = {
+            note,
+            timed: true,
+            chord: !note.querySelector(":scope > rest"),
+            grace: note.querySelector(":scope > grace") !== null,
+            durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+            levels: beamLevelsFromType(typeText),
+          };
+          const idx = timeline.length;
+          timeline.push(entry);
+          noteIndexByTimelineIndex.set(idx, note);
+        }
+
+        if (timeline.length < 2) continue;
+        const assignments = computeBeamAssignments(
+          timeline,
+          beatDiv,
+          (event) => ({
+            timed: event.timed,
+            chord: event.chord,
+            grace: event.grace,
+            durationDiv: event.durationDiv,
+            levels: event.levels,
+          }),
+          { splitAtBeatBoundaryWhenImplicit: true }
+        );
+        for (const [idx, assignment] of assignments.entries()) {
+          const note = noteIndexByTimelineIndex.get(idx);
+          if (!note || assignment.levels <= 0) continue;
+          if (note.querySelector(":scope > beam")) continue;
+          for (let level = 1; level <= assignment.levels; level += 1) {
+            appendBeamElement(note, level, assignment.state);
+          }
+        }
+      }
+    }
+  }
+};
+
 export const normalizeImportedMusicXmlText = (xml: string): string => {
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
@@ -204,6 +353,13 @@ export const normalizeImportedMusicXmlText = (xml: string): string => {
   enrichTupletNotationsInDocument(doc);
   ensureFinalBarlineInEachPart(doc);
   return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
+};
+
+export const applyImplicitBeamsToMusicXmlText = (xml: string): string => {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return xml;
+  enrichImplicitBeamsInDocument(doc);
+  return serializeMusicXmlDocument(doc);
 };
 
 const cloneXmlDocument = (doc: Document): Document => {

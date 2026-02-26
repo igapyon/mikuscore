@@ -512,6 +512,49 @@ describe("musescore-io", () => {
     expect(mscx).toContain("<endRepeat/>");
   });
 
+  it("preserves MusicXML tuplet markers through MuseScore roundtrip", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>320</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop" number="1"/></notations>
+      </note>
+      <note><rest/><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    expect(mscx).toContain("<Tuplet id=\"T1\"><normalNotes>2</normalNotes><actualNotes>3</actualNotes></Tuplet>");
+    const roundtripXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const roundtripDoc = parseMusicXmlDocument(roundtripXml);
+    expect(roundtripDoc).not.toBeNull();
+    if (!roundtripDoc) return;
+    const start = roundtripDoc.querySelector("part > measure > note:nth-of-type(1) > notations > tuplet[type=\"start\"]");
+    const stop = roundtripDoc.querySelector("part > measure > note:nth-of-type(3) > notations > tuplet[type=\"stop\"]");
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+  });
+
   it("exports MusicXML cut-time symbol into MuseScore TimeSig subtype", () => {
     const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

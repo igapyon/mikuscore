@@ -53,6 +53,9 @@
   - 4. Improve voice/staff reconstruction using register continuity and overlap minimization.
   - 5. Keep onset-strict comparator as primary metric and duration-ratio metric as secondary gate in spot runs.
   - 6. Add import preset profiles (`safe` / `musescore_parity`) for MIDI->MusicXML and document default intent.
+- [ ] Add MIDI import UI controls for quantize behavior:
+  - expose `quantizeGrid` selector (`auto` / `1/8` / `1/16` / `1/32`)
+  - add `tripletAwareQuantize` toggle and define default behavior
 - [ ] Investigate MuseScore OSS MIDI export implementation files and map transferable diff points for mikuscore:
   - Identify concrete source files/functions for `MSCX/MSCZ -> MIDI` in MuseScore.
   - Compare note event ordering, tie/retrigger handling, and quantization/rounding policies against mikuscore.
@@ -160,6 +163,9 @@
   - 4. 音域連続性と重なり最小化に基づく voice/staff 再構成を改善する。
   - 5. spot 比較で onset 厳格一致を主指標、duration 比率許容を副指標として固定する。
   - 6. MIDI->MusicXML に `safe` / `musescore_parity` の入力プリセットを追加し、既定意図を明文化する。
+- [ ] MIDI import の量子化設定を UI から指定可能にする。
+  - `quantizeGrid` セレクタ（`auto` / `1/8` / `1/16` / `1/32`）を追加する。
+  - `tripletAwareQuantize` トグルを追加し、既定値の方針を定義する。
 - [ ] MuseScore OSS の MIDI export 実装ファイルを調査し、mikuscore に取り込める差分観点を一覧化する。
   - MuseScore 側の `MSCX/MSCZ -> MIDI` の具体ファイル/関数を特定する。
   - ノートイベント順序、tie/retrigger、量子化/丸め規則を mikuscore と比較する。

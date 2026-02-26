@@ -221,6 +221,24 @@ describe("LilyPond I/O", () => {
     expect(m2FirstStep).toBe("C");
   });
 
+  it("adds implicit beams on LilyPond import for short-note groups", () => {
+    const lily = `\\version "2.24.0"
+\\time 2/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'8 d'8 e'8 f'8 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[1]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+    expect(notes[2]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[3]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+  });
+
   it("exports MusicXML to LilyPond text", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

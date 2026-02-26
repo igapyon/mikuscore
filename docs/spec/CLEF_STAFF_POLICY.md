@@ -1,84 +1,92 @@
-# Clef / Staff Selection Policy (Draft)
+# MusicXML 譜表・記号判定ロジック
 
-## Purpose
+この文書は、`mikuscore` における MusicXML 出力時の譜表/記号判定ルールを定義する。
 
-This document defines deterministic clef/staff selection rules for track-level notation output.
-Primary target is MIDI-derived import where explicit staff/clef information is weak or absent.
+- 主軸: VSQX->MusicXML の現行ルール（55/64 閾値・ヒステリシス）を基準にする。
+- 例外: ドラム系の扱いは `mikuscore` 現行実装を基準にする。
 
-## Scope
+## 1. 適用範囲
 
-- Input unit: one logical track (or one part candidate).
-- Output unit:
-  - single staff with one clef, or
-  - grand staff (2 staves: upper/lower).
+- 対象: 1トラック（1パート候補）単位の譜表/clef 判定。
+- 対象外: 拍子・調号・発想記号など、clef/staff 以外の出力詳細。
 
-## Pitch Thresholds
+## 2. 主要閾値
 
-- `A3 = MIDI 57`
-- `C4 = MIDI 60`
-- `D4 = MIDI 62`
+- `UPPER_STAFF_HOLD_MIN = 55`（G3）
+- `LOWER_STAFF_HOLD_MAX = 64`（E4）
+- `STAFF_SPLIT_C4 = 60`（C4）
+- `STAFF_SPLIT_B3 = 59`（B3）
 
-## Decision Flow
+## 3. 非ドラム時の判定フロー
 
-1. Decide whether to use grand staff (2 staves).
-2. If not grand staff, choose a single clef.
-3. If grand staff, split notes into upper/lower staff.
+1. 単一譜表か大譜表かを判定する。
+2. 単一譜表なら clef を選ぶ。
+3. 大譜表なら上段/下段への音符割当を行う。
+4. 片側空ガードを適用する。
 
-## Rule 1: Grand Staff Decision
+## 4. 大譜表の一次判定
 
-Use grand staff if both are true in the same track:
+トラック全体で以下を満たす場合のみ大譜表候補にする。
 
-- minimum pitch `<= A3 (57)`
-- maximum pitch `>= D4 (62)`
+- `minKey <= 55` かつ `maxKey >= 64`
 
-Otherwise, do not use grand staff.
+これを満たさない場合は単一譜表にする。
 
-## Rule 2: Single-Clef Decision (Non-grand Case)
+## 5. 大譜表候補時の上段/下段割当
 
-- Compute median pitch from all note events in the track.
-- If `median < C4 (60)`: use bass clef (`F`).
-- If `median >= C4 (60)`: use treble clef (`G`).
-- If there are no notes: default to treble clef (`G`).
+同時発音クラスタ単位で staff を決める。
 
-## Rule 3: Grand Staff Clefs and Note Split
+- 基本境界:
+  - `key >= 60` は上段候補
+  - `key <= 59` は下段候補
+- ヒステリシス:
+  - 直前が上段なら `maxClusterKey >= 55` の間は上段維持
+  - 直前が下段なら `minClusterKey <= 64` の間は下段維持
 
-When grand staff is selected:
+## 6. 大譜表の最終ガード（片側空防止）
 
-- Upper staff clef is fixed to treble (`G`).
-- Lower staff clef is fixed to bass (`F`).
-- Base split:
-  - `>= C4 (60)` -> upper
-  - `<= B3 (59)` -> lower
+割当後に実音が片側だけ（上段のみ、または下段のみ）の場合は、
+大譜表を無効化して単一譜表へ戻す。
 
-### Flow-preserving correction (anti-flip)
+### 6.1 既存フォールバックの扱い
 
-To reduce unnatural rapid switching between staves, apply a continuity correction:
+`mikuscore` 現行には「空レーンでも最低1 voice を確保する」出力安定化フォールバックがある。
+このフォールバックは残すが、適用範囲を次に限定する。
 
-- Keep recent staff assignment context per local phrase/time adjacency.
-- For boundary-area notes (around `B3/C4`), prefer previous staff if musically reasonable.
-- Do not violate hard constraints that would create severe ledger-line jumps compared to neighboring notes.
+- 大譜表を最終採用したケースでのみ使用する
+- 片側空ガードで単一譜表へ戻したケースでは使用しない
 
-Implementation details may evolve, but behavior MUST remain deterministic.
+## 7. 単一譜表時の clef 選択
 
-## Empty / Degenerate Cases
+- `minKey >= 55` ならト音記号（`G`）
+- それより低い音がある場合は中央値を使って判定し、必要ならヘ音記号（`F`）を選ぶ
+- 音符がない場合はト音記号（`G`）を既定とする
 
-- No pitched notes in the track:
-  - single staff + treble clef (`G`)
-- Percussion or non-pitched-only tracks:
-  - handled by existing percussion policy (out of scope for this document).
+## 8. ドラム時のルール（mikuscore現行準拠）
 
-## Test Expectations
+ドラム判定トラックは、上記 3〜7 の音高ベース判定を適用しない。
 
-Minimum required tests:
+- clef は percussion（`<sign>percussion</sign><line>2</line>`）
+- staff はボイス単位でレーン化する（`mikuscore` 現行の lane 構築に準拠）
+- ノートの staff 割当はドラム時に `1` 系統起点で扱う（非ドラムの C4 境界分割を使わない）
 
-1. Grand staff is selected when range crosses `A3..D4` condition.
-2. Single bass clef is selected when median is below `C4`.
-3. Single treble clef is selected when median is at/above `C4`.
-4. No-note track defaults to treble clef.
-5. Grand split keeps `C4` in upper and `B3` in lower.
-6. Flow-preserving correction prevents excessive one-note flip-flop near boundary.
+## 9. 編集時（ScoreCore）の適用ガード
 
-## Notes
+編集系の `core` ロジックでは、既存の「適用対象を限定するガード」を維持する。
 
-- This policy optimizes readability, not strict performer hand semantics.
-- Threshold constants are intentionally explicit and centralized for future tuning.
+- 既存が G/F の2段大譜表文脈である場合のみ、自動 staff 再配置を適用する
+- 単一譜表や非G/F文脈では、大譜表用の自動再配置を適用しない
+- そのうえで、再配置アルゴリズム本体は固定境界（60）から本仕様のヒステリシス方式へ置換する
+
+## 10. テスト観点
+
+最低限、以下を満たすこと。
+
+1. `min<=55 && max>=64` でのみ大譜表になる。
+2. 境界近傍でヒステリシスが効き、不要な上下反転を抑制する。
+3. 片側空のとき大譜表が無効化される。
+4. 単一譜表で `minKey>=55` は G clef になる。
+5. 単一譜表で低音を含む場合、中央値判定で F clef を選べる。
+6. ドラムは常に percussion clef ルールを使う。
+7. 大譜表採用時のみ空レーンfallbackが有効で、単一譜表確定後は発動しない。
+8. `core` は G/F大譜表文脈でのみ自動再配置し、それ以外では不介入である。
