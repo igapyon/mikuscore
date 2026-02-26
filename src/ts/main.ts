@@ -1818,7 +1818,11 @@ const unlockAudioForPlayback = async (): Promise<boolean> => {
 const startPlayback = async (): Promise<void> => {
   const ok = await unlockAudioForPlayback();
   if (!ok) return;
-  await startPlaybackFlow(playbackFlowOptions, { isLoaded: state.loaded, core });
+  await startPlaybackFlow(playbackFlowOptions, {
+    isLoaded: state.loaded,
+    core,
+    startFromMeasure: selectedMeasure,
+  });
 };
 
 const startMeasurePlayback = async (): Promise<void> => {

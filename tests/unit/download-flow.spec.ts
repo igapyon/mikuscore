@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createMuseScoreDownloadPayload,
   createMusicXmlDownloadPayload,
+  createVsqxDownloadPayload,
 } from "../../src/ts/download-flow";
 import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../../src/ts/mxl-io";
 
@@ -20,6 +21,11 @@ const readBlobAsArrayBuffer = async (blob: Blob): Promise<ArrayBuffer> => {
     };
     reader.readAsArrayBuffer(blob);
   });
+};
+
+const readBlobAsText = async (blob: Blob): Promise<string> => {
+  const ab = await readBlobAsArrayBuffer(blob);
+  return new TextDecoder().decode(new Uint8Array(ab));
 };
 
 describe("download-flow compressed export", () => {
@@ -57,5 +63,30 @@ describe("download-flow compressed export", () => {
     const ab = await readBlobAsArrayBuffer(payload.blob);
     const extracted = await extractTextFromZipByExtensions(ab, [".mscx"]);
     expect(extracted).toContain("<museScore");
+    expect(extracted).toContain("\n  <Score");
+  });
+
+  it("formats plain .mscx output with 2-space indentation", async () => {
+    const xml = `<score-partwise version="4.0"><part-list/></score-partwise>`;
+    const payload = await createMuseScoreDownloadPayload(
+      xml,
+      () => `<?xml version="1.0" encoding="UTF-8"?><museScore version="4.0"><Score><Staff id="1"/></Score></museScore>`
+    );
+    expect(payload).not.toBeNull();
+    if (!payload) return;
+    expect(payload.fileName.endsWith(".mscx")).toBe(true);
+    const text = await readBlobAsText(payload.blob);
+    expect(text).toContain("\n  <Score>");
+    expect(text).toContain("\n    <Staff id=\"1\"/>");
+  });
+
+  it("formats .vsqx output with 2-space indentation", async () => {
+    const payload = createVsqxDownloadPayload(
+      `<?xml version="1.0" encoding="UTF-8"?><vsq4><vVoiceTable><vVoice/></vVoiceTable></vsq4>`
+    );
+    expect(payload.fileName.endsWith(".vsqx")).toBe(true);
+    const text = await readBlobAsText(payload.blob);
+    expect(text).toContain("\n  <vVoiceTable>");
+    expect(text).toContain("\n    <vVoice/>");
   });
 });

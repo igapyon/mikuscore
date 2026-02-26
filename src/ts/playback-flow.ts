@@ -4,6 +4,8 @@ import {
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiKeySignatureEventsFromMusicXmlDoc,
+  type MidiControlEvent,
+  type MidiTempoEvent,
   collectMidiProgramOverridesFromMusicXmlDoc,
   collectMidiTimeSignatureEventsFromMusicXmlDoc,
   collectMidiTempoEventsFromMusicXmlDoc,
@@ -364,6 +366,95 @@ type SaveCapableCore = {
   debugSerializeCurrentXml: () => string | null;
 };
 
+type PlaybackStartLocation = {
+  partId: string;
+  measureNumber: string;
+};
+
+const parsePositiveInt = (text: string | null | undefined): number | null => {
+  const value = Number.parseInt(String(text ?? "").trim(), 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
+};
+
+const resolveMeasureStartTickInPart = (
+  doc: Document,
+  startFromMeasure: PlaybackStartLocation,
+  fallbackDivisions: number
+): number | null => {
+  const part = Array.from(doc.querySelectorAll("score-partwise > part")).find(
+    (p) => (p.getAttribute("id") ?? "").trim() === String(startFromMeasure.partId || "").trim()
+  );
+  if (!part) return null;
+  let divisions = Math.max(1, Math.round(fallbackDivisions));
+  let beats = 4;
+  let beatType = 4;
+  let tick = 0;
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  for (const measure of measures) {
+    const attrs = measure.querySelector(":scope > attributes");
+    const nextDivisions = parsePositiveInt(attrs?.querySelector(":scope > divisions")?.textContent);
+    if (nextDivisions) divisions = nextDivisions;
+    const nextBeats = parsePositiveInt(attrs?.querySelector(":scope > time > beats")?.textContent);
+    if (nextBeats) beats = nextBeats;
+    const nextBeatType = parsePositiveInt(attrs?.querySelector(":scope > time > beat-type")?.textContent);
+    if (nextBeatType) beatType = nextBeatType;
+    const measureNo = (measure.getAttribute("number") ?? "").trim();
+    if (measureNo === String(startFromMeasure.measureNumber ?? "").trim()) {
+      return tick;
+    }
+    const measureTicks = Math.max(1, Math.round((divisions * beats * 4) / Math.max(1, beatType)));
+    tick += measureTicks;
+  }
+  return null;
+};
+
+const trimPlaybackFromTick = (
+  parsedPlayback: ReturnType<typeof buildPlaybackEventsFromMusicXmlDoc>,
+  tempoEvents: MidiTempoEvent[],
+  controlEvents: MidiControlEvent[],
+  startTick: number
+): {
+  parsedPlayback: ReturnType<typeof buildPlaybackEventsFromMusicXmlDoc>;
+  tempoEvents: MidiTempoEvent[];
+  controlEvents: MidiControlEvent[];
+} => {
+  if (!Number.isFinite(startTick) || startTick <= 0) {
+    return { parsedPlayback, tempoEvents, controlEvents };
+  }
+  const safeStartTick = Math.max(0, Math.round(startTick));
+  const trimmedEvents = parsedPlayback.events
+    .filter((event) => event.startTicks >= safeStartTick)
+    .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+
+  const sortedTempo = (tempoEvents ?? [])
+    .slice()
+    .map((event) => ({
+      startTicks: Math.max(0, Math.round(event.startTicks)),
+      bpm: Math.max(1, Math.round(event.bpm || parsedPlayback.tempo || 120)),
+    }))
+    .sort((a, b) => a.startTicks - b.startTicks);
+  const lastTempoBeforeOrAtStart = sortedTempo
+    .slice()
+    .reverse()
+    .find((event) => event.startTicks <= safeStartTick);
+  const trimmedTempoEvents = sortedTempo
+    .filter((event) => event.startTicks > safeStartTick)
+    .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+  if (lastTempoBeforeOrAtStart) {
+    trimmedTempoEvents.unshift({ startTicks: 0, bpm: lastTempoBeforeOrAtStart.bpm });
+  }
+
+  const trimmedControlEvents = (controlEvents ?? [])
+    .filter((event) => event.startTicks >= safeStartTick)
+    .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+
+  return {
+    parsedPlayback: { ...parsedPlayback, events: trimmedEvents },
+    tempoEvents: trimmedTempoEvents,
+    controlEvents: trimmedControlEvents,
+  };
+};
+
 export const stopPlayback = (options: PlaybackFlowOptions): void => {
   options.engine.stop();
   options.setIsPlaying(false);
@@ -373,7 +464,7 @@ export const stopPlayback = (options: PlaybackFlowOptions): void => {
 
 export const startPlayback = async (
   options: PlaybackFlowOptions,
-  params: { isLoaded: boolean; core: SaveCapableCore }
+  params: { isLoaded: boolean; core: SaveCapableCore; startFromMeasure?: PlaybackStartLocation | null }
 ): Promise<void> => {
   if (!params.isLoaded || options.getIsPlaying()) return;
 
@@ -410,18 +501,33 @@ export const startPlayback = async (
     metricAccentEnabled: options.getMetricAccentEnabled(),
     metricAccentProfile: options.getMetricAccentProfile(),
   });
-  const events = parsedPlayback.events;
+  let effectiveParsedPlayback = parsedPlayback;
+  let effectiveTempoEvents = useMidiLikePlayback
+    ? collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
+    : [];
+  let effectiveControlEvents = useMidiLikePlayback
+    ? collectMidiControlEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
+    : [];
+  if (params.startFromMeasure) {
+    const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
+    if (startTick !== null && startTick > 0) {
+      const trimmed = trimPlaybackFromTick(
+        effectiveParsedPlayback,
+        effectiveTempoEvents,
+        effectiveControlEvents,
+        startTick
+      );
+      effectiveParsedPlayback = trimmed.parsedPlayback;
+      effectiveTempoEvents = trimmed.tempoEvents;
+      effectiveControlEvents = trimmed.controlEvents;
+    }
+  }
+  const events = effectiveParsedPlayback.events;
   if (events.length === 0) {
     options.setPlaybackText("Playback: no playable notes");
     options.renderControlState();
     return;
   }
-  const tempoEvents = useMidiLikePlayback
-    ? collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
-    : [];
-  const controlEvents = useMidiLikePlayback
-    ? collectMidiControlEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
-    : [];
   const timeSignatureEvents = useMidiLikePlayback
     ? collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
     : [];
@@ -435,11 +541,11 @@ export const startPlayback = async (
   try {
     midiBytes = buildMidiBytesForPlayback(
       events,
-      parsedPlayback.tempo,
+      effectiveParsedPlayback.tempo,
       "electric_piano_2",
       collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc),
-      controlEvents,
-      tempoEvents,
+      effectiveControlEvents,
+      effectiveTempoEvents,
       timeSignatureEvents,
       keySignatureEvents
     );
@@ -453,7 +559,7 @@ export const startPlayback = async (
 
   try {
     await options.engine.playSchedule(
-      toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents),
+      toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents),
       waveform,
       () => {
         options.setIsPlaying(false);
@@ -470,8 +576,11 @@ export const startPlayback = async (
   }
 
   options.setIsPlaying(true);
+  const fromMeasureLabel = params.startFromMeasure
+    ? ` / from measure ${params.startFromMeasure.measureNumber}`
+    : "";
   options.setPlaybackText(
-    `Playing: ${events.length} notes / mode ${playbackMode} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`
+    `Playing: ${events.length} notes / mode ${playbackMode}${fromMeasureLabel} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`
   );
   options.renderControlState();
   options.renderAll();

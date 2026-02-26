@@ -19,6 +19,7 @@ type LilyParsedPitch = {
 
 type LilyDirectEvent =
   | { kind: "rest"; durationDiv: number; type: string; dots: number }
+  | { kind: "backup"; durationDiv: number }
   | {
     kind: "note";
     durationDiv: number;
@@ -605,6 +606,42 @@ const parseMksAccidentalHints = (source: string): Map<string, string> => {
   return out;
 };
 
+const parseMksLaneHints = (source: string): Map<string, Map<number, string[]>> => {
+  const out = new Map<string, Map<number, string[]>>();
+  const lines = String(source || "").split("\n");
+  for (const lineRaw of lines) {
+    const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+    const m = trimmed.match(/^%@mks\s+lanes\s+(.+)$/i);
+    if (!m) continue;
+    const params: Record<string, string> = {};
+    const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+    let kv: RegExpExecArray | null;
+    while ((kv = kvRegex.exec(m[1])) !== null) {
+      params[String(kv[1]).toLowerCase()] = String(kv[2]);
+    }
+    const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+    const measureNo = Number.parseInt(String(params.measure || ""), 10);
+    const encoded = String(params.data || "").trim();
+    if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !encoded) continue;
+    const lanes = encoded
+      .split(",")
+      .map((entry) => {
+        try {
+          return decodeURIComponent(entry);
+        } catch {
+          return "";
+        }
+      })
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (!lanes.length) continue;
+    const byMeasure = out.get(voiceId) ?? new Map<number, string[]>();
+    byMeasure.set(measureNo, lanes);
+    out.set(voiceId, byMeasure);
+  }
+  return out;
+};
+
 const applyArticulationHintsToMeasures = (
   measures: LilyDirectEvent[][],
   voiceId: string,
@@ -616,7 +653,7 @@ const applyArticulationHintsToMeasures = (
   for (let mi = 0; mi < measures.length; mi += 1) {
     let noteEventNo = 0;
     for (const event of measures[mi] ?? []) {
-      if (event.kind === "rest") continue;
+      if (event.kind === "rest" || event.kind === "backup") continue;
       noteEventNo += 1;
       const key = `${voiceId}#${mi + 1}#${noteEventNo}`;
       const hints = articulationHintByKey.get(key);
@@ -856,6 +893,7 @@ const parseLilyDirectBody = (
     graceHintByKey?: Map<string, { slash: boolean }>;
   } = {}
 ): LilyDirectEvent[][] => {
+  const SMALL_OVERFLOW_TOLERANCE_DIV = 8;
   const relative = unwrapRelativeBlock(body);
   let previousMidi: number | null = relative.relativeMidi;
   const clean = stripLilyComments(relative.body)
@@ -881,6 +919,12 @@ const parseLilyDirectBody = (
     const current = measures[measures.length - 1];
     const used = current.reduce((sum, item) => sum + item.durationDiv, 0);
     if (used + event.durationDiv > measureCapacity) {
+      const overflow = used + event.durationDiv - measureCapacity;
+      if (overflow <= SMALL_OVERFLOW_TOLERANCE_DIV) {
+        warnings.push(`${contextLabel}: accepted slight overfill due to duration rounding.`);
+        current.push(event);
+        return;
+      }
       if (event.durationDiv > measureCapacity) {
         warnings.push(`${contextLabel}: overfull measure; dropped oversized event.`);
         return;
@@ -1098,6 +1142,10 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
           continue;
         }
         for (const event of events) {
+          if (event.kind === "backup") {
+            body += `<backup><duration>${event.durationDiv}</duration></backup>`;
+            continue;
+          }
           const accidentalXml = event.kind !== "rest" && event.accidentalText
             ? `<accidental>${event.accidentalText}</accidental>`
             : "";
@@ -1155,25 +1203,61 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
   const graceHintByKey = parseMksGraceHints(source);
   const tupletHintByKey = parseMksTupletHints(source);
   const accidentalHintByKey = parseMksAccidentalHints(source);
+  const laneHintByVoiceId = parseMksLaneHints(source);
   if (!staffBlocks.length) return null;
   const warnings: string[] = [];
-  const staffs = staffBlocks.map((staff, index) => ({
-    voiceId: staff.voiceId || `P${index + 1}`,
-    clef: normalizeAbcClefName(staff.clef || "treble"),
-    measures: applyArticulationHintsToMeasures(
-      parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
-        voiceId: normalizeVoiceId(staff.voiceId, `P${index + 1}`),
-        graceHintByKey,
-      }),
-      normalizeVoiceId(staff.voiceId, `P${index + 1}`),
-      articulationHintByKey,
+  const staffs = staffBlocks.map((staff, index) => {
+    const normalizedVoiceId = normalizeVoiceId(staff.voiceId, `P${index + 1}`);
+    const measures = parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
+      voiceId: normalizedVoiceId,
       graceHintByKey,
-      tupletHintByKey,
-      accidentalHintByKey
-    ),
-    transpose: transposeHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || staff.transpose || null,
-    measureHintsByIndex: measureHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || undefined,
-  }));
+    });
+    const laneHintsForVoice = laneHintByVoiceId.get(normalizedVoiceId);
+    if (laneHintsForVoice && laneHintsForVoice.size > 0) {
+      for (const [measureNo, laneBodies] of laneHintsForVoice.entries()) {
+        if (!Number.isFinite(measureNo) || measureNo <= 0 || laneBodies.length <= 1) continue;
+        const merged: LilyDirectEvent[] = [];
+        let previousLaneDuration = 0;
+        for (let laneIndex = 0; laneIndex < laneBodies.length; laneIndex += 1) {
+          const laneParsed = parseLilyDirectBody(
+            laneBodies[laneIndex],
+            warnings,
+            `staff ${index + 1} lane ${laneIndex + 1}`,
+            meter.beats,
+            meter.beatType,
+            {
+              voiceId: normalizedVoiceId,
+              graceHintByKey,
+            }
+          );
+          const laneEvents = laneParsed[0] ?? [];
+          if (laneIndex > 0 && previousLaneDuration > 0) {
+            merged.push({ kind: "backup", durationDiv: previousLaneDuration });
+          }
+          merged.push(...laneEvents);
+          previousLaneDuration = laneEvents.reduce(
+            (sum, event) => sum + (event.kind === "backup" ? 0 : event.durationDiv),
+            0
+          );
+        }
+        measures[measureNo - 1] = merged;
+      }
+    }
+    return {
+      voiceId: staff.voiceId || `P${index + 1}`,
+      clef: normalizeAbcClefName(staff.clef || "treble"),
+      measures: applyArticulationHintsToMeasures(
+        measures,
+        normalizedVoiceId,
+        articulationHintByKey,
+        graceHintByKey,
+        tupletHintByKey,
+        accidentalHintByKey
+      ),
+      transpose: transposeHintByVoiceId.get(normalizedVoiceId) || staff.transpose || null,
+      measureHintsByIndex: measureHintByVoiceId.get(normalizedVoiceId) || undefined,
+    };
+  });
   if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
     return null;
   }
@@ -1497,13 +1581,23 @@ const resolveLilyClefForPartStaff = (part: Element, staffNo: number): string => 
 const buildLilyBodyFromPart = (
   part: Element,
   warnings: string[],
-  targetStaffNo: number | null = null
+  options: {
+    targetStaffNo?: number | null;
+    laneHintVoiceId?: string;
+    laneHintCommentsOut?: string[];
+  } = {}
 ): string => {
+  const SMALL_OVERFLOW_TOLERANCE_DIV = 8;
+  const targetStaffNo = options.targetStaffNo ?? null;
+  const laneHintVoiceId = options.laneHintVoiceId ?? "";
+  const laneHintCommentsOut = options.laneHintCommentsOut;
   const tokens: string[] = [];
   let currentDivisions = 480;
   let currentBeats = 4;
   let currentBeatType = 4;
-  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+    const measure = measures[measureIndex];
     const parsedDivisions = Number.parseInt(measure.querySelector(":scope > attributes > divisions")?.textContent || "", 10);
     if (Number.isFinite(parsedDivisions) && parsedDivisions > 0) {
       currentDivisions = parsedDivisions;
@@ -1526,13 +1620,43 @@ const buildLilyBodyFromPart = (
 
     const measureTokens: string[] = [];
     let occupiedDiv = 0;
+    let laneNoteCount = 0;
+    const finalizedLanes: Array<{ tokens: string[]; occupiedDiv: number; noteCount: number }> = [];
+    let bestLaneTokens: string[] = [];
+    let bestLaneOccupiedDiv = -1;
+    let bestLaneNoteCount = -1;
+    const finalizeLane = (): void => {
+      if (targetStaffNo === null) return;
+      const hasAny = measureTokens.length > 0;
+      if (!hasAny) return;
+      finalizedLanes.push({
+        tokens: measureTokens.slice(),
+        occupiedDiv,
+        noteCount: laneNoteCount,
+      });
+      // Prefer lane with richer note content; tie-break by occupied timeline.
+      if (
+        laneNoteCount > bestLaneNoteCount
+        || (laneNoteCount === bestLaneNoteCount && occupiedDiv > bestLaneOccupiedDiv)
+      ) {
+        bestLaneTokens = measureTokens.slice();
+        bestLaneOccupiedDiv = occupiedDiv;
+        bestLaneNoteCount = laneNoteCount;
+      }
+    };
     const children = Array.from(measure.children);
     for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
       const child = children[childIndex];
       if (child.tagName === "backup") {
         const backupDur = Number.parseInt(child.querySelector(":scope > duration")?.textContent || "0", 10);
         if (targetStaffNo !== null) {
-          // In per-staff export, backup only represents cross-lane timeline control.
+          // In per-staff export, treat backup as lane boundary and keep the densest lane.
+          if (Number.isFinite(backupDur) && backupDur > 0) {
+            finalizeLane();
+            measureTokens.length = 0;
+            occupiedDiv = 0;
+            laneNoteCount = 0;
+          }
           continue;
         }
         if (Number.isFinite(backupDur) && backupDur > 0) {
@@ -1562,8 +1686,11 @@ const buildLilyBodyFromPart = (
         currentDivisions
       );
       if (occupiedDiv + timelineDurationDiv > measureCapacityDiv) {
-        warnings.push("export: dropped note/rest that would overfill a measure.");
-        continue;
+        const overflow = occupiedDiv + timelineDurationDiv - measureCapacityDiv;
+        if (overflow > SMALL_OVERFLOW_TOLERANCE_DIV) {
+          warnings.push("export: dropped note/rest that would overfill a measure.");
+          continue;
+        }
       }
       if (note.querySelector(":scope > rest")) {
         measureTokens.push(`r${durWithDots}`);
@@ -1597,7 +1724,20 @@ const buildLilyBodyFromPart = (
       } else {
         measureTokens.push(`<${chordPitches.join(" ")}>${durWithDots}`);
       }
+      laneNoteCount += 1;
       occupiedDiv += timelineDurationDiv;
+    }
+    finalizeLane();
+    if (targetStaffNo !== null && finalizedLanes.length > 1 && laneHintVoiceId && laneHintCommentsOut) {
+      const encodedLanes = finalizedLanes
+        .map((lane) => encodeURIComponent(lane.tokens.join(" ")))
+        .join(",");
+      laneHintCommentsOut.push(`%@mks lanes voice=${laneHintVoiceId} measure=${measureIndex + 1} data=${encodedLanes}`);
+    }
+    if (targetStaffNo !== null && bestLaneTokens.length > 0) {
+      measureTokens.length = 0;
+      measureTokens.push(...bestLaneTokens);
+      occupiedDiv = Math.max(0, bestLaneOccupiedDiv);
     }
     if (!measureTokens.length) {
       const safeBeats = Math.max(1, Math.round(currentBeats));
@@ -1779,7 +1919,11 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
     const staffNumbers = activeStaffNumbers.length ? activeStaffNumbers : declaredStaffNumbers.slice(0, 1);
     if (staffNumbers.length <= 1) {
       const staffNo = staffNumbers[0] ?? 1;
-      const body = buildLilyBodyFromPart(part, warnings, staffNo);
+      const body = buildLilyBodyFromPart(part, warnings, {
+        targetStaffNo: staffNo,
+        laneHintVoiceId: partId,
+        laneHintCommentsOut: measureComments,
+      });
       const clef = resolveLilyClefForPartStaff(part, staffNo);
       const clefPrefix = clef === "treble" ? "" : `\\clef ${clef} `;
       blocks.push(`\\new Staff = "${partId}" { ${clefPrefix}${body} }`);
@@ -1789,10 +1933,14 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       continue;
     }
     const staffBlocks = staffNumbers.map((staffNo) => {
-      const body = buildLilyBodyFromPart(part, warnings, staffNo);
+      const voiceId = `${partId}_s${staffNo}`;
+      const body = buildLilyBodyFromPart(part, warnings, {
+        targetStaffNo: staffNo,
+        laneHintVoiceId: voiceId,
+        laneHintCommentsOut: measureComments,
+      });
       const clef = resolveLilyClefForPartStaff(part, staffNo);
       const clefPrefix = clef === "treble" ? "" : `\\clef ${clef} `;
-      const voiceId = `${partId}_s${staffNo}`;
       const transposeComment = transposeCommentForVoice(voiceId);
       if (transposeComment) transposeComments.push(transposeComment);
       measureComments.push(...measureCommentsForVoice(voiceId, staffNo));
