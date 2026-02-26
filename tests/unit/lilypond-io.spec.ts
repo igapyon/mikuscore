@@ -218,6 +218,82 @@ describe("LilyPond I/O", () => {
     expect(lastM1Octave).toBe("7");
   });
 
+  it("keeps triplet-16th visual semantics (type/slur) on m85-like roundtrip", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>6</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start"/><slur type="start" number="1" placement="above"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>6</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>6</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop"/><slur type="stop" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>6</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>A</step><octave>5</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start"/><slur type="start" number="1" placement="above"/></notations>
+      </note>
+      <note>
+        <pitch><step>B</step><octave>5</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>A</step><octave>5</octave></pitch>
+        <duration>80</duration><voice>1</voice><type>16th</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop"/><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const lily = exportMusicXmlDomToLilyPond(srcDoc);
+    expect(lily).toContain("%@mks slur voice=P1 measure=1 event=1 type=start");
+    expect(lily).toContain("%@mks slur voice=P1 measure=1 event=3 type=stop");
+
+    const roundtripXml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = outDoc.querySelectorAll("part > measure:nth-of-type(1) > note");
+    expect(notes.length).toBe(7);
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1) > type")?.textContent?.trim()).toBe("16th");
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(2) > type")?.textContent?.trim()).toBe("16th");
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(3) > type")?.textContent?.trim()).toBe("16th");
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1) > notations > slur[type=\"start\"]")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(3) > notations > slur[type=\"stop\"]")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(5) > notations > slur[type=\"start\"]")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(7) > notations > slur[type=\"stop\"]")).not.toBeNull();
+  });
+
   it("imports staff clef from LilyPond (\\clef bass)", () => {
     const lily = `\\version "2.24.0"
 \\time 4/4
@@ -728,7 +804,7 @@ describe("LilyPond I/O", () => {
     expect(outDoc.querySelector("direction > direction-type > octave-shift")).toBeNull();
   });
 
-  it("currently degrades trill ornaments on LilyPond roundtrip (policy explicit)", () => {
+  it("exports and imports trill ornaments via %@mks trill metadata", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
@@ -756,13 +832,21 @@ describe("LilyPond I/O", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks trill voice=P1 measure=1 event=1 mark=1");
+    expect(lily).toContain("% %@mks trill voice=P1 measure=1 event=1 wavy=start number=1");
+    expect(lily).toContain("% %@mks trill voice=P1 measure=1 event=2 wavy=stop number=1");
     const outDoc = parseMusicXmlDocument(convertLilyPondToMusicXml(lily));
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("part > measure > note:nth-of-type(1) > pitch > step")?.textContent?.trim()).toBe("C");
     expect(outDoc.querySelector("part > measure > note:nth-of-type(2) > pitch > step")?.textContent?.trim()).toBe("D");
-    expect(outDoc.querySelector("notations > ornaments > trill-mark")).toBeNull();
-    expect(outDoc.querySelector("notations > ornaments > wavy-line")).toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(1) > notations > ornaments > trill-mark")).not.toBeNull();
+    expect(
+      outDoc.querySelector("part > measure > note:nth-of-type(1) > notations > ornaments > wavy-line[type=\"start\"]")
+    ).not.toBeNull();
+    expect(
+      outDoc.querySelector("part > measure > note:nth-of-type(2) > notations > ornaments > wavy-line[type=\"stop\"]")
+    ).not.toBeNull();
   });
 
   it("exported LilyPond does not overfill 3/4 when source has backup lanes", () => {

@@ -95,7 +95,7 @@
 - [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
 - [ ] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
 - [ ] Add ABC import compatibility mode for overfull legacy exports and surface warning summary in UI.
-- [ ] Add LilyPond (`.ly`) import/export support.
+- [x] Add LilyPond (`.ly`) import/export support.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
 - [ ] Add VSQX import/export support.
@@ -214,7 +214,7 @@
 - [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
 - [ ] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
 - [ ] 旧ABC由来の小節過充填に対する互換モードを整備し、UIに警告サマリを表示。
-- [ ] LilyPond（`.ly`）の入出力対応を追加。
+- [x] LilyPond（`.ly`）の入出力対応を追加。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
 - [ ] VSQX 形式の入出力対応を追加。

@@ -12410,8 +12410,109 @@ const parseMksLaneHints = (source) => {
     }
     return out;
 };
-const applyArticulationHintsToMeasures = (measures, voiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey) => {
-    var _a, _b;
+const parseMksSlurHints = (source) => {
+    var _a;
+    const out = new Map();
+    const lines = String(source || "").split("\n");
+    for (const lineRaw of lines) {
+        const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+        const m = trimmed.match(/^%@mks\s+slur\s+(.+)$/i);
+        if (!m)
+            continue;
+        const params = {};
+        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+        let kv;
+        while ((kv = kvRegex.exec(m[1])) !== null) {
+            params[String(kv[1]).toLowerCase()] = String(kv[2]);
+        }
+        const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+        const measureNo = Number.parseInt(String(params.measure || ""), 10);
+        const eventNo = Number.parseInt(String(params.event || ""), 10);
+        const typeRaw = String(params.type || "").trim().toLowerCase();
+        if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0)
+            continue;
+        if (typeRaw !== "start" && typeRaw !== "stop")
+            continue;
+        const numberRaw = Number.parseInt(String(params.number || ""), 10);
+        const placementRaw = String(params.placement || "").trim().toLowerCase();
+        const key = `${voiceId}#${measureNo}#${eventNo}`;
+        const arr = (_a = out.get(key)) !== null && _a !== void 0 ? _a : [];
+        arr.push({
+            type: typeRaw,
+            number: Number.isFinite(numberRaw) && numberRaw > 0 ? Math.round(numberRaw) : undefined,
+            placement: placementRaw === "above" || placementRaw === "below" ? placementRaw : undefined,
+        });
+        out.set(key, arr);
+    }
+    return out;
+};
+const parseMksTrillHints = (source) => {
+    var _a, _b, _c, _d;
+    const out = new Map();
+    const lines = String(source || "").split("\n");
+    for (const lineRaw of lines) {
+        const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+        const m = trimmed.match(/^%@mks\s+trill\s+(.+)$/i);
+        if (!m)
+            continue;
+        const params = {};
+        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+        let kv;
+        while ((kv = kvRegex.exec(m[1])) !== null) {
+            params[String(kv[1]).toLowerCase()] = String(kv[2]);
+        }
+        const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+        const measureNo = Number.parseInt(String(params.measure || ""), 10);
+        const eventNo = Number.parseInt(String(params.event || ""), 10);
+        if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !Number.isFinite(eventNo) || eventNo <= 0)
+            continue;
+        const key = `${voiceId}#${measureNo}#${eventNo}`;
+        const slot = (_a = out.get(key)) !== null && _a !== void 0 ? _a : {};
+        const markRaw = String(params.mark || "").trim().toLowerCase();
+        if (markRaw === "1" || markRaw === "true" || markRaw === "yes") {
+            slot.trillMark = true;
+        }
+        const wavyType = String(params.wavy || "").trim().toLowerCase();
+        if (wavyType === "start" || wavyType === "stop") {
+            const number = Number.parseInt(String(params.number || ""), 10);
+            const arr = (_b = slot.wavy) !== null && _b !== void 0 ? _b : [];
+            arr.push({
+                type: wavyType,
+                number: Number.isFinite(number) && number > 0 ? Math.round(number) : undefined,
+            });
+            slot.wavy = arr;
+        }
+        if (slot.trillMark || ((_d = (_c = slot.wavy) === null || _c === void 0 ? void 0 : _c.length) !== null && _d !== void 0 ? _d : 0) > 0)
+            out.set(key, slot);
+    }
+    return out;
+};
+const inferMusicXmlTypeFromDurationDiv = (durationDiv, divisions) => {
+    const safeDivisions = Math.max(1, Math.round(divisions));
+    const safeDuration = Math.max(1, Math.round(durationDiv));
+    const table = [
+        { type: "whole", dur: safeDivisions * 4 },
+        { type: "half", dur: safeDivisions * 2 },
+        { type: "quarter", dur: safeDivisions },
+        { type: "eighth", dur: Math.round(safeDivisions / 2) },
+        { type: "16th", dur: Math.round(safeDivisions / 4) },
+        { type: "32nd", dur: Math.round(safeDivisions / 8) },
+        { type: "64th", dur: Math.round(safeDivisions / 16) },
+    ];
+    let best = table[0];
+    let bestDiff = Math.abs(safeDuration - best.dur);
+    for (const row of table) {
+        const diff = Math.abs(safeDuration - row.dur);
+        if (diff < bestDiff) {
+            best = row;
+            bestDiff = diff;
+        }
+    }
+    return best.type;
+};
+const applyArticulationHintsToMeasures = (measures, voiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey, slurHintByKey, trillHintByKey) => {
+    var _a, _b, _c;
+    const divisions = 480;
     for (let mi = 0; mi < measures.length; mi += 1) {
         let noteEventNo = 0;
         for (const event of (_a = measures[mi]) !== null && _a !== void 0 ? _a : []) {
@@ -12441,10 +12542,28 @@ const applyArticulationHintsToMeasures = (measures, voiceId, articulationHintByK
                         event.tupletStart = true;
                     if (tupletHint.stop === true)
                         event.tupletStop = true;
+                    if (Number.isFinite(tupletHint.actual)
+                        && tupletHint.actual > 0
+                        && Number.isFinite(tupletHint.normal)
+                        && tupletHint.normal > 0
+                        && event.durationDiv > 0) {
+                        const normalizedDiv = Math.round((event.durationDiv * Math.round(tupletHint.actual)) / Math.max(1, Math.round(tupletHint.normal)));
+                        event.type = inferMusicXmlTypeFromDurationDiv(normalizedDiv, divisions);
+                    }
                 }
                 const accidentalText = accidentalHintByKey.get(key);
                 if (accidentalText)
                     event.accidentalText = accidentalText;
+                const slurHints = slurHintByKey.get(key);
+                if (slurHints === null || slurHints === void 0 ? void 0 : slurHints.length)
+                    event.slurHints = slurHints.slice();
+                const trillHints = trillHintByKey.get(key);
+                if (trillHints) {
+                    if (trillHints.trillMark)
+                        event.trillMark = true;
+                    if ((_c = trillHints.wavy) === null || _c === void 0 ? void 0 : _c.length)
+                        event.wavyLineHints = trillHints.wavy.slice();
+                }
             }
         }
     }
@@ -12789,7 +12908,7 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
 };
 const buildDirectMusicXmlFromStaffBlocks = (params) => {
     const buildNoteExtrasXml = (event) => {
-        var _a;
+        var _a, _b, _c;
         const graceXml = event.graceSlash === undefined ? "" : `<grace${event.graceSlash ? ' slash="yes"' : ""}/>`;
         const durationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
         const timeModXml = Number.isFinite(event.tupletActual)
@@ -12812,8 +12931,24 @@ const buildDirectMusicXmlFromStaffBlocks = (params) => {
             tupletNodes.push(`<tuplet type="start"${tupletNumberAttr}/>`);
         if (event.tupletStop)
             tupletNodes.push(`<tuplet type="stop"${tupletNumberAttr}/>`);
-        const notationXml = nodes.length || tupletNodes.length
-            ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${tupletNodes.join("")}</notations>`
+        const slurNodes = ((_b = event.slurHints) !== null && _b !== void 0 ? _b : []).map((slur) => {
+            const numberAttr = Number.isFinite(slur.number) && slur.number > 0
+                ? ` number="${Math.round(slur.number)}"`
+                : "";
+            const placementAttr = slur.type === "start" && slur.placement ? ` placement="${slur.placement}"` : "";
+            return `<slur type="${slur.type}"${numberAttr}${placementAttr}/>`;
+        });
+        const wavyNodes = ((_c = event.wavyLineHints) !== null && _c !== void 0 ? _c : []).map((wavy) => {
+            const numberAttr = Number.isFinite(wavy.number) && wavy.number > 0
+                ? ` number="${Math.round(wavy.number)}"`
+                : "";
+            return `<wavy-line type="${wavy.type}"${numberAttr}/>`;
+        });
+        const ornamentsXml = event.trillMark || wavyNodes.length
+            ? `<ornaments>${event.trillMark ? "<trill-mark/>" : ""}${wavyNodes.join("")}</ornaments>`
+            : "";
+        const notationXml = nodes.length || tupletNodes.length || slurNodes.length || ornamentsXml
+            ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${tupletNodes.join("")}${slurNodes.join("")}${ornamentsXml}</notations>`
             : "";
         return `${graceXml}${durationXml}${timeModXml}${notationXml}`;
     };
@@ -12943,6 +13078,8 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
     const tupletHintByKey = parseMksTupletHints(source);
     const accidentalHintByKey = parseMksAccidentalHints(source);
     const laneHintByVoiceId = parseMksLaneHints(source);
+    const slurHintByKey = parseMksSlurHints(source);
+    const trillHintByKey = parseMksTrillHints(source);
     if (!staffBlocks.length)
         return null;
     const warnings = [];
@@ -12978,7 +13115,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
         return {
             voiceId: staff.voiceId || `P${index + 1}`,
             clef: normalizeAbcClefName(staff.clef || "treble"),
-            measures: applyArticulationHintsToMeasures(measures, normalizedVoiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey),
+            measures: applyArticulationHintsToMeasures(measures, normalizedVoiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey, slurHintByKey, trillHintByKey),
             transpose: transposeHintByVoiceId.get(normalizedVoiceId) || staff.transpose || null,
             measureHintsByIndex: measureHintByVoiceId.get(normalizedVoiceId) || undefined,
         };
@@ -13633,6 +13770,35 @@ const exportMusicXmlDomToLilyPond = (doc) => {
                         kinds.push("accent");
                     if (kinds.length) {
                         out.push(`%@mks articul voice=${voiceId} measure=${mi + 1} event=${eventNo} kind=${kinds.join(",")}`);
+                    }
+                    const slurs = Array.from(child.querySelectorAll(":scope > notations > slur"));
+                    for (const slur of slurs) {
+                        const slurType = (slur.getAttribute("type") || "").trim().toLowerCase();
+                        if (slurType !== "start" && slurType !== "stop")
+                            continue;
+                        const slurFields = [`%@mks slur voice=${voiceId} measure=${mi + 1} event=${eventNo} type=${slurType}`];
+                        const slurNumber = Number.parseInt(slur.getAttribute("number") || "", 10);
+                        if (Number.isFinite(slurNumber) && slurNumber > 0)
+                            slurFields.push(`number=${Math.round(slurNumber)}`);
+                        const slurPlacement = (slur.getAttribute("placement") || "").trim().toLowerCase();
+                        if (slurPlacement === "above" || slurPlacement === "below")
+                            slurFields.push(`placement=${slurPlacement}`);
+                        out.push(slurFields.join(" "));
+                    }
+                    const trillMark = child.querySelector(":scope > notations > ornaments > trill-mark");
+                    if (trillMark) {
+                        out.push(`%@mks trill voice=${voiceId} measure=${mi + 1} event=${eventNo} mark=1`);
+                    }
+                    const wavyLines = Array.from(child.querySelectorAll(":scope > notations > ornaments > wavy-line"));
+                    for (const wavy of wavyLines) {
+                        const wavyType = (wavy.getAttribute("type") || "").trim().toLowerCase();
+                        if (wavyType !== "start" && wavyType !== "stop")
+                            continue;
+                        const wavyFields = [`%@mks trill voice=${voiceId} measure=${mi + 1} event=${eventNo} wavy=${wavyType}`];
+                        const wavyNumber = Number.parseInt(wavy.getAttribute("number") || "", 10);
+                        if (Number.isFinite(wavyNumber) && wavyNumber > 0)
+                            wavyFields.push(`number=${Math.round(wavyNumber)}`);
+                        out.push(wavyFields.join(" "));
                     }
                     const accidentalText = ((_h = (_g = child.querySelector(":scope > accidental")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim().toLowerCase()) || "";
                     if (accidentalText) {
