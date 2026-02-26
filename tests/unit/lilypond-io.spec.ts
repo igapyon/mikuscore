@@ -352,6 +352,48 @@ describe("LilyPond I/O", () => {
     expect(m1?.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')).not.toBeNull();
   });
 
+  it("exports and imports section-boundary double bar + explicit same-meter time via %@mks measure metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="24">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="right"><bar-style>light-light</bar-style></barline>
+    </measure>
+    <measure number="25">
+      <attributes><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="left"><bar-style>light-light</bar-style></barline>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("explicitTime=1");
+    expect(lily).toContain("beats=2");
+    expect(lily).toContain("beatType=4");
+    expect(lily).toContain("doubleBar=right");
+    expect(lily).toContain("doubleBar=left");
+
+    const roundtrip = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const m2 = outDoc.querySelector("part > measure:nth-of-type(2)");
+    expect(m2?.querySelector(":scope > attributes > time > beats")?.textContent?.trim()).toBe("2");
+    expect(m2?.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim()).toBe("4");
+    expect(
+      m2?.querySelector(':scope > barline[location="left"] > bar-style')?.textContent?.trim()
+      || outDoc.querySelector('part > measure:nth-of-type(1) > barline[location="right"] > bar-style')?.textContent?.trim()
+    ).toBe("light-light");
+  });
+
   it("exported LilyPond does not overfill 3/4 when source has backup lanes", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

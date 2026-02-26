@@ -264,4 +264,49 @@ describe("MEI export", () => {
     expect(notes[2]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
     expect(notes[3]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
   });
+
+  it("roundtrips section-boundary double bar + explicit same-meter time via MEI measure metadata annot", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="24">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="right"><bar-style>light-light</bar-style></barline>
+    </measure>
+    <measure number="25">
+      <attributes><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="left"><bar-style>light-light</bar-style></barline>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mei = exportMusicXmlDomToMei(srcDoc);
+    expect(mei).toContain('type="musicxml-measure-meta"');
+    expect(mei).toContain("explicitTime=1");
+    expect(mei).toContain("beats=2");
+    expect(mei).toContain("beatType=4");
+    expect(mei).toContain("doubleBar=right");
+    expect(mei).toContain("doubleBar=left");
+
+    const roundtripXml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const m2 = outDoc.querySelector("part > measure:nth-of-type(2)");
+    expect(m2?.querySelector(":scope > attributes > time > beats")?.textContent?.trim()).toBe("2");
+    expect(m2?.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim()).toBe("4");
+    const m24RightDouble = outDoc.querySelector('part > measure:nth-of-type(1) > barline[location="right"] > bar-style');
+    const m25LeftDouble = outDoc.querySelector('part > measure:nth-of-type(2) > barline[location="left"] > bar-style');
+    const hasBoundaryDouble =
+      m24RightDouble?.textContent?.trim() === "light-light"
+      || m25LeftDouble?.textContent?.trim() === "light-light";
+    expect(hasBoundaryDouble).toBe(true);
+  });
 });

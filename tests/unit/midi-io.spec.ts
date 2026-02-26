@@ -257,6 +257,115 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(Math.abs(grace.durTicks - principal.durTicks)).toBeLessThanOrEqual(1);
   });
 
+  it("merges tied notes into one sustained playback event in MIDI mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <tie type="start"/><notations><tied type="start"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <tie type="stop"/><notations><tied type="stop"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const c4Events = midiMode.events
+      .filter((e) => e.midiNumber === 60)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(c4Events.length).toBe(1);
+    expect(c4Events[0]?.startTicks).toBe(0);
+    expect(c4Events[0]?.durTicks).toBeGreaterThanOrEqual(256);
+  });
+
+  it("keeps slurred notes longer than detached notes in MIDI mode", () => {
+    const baseXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        %NOTATIONS1%
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        %NOTATIONS2%
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const plainDoc = parseDoc(baseXml.replace("%NOTATIONS1%", "").replace("%NOTATIONS2%", ""));
+    const slurDoc = parseDoc(
+      baseXml
+        .replace("%NOTATIONS1%", '<notations><slur type="start" number="1"/></notations>')
+        .replace("%NOTATIONS2%", '<notations><slur type="stop" number="1"/></notations>')
+    );
+    const plain = buildPlaybackEventsFromMusicXmlDoc(plainDoc, 128, { mode: "midi" }).events
+      .sort((a, b) => a.startTicks - b.startTicks);
+    const slurred = buildPlaybackEventsFromMusicXmlDoc(slurDoc, 128, { mode: "midi" }).events
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(plain.length).toBe(2);
+    expect(slurred.length).toBe(2);
+    expect(slurred[0]?.durTicks ?? 0).toBeGreaterThan(plain[0]?.durTicks ?? 0);
+    expect(slurred[1]?.durTicks ?? 0).toBeGreaterThan(plain[1]?.durTicks ?? 0);
+  });
+
+  it("keeps timeline stable for underfull + implicit + regular-underfull sequence", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+    <measure number="X1" implicit="yes">
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="3">
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "playback" });
+    const sorted = result.events.slice().sort((a, b) => a.startTicks - b.startTicks);
+    expect(sorted.length).toBeGreaterThanOrEqual(4);
+    expect(sorted[0]?.startTicks).toBe(0);   // m1
+    expect(sorted[1]?.startTicks).toBe(256); // X1 (underfull m1 respected before implicit)
+    expect(sorted[2]?.startTicks).toBe(384); // m2
+    expect(sorted[3]?.startTicks).toBe(896); // m3 (m2 underfull but not followed by implicit -> full bar advance)
+  });
+
   it("applies metric beat accents in 4/4 when enabled", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -1137,5 +1246,99 @@ describe("midi-io MIDI import MVP", () => {
     expect(timeEvents[0]).toEqual({ startTicks: 0, beats: 3, beatType: 4 });
     expect(timeEvents[1]?.beats).toBe(6);
     expect(timeEvents[1]?.beatType).toBe(8);
+  });
+
+  it("keeps stable triplet-eighth timing in MusicXML playback extraction", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const events = result.events.slice().sort((a, b) => a.startTicks - b.startTicks);
+    expect(events.length).toBe(3);
+    expect(events[0]?.startTicks).toBe(0);
+    const d1 = (events[1]?.startTicks ?? 0) - (events[0]?.startTicks ?? 0);
+    const d2 = (events[2]?.startTicks ?? 0) - (events[1]?.startTicks ?? 0);
+    expect([42, 43]).toContain(d1);
+    expect([42, 43]).toContain(d2);
+    expect(d1 + d2).toBe(85);
+    expect(events.every((ev) => ev.durTicks > 0)).toBe(true);
+  });
+
+  it("keeps note timing extraction stable with staccato/accent notations", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/></articulations></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const result = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const events = result.events.slice().sort((a, b) => a.startTicks - b.startTicks);
+    expect(events.length).toBe(2);
+    expect(events[0]?.startTicks).toBe(0);
+    expect(events[1]?.startTicks).toBe(128);
+    expect(events[0]?.durTicks).toBeGreaterThan(0);
+    expect(events[0]?.durTicks ?? 0).toBeLessThanOrEqual(128);
+    expect(events[1]?.durTicks).toBeGreaterThan(0);
+    expect(events[1]?.durTicks ?? 0).toBeLessThanOrEqual(128);
+  });
+
+  it("does not duplicate FF58 events on explicit same-meter re-declaration", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="24">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="right"><bar-style>light-light</bar-style></barline>
+    </measure>
+    <measure number="25">
+      <attributes><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const timeEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, 128);
+    expect(timeEvents).toEqual([{ startTicks: 0, beats: 2, beatType: 4 }]);
   });
 });

@@ -28,6 +28,10 @@ type LilyMeasureHint = {
   implicit?: boolean;
   repeat?: "forward" | "backward";
   times?: number;
+  beats?: number;
+  beatType?: number;
+  explicitTime?: boolean;
+  doubleBar?: "left" | "right" | "both";
 };
 
 const xmlEscape = (value: string): string =>
@@ -430,6 +434,18 @@ const parseMksMeasureHints = (source: string): Map<string, Map<number, LilyMeasu
     }
     const times = Number.parseInt(String(params.times || ""), 10);
     if (Number.isFinite(times) && times > 1) hint.times = times;
+    const beats = Number.parseInt(String(params.beats || ""), 10);
+    if (Number.isFinite(beats) && beats > 0) hint.beats = Math.max(1, Math.round(beats));
+    const beatType = Number.parseInt(String(params.beattype || ""), 10);
+    if (Number.isFinite(beatType) && beatType > 0) hint.beatType = Math.max(1, Math.round(beatType));
+    const explicitTimeRaw = String(params.explicittime || "").trim().toLowerCase();
+    if (explicitTimeRaw) {
+      hint.explicitTime = explicitTimeRaw === "1" || explicitTimeRaw === "true" || explicitTimeRaw === "yes";
+    }
+    const doubleBarRaw = String(params.doublebar || "").trim().toLowerCase();
+    if (doubleBarRaw === "left" || doubleBarRaw === "right" || doubleBarRaw === "both") {
+      hint.doubleBar = doubleBarRaw;
+    }
     const byMeasure = out.get(voiceId) ?? new Map<number, LilyMeasureHint>();
     byMeasure.set(measureNo, hint);
     out.set(voiceId, byMeasure);
@@ -783,12 +799,21 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
       const partId = `P${i + 1}`;
       const measuresXml: string[] = [];
       const measureCapacity = Math.max(1, Math.round((480 * 4 * params.beats) / Math.max(1, params.beatType)));
+      let currentBeats = Math.max(1, Math.round(params.beats));
+      let currentBeatType = Math.max(1, Math.round(params.beatType));
       for (let m = 0; m < measureCount; m += 1) {
         const events = staff.measures[m] || [];
         const index1 = m + 1;
         const hint = staff.measureHintsByIndex?.get(index1) ?? null;
         const numberText = hint?.number?.trim() || String(index1);
         const implicitAttr = hint?.implicit ? ' implicit="yes"' : "";
+        const measureBeats = Math.max(1, Math.round(hint?.beats ?? currentBeats));
+        const measureBeatType = Math.max(1, Math.round(hint?.beatType ?? currentBeatType));
+        const shouldEmitTime =
+          m === 0
+          || hint?.explicitTime === true
+          || measureBeats !== currentBeats
+          || measureBeatType !== currentBeatType;
         let body = "";
         if (m === 0) {
           const clefXml =
@@ -803,7 +828,12 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
           const transposeXml = transpose && (Number.isFinite(transpose.chromatic) || Number.isFinite(transpose.diatonic))
             ? `<transpose>${Number.isFinite(transpose.diatonic) ? `<diatonic>${Math.round(Number(transpose.diatonic))}</diatonic>` : ""}${Number.isFinite(transpose.chromatic) ? `<chromatic>${Math.round(Number(transpose.chromatic))}</chromatic>` : ""}</transpose>`
             : "";
-          body += `<attributes><divisions>480</divisions><key><fifths>${params.fifths}</fifths><mode>${params.mode}</mode></key><time><beats>${params.beats}</beats><beat-type>${params.beatType}</beat-type></time>${transposeXml}${clefXml}</attributes>`;
+          body += `<attributes><divisions>480</divisions><key><fifths>${params.fifths}</fifths><mode>${params.mode}</mode></key><time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>${transposeXml}${clefXml}</attributes>`;
+        } else if (shouldEmitTime) {
+          body += `<attributes><time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time></attributes>`;
+        }
+        if (hint?.doubleBar === "left" || hint?.doubleBar === "both") {
+          body += `<barline location="left"><bar-style>light-light</bar-style></barline>`;
         }
         if (!events.length) {
           body += `<note><rest/><duration>${measureCapacity}</duration><voice>1</voice><type>whole</type></note>`;
@@ -815,6 +845,11 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
               : `<repeat direction="backward"/>`;
             body += `<barline location="right">${timesText}</barline>`;
           }
+          if (hint?.doubleBar === "right" || hint?.doubleBar === "both") {
+            body += `<barline location="right"><bar-style>light-light</bar-style></barline>`;
+          }
+          currentBeats = measureBeats;
+          currentBeatType = measureBeatType;
           measuresXml.push(`<measure number="${xmlEscape(numberText)}"${implicitAttr}>${body}</measure>`);
           continue;
         }
@@ -840,6 +875,11 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
             : `<repeat direction="backward"/>`;
           body += `<barline location="right">${timesText}</barline>`;
         }
+        if (hint?.doubleBar === "right" || hint?.doubleBar === "both") {
+          body += `<barline location="right"><bar-style>light-light</bar-style></barline>`;
+        }
+        currentBeats = measureBeats;
+        currentBeatType = measureBeatType;
         measuresXml.push(`<measure number="${xmlEscape(numberText)}"${implicitAttr}>${body}</measure>`);
       }
       return `<part id="${partId}">${measuresXml.join("")}</part>`;
@@ -1395,6 +1435,15 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
         fields.push(`implicit=${isImplicit ? 1 : 0}`);
         const leftRepeat = measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]');
         const rightRepeat = measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]');
+        const explicitTimeNode = measure.querySelector(":scope > attributes > time");
+        const beats = Number.parseInt(explicitTimeNode?.querySelector(":scope > beats")?.textContent || "", 10);
+        const beatType = Number.parseInt(explicitTimeNode?.querySelector(":scope > beat-type")?.textContent || "", 10);
+        const hasLeftDouble = (measure.querySelector(':scope > barline[location="left"] > bar-style')?.textContent || "")
+          .trim()
+          .toLowerCase() === "light-light";
+        const hasRightDouble = (measure.querySelector(':scope > barline[location="right"] > bar-style')?.textContent || "")
+          .trim()
+          .toLowerCase() === "light-light";
         if (leftRepeat) {
           fields.push("repeat=forward");
         } else if (rightRepeat) {
@@ -1404,6 +1453,18 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
             10
           );
           if (Number.isFinite(times) && times > 1) fields.push(`times=${times}`);
+        }
+        if (explicitTimeNode) {
+          fields.push("explicitTime=1");
+          if (Number.isFinite(beats) && beats > 0) fields.push(`beats=${Math.round(beats)}`);
+          if (Number.isFinite(beatType) && beatType > 0) fields.push(`beatType=${Math.round(beatType)}`);
+        }
+        if (hasLeftDouble && hasRightDouble) {
+          fields.push("doubleBar=both");
+        } else if (hasLeftDouble) {
+          fields.push("doubleBar=left");
+        } else if (hasRightDouble) {
+          fields.push("doubleBar=right");
         }
         out.push(fields.join(" "));
       }
