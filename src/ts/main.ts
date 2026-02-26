@@ -73,6 +73,7 @@ type UiState = {
   lastDispatchResult: DispatchResult | null;
   lastSaveResult: SaveResult | null;
   lastSuccessfulSaveXml: string;
+  importWarningSummary: string;
 };
 
 type NoteLocation = {
@@ -205,6 +206,7 @@ const state: UiState = {
   lastDispatchResult: null,
   lastSaveResult: null,
   lastSuccessfulSaveXml: "",
+  importWarningSummary: "",
 };
 
 let isPlaying = false;
@@ -459,6 +461,27 @@ const stripMetadataFromMusicXml = (xml: string, keepMetadata: boolean): string =
     attributes.remove();
   }
   return serializeMusicXmlDocument(doc);
+};
+
+const summarizeImportedDiagWarnings = (xml: string): string => {
+  const doc = parseMusicXmlDocument(xml);
+  if (!doc) return "";
+  let overfullReflowCount = 0;
+  let parserWarningCount = 0;
+  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="diag:"]'));
+  for (const field of fields) {
+    const name = (field.getAttribute("name") || "").trim().toLowerCase();
+    if (name === "diag:count") continue;
+    const payload = field.textContent?.trim() ?? "";
+    const m = payload.match(/(?:^|;)code=([^;]+)/);
+    const code = (m?.[1] ?? "").trim().toUpperCase();
+    if (code === "OVERFULL_REFLOWED") overfullReflowCount += 1;
+    if (code === "ABC_IMPORT_WARNING") parserWarningCount += 1;
+  }
+  const parts: string[] = [];
+  if (overfullReflowCount > 0) parts.push(`ABC overfull auto-reflow: ${overfullReflowCount}`);
+  if (parserWarningCount > 0) parts.push(`ABC parser warnings: ${parserWarningCount}`);
+  return parts.join(" / ");
 };
 
 const resolveMusicXmlOutput = (): string => {
@@ -1210,6 +1233,11 @@ const renderUiMessage = (): void => {
   if (save && !save.ok && save.diagnostics.length > 0) {
     const d = save.diagnostics[0];
     showMessage("error", `Error: ${d.message} (${d.code})`);
+    return;
+  }
+
+  if (state.importWarningSummary) {
+    showMessage("warning", `Warning: ${state.importWarningSummary}`);
     return;
   }
 
@@ -1978,10 +2006,11 @@ const loadFromText = (xml: string): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
+  const selectedSourceType = getSelectedSourceType();
   const keepMetadata = keepMetadataInMusicXml.checked;
   const result = await resolveLoadFlow({
     isNewType: inputEntryNew.checked,
-    sourceType: getSelectedSourceType(),
+    sourceType: selectedSourceType,
     isFileMode: inputEntryFile.checked,
     selectedFile: fileInput.files?.[0] ?? null,
     xmlSourceText: xmlInput.value,
@@ -1996,6 +2025,7 @@ const onLoadClick = async (): Promise<void> => {
       convertAbcToMusicXml(abcSource, {
         sourceMetadata: keepMetadata,
         debugMetadata: keepMetadata,
+        overfullCompatibilityMode: true,
       }),
     convertMeiToMusicXml: (meiSource) =>
       convertMeiToMusicXml(meiSource, {
@@ -2026,6 +2056,7 @@ const onLoadClick = async (): Promise<void> => {
   });
 
   if (!result.ok) {
+    state.importWarningSummary = "";
     state.lastDispatchResult = {
       ok: false,
       dirtyChanged: false,
@@ -2044,6 +2075,8 @@ const onLoadClick = async (): Promise<void> => {
   if (result.nextXmlInputText !== undefined) {
     xmlInput.value = result.nextXmlInputText;
   }
+  state.importWarningSummary =
+    selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
   // Persist immediately on explicit load actions (Load / Load sample).
   writeLocalDraft(result.xmlToLoad);
   loadFromText(result.xmlToLoad);

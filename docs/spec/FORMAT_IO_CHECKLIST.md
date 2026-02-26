@@ -144,6 +144,19 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Roundtrip golden test for representative fixtures
 - [ ] Regression test for known tricky cases
 
+### CFFP Standard (Cross-Format Focus Parity)
+
+- [ ] For each focused notation topic, add one minimal fixture and run:
+  - `MusicXML -> format -> MusicXML` for all supported formats
+  - Target formats: `musescore / midi / vsqx / abc / mei / lilypond`
+- [ ] Define per-format policy for the topic:
+  - `must-preserve`: semantic element must remain after roundtrip
+  - `allowed-degrade`: degradation is accepted and documented
+- [ ] Keep assertion scope narrow for the topic:
+  - Example for trill: pitch/start timing baseline for all formats, trill-presence only where `must-preserve`
+- [ ] Store CFFP case IDs and policy matrix in `docs/spec/TEST_CFFP.md`
+- [ ] Add corresponding IDs to `docs/spec/TEST_MATRIX.md` for visibility in overall planning
+
 ---
 
 ## 8. Build and Release Hygiene

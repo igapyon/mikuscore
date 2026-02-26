@@ -772,7 +772,7 @@ describe("LilyPond I/O", () => {
     expect(third?.querySelector(':scope > notations > tuplet[type="stop"]')?.getAttribute("number")).toBe("1");
   });
 
-  it("currently degrades octave-shift directions on LilyPond roundtrip (policy explicit)", () => {
+  it("exports and imports octave-shift directions via %@mks octshift metadata", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
@@ -796,12 +796,19 @@ describe("LilyPond I/O", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("% %@mks octshift voice=P1 measure=1 type=up size=8 number=1");
+    expect(lily).toContain("% %@mks octshift voice=P1 measure=2 type=stop size=8 number=1");
     const outDoc = parseMusicXmlDocument(convertLilyPondToMusicXml(lily));
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("part > measure:nth-of-type(1) > note > pitch > step")?.textContent?.trim()).toBe("C");
     expect(outDoc.querySelector("part > measure:nth-of-type(2) > note > pitch > step")?.textContent?.trim()).toBe("D");
-    expect(outDoc.querySelector("direction > direction-type > octave-shift")).toBeNull();
+    expect(
+      outDoc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type=\"up\"]")
+    ).not.toBeNull();
+    expect(
+      outDoc.querySelector("part > measure:nth-of-type(2) > direction > direction-type > octave-shift[type=\"stop\"]")
+    ).not.toBeNull();
   });
 
   it("exports and imports trill ornaments via %@mks trill metadata", () => {

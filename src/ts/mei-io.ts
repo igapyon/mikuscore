@@ -88,6 +88,40 @@ const toPname = (stepText: string): string => {
   return "c";
 };
 
+const lyricWordposFromSyllabic = (syllabicText: string): string => {
+  const v = String(syllabicText || "").trim().toLowerCase();
+  if (v === "begin") return "i";
+  if (v === "middle") return "m";
+  if (v === "end") return "t";
+  return "";
+};
+
+const lyricSyllabicFromWordpos = (wordposText: string): string => {
+  const v = String(wordposText || "").trim().toLowerCase();
+  if (v === "i") return "begin";
+  if (v === "m") return "middle";
+  if (v === "t") return "end";
+  return "single";
+};
+
+const extractMusicXmlLyric = (note: Element): { text: string; syllabic: string } | null => {
+  const lyric = note.querySelector(":scope > lyric");
+  if (!lyric) return null;
+  const text = lyric.querySelector(":scope > text")?.textContent?.trim() ?? "";
+  if (!text) return null;
+  const syllabic = lyric.querySelector(":scope > syllabic")?.textContent?.trim() ?? "";
+  return { text, syllabic };
+};
+
+const extractMeiLyric = (meiNote: Element): { text: string; syllabic: string } | null => {
+  const syl = meiNote.querySelector(":scope > verse > syl");
+  if (!syl) return null;
+  const text = syl.textContent?.trim() ?? "";
+  if (!text) return null;
+  const syllabic = lyricSyllabicFromWordpos(syl.getAttribute("wordpos") || "");
+  return { text, syllabic };
+};
+
 const readPartNameMap = (doc: Document): Map<string, string> => {
   const map = new Map<string, string>();
   for (const scorePart of Array.from(doc.querySelectorAll("score-partwise > part-list > score-part"))) {
@@ -193,6 +227,12 @@ const buildSimplePitchNote = (note: Element): string => {
     attrs.push(`grace="${slash ? "acc" : "unacc"}"`);
   }
   if (arts.length) attrs.push(`artic="${esc(arts.join(" "))}"`);
+  const lyric = extractMusicXmlLyric(note);
+  if (lyric) {
+    const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
+    const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
+    return `<note ${attrs.join(" ")}><verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse></note>`;
+  }
   return `<note ${attrs.join(" ")}/>`;
 };
 
@@ -265,6 +305,12 @@ const buildLayerContent = (notes: Element[]): string => {
         `oct="${esc(octaveText)}"`,
       ];
       if (accid) noteAttrs.push(`accid="${accid}"`);
+      const lyric = extractMusicXmlLyric(n);
+      if (lyric) {
+        const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
+        const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
+        return `<note ${noteAttrs.join(" ")}><verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse></note>`;
+      }
       return `<note ${noteAttrs.join(" ")}/>`;
     });
     out.push(`<chord ${chordAttrs.join(" ")}>${members.join("")}</chord>`);
@@ -594,9 +640,13 @@ const buildMusicXmlNoteFromMeiNote = (
   const isGrace = graceAttr === "acc" || graceAttr === "unacc";
   const graceXml = isGrace ? `<grace${graceAttr === "acc" ? ' slash="yes"' : ""}/>` : "";
   const durationXml = isGrace ? "" : `<duration>${durationTicks}</duration>`;
+  const lyric = extractMeiLyric(meiNote);
+  const lyricXml = lyric
+    ? `<lyric>${lyric.syllabic ? `<syllabic>${xmlEscape(lyric.syllabic)}</syllabic>` : ""}<text>${xmlEscape(lyric.text)}</text></lyric>`
+    : "";
   return `<note>${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${durationXml}<voice>${xmlEscape(
     voice
-  )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}</note>`;
+  )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}${lyricXml}</note>`;
 };
 
 const parseLayerEvents = (layer: Element, divisions: number, voice: string): ParsedMeiEvent[] => {
@@ -684,9 +734,13 @@ const parseLayerEvents = (layer: Element, divisions: number, voice: string): Par
             : index === 0 && tupletXml.length
               ? `<notations>${tupletXml}</notations>`
             : "";
+          const lyric = extractMeiLyric(note);
+          const lyricXml = lyric
+            ? `<lyric>${lyric.syllabic ? `<syllabic>${xmlEscape(lyric.syllabic)}</syllabic>` : ""}<text>${xmlEscape(lyric.text)}</text></lyric>`
+            : "";
           return `<note>${chordXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch><duration>${ticks}</duration><voice>${xmlEscape(
             voice
-          )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}</note>`;
+          )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}${lyricXml}</note>`;
         })
         .join("");
       events.push({ kind: "chord", durationTicks: ticks, xml: noteXml });

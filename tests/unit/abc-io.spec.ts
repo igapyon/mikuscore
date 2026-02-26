@@ -249,6 +249,27 @@ C D E F G A B c d |`;
     ).toContain("code=OVERFULL_REFLOWED");
   });
 
+  it("ABC import can disable overfull compatibility reflow", () => {
+    const overfullAbc = `X:1
+T:Overfull strict
+M:4/4
+L:1/8
+K:C
+V:1
+C D E F G A B c d |`;
+    const xml = convertAbcToMusicXml(overfullAbc, { overfullCompatibilityMode: false });
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector('miscellaneous-field[name="diag:count"]')).toBeNull();
+
+    const core = new ScoreCore();
+    core.load(xml);
+    const save = core.save();
+    expect(save.ok).toBe(false);
+    expect(save.diagnostics[0]?.code).toBe("MEASURE_OVERFULL");
+  });
+
   it("records ABC parser fallback warnings into diag:* fields", () => {
     const abc = `X:1
 T:Bad header
@@ -291,6 +312,26 @@ V:1
     core.load(xml);
     const save = core.save();
     expect(save.ok).toBe(true);
+  });
+
+  it("ABC->MusicXML parses turn decoration and grace slash variant", () => {
+    const abc = `X:1
+T:Turn test
+M:4/4
+L:1/8
+K:C
+V:1
+{/g}!turn!a2 b2 c2 d2 |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(':scope > grace[slash="yes"]')).not.toBeNull();
+    const principal = notes.find((n) => n.querySelector(":scope > grace") === null);
+    expect(principal?.querySelector(":scope > notations > ornaments > turn")).not.toBeNull();
   });
 
   it("ABC->MusicXML parses staccato decoration", () => {
@@ -475,6 +516,53 @@ V:1
     if (!outDoc) return;
     expect(outDoc.querySelector("note > grace")).not.toBeNull();
     expect(outDoc.querySelector("note > notations > ornaments > trill-mark")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC exports turn and grace slash notes and roundtrips them", () => {
+    const xmlWithTurn = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <grace slash="yes"/>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <voice>1</voice><type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <notations><ornaments><turn/></ornaments></notations>
+      </note>
+      <note>
+        <rest/><duration>1920</duration><voice>1</voice><type>half</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithTurn);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!turn!");
+    expect(abc).toMatch(/\{\/[^}]+\}/);
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector('note > grace[slash="yes"]')).not.toBeNull();
+    expect(outDoc.querySelector("note > notations > ornaments > turn")).not.toBeNull();
   });
 
   it("MusicXML->ABC exports trill when encoded as ornaments wavy-line start", () => {
