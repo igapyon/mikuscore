@@ -118,6 +118,106 @@ describe("LilyPond I/O", () => {
     expect(doc.querySelectorAll("score-partwise > part").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("roundtrips same-staff multi-voice note via %@mks lanes metadata", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>960</duration><voice>1</voice><type>half</type>
+      </note>
+      <backup><duration>960</duration></backup>
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>2</voice><type>quarter</type>
+      </note>
+      <note>
+        <pitch><step>B</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>2</voice><type>quarter</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const lily = exportMusicXmlDomToLilyPond(srcDoc);
+    expect(lily).toContain("%@mks lanes voice=P1 measure=1 data=");
+
+    const roundtripXml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const e5Half = outDoc.querySelector(
+      "part > measure:nth-of-type(1) > note > pitch > step"
+    );
+    const measureNotes = outDoc.querySelectorAll("part > measure:nth-of-type(1) > note");
+    const backup = outDoc.querySelector("part > measure:nth-of-type(1) > backup > duration")?.textContent?.trim();
+
+    expect(measureNotes.length).toBe(3);
+    expect(backup).toBe("960");
+    expect(e5Half?.textContent?.trim()).toBe("E");
+    expect(
+      outDoc.querySelector("part > measure:nth-of-type(1) > note > pitch > octave")?.textContent?.trim()
+    ).toBe("5");
+    expect(
+      outDoc.querySelector("part > measure:nth-of-type(1) > note > duration")?.textContent?.trim()
+    ).toBe("960");
+  });
+
+  it("keeps final 16th note in 7:8 tuplet + 16th-run measure (m138-like)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>F</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>A</step><octave>5</octave></pitch><duration>69</duration><voice>1</voice><type>32nd</type><time-modification><actual-notes>7</actual-notes><normal-notes>8</normal-notes></time-modification></note>
+      <note><pitch><step>D</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>F</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>A</step><octave>6</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>D</step><octave>7</octave></pitch><duration>120</duration><voice>1</voice><type>16th</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const lily = exportMusicXmlDomToLilyPond(srcDoc);
+    const roundtripXml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const m1Notes = outDoc.querySelectorAll("part > measure:nth-of-type(1) > note");
+    expect(m1Notes.length).toBe(11);
+    const lastM1Step = outDoc.querySelector("part > measure:nth-of-type(1) > note:last-of-type > pitch > step")?.textContent?.trim();
+    const lastM1Octave = outDoc.querySelector("part > measure:nth-of-type(1) > note:last-of-type > pitch > octave")?.textContent?.trim();
+    expect(lastM1Step).toBe("D");
+    expect(lastM1Octave).toBe("7");
+  });
+
   it("imports staff clef from LilyPond (\\clef bass)", () => {
     const lily = `\\version "2.24.0"
 \\time 4/4
@@ -692,6 +792,39 @@ describe("LilyPond I/O", () => {
     core.load(roundtripXml);
     const saved = core.save();
     expect(saved.ok).toBe(true);
+  });
+
+  it("chooses dense lane for single-staff backup measure (m97-like) instead of collapsing to one long note", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note><pitch><step>E</step><octave>5</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+      <backup><duration>960</duration></backup>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><chord/><pitch><step>E</step><octave>5</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><chord/><pitch><step>D</step><octave>5</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>240</duration><voice>2</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain("<a' c''>8 <c'' e''>8 <b' d''>8 <a' c''>8");
+    expect(lily).toContain("%@mks lanes voice=P1 measure=1 data=");
+    expect(lily).not.toContain("dropped note/rest that would overfill a measure");
   });
 
   it("exports multi-staff part as PianoStaff with per-staff blocks", () => {

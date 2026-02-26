@@ -49,6 +49,23 @@ const buildFileTimestamp = (): string => {
   ].join("");
 };
 
+const prettyPrintXmlWithTwoSpaceIndent = (xml: string): string => {
+  const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indentLevel = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indentLevel = Math.max(0, indentLevel - 1);
+    lines.push(`${"  ".repeat(indentLevel)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indentLevel += 1;
+  }
+  return lines.join("\n");
+};
+
 export const triggerFileDownload = (payload: DownloadFilePayload): void => {
   const url = URL.createObjectURL(payload.blob);
   const a = document.createElement("a");
@@ -268,9 +285,10 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
 
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
   const ts = buildFileTimestamp();
+  const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
   return {
     fileName: `mikuscore-${ts}.vsqx`,
-    blob: new Blob([vsqxText], { type: "application/xml;charset=utf-8" }),
+    blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
   };
 };
 
@@ -418,10 +436,11 @@ export const createMuseScoreDownloadPayload = async (
   } catch {
     return null;
   }
+  const formattedMscx = prettyPrintXmlWithTwoSpaceIndent(mscxText);
 
   const ts = buildFileTimestamp();
   if (options.compressed === true) {
-    const msczBytes = await makeMsczBytes(mscxText);
+    const msczBytes = await makeMsczBytes(formattedMscx);
     return {
       fileName: `mikuscore-${ts}.mscz`,
       blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
@@ -429,7 +448,7 @@ export const createMuseScoreDownloadPayload = async (
   }
   return {
     fileName: `mikuscore-${ts}.mscx`,
-    blob: new Blob([mscxText], { type: "application/xml;charset=utf-8" }),
+    blob: new Blob([formattedMscx], { type: "application/xml;charset=utf-8" }),
   };
 };
 

@@ -1676,7 +1676,11 @@ const startPlayback = async () => {
     const ok = await unlockAudioForPlayback();
     if (!ok)
         return;
-    await (0, playback_flow_1.startPlayback)(playbackFlowOptions, { isLoaded: state.loaded, core });
+    await (0, playback_flow_1.startPlayback)(playbackFlowOptions, {
+        isLoaded: state.loaded,
+        core,
+        startFromMeasure: selectedMeasure,
+    });
 };
 const startMeasurePlayback = async () => {
     const ok = await unlockAudioForPlayback();
@@ -7717,6 +7721,74 @@ const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) =>
         })),
     };
 };
+const parsePositiveInt = (text) => {
+    const value = Number.parseInt(String(text !== null && text !== void 0 ? text : "").trim(), 10);
+    return Number.isFinite(value) && value > 0 ? value : null;
+};
+const resolveMeasureStartTickInPart = (doc, startFromMeasure, fallbackDivisions) => {
+    var _a, _b, _c, _d, _e;
+    const part = Array.from(doc.querySelectorAll("score-partwise > part")).find((p) => { var _a; return ((_a = p.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim() === String(startFromMeasure.partId || "").trim(); });
+    if (!part)
+        return null;
+    let divisions = Math.max(1, Math.round(fallbackDivisions));
+    let beats = 4;
+    let beatType = 4;
+    let tick = 0;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    for (const measure of measures) {
+        const attrs = measure.querySelector(":scope > attributes");
+        const nextDivisions = parsePositiveInt((_a = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > divisions")) === null || _a === void 0 ? void 0 : _a.textContent);
+        if (nextDivisions)
+            divisions = nextDivisions;
+        const nextBeats = parsePositiveInt((_b = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > time > beats")) === null || _b === void 0 ? void 0 : _b.textContent);
+        if (nextBeats)
+            beats = nextBeats;
+        const nextBeatType = parsePositiveInt((_c = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > time > beat-type")) === null || _c === void 0 ? void 0 : _c.textContent);
+        if (nextBeatType)
+            beatType = nextBeatType;
+        const measureNo = ((_d = measure.getAttribute("number")) !== null && _d !== void 0 ? _d : "").trim();
+        if (measureNo === String((_e = startFromMeasure.measureNumber) !== null && _e !== void 0 ? _e : "").trim()) {
+            return tick;
+        }
+        const measureTicks = Math.max(1, Math.round((divisions * beats * 4) / Math.max(1, beatType)));
+        tick += measureTicks;
+    }
+    return null;
+};
+const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startTick) => {
+    if (!Number.isFinite(startTick) || startTick <= 0) {
+        return { parsedPlayback, tempoEvents, controlEvents };
+    }
+    const safeStartTick = Math.max(0, Math.round(startTick));
+    const trimmedEvents = parsedPlayback.events
+        .filter((event) => event.startTicks >= safeStartTick)
+        .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+    const sortedTempo = (tempoEvents !== null && tempoEvents !== void 0 ? tempoEvents : [])
+        .slice()
+        .map((event) => ({
+        startTicks: Math.max(0, Math.round(event.startTicks)),
+        bpm: Math.max(1, Math.round(event.bpm || parsedPlayback.tempo || 120)),
+    }))
+        .sort((a, b) => a.startTicks - b.startTicks);
+    const lastTempoBeforeOrAtStart = sortedTempo
+        .slice()
+        .reverse()
+        .find((event) => event.startTicks <= safeStartTick);
+    const trimmedTempoEvents = sortedTempo
+        .filter((event) => event.startTicks > safeStartTick)
+        .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+    if (lastTempoBeforeOrAtStart) {
+        trimmedTempoEvents.unshift({ startTicks: 0, bpm: lastTempoBeforeOrAtStart.bpm });
+    }
+    const trimmedControlEvents = (controlEvents !== null && controlEvents !== void 0 ? controlEvents : [])
+        .filter((event) => event.startTicks >= safeStartTick)
+        .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
+    return {
+        parsedPlayback: { ...parsedPlayback, events: trimmedEvents },
+        tempoEvents: trimmedTempoEvents,
+        controlEvents: trimmedControlEvents,
+    };
+};
 const stopPlayback = (options) => {
     options.engine.stop();
     options.setIsPlaying(false);
@@ -7759,18 +7831,28 @@ const startPlayback = async (options, params) => {
         metricAccentEnabled: options.getMetricAccentEnabled(),
         metricAccentProfile: options.getMetricAccentProfile(),
     });
-    const events = parsedPlayback.events;
+    let effectiveParsedPlayback = parsedPlayback;
+    let effectiveTempoEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
+    let effectiveControlEvents = useMidiLikePlayback
+        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+        : [];
+    if (params.startFromMeasure) {
+        const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
+        if (startTick !== null && startTick > 0) {
+            const trimmed = trimPlaybackFromTick(effectiveParsedPlayback, effectiveTempoEvents, effectiveControlEvents, startTick);
+            effectiveParsedPlayback = trimmed.parsedPlayback;
+            effectiveTempoEvents = trimmed.tempoEvents;
+            effectiveControlEvents = trimmed.controlEvents;
+        }
+    }
+    const events = effectiveParsedPlayback.events;
     if (events.length === 0) {
         options.setPlaybackText("Playback: no playable notes");
         options.renderControlState();
         return;
     }
-    const tempoEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const controlEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
     const timeSignatureEvents = useMidiLikePlayback
         ? (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
         : [];
@@ -7780,7 +7862,7 @@ const startPlayback = async (options, params) => {
     const waveform = options.getPlaybackWaveform();
     let midiBytes;
     try {
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), controlEvents, tempoEvents, timeSignatureEvents, keySignatureEvents);
+        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, effectiveParsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), effectiveControlEvents, effectiveTempoEvents, timeSignatureEvents, keySignatureEvents);
     }
     catch (error) {
         options.setPlaybackText("Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")");
@@ -7788,7 +7870,7 @@ const startPlayback = async (options, params) => {
         return;
     }
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, () => {
+        await options.engine.playSchedule(toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents), waveform, () => {
             options.setIsPlaying(false);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
@@ -7800,7 +7882,10 @@ const startPlayback = async (options, params) => {
         return;
     }
     options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: ${events.length} notes / mode ${playbackMode} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
+    const fromMeasureLabel = params.startFromMeasure
+        ? ` / from measure ${params.startFromMeasure.measureNumber}`
+        : "";
+    options.setPlaybackText(`Playing: ${events.length} notes / mode ${playbackMode}${fromMeasureLabel} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
     options.renderControlState();
     options.renderAll();
 };
@@ -8540,6 +8625,25 @@ const buildFileTimestamp = () => {
         pad2(now.getMinutes()),
     ].join("");
 };
+const prettyPrintXmlWithTwoSpaceIndent = (xml) => {
+    const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+    const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+    let indentLevel = 0;
+    const lines = [];
+    for (const rawToken of split) {
+        const token = rawToken.trim();
+        if (!token)
+            continue;
+        if (/^<\//.test(token))
+            indentLevel = Math.max(0, indentLevel - 1);
+        lines.push(`${"  ".repeat(indentLevel)}${token}`);
+        const isOpening = /^<[^!?/][^>]*>$/.test(token);
+        const isSelfClosing = /\/>$/.test(token);
+        if (isOpening && !isSelfClosing)
+            indentLevel += 1;
+    }
+    return lines.join("\n");
+};
 const triggerFileDownload = (payload) => {
     const url = URL.createObjectURL(payload.blob);
     const a = document.createElement("a");
@@ -8740,9 +8844,10 @@ const createSvgDownloadPayload = (svgText) => {
 exports.createSvgDownloadPayload = createSvgDownloadPayload;
 const createVsqxDownloadPayload = (vsqxText) => {
     const ts = buildFileTimestamp();
+    const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
     return {
         fileName: `mikuscore-${ts}.vsqx`,
-        blob: new Blob([vsqxText], { type: "application/xml;charset=utf-8" }),
+        blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
     };
 };
 exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
@@ -8859,9 +8964,10 @@ const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScor
     catch (_a) {
         return null;
     }
+    const formattedMscx = prettyPrintXmlWithTwoSpaceIndent(mscxText);
     const ts = buildFileTimestamp();
     if (options.compressed === true) {
-        const msczBytes = await makeMsczBytes(mscxText);
+        const msczBytes = await makeMsczBytes(formattedMscx);
         return {
             fileName: `mikuscore-${ts}.mscz`,
             blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
@@ -8869,7 +8975,7 @@ const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScor
     }
     return {
         fileName: `mikuscore-${ts}.mscx`,
-        blob: new Blob([mscxText], { type: "application/xml;charset=utf-8" }),
+        blob: new Blob([formattedMscx], { type: "application/xml;charset=utf-8" }),
     };
 };
 exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
@@ -12264,12 +12370,52 @@ const parseMksAccidentalHints = (source) => {
     }
     return out;
 };
+const parseMksLaneHints = (source) => {
+    var _a;
+    const out = new Map();
+    const lines = String(source || "").split("\n");
+    for (const lineRaw of lines) {
+        const trimmed = lineRaw.trim().replace(/^%\s*/, "");
+        const m = trimmed.match(/^%@mks\s+lanes\s+(.+)$/i);
+        if (!m)
+            continue;
+        const params = {};
+        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+        let kv;
+        while ((kv = kvRegex.exec(m[1])) !== null) {
+            params[String(kv[1]).toLowerCase()] = String(kv[2]);
+        }
+        const voiceId = normalizeVoiceId(String(params.voice || "").trim(), "");
+        const measureNo = Number.parseInt(String(params.measure || ""), 10);
+        const encoded = String(params.data || "").trim();
+        if (!voiceId || !Number.isFinite(measureNo) || measureNo <= 0 || !encoded)
+            continue;
+        const lanes = encoded
+            .split(",")
+            .map((entry) => {
+            try {
+                return decodeURIComponent(entry);
+            }
+            catch (_a) {
+                return "";
+            }
+        })
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+        if (!lanes.length)
+            continue;
+        const byMeasure = (_a = out.get(voiceId)) !== null && _a !== void 0 ? _a : new Map();
+        byMeasure.set(measureNo, lanes);
+        out.set(voiceId, byMeasure);
+    }
+    return out;
+};
 const applyArticulationHintsToMeasures = (measures, voiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey) => {
     var _a, _b;
     for (let mi = 0; mi < measures.length; mi += 1) {
         let noteEventNo = 0;
         for (const event of (_a = measures[mi]) !== null && _a !== void 0 ? _a : []) {
-            if (event.kind === "rest")
+            if (event.kind === "rest" || event.kind === "backup")
                 continue;
             noteEventNo += 1;
             const key = `${voiceId}#${mi + 1}#${noteEventNo}`;
@@ -12500,6 +12646,7 @@ const unwrapRelativeBlock = (sourceBody) => {
 };
 const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, options = {}) => {
     var _a, _b, _c;
+    const SMALL_OVERFLOW_TOLERANCE_DIV = 8;
     const relative = unwrapRelativeBlock(body);
     let previousMidi = relative.relativeMidi;
     const clean = stripLilyComments(relative.body)
@@ -12523,6 +12670,12 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
         const current = measures[measures.length - 1];
         const used = current.reduce((sum, item) => sum + item.durationDiv, 0);
         if (used + event.durationDiv > measureCapacity) {
+            const overflow = used + event.durationDiv - measureCapacity;
+            if (overflow <= SMALL_OVERFLOW_TOLERANCE_DIV) {
+                warnings.push(`${contextLabel}: accepted slight overfill due to duration rounding.`);
+                current.push(event);
+                return;
+            }
             if (event.durationDiv > measureCapacity) {
                 warnings.push(`${contextLabel}: overfull measure; dropped oversized event.`);
                 return;
@@ -12729,6 +12882,10 @@ const buildDirectMusicXmlFromStaffBlocks = (params) => {
                 continue;
             }
             for (const event of events) {
+                if (event.kind === "backup") {
+                    body += `<backup><duration>${event.durationDiv}</duration></backup>`;
+                    continue;
+                }
                 const accidentalXml = event.kind !== "rest" && event.accidentalText
                     ? `<accidental>${event.accidentalText}</accidental>`
                     : "";
@@ -12785,19 +12942,47 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
     const graceHintByKey = parseMksGraceHints(source);
     const tupletHintByKey = parseMksTupletHints(source);
     const accidentalHintByKey = parseMksAccidentalHints(source);
+    const laneHintByVoiceId = parseMksLaneHints(source);
     if (!staffBlocks.length)
         return null;
     const warnings = [];
-    const staffs = staffBlocks.map((staff, index) => ({
-        voiceId: staff.voiceId || `P${index + 1}`,
-        clef: normalizeAbcClefName(staff.clef || "treble"),
-        measures: applyArticulationHintsToMeasures(parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
-            voiceId: normalizeVoiceId(staff.voiceId, `P${index + 1}`),
+    const staffs = staffBlocks.map((staff, index) => {
+        var _a;
+        const normalizedVoiceId = normalizeVoiceId(staff.voiceId, `P${index + 1}`);
+        const measures = parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
+            voiceId: normalizedVoiceId,
             graceHintByKey,
-        }), normalizeVoiceId(staff.voiceId, `P${index + 1}`), articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey),
-        transpose: transposeHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || staff.transpose || null,
-        measureHintsByIndex: measureHintByVoiceId.get(normalizeVoiceId(staff.voiceId, `P${index + 1}`)) || undefined,
-    }));
+        });
+        const laneHintsForVoice = laneHintByVoiceId.get(normalizedVoiceId);
+        if (laneHintsForVoice && laneHintsForVoice.size > 0) {
+            for (const [measureNo, laneBodies] of laneHintsForVoice.entries()) {
+                if (!Number.isFinite(measureNo) || measureNo <= 0 || laneBodies.length <= 1)
+                    continue;
+                const merged = [];
+                let previousLaneDuration = 0;
+                for (let laneIndex = 0; laneIndex < laneBodies.length; laneIndex += 1) {
+                    const laneParsed = parseLilyDirectBody(laneBodies[laneIndex], warnings, `staff ${index + 1} lane ${laneIndex + 1}`, meter.beats, meter.beatType, {
+                        voiceId: normalizedVoiceId,
+                        graceHintByKey,
+                    });
+                    const laneEvents = (_a = laneParsed[0]) !== null && _a !== void 0 ? _a : [];
+                    if (laneIndex > 0 && previousLaneDuration > 0) {
+                        merged.push({ kind: "backup", durationDiv: previousLaneDuration });
+                    }
+                    merged.push(...laneEvents);
+                    previousLaneDuration = laneEvents.reduce((sum, event) => sum + (event.kind === "backup" ? 0 : event.durationDiv), 0);
+                }
+                measures[measureNo - 1] = merged;
+            }
+        }
+        return {
+            voiceId: staff.voiceId || `P${index + 1}`,
+            clef: normalizeAbcClefName(staff.clef || "treble"),
+            measures: applyArticulationHintsToMeasures(measures, normalizedVoiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey),
+            transpose: transposeHintByVoiceId.get(normalizedVoiceId) || staff.transpose || null,
+            measureHintsByIndex: measureHintByVoiceId.get(normalizedVoiceId) || undefined,
+        };
+    });
     if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
         return null;
     }
@@ -13140,35 +13325,71 @@ const resolveLilyClefForPartStaff = (part, staffNo) => {
     }
     return "treble";
 };
-const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+const buildLilyBodyFromPart = (part, warnings, options = {}) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    const SMALL_OVERFLOW_TOLERANCE_DIV = 8;
+    const targetStaffNo = (_a = options.targetStaffNo) !== null && _a !== void 0 ? _a : null;
+    const laneHintVoiceId = (_b = options.laneHintVoiceId) !== null && _b !== void 0 ? _b : "";
+    const laneHintCommentsOut = options.laneHintCommentsOut;
     const tokens = [];
     let currentDivisions = 480;
     let currentBeats = 4;
     let currentBeatType = 4;
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-        const parsedDivisions = Number.parseInt(((_a = measure.querySelector(":scope > attributes > divisions")) === null || _a === void 0 ? void 0 : _a.textContent) || "", 10);
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+        const measure = measures[measureIndex];
+        const parsedDivisions = Number.parseInt(((_c = measure.querySelector(":scope > attributes > divisions")) === null || _c === void 0 ? void 0 : _c.textContent) || "", 10);
         if (Number.isFinite(parsedDivisions) && parsedDivisions > 0) {
             currentDivisions = parsedDivisions;
         }
-        const parsedBeats = Number.parseInt(((_b = measure.querySelector(":scope > attributes > time > beats")) === null || _b === void 0 ? void 0 : _b.textContent) || "", 10);
+        const parsedBeats = Number.parseInt(((_d = measure.querySelector(":scope > attributes > time > beats")) === null || _d === void 0 ? void 0 : _d.textContent) || "", 10);
         if (Number.isFinite(parsedBeats) && parsedBeats > 0) {
             currentBeats = parsedBeats;
         }
-        const parsedBeatType = Number.parseInt(((_c = measure.querySelector(":scope > attributes > time > beat-type")) === null || _c === void 0 ? void 0 : _c.textContent) || "", 10);
+        const parsedBeatType = Number.parseInt(((_e = measure.querySelector(":scope > attributes > time > beat-type")) === null || _e === void 0 ? void 0 : _e.textContent) || "", 10);
         if (Number.isFinite(parsedBeatType) && parsedBeatType > 0) {
             currentBeatType = parsedBeatType;
         }
         const measureCapacityDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / Math.max(1, currentBeatType)));
         const measureTokens = [];
         let occupiedDiv = 0;
+        let laneNoteCount = 0;
+        const finalizedLanes = [];
+        let bestLaneTokens = [];
+        let bestLaneOccupiedDiv = -1;
+        let bestLaneNoteCount = -1;
+        const finalizeLane = () => {
+            if (targetStaffNo === null)
+                return;
+            const hasAny = measureTokens.length > 0;
+            if (!hasAny)
+                return;
+            finalizedLanes.push({
+                tokens: measureTokens.slice(),
+                occupiedDiv,
+                noteCount: laneNoteCount,
+            });
+            // Prefer lane with richer note content; tie-break by occupied timeline.
+            if (laneNoteCount > bestLaneNoteCount
+                || (laneNoteCount === bestLaneNoteCount && occupiedDiv > bestLaneOccupiedDiv)) {
+                bestLaneTokens = measureTokens.slice();
+                bestLaneOccupiedDiv = occupiedDiv;
+                bestLaneNoteCount = laneNoteCount;
+            }
+        };
         const children = Array.from(measure.children);
         for (let childIndex = 0; childIndex < children.length; childIndex += 1) {
             const child = children[childIndex];
             if (child.tagName === "backup") {
-                const backupDur = Number.parseInt(((_d = child.querySelector(":scope > duration")) === null || _d === void 0 ? void 0 : _d.textContent) || "0", 10);
+                const backupDur = Number.parseInt(((_f = child.querySelector(":scope > duration")) === null || _f === void 0 ? void 0 : _f.textContent) || "0", 10);
                 if (targetStaffNo !== null) {
-                    // In per-staff export, backup only represents cross-lane timeline control.
+                    // In per-staff export, treat backup as lane boundary and keep the densest lane.
+                    if (Number.isFinite(backupDur) && backupDur > 0) {
+                        finalizeLane();
+                        measureTokens.length = 0;
+                        occupiedDiv = 0;
+                        laneNoteCount = 0;
+                    }
                     continue;
                 }
                 if (Number.isFinite(backupDur) && backupDur > 0) {
@@ -13180,7 +13401,7 @@ const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
             if (child.tagName !== "note")
                 continue;
             const note = child;
-            const noteStaff = Number.parseInt(((_e = note.querySelector(":scope > staff")) === null || _e === void 0 ? void 0 : _e.textContent) || "1", 10);
+            const noteStaff = Number.parseInt(((_g = note.querySelector(":scope > staff")) === null || _g === void 0 ? void 0 : _g.textContent) || "1", 10);
             if (targetStaffNo !== null && noteStaff !== targetStaffNo)
                 continue;
             if (note.querySelector(":scope > chord")) {
@@ -13188,15 +13409,18 @@ const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
                 continue;
             }
             const dots = note.querySelectorAll(":scope > dot").length;
-            const durationDivRaw = Number.parseInt(((_f = note.querySelector(":scope > duration")) === null || _f === void 0 ? void 0 : _f.textContent) || "0", 10);
+            const durationDivRaw = Number.parseInt(((_h = note.querySelector(":scope > duration")) === null || _h === void 0 ? void 0 : _h.textContent) || "0", 10);
             const durationDiv = Number.isFinite(durationDivRaw) && durationDivRaw > 0
                 ? durationDivRaw
-                : noteTypeToDivisionsFallback(((_g = note.querySelector(":scope > type")) === null || _g === void 0 ? void 0 : _g.textContent) || "", currentDivisions);
+                : noteTypeToDivisionsFallback(((_j = note.querySelector(":scope > type")) === null || _j === void 0 ? void 0 : _j.textContent) || "", currentDivisions);
             const timelineDurationDiv = note.querySelector(":scope > grace") ? 0 : durationDiv;
-            const durWithDots = noteDurationToLilyToken(((_h = note.querySelector(":scope > type")) === null || _h === void 0 ? void 0 : _h.textContent) || "", dots, durationDiv, currentDivisions);
+            const durWithDots = noteDurationToLilyToken(((_k = note.querySelector(":scope > type")) === null || _k === void 0 ? void 0 : _k.textContent) || "", dots, durationDiv, currentDivisions);
             if (occupiedDiv + timelineDurationDiv > measureCapacityDiv) {
-                warnings.push("export: dropped note/rest that would overfill a measure.");
-                continue;
+                const overflow = occupiedDiv + timelineDurationDiv - measureCapacityDiv;
+                if (overflow > SMALL_OVERFLOW_TOLERANCE_DIV) {
+                    warnings.push("export: dropped note/rest that would overfill a measure.");
+                    continue;
+                }
             }
             if (note.querySelector(":scope > rest")) {
                 measureTokens.push(`r${durWithDots}`);
@@ -13208,7 +13432,7 @@ const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
                 const next = children[lookahead];
                 if (next.tagName !== "note")
                     break;
-                const nextStaff = Number.parseInt(((_j = next.querySelector(":scope > staff")) === null || _j === void 0 ? void 0 : _j.textContent) || "1", 10);
+                const nextStaff = Number.parseInt(((_l = next.querySelector(":scope > staff")) === null || _l === void 0 ? void 0 : _l.textContent) || "1", 10);
                 if (targetStaffNo !== null && nextStaff !== targetStaffNo)
                     break;
                 if (!next.querySelector(":scope > chord"))
@@ -13218,9 +13442,9 @@ const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
             }
             const chordPitches = [];
             for (const chordNote of chordNotes) {
-                const step = ((_l = (_k = chordNote.querySelector(":scope > pitch > step")) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim().toUpperCase()) || "C";
-                const octave = Number.parseInt(((_m = chordNote.querySelector(":scope > pitch > octave")) === null || _m === void 0 ? void 0 : _m.textContent) || "4", 10);
-                const alter = Number.parseInt(((_o = chordNote.querySelector(":scope > pitch > alter")) === null || _o === void 0 ? void 0 : _o.textContent) || "0", 10);
+                const step = ((_o = (_m = chordNote.querySelector(":scope > pitch > step")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim().toUpperCase()) || "C";
+                const octave = Number.parseInt(((_p = chordNote.querySelector(":scope > pitch > octave")) === null || _p === void 0 ? void 0 : _p.textContent) || "4", 10);
+                const alter = Number.parseInt(((_q = chordNote.querySelector(":scope > pitch > alter")) === null || _q === void 0 ? void 0 : _q.textContent) || "0", 10);
                 if (!/^[A-G]$/.test(step) || !Number.isFinite(octave)) {
                     warnings.push("export: skipped unsupported note pitch.");
                     continue;
@@ -13235,7 +13459,20 @@ const buildLilyBodyFromPart = (part, warnings, targetStaffNo = null) => {
             else {
                 measureTokens.push(`<${chordPitches.join(" ")}>${durWithDots}`);
             }
+            laneNoteCount += 1;
             occupiedDiv += timelineDurationDiv;
+        }
+        finalizeLane();
+        if (targetStaffNo !== null && finalizedLanes.length > 1 && laneHintVoiceId && laneHintCommentsOut) {
+            const encodedLanes = finalizedLanes
+                .map((lane) => encodeURIComponent(lane.tokens.join(" ")))
+                .join(",");
+            laneHintCommentsOut.push(`%@mks lanes voice=${laneHintVoiceId} measure=${measureIndex + 1} data=${encodedLanes}`);
+        }
+        if (targetStaffNo !== null && bestLaneTokens.length > 0) {
+            measureTokens.length = 0;
+            measureTokens.push(...bestLaneTokens);
+            occupiedDiv = Math.max(0, bestLaneOccupiedDiv);
         }
         if (!measureTokens.length) {
             const safeBeats = Math.max(1, Math.round(currentBeats));
@@ -13433,7 +13670,11 @@ const exportMusicXmlDomToLilyPond = (doc) => {
         const staffNumbers = activeStaffNumbers.length ? activeStaffNumbers : declaredStaffNumbers.slice(0, 1);
         if (staffNumbers.length <= 1) {
             const staffNo = (_m = staffNumbers[0]) !== null && _m !== void 0 ? _m : 1;
-            const body = buildLilyBodyFromPart(part, warnings, staffNo);
+            const body = buildLilyBodyFromPart(part, warnings, {
+                targetStaffNo: staffNo,
+                laneHintVoiceId: partId,
+                laneHintCommentsOut: measureComments,
+            });
             const clef = resolveLilyClefForPartStaff(part, staffNo);
             const clefPrefix = clef === "treble" ? "" : `\\clef ${clef} `;
             blocks.push(`\\new Staff = "${partId}" { ${clefPrefix}${body} }`);
@@ -13444,10 +13685,14 @@ const exportMusicXmlDomToLilyPond = (doc) => {
             continue;
         }
         const staffBlocks = staffNumbers.map((staffNo) => {
-            const body = buildLilyBodyFromPart(part, warnings, staffNo);
+            const voiceId = `${partId}_s${staffNo}`;
+            const body = buildLilyBodyFromPart(part, warnings, {
+                targetStaffNo: staffNo,
+                laneHintVoiceId: voiceId,
+                laneHintCommentsOut: measureComments,
+            });
             const clef = resolveLilyClefForPartStaff(part, staffNo);
             const clefPrefix = clef === "treble" ? "" : `\\clef ${clef} `;
-            const voiceId = `${partId}_s${staffNo}`;
             const transposeComment = transposeCommentForVoice(voiceId);
             if (transposeComment)
                 transposeComments.push(transposeComment);
