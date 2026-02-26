@@ -253,6 +253,42 @@ const extractMiscellaneousFieldsFromMeasure = (measure: Element): Array<{ name: 
   return out;
 };
 
+const encodeMeasureMetaForMei = (measure: Element): string | null => {
+  const rawNo = (measure.getAttribute("number") ?? "").trim();
+  const implicitRaw = (measure.getAttribute("implicit") ?? "").trim().toLowerCase();
+  const isImplicit = implicitRaw === "yes" || implicitRaw === "true" || implicitRaw === "1";
+  const leftRepeat = measure.querySelector(':scope > barline[location="left"] > repeat[direction="forward"]');
+  const rightRepeat = measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]');
+  const repeat = rightRepeat ? "backward" : (leftRepeat ? "forward" : "");
+  const times = Number.parseInt(
+    measure.querySelector(':scope > barline[location="right"] > ending[type="stop"]')?.getAttribute("number") ?? "",
+    10
+  );
+  const explicitTime = measure.querySelector(":scope > attributes > time") !== null;
+  const beats = parseIntSafe(measure.querySelector(":scope > attributes > time > beats")?.textContent, NaN);
+  const beatType = parseIntSafe(measure.querySelector(":scope > attributes > time > beat-type")?.textContent, NaN);
+  const hasLeftDouble = ((measure.querySelector(':scope > barline[location="left"] > bar-style')?.textContent ?? "")
+    .trim()
+    .toLowerCase()) === "light-light";
+  const hasRightDouble = ((measure.querySelector(':scope > barline[location="right"] > bar-style')?.textContent ?? "")
+    .trim()
+    .toLowerCase()) === "light-light";
+  const doubleBar = hasLeftDouble && hasRightDouble ? "both" : hasLeftDouble ? "left" : hasRightDouble ? "right" : "";
+
+  const parts: string[] = [];
+  if (rawNo) parts.push(`number=${rawNo}`);
+  if (isImplicit) parts.push("implicit=1");
+  if (repeat) parts.push(`repeat=${repeat}`);
+  if (Number.isFinite(times) && times > 1) parts.push(`times=${Math.round(times)}`);
+  if (explicitTime) {
+    parts.push("explicitTime=1");
+    if (Number.isFinite(beats) && beats > 0) parts.push(`beats=${Math.round(beats)}`);
+    if (Number.isFinite(beatType) && beatType > 0) parts.push(`beatType=${Math.round(beatType)}`);
+  }
+  if (doubleBar) parts.push(`doubleBar=${doubleBar}`);
+  return parts.length ? parts.join(";") : null;
+};
+
 export const exportMusicXmlDomToMei = (doc: Document): string => {
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (parts.length === 0) {
@@ -320,6 +356,12 @@ export const exportMusicXmlDomToMei = (doc: Document): string => {
       for (const field of miscFields) {
         measureLines.push(
           `<annot type="musicxml-misc-field" label="${esc(field.name)}">${esc(field.value)}</annot>`
+        );
+      }
+      const measureMeta = encodeMeasureMetaForMei(measure);
+      if (measureMeta) {
+        measureLines.push(
+          `<annot type="musicxml-measure-meta" label="mks:measure-meta">${esc(measureMeta)}</annot>`
         );
       }
       for (const voice of Array.from(voiceMap.keys()).sort(voiceSort)) {
@@ -584,6 +626,63 @@ const extractMiscFieldsFromMeiStaff = (staff: Element): Array<{ name: string; va
   return out;
 };
 
+const parseMeasureMetaFromMeiStaff = (staff: Element): {
+  number?: string;
+  implicit?: boolean;
+  repeat?: "forward" | "backward";
+  times?: number;
+  explicitTime?: boolean;
+  beats?: number;
+  beatType?: number;
+  doubleBar?: "left" | "right" | "both";
+} | null => {
+  const metaAnnot = childElementsByName(staff, "annot").find((annot) => {
+    const type = (annot.getAttribute("type") ?? "").trim().toLowerCase();
+    const label = (annot.getAttribute("label") ?? "").trim().toLowerCase();
+    return type === "musicxml-measure-meta" || label === "mks:measure-meta";
+  });
+  if (!metaAnnot) return null;
+  const text = (metaAnnot.textContent ?? "").trim();
+  if (!text) return null;
+  const out: {
+    number?: string;
+    implicit?: boolean;
+    repeat?: "forward" | "backward";
+    times?: number;
+    explicitTime?: boolean;
+    beats?: number;
+    beatType?: number;
+    doubleBar?: "left" | "right" | "both";
+  } = {};
+  for (const token of text.split(";")) {
+    const trimmed = token.trim();
+    if (!trimmed) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const k = trimmed.slice(0, eq).trim().toLowerCase();
+    const v = trimmed.slice(eq + 1).trim();
+    if (!k) continue;
+    if (k === "number" && v) out.number = v;
+    if (k === "implicit") out.implicit = v === "1" || v.toLowerCase() === "true" || v.toLowerCase() === "yes";
+    if (k === "repeat" && (v === "forward" || v === "backward")) out.repeat = v;
+    if (k === "times") {
+      const n = Number.parseInt(v, 10);
+      if (Number.isFinite(n) && n > 1) out.times = Math.round(n);
+    }
+    if (k === "explicittime") out.explicitTime = v === "1" || v.toLowerCase() === "true" || v.toLowerCase() === "yes";
+    if (k === "beats") {
+      const n = Number.parseInt(v, 10);
+      if (Number.isFinite(n) && n > 0) out.beats = Math.max(1, Math.round(n));
+    }
+    if (k === "beattype") {
+      const n = Number.parseInt(v, 10);
+      if (Number.isFinite(n) && n > 0) out.beatType = Math.max(1, Math.round(n));
+    }
+    if (k === "doublebar" && (v === "left" || v === "right" || v === "both")) out.doubleBar = v;
+  }
+  return out;
+};
+
 const buildMeiDebugFieldsFromStaff = (
   staff: Element,
   measureNo: string,
@@ -711,15 +810,27 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
     .map((staffNo, idx) => {
       const partId = `P${idx + 1}`;
       const clef = staffMeta.get(staffNo) || { label: `Staff ${staffNo}`, clefSign: "G", clefLine: 2 };
+      let currentBeats = Math.max(1, Math.round(meterCount));
+      let currentBeatType = Math.max(1, Math.round(meterUnit));
       const measuresXml = measureNodes
         .map((measureNode, measureIndex) => {
-          const measureNo = measureNode.getAttribute("n")?.trim() || String(measureIndex + 1);
+          const sourceMeasureNo = measureNode.getAttribute("n")?.trim() || String(measureIndex + 1);
           const targetStaff = childElementsByName(measureNode, "staff").find(
             (staff) => (staff.getAttribute("n")?.trim() || "") === staffNo
           );
           if (!targetStaff) {
-            return `<measure number="${xmlEscape(measureNo)}"></measure>`;
+            return `<measure number="${xmlEscape(sourceMeasureNo)}"></measure>`;
           }
+          const measureMeta = parseMeasureMetaFromMeiStaff(targetStaff);
+          const measureNo = (measureMeta?.number ?? sourceMeasureNo).trim() || sourceMeasureNo;
+          const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";
+          const measureBeats = Math.max(1, Math.round(measureMeta?.beats ?? currentBeats));
+          const measureBeatType = Math.max(1, Math.round(measureMeta?.beatType ?? currentBeatType));
+          const shouldEmitTime =
+            measureIndex === 0
+            || measureMeta?.explicitTime === true
+            || measureBeats !== currentBeats
+            || measureBeatType !== currentBeatType;
 
           const layerNodes = childElementsByName(targetStaff, "layer");
           const layers = layerNodes
@@ -777,15 +888,38 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
                   )
                   .join("")}</miscellaneous>`
               : "";
-          const attributesXml =
-            measureIndex === 0
-              ? `<attributes><divisions>${divisions}</divisions><key><fifths>${fifths}</fifths></key><time><beats>${meterCount}</beats><beat-type>${meterUnit}</beat-type></time><clef><sign>${xmlEscape(
-                  clef.clefSign
-                )}</sign><line>${clef.clefLine}</line></clef>${miscellaneousXml}</attributes>`
-              : miscellaneousXml
-                ? `<attributes>${miscellaneousXml}</attributes>`
-                : "";
-          return `<measure number="${xmlEscape(measureNo)}">${attributesXml}${body}</measure>`;
+          let attributesXml = "";
+          if (measureIndex === 0) {
+            attributesXml =
+              `<attributes><divisions>${divisions}</divisions><key><fifths>${fifths}</fifths></key>` +
+              `<time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>` +
+              `<clef><sign>${xmlEscape(clef.clefSign)}</sign><line>${clef.clefLine}</line></clef>` +
+              `${miscellaneousXml}</attributes>`;
+          } else if (shouldEmitTime || miscellaneousXml) {
+            attributesXml =
+              `<attributes>${shouldEmitTime ? `<time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>` : ""}${miscellaneousXml}</attributes>`;
+          }
+          let leftBarlineXml = "";
+          let rightBarlineXml = "";
+          if (measureMeta?.doubleBar === "left" || measureMeta?.doubleBar === "both") {
+            leftBarlineXml += `<barline location="left"><bar-style>light-light</bar-style></barline>`;
+          }
+          if (measureMeta?.repeat === "forward") {
+            leftBarlineXml += `<barline location="left"><repeat direction="forward"/></barline>`;
+          }
+          if (measureMeta?.repeat === "backward") {
+            const repeatInner =
+              Number.isFinite(measureMeta.times) && (measureMeta.times as number) > 1
+                ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/><ending number="${Math.round(measureMeta.times as number)}" type="stop"/>`
+                : `<repeat direction="backward"/>`;
+            rightBarlineXml += `<barline location="right">${repeatInner}</barline>`;
+          }
+          if (measureMeta?.doubleBar === "right" || measureMeta?.doubleBar === "both") {
+            rightBarlineXml += `<barline location="right"><bar-style>light-light</bar-style></barline>`;
+          }
+          currentBeats = measureBeats;
+          currentBeatType = measureBeatType;
+          return `<measure number="${xmlEscape(measureNo)}"${implicitAttr}>${attributesXml}${leftBarlineXml}${body}${rightBarlineXml}</measure>`;
         })
         .join("");
       return `<part id="${partId}">${measuresXml}</part>`;

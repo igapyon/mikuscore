@@ -555,6 +555,308 @@ describe("musescore-io", () => {
     expect(stop).not.toBeNull();
   });
 
+  it("roundtrip keeps octave-shift (8va/8vb) exported as chord-local Ottava spanner", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <direction><direction-type><octave-shift type="down" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>A</step><octave>6</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+    <measure number="2">
+      <direction><direction-type><octave-shift type="stop" size="8" number="1"/></direction-type></direction>
+      <note><pitch><step>A</step><octave>5</octave></pitch><duration>960</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const start = dstDoc.querySelector('part > measure:nth-of-type(1) > direction > direction-type > octave-shift[type="start"]');
+    const stop = dstDoc.querySelector('part > measure:nth-of-type(2) > direction > direction-type > octave-shift[type="stop"]');
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+  });
+
+  it("roundtrip keeps trill ornaments exported as chord-local Trill spanner", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>A</step><octave>3</octave></pitch>
+        <duration>960</duration><voice>1</voice><type>half</type>
+        <notations><ornaments><trill-mark/><wavy-line type="start" number="1"/></ornaments></notations>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>A</step><octave>3</octave></pitch>
+        <duration>960</duration><voice>1</voice><type>half</type>
+        <notations><ornaments><wavy-line type="stop" number="1"/></ornaments></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const start = dstDoc.querySelector('part > measure:nth-of-type(1) note > notations > ornaments > wavy-line[type="start"]');
+    const stop = dstDoc.querySelector('part > measure:nth-of-type(2) note > notations > ornaments > wavy-line[type="stop"]');
+    const trillMark = dstDoc.querySelector("part > measure:nth-of-type(1) note > notations > ornaments > trill-mark");
+    expect(start).not.toBeNull();
+    expect(stop).not.toBeNull();
+    expect(trillMark).not.toBeNull();
+  });
+
+  it("roundtrip keeps staccato articulation on a single-measure note", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const first = dstDoc.querySelector("part > measure > note:nth-of-type(1)");
+    expect(first?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
+  });
+
+  it("roundtrip keeps accent articulation on a single-measure note", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>B</step><octave>3</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/></articulations></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const first = dstDoc.querySelector("part > measure > note:nth-of-type(1)");
+    expect(first?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
+  });
+
+  it("roundtrip keeps implicit short pickup measure length", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="X1" implicit="yes">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="1">
+      <note><rest/><duration>1920</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const pickup = dstDoc.querySelector("part > measure:nth-of-type(1)");
+    expect(pickup?.getAttribute("implicit")).toBe("yes");
+    const pickupDur = Array.from(pickup?.querySelectorAll(":scope > note > duration") ?? [])
+      .reduce((sum, node) => sum + Math.round(Number(node.textContent?.trim() ?? "0")), 0);
+    expect(pickupDur).toBe(480);
+  });
+
+  it("roundtrip keeps grace note marker and principal duration", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><grace slash="yes"/><pitch><step>C</step><octave>5</octave></pitch><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>5</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const first = dstDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const second = dstDoc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(first?.querySelector(":scope > grace")).not.toBeNull();
+    expect(second?.querySelector(":scope > duration")?.textContent?.trim()).toBe("480");
+  });
+
+  it("roundtrip keeps unpitched notes as timed note events", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Drums</part-name>
+      <score-instrument id="P1-I1"><instrument-name>Drum Set</instrument-name></score-instrument>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <unpitched><display-step>C</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><voice>1</voice><type>quarter</type><instrument id="P1-I1"/>
+      </note>
+      <note>
+        <unpitched><display-step>D</display-step><display-octave>5</display-octave></unpitched>
+        <duration>480</duration><voice>1</voice><type>quarter</type><instrument id="P1-I1"/>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const timedNotes = Array.from(dstDoc.querySelectorAll("part > measure > note"))
+      .filter((n) => n.querySelector(":scope > rest") === null);
+    expect(timedNotes.length).toBe(2);
+    const durations = timedNotes.map((n) => n.querySelector(":scope > duration")?.textContent?.trim() ?? "");
+    expect(durations).toEqual(["480", "480"]);
+  });
+
+  it("roundtrip keeps section-boundary double bar + explicit same-meter time (m24/m25 minimal)", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="24">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <barline location="right"><bar-style>light-light</bar-style></barline>
+    </measure>
+    <measure number="25">
+      <attributes><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+
+    const m25 = dstDoc.querySelector("part > measure:nth-of-type(2)");
+    expect(m25).not.toBeNull();
+    expect(m25?.querySelector(":scope > attributes > time > beats")?.textContent?.trim()).toBe("2");
+    expect(m25?.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim()).toBe("4");
+
+    const m24RightDouble = dstDoc.querySelector('part > measure:nth-of-type(1) > barline[location="right"] > bar-style');
+    const m25LeftDouble = dstDoc.querySelector('part > measure:nth-of-type(2) > barline[location="left"] > bar-style');
+    const hasBoundaryDouble =
+      m24RightDouble?.textContent?.trim() === "light-light"
+      || m25LeftDouble?.textContent?.trim() === "light-light";
+    expect(hasBoundaryDouble).toBe(true);
+  });
+
+  it("keeps written type for MusicXML triplet eighths on MusicXML->MuseScore->MusicXML", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>160</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop" number="1"/></notations>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(musicXml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(srcDoc);
+    const dstXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const dstDoc = parseMusicXmlDocument(dstXml);
+    expect(dstDoc).not.toBeNull();
+    if (!dstDoc) return;
+    const first = dstDoc.querySelector("part > measure > note:nth-of-type(1)");
+    const third = dstDoc.querySelector("part > measure > note:nth-of-type(3)");
+    expect(first?.querySelector(":scope > type")?.textContent?.trim()).toBe("eighth");
+    expect(first?.querySelector(":scope > duration")?.textContent?.trim()).toBe("160");
+    expect(first?.querySelector(":scope > notations > tuplet[type=\"start\"]")).not.toBeNull();
+    expect(third?.querySelector(":scope > notations > tuplet[type=\"stop\"]")).not.toBeNull();
+  });
+
   it("exports MusicXML cut-time symbol into MuseScore TimeSig subtype", () => {
     const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

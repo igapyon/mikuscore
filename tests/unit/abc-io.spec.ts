@@ -596,6 +596,52 @@ V:1
     expect(outDoc.querySelector('note > notations > slur[type="stop"]')).not.toBeNull();
   });
 
+  it("MusicXML->ABC exports tie notation and roundtrips it", () => {
+    const xmlWithTie = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <tie type="start"/><notations><tied type="start"/></notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <tie type="stop"/><notations><tied type="stop"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithTie);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("-");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector('note > tie[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > tie[type="stop"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > notations > tied[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > notations > tied[type="stop"]')).not.toBeNull();
+  });
+
   it("MusicXML->ABC keeps explicit accidental when lane key is unknown", () => {
     const xmlWithoutKeyButWithSharp = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
