@@ -226,4 +226,42 @@ describe("MEI export", () => {
       )?.textContent
     ).toContain("code=OVERFULL_CLAMPED");
   });
+
+  it("adds implicit beams on MEI import for short-note groups", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="4.0.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="2" meter.unit="4" key.sig="0">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2" /></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1">
+                <layer n="1">
+                  <note pname="c" oct="4" dur="8"/>
+                  <note pname="d" oct="4" dur="8"/>
+                  <note pname="e" oct="4" dur="8"/>
+                  <note pname="f" oct="4" dur="8"/>
+                </layer>
+              </staff>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[1]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+    expect(notes[2]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[3]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+  });
 });

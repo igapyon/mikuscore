@@ -1,4 +1,4 @@
-import { prettyPrintMusicXmlText } from "./musicxml-io";
+import { applyImplicitBeamsToMusicXmlText, prettyPrintMusicXmlText } from "./musicxml-io";
 
 type StaffSlot = {
   partId: string;
@@ -795,5 +795,5 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
   const xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(
     title
   )}</work-title></work><part-list>${partListXml}</part-list>${partsXml}</score-partwise>`;
-  return prettyPrintMusicXmlText(xml);
+  return prettyPrintMusicXmlText(applyImplicitBeamsToMusicXmlText(xml));
 };

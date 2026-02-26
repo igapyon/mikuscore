@@ -245,14 +245,14 @@ Output format:
 
 ### Quantization policy
 
-- default quantization grid is `1/16`
-- quantization grid options: `1/8 | 1/16 | 1/32`
-- default option value MUST be `1/16`
+- default quantization grid is `1/32`
+- quantization grid options: `1/8 | 1/16 | 1/32 | 1/64`
+- default option value MUST be `1/32`
 
 For `TPQ` (ticks-per-quarter), quantization tick is:
 
 - `qTick = TPQ / subdivision`
-- subdivision: `2` for `1/8`, `4` for `1/16`, `8` for `1/32`
+- subdivision: `2` for `1/8`, `4` for `1/16`, `8` for `1/32`, `16` for `1/64`
 
 Start/end quantization:
 

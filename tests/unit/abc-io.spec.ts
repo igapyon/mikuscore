@@ -311,6 +311,72 @@ V:1
     expect(firstNote?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
   });
 
+  it("ABC->MusicXML applies beams and splits them at beat boundaries", () => {
+    const abc = `X:1
+T:Beam test
+M:2/4
+L:1/8
+K:C
+V:1
+C D E F |`;
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const pitchedNotes = Array.from(outDoc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector(":scope > pitch") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(4);
+    const beams = pitchedNotes.map((note) => note.querySelector(":scope > beam")?.textContent?.trim() ?? "");
+    expect(beams[0]).toBe("begin");
+    expect(beams[1]).toBe("end");
+    expect(beams[2]).toBe("begin");
+    expect(beams[3]).toBe("end");
+  });
+
+  it("ABC->MusicXML uses meter-sized empty-measure rests for missing voice measures", () => {
+    const abc = `X:1
+T:Missing measure fallback
+M:2/4
+L:1/8
+K:C
+V:1
+C D | E F |
+V:2
+G A |`;
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const core = new ScoreCore();
+    core.load(xml);
+    const save = core.save();
+    expect(save.ok).toBe(true);
+    const part2Measure2RestDuration = outDoc.querySelector('part[id="P2"] > measure[number="2"] > note > duration')?.textContent?.trim();
+    expect(part2Measure2RestDuration).toBe("1920");
+  });
+
+  it("ABC import does not treat grace-note durations as measure occupancy", () => {
+    const abc = `X:1
+T:Grace occupancy
+M:2/4
+L:1/8
+K:C
+V:1
+{a}c {b}d {c}e {d}f |`;
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const overfullDiag = Array.from(outDoc.querySelectorAll('miscellaneous-field[name^="diag:"]'))
+      .map((node) => node.textContent?.trim() ?? "")
+      .find((text) => text.includes("code=OVERFULL_REFLOWED"));
+    expect(overfullDiag).toBeUndefined();
+    const core = new ScoreCore();
+    core.load(xml);
+    const save = core.save();
+    expect(save.ok).toBe(true);
+  });
+
   it("exports diag:* miscellaneous-field into %@mks diag metadata lines", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">

@@ -20,6 +20,7 @@ import {
   installVsqxMusicXmlNormalizationHook,
 } from "./vsqx-io";
 import {
+  applyImplicitBeamsToMusicXmlText,
   buildRenderDocWithNodeIds,
   extractMeasureEditorDocument,
   normalizeImportedMusicXmlText,
@@ -59,6 +60,7 @@ import {
   buildPlaybackEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
   type GraceTimingMode,
+  type MidiImportQuantizeGrid,
   type MetricAccentProfile,
   type MidiProgramPreset,
 } from "./midi-io";
@@ -141,6 +143,8 @@ const metricAccentEnabledInput = q<HTMLInputElement>("#metricAccentEnabled");
 const metricAccentProfileSelect = q<HTMLSelectElement>("#metricAccentProfile");
 const midiProgramSelect = q<HTMLSelectElement>("#midiProgramSelect");
 const midiExportProfileSelect = q<HTMLSelectElement>("#midiExportProfile");
+const midiImportQuantizeGridSelect = q<HTMLSelectElement>("#midiImportQuantizeGrid");
+const midiImportTripletAware = q<HTMLInputElement>("#midiImportTripletAware");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
 const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
 const exportMusicXmlAsXmlExtension = q<HTMLInputElement>("#exportMusicXmlAsXmlExtension");
@@ -215,6 +219,8 @@ const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_MIDI_EXPORT_PROFILE: MidiExportProfile = "musescore_parity";
+const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID: MidiImportQuantizeGrid = "1/64";
+const DEFAULT_MIDI_IMPORT_TRIPLET_AWARE = true;
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
 const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
 const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
@@ -236,6 +242,8 @@ type PlaybackSettings = {
   metricAccentEnabled: boolean;
   metricAccentProfile: MetricAccentProfile;
   midiExportProfile: MidiExportProfile;
+  midiImportQuantizeGrid: MidiImportQuantizeGrid;
+  midiImportTripletAware: boolean;
   forceMidiProgramOverride: boolean;
   keepMetadataInMusicXml: boolean;
   exportMusicXmlAsXmlExtension: boolean;
@@ -303,6 +311,15 @@ const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
   return DEFAULT_METRIC_ACCENT_PROFILE;
 };
 
+const normalizeMidiImportQuantizeGrid = (value: unknown): MidiImportQuantizeGrid => {
+  if (value === "1/8" || value === "1/16" || value === "1/32" || value === "1/64") return value;
+  return DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+};
+
+const normalizeMidiImportTripletAware = (value: unknown): boolean => {
+  return value !== false;
+};
+
 const readPlaybackSettings = (): PlaybackSettings | null => {
   try {
     const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
@@ -316,6 +333,8 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       metricAccentEnabled: normalizeMetricAccentEnabled(parsed.metricAccentEnabled),
       metricAccentProfile: normalizeMetricAccentProfile(parsed.metricAccentProfile),
       midiExportProfile: normalizeMidiExportProfile(parsed.midiExportProfile),
+      midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(parsed.midiImportQuantizeGrid),
+      midiImportTripletAware: normalizeMidiImportTripletAware(parsed.midiImportTripletAware),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
       keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
       exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
@@ -339,6 +358,8 @@ const writePlaybackSettings = (): void => {
       metricAccentEnabled: metricAccentEnabledInput.checked,
       metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
       midiExportProfile: normalizeMidiExportProfile(midiExportProfileSelect.value),
+      midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
+      midiImportTripletAware: midiImportTripletAware.checked,
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
       keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
       exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
@@ -368,6 +389,10 @@ const applyInitialPlaybackSettings = (): void => {
   metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
   metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
   midiExportProfileSelect.value = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
+  midiImportQuantizeGridSelect.value =
+    stored?.midiImportQuantizeGrid ?? DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+  midiImportTripletAware.checked =
+    stored?.midiImportTripletAware ?? DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
@@ -388,6 +413,8 @@ const onResetPlaybackSettings = (): void => {
   metricAccentEnabledInput.checked = DEFAULT_METRIC_ACCENT_ENABLED;
   metricAccentProfileSelect.value = DEFAULT_METRIC_ACCENT_PROFILE;
   midiExportProfileSelect.value = DEFAULT_MIDI_EXPORT_PROFILE;
+  midiImportQuantizeGridSelect.value = DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+  midiImportTripletAware.checked = DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
   keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
   exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
@@ -1951,6 +1978,8 @@ const onLoadClick = async (): Promise<void> => {
       }),
     convertMidiToMusicXml: (midiBytes) =>
       convertMidiToMusicXml(midiBytes, {
+        quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
+        tripletAwareQuantize: midiImportTripletAware.checked,
         sourceMetadata: keepMetadata,
         debugMetadata: keepMetadata,
       }),
@@ -2772,6 +2801,8 @@ downloadSvgBtn.addEventListener("click", onDownloadSvg);
 resetPlaybackSettingsBtn.addEventListener("click", onResetPlaybackSettings);
 midiProgramSelect.addEventListener("change", writePlaybackSettings);
 midiExportProfileSelect.addEventListener("change", writePlaybackSettings);
+midiImportQuantizeGridSelect.addEventListener("change", writePlaybackSettings);
+midiImportTripletAware.addEventListener("change", writePlaybackSettings);
 forceMidiProgramOverride.addEventListener("change", writePlaybackSettings);
 playbackWaveform.addEventListener("change", writePlaybackSettings);
 playbackUseMidiLike.addEventListener("change", writePlaybackSettings);
@@ -2812,6 +2843,8 @@ playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: t
 renderNewPartClefControls();
 applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
-installVsqxMusicXmlNormalizationHook(normalizeImportedMusicXmlText);
+installVsqxMusicXmlNormalizationHook((xml) =>
+  applyImplicitBeamsToMusicXmlText(normalizeImportedMusicXmlText(xml))
+);
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);

@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { normalizeImportedMusicXmlText, parseMusicXmlDocument } from "../../src/ts/musicxml-io";
+import {
+  applyImplicitBeamsToMusicXmlText,
+  normalizeImportedMusicXmlText,
+  parseMusicXmlDocument,
+} from "../../src/ts/musicxml-io";
 
 describe("musicxml-io normalizeImportedMusicXmlText", () => {
   it("adds tuplet start/stop notations when only time-modification exists", () => {
@@ -135,6 +139,81 @@ describe("musicxml-io normalizeImportedMusicXmlText", () => {
     if (!doc) return;
     const finalBarStyle = doc.querySelector('score-partwise > part > measure:last-of-type > barline[location="right"] > bar-style');
     expect(finalBarStyle?.textContent?.trim()).toBe("light-heavy");
+  });
+
+  it("does not add implicit beams during generic MusicXML normalization", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const normalized = normalizeImportedMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(normalized);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(":scope > beam")).toBeNull();
+    expect(notes[1]?.querySelector(":scope > beam")).toBeNull();
+    expect(notes[2]?.querySelector(":scope > beam")).toBeNull();
+    expect(notes[3]?.querySelector(":scope > beam")).toBeNull();
+  });
+
+  it("adds implicit beams only when requested explicitly", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const withBeams = applyImplicitBeamsToMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(withBeams);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[1]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+    expect(notes[2]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("begin");
+    expect(notes[3]?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
+  });
+
+  it("keeps lane beams untouched when explicit beam pass runs over existing beams", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type><beam number="1">begin</beam></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type><beam number="1">end</beam></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>240</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const normalized = normalizeImportedMusicXmlText(xml);
+    const doc = parseMusicXmlDocument(normalized);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelectorAll(":scope > beam").length).toBe(1);
+    expect(notes[1]?.querySelectorAll(":scope > beam").length).toBe(1);
+    expect(notes[2]?.querySelector(":scope > beam")).toBeNull();
+    expect(notes[3]?.querySelector(":scope > beam")).toBeNull();
   });
 
   it("keeps existing final right barline as-is", () => {

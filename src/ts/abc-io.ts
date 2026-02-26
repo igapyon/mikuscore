@@ -1,4 +1,6 @@
 // @ts-nocheck
+import { computeBeamAssignments } from "./beam-common";
+
 export type Fraction = { num: number; den: number };
 
 const DEFAULT_UNIT: Fraction = { num: 1, den: 8 };
@@ -1313,7 +1315,10 @@ const abcCommon = AbcCommon;
           continue;
         }
 
-        const duration = Math.max(1, Math.round(Number(note.duration) || 1));
+        // Grace notes are notation-time ornaments and should not consume measure capacity.
+        const duration = note.grace
+          ? 0
+          : Math.max(1, Math.round(Number(note.duration) || 1));
         if (occupied + duration <= capacity || out.length === 0) {
           out.push(note);
           occupied += duration;
@@ -2051,6 +2056,10 @@ const buildMusicXmlFromAbcParsed = (
   const beats = parsed.meta?.meter?.beats || 4;
   const beatType = parsed.meta?.meter?.beatType || 4;
   const defaultFifths = Number.isFinite(parsed.meta?.keyInfo?.fifths) ? parsed.meta.keyInfo.fifths : 0;
+  const divisions = 960;
+  const beatDiv = Math.max(1, Math.round((divisions * 4) / Math.max(1, Math.round(beatType))));
+  const measureDurationDiv = Math.max(1, Math.round((divisions * 4 * Math.max(1, Math.round(beats))) / Math.max(1, Math.round(beatType))));
+  const emptyMeasureRestType = normalizeTypeForMusicXml(typeFromDuration(measureDurationDiv, divisions));
   const tempoBpm =
     Number.isFinite(parsed.meta?.tempoBpm as number) && Number(parsed.meta?.tempoBpm) > 0
       ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
@@ -2116,8 +2125,65 @@ const buildMusicXmlFromAbcParsed = (
 
         const notesXml =
           notes.length > 0
-            ? notes
-                .map((note) => {
+            ? (() => {
+                const beamXmlByNoteIndex = (() => {
+                  const out = new Map();
+                  const levelFromType = (typeText) => {
+                    switch (String(typeText || "").trim().toLowerCase()) {
+                      case "eighth":
+                        return 1;
+                      case "16th":
+                        return 2;
+                      case "32nd":
+                        return 3;
+                      case "64th":
+                        return 4;
+                      default:
+                        return 0;
+                    }
+                  };
+                  const byVoice = new Map();
+                  for (let i = 0; i < notes.length; i += 1) {
+                    const n = notes[i];
+                    const voice = normalizeVoiceForMusicXml(n.voice);
+                    const bucket = byVoice.get(voice) ?? [];
+                    bucket.push({ note: n, noteIndex: i });
+                    byVoice.set(voice, bucket);
+                  }
+                  for (const events of byVoice.values()) {
+                    const primary = events.filter((ev) => !ev.note?.chord);
+                    if (!primary.length) continue;
+                    const assignments = computeBeamAssignments(
+                      primary,
+                      beatDiv,
+                      (ev) => {
+                        const type = normalizeTypeForMusicXml(ev.note?.type);
+                        return {
+                          timed: true,
+                          chord: !Boolean(ev.note?.isRest),
+                          grace: Boolean(ev.note?.grace),
+                          durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
+                          levels: levelFromType(type),
+                        };
+                      },
+                      { splitAtBeatBoundaryWhenImplicit: true }
+                    );
+                    for (const [eventIndex, assignment] of assignments.entries()) {
+                      if (!assignment || assignment.levels <= 0) continue;
+                      let beamXml = "";
+                      for (let level = 1; level <= assignment.levels; level += 1) {
+                        beamXml += `<beam number="${level}">${assignment.state}</beam>`;
+                      }
+                      if (!beamXml) continue;
+                      const target = primary[eventIndex];
+                      if (!target) continue;
+                      out.set(target.noteIndex, beamXml);
+                    }
+                  }
+                  return out;
+                })();
+                return notes
+                  .map((note, noteIndex) => {
                   const chunks: string[] = ["<note>"];
                   if (note.chord) chunks.push("<chord/>");
                   if (note.grace) chunks.push("<grace/>");
@@ -2144,6 +2210,9 @@ const buildMusicXmlFromAbcParsed = (
                   }
                   chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
                   chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+                  if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) {
+                    chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
+                  }
                   if (
                     note.timeModification &&
                     Number.isFinite(note.timeModification.actual) &&
@@ -2191,8 +2260,9 @@ const buildMusicXmlFromAbcParsed = (
                   chunks.push("</note>");
                   return chunks.join("");
                 })
-                .join("")
-            : '<note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>';
+                .join("");
+              })()
+            : `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type></note>`;
 
         const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
         const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";

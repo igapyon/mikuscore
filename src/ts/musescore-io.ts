@@ -2,6 +2,9 @@ import {
   midiToPitch,
   resolveAccidentalTextForPitch,
 } from "../../core/accidentalSpelling";
+import {
+  computeBeamAssignments,
+} from "./beam-common";
 
 type MuseScoreImportOptions = {
   sourceMetadata?: boolean;
@@ -707,114 +710,26 @@ const buildBeamXmlByVoiceEvents = (
   beatDiv: number
 ): Map<number, string> => {
   const beamXmlByIndex = new Map<number, string>();
-  const isBeamableTimedEvent = (ev: ParsedMuseScoreEvent | undefined): boolean => {
-    if (!ev) return false;
-    if (ev.kind !== "chord" && ev.kind !== "rest") return false;
-    if (ev.kind === "chord" && ev.grace) return false;
-    const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
-    return beamLevelFromType(info.type) > 0;
-  };
-  const flushGroup = (indices: number[]): void => {
-    const chordIndices = indices.filter((idx) => {
-      const ev = voiceEvents[idx];
-      return ev?.kind === "chord" && !ev.grace;
-    });
-    if (chordIndices.length < 2) return;
-    for (let gi = 0; gi < chordIndices.length; gi += 1) {
-      const idx = chordIndices[gi];
-      const ev = voiceEvents[idx];
-      if (!ev || ev.kind !== "chord") continue;
-      const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
-      const levels = beamLevelFromType(info.type);
-      if (levels <= 0) continue;
-      const state = gi === 0 ? "begin" : (gi === chordIndices.length - 1 ? "end" : "continue");
-      let xml = "";
-      for (let level = 1; level <= levels; level += 1) {
-        xml += `<beam number="${level}">${state}</beam>`;
-      }
-      if (xml) beamXmlByIndex.set(idx, xml);
+  const assignments = computeBeamAssignments(voiceEvents, beatDiv, (ev) => {
+    const isTimed = ev.kind === "chord" || ev.kind === "rest";
+    const info = isTimed ? divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv) : null;
+    const levels = info ? beamLevelFromType(info.type) : 0;
+    return {
+      timed: isTimed,
+      chord: ev.kind === "chord",
+      grace: ev.kind === "chord" && Boolean(ev.grace),
+      durationDiv: isTimed ? Math.max(0, ev.durationDiv) : 0,
+      levels,
+      explicitMode: isTimed ? ev.beamMode : undefined,
+    };
+  });
+  for (const [idx, assignment] of assignments.entries()) {
+    let xml = "";
+    for (let level = 1; level <= assignment.levels; level += 1) {
+      xml += `<beam number="${level}">${assignment.state}</beam>`;
     }
-  };
-
-  const hasExplicitBeamMode = voiceEvents.some(
-    (ev) =>
-      (ev.kind === "chord" || ev.kind === "rest")
-      && ev.beamMode !== undefined
-      && (ev.beamMode === "begin" || ev.beamMode === "mid")
-  );
-  if (!hasExplicitBeamMode) {
-    let currentGroup: number[] = [];
-    for (let i = 0; i < voiceEvents.length; i += 1) {
-      const ev = voiceEvents[i];
-      if (ev.kind !== "chord") {
-        flushGroup(currentGroup);
-        currentGroup = [];
-        continue;
-      }
-      const info = divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv);
-      const beamable = beamLevelFromType(info.type) > 0;
-      if (!beamable) {
-        flushGroup(currentGroup);
-        currentGroup = [];
-        continue;
-      }
-      currentGroup.push(i);
-    }
-    flushGroup(currentGroup);
-    return beamXmlByIndex;
+    if (xml) beamXmlByIndex.set(idx, xml);
   }
-
-  let activeGroup: number[] = [];
-  let cursorDiv = 0;
-  const resolvedBeatDiv = Math.max(1, Math.round(beatDiv));
-  for (let i = 0; i < voiceEvents.length; i += 1) {
-    const ev = voiceEvents[i];
-    if (ev.kind !== "chord" && ev.kind !== "rest") {
-      flushGroup(activeGroup);
-      activeGroup = [];
-      continue;
-    }
-    const startsAtBeatBoundary = cursorDiv > 0 && cursorDiv % resolvedBeatDiv === 0;
-    if (startsAtBeatBoundary) {
-      flushGroup(activeGroup);
-      activeGroup = [];
-    }
-    if (ev.kind === "chord" && ev.grace) {
-      flushGroup(activeGroup);
-      activeGroup = [];
-      continue;
-    }
-    const beamable = isBeamableTimedEvent(ev);
-    if (!beamable) {
-      flushGroup(activeGroup);
-      activeGroup = [];
-      continue;
-    }
-    if (ev.beamMode === "begin") {
-      flushGroup(activeGroup);
-      activeGroup = [i];
-      cursorDiv += Math.max(0, ev.durationDiv);
-      continue;
-    }
-    if (ev.beamMode === "mid") {
-      if (!activeGroup.length) {
-        const prev = i > 0 ? voiceEvents[i - 1] : undefined;
-        if (isBeamableTimedEvent(prev)) {
-          activeGroup = [i - 1, i];
-        } else {
-          activeGroup = [i];
-        }
-      } else {
-        activeGroup.push(i);
-      }
-      cursorDiv += Math.max(0, ev.durationDiv);
-      continue;
-    }
-    if (activeGroup.length) activeGroup.push(i);
-    else activeGroup = [i];
-    cursorDiv += Math.max(0, ev.durationDiv);
-  }
-  flushGroup(activeGroup);
   return beamXmlByIndex;
 };
 
@@ -1920,12 +1835,21 @@ const makeMuseChordXml = (
   articulationSubtypes?: string[],
   trillStarts?: number[],
   trillStops?: number[],
+  tupletRefId?: string,
   ottavaStartSubtypes?: string[],
-  ottavaStopCount?: number
+  ottavaStopCount?: number,
+  grace?: boolean,
+  graceSlash?: boolean
 ): string => {
-  const duration = divisionsToMuseDurationType(divisions, durationDiv);
+  const duration = divisionsToMuseDurationType(divisions, durationDiv > 0 ? durationDiv : Math.max(1, Math.round(divisions / 4)));
   let xml = "<Chord>";
+  if (grace) {
+    xml += graceSlash ? "<acciaccatura/>" : "<grace/>";
+  }
   xml += `<durationType>${duration.durationType}</durationType>`;
+  if (tupletRefId && tupletRefId.trim()) {
+    xml += `<Tuplet>${xmlEscape(tupletRefId.trim())}</Tuplet>`;
+  }
   if (duration.dots > 0) xml += `<dots>${duration.dots}</dots>`;
   for (const subtype of ottavaStartSubtypes ?? []) {
     xml += `<Spanner type="Ottava"><Ottava><subtype>${xmlEscape(subtype)}</subtype></Ottava><next><location><fractions>1/1</fractions></location></next></Spanner>`;
@@ -1968,10 +1892,13 @@ const makeMuseChordXml = (
   return xml;
 };
 
-const makeMuseRestXml = (durationDiv: number, divisions: number): string => {
+const makeMuseRestXml = (durationDiv: number, divisions: number, tupletRefId?: string): string => {
   const duration = divisionsToMuseDurationType(divisions, durationDiv);
   let xml = "<Rest>";
   xml += `<durationType>${duration.durationType}</durationType>`;
+  if (tupletRefId && tupletRefId.trim()) {
+    xml += `<Tuplet>${xmlEscape(tupletRefId.trim())}</Tuplet>`;
+  }
   if (duration.dots > 0) xml += `<dots>${duration.dots}</dots>`;
   xml += "</Rest>";
   return xml;
@@ -2089,6 +2016,14 @@ const parseMusicXmlOctaveShiftSubtype = (octaveShift: Element): string | null =>
 type MuseVoiceEvent = {
   atDiv: number;
   durationDiv: number;
+  grace?: boolean;
+  graceSlash?: boolean;
+  tupletTimeModification?: {
+    actualNotes: number;
+    normalNotes: number;
+  };
+  tupletStarts?: number[];
+  tupletStops?: number[];
   pitches: Array<{
     midi: number;
     tieStart: boolean;
@@ -2174,6 +2109,32 @@ const parseMusicXmlTrillNumbers = (note: Element): { starts: number[]; stops: nu
     && note.querySelector(":scope > notations > ornaments > trill-mark") !== null
   ) {
     starts.push(1);
+  }
+  return { starts, stops };
+};
+
+const parseMusicXmlTupletTimeModification = (
+  note: Element
+): { actualNotes: number; normalNotes: number } | null => {
+  const actual = Number.parseInt((note.querySelector(":scope > time-modification > actual-notes")?.textContent ?? "").trim(), 10);
+  const normal = Number.parseInt((note.querySelector(":scope > time-modification > normal-notes")?.textContent ?? "").trim(), 10);
+  if (!Number.isFinite(actual) || !Number.isFinite(normal) || actual <= 0 || normal <= 0) return null;
+  return {
+    actualNotes: Math.max(1, Math.round(actual)),
+    normalNotes: Math.max(1, Math.round(normal)),
+  };
+};
+
+const parseMusicXmlTupletNumbers = (note: Element): { starts: number[]; stops: number[] } => {
+  const starts: number[] = [];
+  const stops: number[] = [];
+  for (const tuplet of Array.from(note.querySelectorAll(":scope > notations > tuplet[type]"))) {
+    const type = (tuplet.getAttribute("type") ?? "").trim().toLowerCase();
+    const rawNumber = (tuplet.getAttribute("number") ?? "").trim();
+    const parsed = Number.parseInt(rawNumber, 10);
+    const number = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1;
+    if (type === "start") starts.push(number);
+    if (type === "stop") stops.push(number);
   }
   return { starts, stops };
 };
@@ -2377,9 +2338,15 @@ const buildMuseVoiceEventsByStaff = (
 
     const staffNo = getNoteStaffNo(child);
     const voiceNo = Math.max(1, Math.round(firstNumber(child, ":scope > voice") ?? 1));
-    const durationDiv = Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? divisions));
+    const isGrace = child.querySelector(":scope > grace") !== null;
+    const isGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
+    const durationDiv = isGrace
+      ? 0
+      : Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? divisions));
     const isChordFollow = child.querySelector(":scope > chord") !== null;
     const isRest = child.querySelector(":scope > rest") !== null;
+    const tupletTimeModification = parseMusicXmlTupletTimeModification(child);
+    const tupletNumbers = parseMusicXmlTupletNumbers(child);
 
     const byVoice = byStaff.get(staffNo) ?? new Map<number, MuseVoiceEvent[]>();
     byStaff.set(staffNo, byVoice);
@@ -2410,7 +2377,16 @@ const buildMuseVoiceEventsByStaff = (
           prev.slurStops = mergeUniqueNumbers(prev.slurStops, slur.stops);
           prev.trillStarts = mergeUniqueNumbers(prev.trillStarts, trill.starts);
           prev.trillStops = mergeUniqueNumbers(prev.trillStops, trill.stops);
+          prev.tupletStarts = mergeUniqueNumbers(prev.tupletStarts, tupletNumbers.starts);
+          prev.tupletStops = mergeUniqueNumbers(prev.tupletStops, tupletNumbers.stops);
+          if (!prev.tupletTimeModification && tupletTimeModification) {
+            prev.tupletTimeModification = tupletTimeModification;
+          }
           prev.articulationSubtypes = mergeUniqueStrings(prev.articulationSubtypes, articulations);
+          if (isGrace) {
+            prev.grace = true;
+            prev.graceSlash = prev.graceSlash || isGraceSlash;
+          }
         }
       }
     } else if (isRest) {
@@ -2419,6 +2395,9 @@ const buildMuseVoiceEventsByStaff = (
         atDiv: cursorDiv,
         durationDiv,
         pitches: null,
+        tupletTimeModification: tupletTimeModification ?? undefined,
+        tupletStarts: tupletNumbers.starts.length ? tupletNumbers.starts : undefined,
+        tupletStops: tupletNumbers.stops.length ? tupletNumbers.stops : undefined,
         ottavaStartSubtypes: marks?.ottavaStartSubtypes?.length ? marks.ottavaStartSubtypes : undefined,
         ottavaStopCount: marks?.ottavaStopCount ? marks.ottavaStopCount : undefined,
       });
@@ -2434,6 +2413,11 @@ const buildMuseVoiceEventsByStaff = (
         events.push({
           atDiv: cursorDiv,
           durationDiv,
+          grace: isGrace ? true : undefined,
+          graceSlash: isGrace ? isGraceSlash : undefined,
+          tupletTimeModification: tupletTimeModification ?? undefined,
+          tupletStarts: tupletNumbers.starts.length ? tupletNumbers.starts : undefined,
+          tupletStops: tupletNumbers.stops.length ? tupletNumbers.stops : undefined,
           pitches: [{
             midi,
             tieStart: tie.tieStart,
@@ -2453,7 +2437,7 @@ const buildMuseVoiceEventsByStaff = (
       }
     }
 
-    if (!isChordFollow) {
+    if (!isChordFollow && !isGrace) {
       cursorDiv += durationDiv;
     }
   }
@@ -2635,13 +2619,43 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
 
           const events = (byVoice.get(voiceNo) ?? []).slice().sort((a, b) => a.atDiv - b.atDiv);
           let cursorDiv = 0;
+          let nextTupletRefNo = 1;
+          const activeTupletRefByNumber = new Map<number, string>();
           for (const event of events) {
             if (event.atDiv > cursorDiv) {
               voiceXml += makeMuseRestXml(event.atDiv - cursorDiv, divisions);
               cursorDiv = event.atDiv;
             }
+            const startNumbers = event.tupletStarts ?? [];
+            const stopNumbers = event.tupletStops ?? [];
+            const hasTupletTiming = Boolean(event.tupletTimeModification);
+            for (const number of startNumbers) {
+              const normalized = Math.max(1, Math.round(number));
+              const refId = `T${nextTupletRefNo}`;
+              nextTupletRefNo += 1;
+              const tm = event.tupletTimeModification ?? { actualNotes: 3, normalNotes: 2 };
+              voiceXml += `<Tuplet id="${refId}"><normalNotes>${tm.normalNotes}</normalNotes><actualNotes>${tm.actualNotes}</actualNotes></Tuplet>`;
+              activeTupletRefByNumber.set(normalized, refId);
+            }
+            if (!hasTupletTiming && startNumbers.length === 0 && stopNumbers.length === 0) {
+              activeTupletRefByNumber.clear();
+            }
+            if (hasTupletTiming && activeTupletRefByNumber.size === 0) {
+              const implicitNumber = 1_000_000 + nextTupletRefNo;
+              const refId = `T${nextTupletRefNo}`;
+              nextTupletRefNo += 1;
+              const tm = event.tupletTimeModification ?? { actualNotes: 3, normalNotes: 2 };
+              voiceXml += `<Tuplet id="${refId}"><normalNotes>${tm.normalNotes}</normalNotes><actualNotes>${tm.actualNotes}</actualNotes></Tuplet>`;
+              activeTupletRefByNumber.set(implicitNumber, refId);
+            }
+            const activeTupletRefIds = Array.from(activeTupletRefByNumber.entries())
+              .sort((a, b) => a[0] - b[0])
+              .map((entry) => entry[1]);
+            const tupletRefId = hasTupletTiming && activeTupletRefIds.length
+              ? activeTupletRefIds[activeTupletRefIds.length - 1]
+              : undefined;
             if (event.pitches === null) {
-              voiceXml += makeMuseRestXml(event.durationDiv, divisions);
+              voiceXml += makeMuseRestXml(event.durationDiv, divisions, tupletRefId);
             } else {
               voiceXml += makeMuseChordXml(
                 event.durationDiv,
@@ -2652,9 +2666,15 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
                 event.articulationSubtypes,
                 event.trillStarts,
                 event.trillStops,
+                tupletRefId,
                 event.ottavaStartSubtypes,
-                event.ottavaStopCount
+                event.ottavaStopCount,
+                event.grace,
+                event.graceSlash
               );
+            }
+            for (const number of stopNumbers) {
+              activeTupletRefByNumber.delete(Math.max(1, Math.round(number)));
             }
             cursorDiv += event.durationDiv;
           }

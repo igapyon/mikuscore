@@ -520,6 +520,54 @@ describe("midi-io MIDI import MVP", () => {
     expect(notes.some((note) => note.querySelector("type")?.textContent === "quarter")).toBe(true);
   });
 
+  it("applies beam tags to grouped short notes and breaks beams across rests", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(240), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 96,
+      ...vlq(240), 0x80, 62, 0,
+      ...vlq(240), 0x90, 64, 96,
+      ...vlq(240), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/8" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const pitchedNotes = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("pitch") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(3);
+    const firstBeam = pitchedNotes[0]?.querySelector("beam")?.textContent?.trim();
+    const secondBeam = pitchedNotes[1]?.querySelector("beam")?.textContent?.trim();
+    const thirdBeam = pitchedNotes[2]?.querySelector("beam");
+    expect(firstBeam).toBe("begin");
+    expect(secondBeam).toBe("end");
+    expect(thirdBeam).toBeNull();
+  });
+
+  it("splits implicit beams at beat boundaries in MIDI import", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x58, 0x04, 0x02, 0x02, 0x18, 0x08, // 2/4
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(240), 0x80, 60, 0,
+      ...vlq(0), 0x90, 62, 96,
+      ...vlq(240), 0x80, 62, 0,
+      ...vlq(0), 0x90, 64, 96,
+      ...vlq(240), 0x80, 64, 0,
+      ...vlq(0), 0x90, 65, 96,
+      ...vlq(240), 0x80, 65, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/8" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const pitchedNotes = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("pitch") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(4);
+    const beams = pitchedNotes.map((note) => note.querySelector("beam")?.textContent?.trim() ?? "");
+    expect(beams[0]).toBe("begin");
+    expect(beams[1]).toBe("end");
+    expect(beams[2]).toBe("begin");
+    expect(beams[3]).toBe("end");
+  });
+
   it("keeps same-pitch retrigger stable even when note-on appears before note-off at same tick", () => {
     const midiOffThenOn = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
@@ -796,12 +844,14 @@ describe("midi-io MIDI import MVP", () => {
     expect(accidental).toBe("natural");
   });
 
-  it("splits melodic notes into grand staff by middle C threshold", () => {
+  it("keeps upper-staff hysteresis around split boundary in grand staff mode", () => {
     const midi = buildSmfFormat0([
-      ...vlq(0), 0x90, 60, 100, // C4 -> treble (staff 1)
-      ...vlq(0), 0x90, 59, 100, // B3 -> bass (staff 2)
-      ...vlq(480), 0x80, 60, 0,
-      ...vlq(0), 0x80, 59, 0,
+      ...vlq(0), 0x90, 64, 100, // E4 -> upper
+      ...vlq(480), 0x80, 64, 0,
+      ...vlq(0), 0x90, 59, 100, // B3 stays upper by hysteresis (prev upper && >=55)
+      ...vlq(480), 0x80, 59, 0,
+      ...vlq(0), 0x90, 54, 100, // F#3 -> lower (drops below upper hold min)
+      ...vlq(480), 0x80, 54, 0,
     ]);
     const result = convertMidiToMusicXml(midi);
     expect(result.ok).toBe(true);
@@ -812,17 +862,18 @@ describe("midi-io MIDI import MVP", () => {
     const clef2 = doc.querySelector("part > measure > attributes > clef[number=\"2\"] > sign")?.textContent?.trim();
     expect(clef1).toBe("G");
     expect(clef2).toBe("F");
-    const c4Note = Array.from(doc.querySelectorAll("part > measure > note"))
-      .find((note) => note.querySelector("pitch > step")?.textContent?.trim() === "C"
-        && note.querySelector("pitch > octave")?.textContent?.trim() === "4");
     const b3Note = Array.from(doc.querySelectorAll("part > measure > note"))
       .find((note) => note.querySelector("pitch > step")?.textContent?.trim() === "B"
         && note.querySelector("pitch > octave")?.textContent?.trim() === "3");
-    expect(c4Note?.querySelector("staff")?.textContent?.trim()).toBe("1");
-    expect(b3Note?.querySelector("staff")?.textContent?.trim()).toBe("2");
+    const fs3Note = Array.from(doc.querySelectorAll("part > measure > note"))
+      .find((note) => note.querySelector("pitch > step")?.textContent?.trim() === "F"
+        && note.querySelector("pitch >alter")?.textContent?.trim() === "1"
+        && note.querySelector("pitch > octave")?.textContent?.trim() === "3");
+    expect(b3Note?.querySelector("staff")?.textContent?.trim()).toBe("1");
+    expect(fs3Note?.querySelector("staff")?.textContent?.trim()).toBe("2");
   });
 
-  it("fills empty staff with a full-measure rest in grand staff mode", () => {
+  it("does not emit phantom empty staff when melody stays on one side", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 72, 100, // C5 only (treble side)
       ...vlq(480), 0x80, 72, 0,
@@ -830,11 +881,31 @@ describe("midi-io MIDI import MVP", () => {
     const result = convertMidiToMusicXml(midi);
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
-    const bassRests = Array.from(doc.querySelectorAll("part > measure > note"))
-      .filter((note) => note.querySelector("staff")?.textContent?.trim() === "2")
-      .filter((note) => note.querySelector("rest") !== null);
-    expect(bassRests.length).toBeGreaterThan(0);
-    expect(bassRests.some((note) => note.querySelector("type")?.textContent?.trim() === "whole")).toBe(true);
+    const staves = doc.querySelector("part > measure > attributes > staves");
+    expect(staves).toBeNull();
+    const clefSign = doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim();
+    expect(clefSign).toBe("G");
+    const staff2Notes = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("staff")?.textContent?.trim() === "2");
+    expect(staff2Notes.length).toBe(0);
+  });
+
+  it("does not emit full-rest-only inactive voice in a measure that already has notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x58, 0x04, 0x01, 0x02, 0x18, 0x08, // 1/4
+      ...vlq(0), 0x90, 60, 100,  // m1 voice 1 candidate
+      ...vlq(120), 0x90, 64, 100, // m1 overlap -> voice 2 candidate
+      ...vlq(240), 0x80, 64, 0,
+      ...vlq(120), 0x80, 60, 0,
+      ...vlq(0), 0x90, 67, 100, // m2 only one sounding note
+      ...vlq(240), 0x80, 67, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const measure2Voice2Notes = Array.from(doc.querySelectorAll('part > measure[number="2"] > note'))
+      .filter((note) => note.querySelector("voice")?.textContent?.trim() === "2");
+    expect(measure2Voice2Notes.length).toBe(0);
   });
 
   it("reads MIDI tempo meta event into MusicXML direction/sound tempo", () => {
