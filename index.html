@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>mikuscore</title>
   <style>
     :root {
@@ -135,7 +138,7 @@
         <li>ABC, MEI, and LilyPond support is currently experimental.</li>
       </ul>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html">Open mikuscore</a>
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">Open mikuscore</a>
         <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
@@ -163,10 +166,42 @@
         <li>ABC、MEI、LilyPond 対応は現在 Experimental（試験対応）です。</li>
       </ul>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html">mikuscore を開く</a>
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">mikuscore を開く</a>
         <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      // Cache-busting: append a timestamp query right before opening mikuscore.html.
+      const selector = 'a[href^="./mikuscore.html"]';
+      const buildVersionStamp = () => {
+        const d = new Date();
+        return (
+          d.getFullYear().toString() +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          String(d.getDate()).padStart(2, "0") +
+          String(d.getHours()).padStart(2, "0") +
+          String(d.getMinutes()).padStart(2, "0")
+        );
+      };
+      const stampAndGo = (anchor) => {
+        const u = new URL(anchor.getAttribute("href"), location.href);
+        u.searchParams.set("v", buildVersionStamp());
+        anchor.setAttribute("href", u.pathname + u.search);
+      };
+      document.addEventListener("click", (ev) => {
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+      document.addEventListener("auxclick", (ev) => {
+        if (ev.button !== 1) return;
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+    })();
+  </script>
 </body>
 </html>

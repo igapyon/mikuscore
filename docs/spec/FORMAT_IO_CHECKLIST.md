@@ -37,6 +37,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - [ ] tempo
   - [ ] key/time/transpose
   - [ ] `miscellaneous-field` equivalent (if representable in source format)
+  - [ ] format-specific roundtrip hints (if used) are explicitly documented (key format, scope, restore rule)
 - [ ] Unsupported feature handling is explicit:
   - [ ] either diagnostic + skip
   - [ ] or hard error + fail import
@@ -57,6 +58,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - [ ] tempo
   - [ ] transpose
   - [ ] `miscellaneous-field` equivalent
+  - [ ] comment-level metadata/hints (if any) are versioned and parseable (e.g. `%@mks ...`)
 - [ ] If loss is unavoidable, degradation behavior is documented
 
 ---
@@ -116,7 +118,19 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] For each format, document retention policy for both categories:
   - preserve as-is / transform / drop
   - roundtrip expectations (`MusicXML -> Format -> MusicXML`, `Format -> MusicXML -> Format`)
+- [ ] If using out-of-band comment hints (non-XML metadata), define:
+  - token schema and allowed keys
+  - event addressing key (`voice + measure + event`)
+  - fallback when hint is absent or invalid
+  - safety against conflicts with existing source comments
 - [ ] Keep namespace separation strict (`src:*` vs `mks:*` vs `diag:*` vs optional `dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
+
+### LilyPond Note (Current `mks` usage)
+
+- `%@mks lanes ...`:
+  - stores per-measure multi-lane token streams to restore same-staff multi-voice structure (`backup`) on import.
+- `%@mks slur ...`:
+  - stores slur start/stop metadata (`type`, optional `number`, optional `placement`) by event key for roundtrip restoration.
 
 ---
 

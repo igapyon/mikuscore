@@ -89,15 +89,24 @@ This file MUST remain side-effect free.
 
 1. Save current score.
 2. Parse saved MusicXML.
+3. Resolve optional start location:
+   - if `startFromMeasure` is provided (`partId`, `measureNumber`),
+     playback MUST seek to that measure start tick within the target part.
 3. Resolve playback mode:
    - `playback`
    - `midi` (when MIDI-like playback is enabled)
 4. Build events via `buildPlaybackEventsFromMusicXmlDoc`.
 5. Build optional tempo/control streams for MIDI-like mode.
+6. If a start measure was resolved:
+   - trim note events to `startTicks >= startTick` and rebase by `-startTick`
+   - trim/rebase tempo events and inject a tick-0 tempo from the latest pre-start tempo
+   - trim/rebase control events (`CC`) to the new origin
 6. Build MIDI bytes (diagnostic parity and validation path).
 7. Convert to synth schedule and start playback.
 
 On failure, status text MUST be updated and playback MUST not start.
+
+Status text SHOULD include start context when provided (e.g. `from measure X`).
 
 ## startMeasurePlayback
 
