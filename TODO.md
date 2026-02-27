@@ -207,14 +207,35 @@
   - Add unit tests for multi-staff parsing edge cases (`<< >>`, `\new Staff`, `\new Voice`, variable expansion).
   - Add unit tests for command-argument non-note tokens (`\key`, `\time`, `\clef`, header/layout blocks) to prevent false note parsing.
   - Add regression unit tests from recent incidents (overcount notes, octave shift mismatch, missing events in dense measures).
+- [ ] LilyPond v2.24 notation audit follow-up (index + child/grandchild pages):
+  - [ ] Fix relative-octave decision to follow LilyPond rule (letter-name interval based, not semitone-distance based).
+  - [ ] Fix post-chord relative anchor to use the first note of chord as the reference for subsequent relative notes.
+  - [ ] Support isolated durations in note stream (e.g. `4`, `16`) so forms like `a'2~ 4~ 16` parse correctly.
+  - [ ] Preserve/parse tie marker `~` in native LilyPond import instead of stripping it in direct parser.
+  - [ ] Add native `\tuplet` parsing path (reduce duration drift when `%@mks` hints are absent).
+  - Parse native ties (`~`) and preserve tie semantics on import (currently dropped in direct parser).
+  - Parse native slurs / phrasing slurs (`(` `)` / `\(` `\)`) instead of relying on `%@mks` hints.
+  - Parse native dynamics (`\p`, `\f`, `\mf`, `\sfz`, `\<`, `\>`, `\!`) on import.
+  - [x] Parse native trill commands (`\trill`, `\startTrillSpan`/`\stopTrillSpan`) on import.
+  - [x] Parse native glissando command (`\glissando`) on import.
+  - Parse native repeat constructs (`\repeat volta`, `\alternative`, segno/al-fine variants) on import.
+  - Parse lyric constructs (`\lyricmode`, `\addlyrics`, `\lyricsto`) on import.
+  - Parse keyboard staff-change commands (`\change Staff`, `\autoChange`) on import.
+  - [x] Parse piano pedal commands (`\sustainOn`/`\sustainOff`, `\sostenutoOn`/`Off`, `\unaCorda`, `\treCorde`) on import.
+  - [x] Parse `\upbow` / `\downbow` on import.
+  - [x] Parse harmonics / `\snappizzicato` on import (minimal native mapping).
 - [ ] Apply shared clef/staff policy (`core/staffClefPolicy.ts`) to LilyPond import path:
-  - Use `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` for single-block imports.
-  - Apply hysteresis-based staff assignment when auto-splitting to grand staff.
+  - [x] Use `chooseSingleClefByKeys` when `\clef` is omitted (single-block / `\new Staff` fallback).
+  - [x] Use `shouldUseGrandStaffByRange` for single-block imports that should auto-split to upper/lower staffs.
+  - [x] Apply hysteresis-based staff assignment when auto-splitting to upper/lower staffs.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
 - [ ] Strengthen MEI test strategy beyond unit level (unit-only is likely insufficient):
   - Add MEI roundtrip golden tests (`MusicXML -> MEI -> MusicXML`) with semantic comparators.
   - Add MEI spot/parity tests on larger real-world fixtures (e.g., piano multi-voice / ornaments / repeats).
   - Define MEI preserve/degrade acceptance gates and fail CI when regressions exceed thresholds.
+  - Verify implementation conformance against official MEI references and track gaps in TODO:
+    - https://music-encoding.org/
+    - https://music-encoding.org/guidelines/v5/content/
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
 - [ ] Add VSQX import/export support.
 - [ ] Add lyrics support (import/edit/export with format-specific preserve/degrade rules).
@@ -444,14 +465,35 @@
   - 多段譜解析の境界ケース（`<< >>` / `\new Staff` / `\new Voice` / 変数展開）を追加。
   - `\key` / `\time` / `\clef` / header/layout など「音符でないトークン」の誤認識防止テストを追加。
   - 直近不具合（音符過剰生成・オクターブずれ・密集小節での欠落）を回帰テスト化する。
+- [ ] LilyPond v2.24 記法監査（index + 子/孫ページ）に基づく追従TODO:
+  - [ ] relative のオクターブ判定を LilyPond 仕様に合わせる（半音距離ではなく音名間隔ベース）。
+  - [ ] 和音直後の relative 基準音を「和音先頭音」に修正する（現状は末尾音基準になりうる）。
+  - [ ] 単独音価トークン（例: `4`, `16`）を解析し、`a'2~ 4~ 16` のような記法を正しく取り込む。
+  - [ ] direct parser で `~` を除去せず、tie をネイティブ解析・保持する。
+  - [ ] `%@mks` 非依存で `\tuplet` をネイティブ解析する経路を追加する。
+  - tie 記法（`~`）をネイティブ解析し、取り込み時に tie セマンティクスを保持する（現状は direct parser で脱落）。
+  - slur / phrasing slur（`(` `)` / `\(` `\)`）を `%@mks` 依存ではなくネイティブ解析する。
+  - dynamics（`\p`, `\f`, `\mf`, `\sfz`, `\<`, `\>`, `\!`）をネイティブ解析する。
+  - [x] trill（`\trill`, `\startTrillSpan`/`\stopTrillSpan`）をネイティブ解析する。
+  - [x] glissando（`\glissando`）をネイティブ解析する。
+  - repeat 構文（`\repeat volta`, `\alternative`, segno/al-fine 系）をネイティブ解析する。
+  - lyrics 構文（`\lyricmode`, `\addlyrics`, `\lyricsto`）をネイティブ解析する。
+  - 鍵盤系の staff 変更（`\change Staff`, `\autoChange`）を取り込む。
+  - [x] ピアノペダル記法（`\sustainOn`/`\sustainOff`, `\sostenutoOn`/`Off`, `\unaCorda`, `\treCorde`）を取り込む。
+  - [x] `\upbow` / `\downbow` を取り込む。
+  - [x] harmonics / `\snappizzicato` を取り込む（最小ネイティブマッピング）。
 - [ ] LilyPond 取り込み経路に共通の clef/staff 判定（`core/staffClefPolicy.ts`）を適用する。
-  - 単一ブロック取り込み時に `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` を適用。
-  - 大譜表へ自動分割する場合はヒステリシス方式の staff 割当を適用。
+  - [x] `\clef` 未指定時のフォールバックに `chooseSingleClefByKeys` を適用する（単一ブロック / `\new Staff`）。
+  - [x] 単一ブロック取り込み時に `shouldUseGrandStaffByRange` を使い、大譜表相当（上下staff）への自動分割を適用する。
+  - [x] 大譜表相当へ自動分割する場合はヒステリシス方式の staff 割当を適用する。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MEI のテスト戦略を単体レベル以上に強化する（unit だけでは不足の可能性）:
   - `MusicXML -> MEI -> MusicXML` の roundtrip golden テストを追加する。
   - 実運用に近い大きめ fixture（多声・装飾・リピート等）で spot/parity テストを追加する。
   - preserve/degrade の許容基準を定義し、閾値超過で CI を失敗させる。
+  - MEI 公式リファレンスに照らして実装適合を確認し、差分は TODO で管理する:
+    - https://music-encoding.org/
+    - https://music-encoding.org/guidelines/v5/content/
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
 - [ ] VSQX 形式の入出力対応を追加。
 - [ ] 歌詞（lyrics）の対応を追加（取り込み/編集/出力と、形式ごとの保持/劣化ルール定義を含む）。
