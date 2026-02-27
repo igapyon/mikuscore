@@ -23,6 +23,21 @@ describe("LilyPond I/O", () => {
     expect(doc.querySelectorAll("note").length).toBeGreaterThan(0);
   });
 
+  it("imports bare top-level music block without \\score/\\new Staff", () => {
+    const lily = `\\version "2.24.4"
+{
+  c' e' g' e'
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = Array.from(doc.querySelectorAll("score-partwise > part > measure > note > pitch > step")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    expect(notes.slice(0, 4)).toEqual(["C", "E", "G", "E"]);
+  });
+
   it("writes LilyPond import warnings into diag:* fields", () => {
     const lily = `\\version "2.24.0"
 \\time 4/4
@@ -54,6 +69,23 @@ describe("LilyPond I/O", () => {
     const notes = Array.from(doc.querySelectorAll("note > pitch > step")).map((n) => (n.textContent || "").trim());
     expect(notes.length).toBeGreaterThanOrEqual(8);
     expect(notes.slice(0, 4)).toEqual(["C", "D", "E", "F"]);
+  });
+
+  it("honors explicit octave marks inside \\relative", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\relative c' { d'4 d4 } }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const octaves = Array.from(doc.querySelectorAll("part > measure > note > pitch > octave")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    expect(octaves.slice(0, 2)).toEqual(["5", "5"]);
   });
 
   it("imports basic chord token <...>", () => {
@@ -116,6 +148,78 @@ describe("LilyPond I/O", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     expect(doc.querySelectorAll("score-partwise > part").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("does not overcount notes for simultaneous two-staff fragment", () => {
+    const lily = `<<
+  \\new Staff { \\clef "treble" \\key d \\major \\time 3/4 c''4 }
+  \\new Staff { \\clef "bass" c4 }
+>>`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const parts = doc.querySelectorAll("score-partwise > part");
+    expect(parts.length).toBe(2);
+    const p1Notes = parts[0].querySelectorAll("measure > note");
+    const p2Notes = parts[1].querySelectorAll("measure > note");
+    expect(p1Notes.length).toBe(1);
+    expect(p2Notes.length).toBe(1);
+    expect(parts[0].querySelector("measure > note > pitch > step")?.textContent?.trim()).toBe("C");
+    expect(parts[1].querySelector("measure > note > pitch > step")?.textContent?.trim()).toBe("C");
+  });
+
+  it("imports variable-based organ score with \\relative { ... } blocks", () => {
+    const lily = `\\header {
+  title = "Jesu, meine Freude"
+  composer = "J S Bach"
+}
+keyTime = { \\key c \\minor \\time 4/4 }
+ManualOneVoiceOneMusic = \\relative {
+  g'4 g f ees |
+  d2 c |
+}
+ManualOneVoiceTwoMusic = \\relative {
+  ees'16 d ees8~ 16 f ees d c8 d~ d c~ |
+  8 c4 b8 c8. g16 c b c d |
+}
+ManualTwoMusic = \\relative {
+  c'16 b c8~ 16 b c g a8 g~ 16 g aes ees |
+  f16 ees f d g aes g f ees d ees8~ 16 f ees d |
+}
+PedalOrganMusic = \\relative {
+  r8 c16 d ees d ees8~ 16 a, b g c b c8 |
+  r16 g ees f g f g8 c,2 |
+}
+
+\\score {
+  <<
+    \\new PianoStaff <<
+      \\new Staff = "ManualOne" <<
+        \\keyTime
+        \\clef "treble"
+        \\new Voice { \\voiceOne \\ManualOneVoiceOneMusic }
+        \\new Voice { \\voiceTwo \\ManualOneVoiceTwoMusic }
+      >>
+      \\new Staff = "ManualTwo" <<
+        \\keyTime
+        \\clef "bass"
+        \\new Voice { \\ManualTwoMusic }
+      >>
+    >>
+    \\new Staff = "PedalOrgan" <<
+      \\keyTime
+      \\clef "bass"
+      \\new Voice { \\PedalOrganMusic }
+    >>
+  >>
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelectorAll("score-partwise > part").length).toBeGreaterThanOrEqual(3);
+    expect(doc.querySelectorAll("score-partwise > part > measure > note").length).toBeGreaterThan(0);
   });
 
   it("roundtrips same-staff multi-voice note via %@mks lanes metadata", () => {

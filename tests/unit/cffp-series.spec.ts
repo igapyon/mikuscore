@@ -512,7 +512,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: {},
+    preserveByFormat: { musescore: true },
     hasFeature: (doc) =>
       doc.querySelector("part > measure > direction > direction-type > segno") !== null &&
       doc.querySelector("part > measure > direction > direction-type > coda") !== null,
@@ -1047,7 +1047,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: { abc: true, lilypond: true, musescore: true },
+    preserveByFormat: { abc: true, musescore: true },
     hasFeature: (doc) => {
       const m1n1 = doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1)");
       const m1n2 = doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(2)");
@@ -1117,7 +1117,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: { musescore: true },
+    preserveByFormat: {},
     preservePitchByFormat: { abc: false, mei: false, lilypond: false, musescore: false, midi: false, vsqx: false },
     hasFeature: (doc) => {
       const beams = Array.from(doc.querySelectorAll("part > measure > note > beam[number=\"1\"]")).map(
@@ -1384,7 +1384,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: { abc: true, musescore: true },
+    preserveByFormat: { abc: true, lilypond: true, musescore: true },
     hasFeature: (doc) =>
       doc.querySelector('part > measure > note > notations > slur[type="start"]') !== null &&
       doc.querySelector('part > measure > note > notations > slur[type="stop"]') !== null,
@@ -1609,7 +1609,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: {},
+    preserveByFormat: { musescore: true },
     hasFeature: (doc) => {
       const voices = Array.from(doc.querySelectorAll("part > measure > note > voice")).map((n) => n.textContent?.trim() ?? "");
       return voices.includes("1") && voices.includes("2");
@@ -1756,7 +1756,7 @@ const CFFP_CASES: CffpCase[] = [
     </measure>
   </part>
 </score-partwise>`,
-    preserveByFormat: {},
+    preserveByFormat: { musescore: true },
     hasFeature: (doc) =>
       doc.querySelector("part > measure:nth-of-type(1) > note > tie[type=\"start\"]") !== null &&
       doc.querySelector("part > measure:nth-of-type(2) > note > tie[type=\"stop\"]") !== null,
