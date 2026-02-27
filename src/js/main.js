@@ -16334,6 +16334,7 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
     const events = [];
     const idToEventIndex = new Map();
     const tieCarryByPitch = new Map(tieCarryIn);
+    const measureAccidentalByPitch = new Map();
     const tiePitchKey = (pname, octave) => `${String(pname || "").trim().toUpperCase()}:${Math.round(Number(octave) || 0)}`;
     const breaksecFromNode = (node) => {
         const raw = parseIntSafe(node.getAttribute("breaksec"), NaN);
@@ -16377,11 +16378,16 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
         const carriedAlter = tieFlags.stop && explicitAlter === null
             ? tieCarryByPitch.get(pitchKey)
             : undefined;
+        const measureCarriedAlter = explicitAlter === null
+            ? measureAccidentalByPitch.get(pitchKey)
+            : undefined;
         const resolvedAlter = explicitAlter !== null
             ? explicitAlter
             : Number.isFinite(carriedAlter)
                 ? Math.round(Number(carriedAlter))
-                : impliedAlter;
+                : Number.isFinite(measureCarriedAlter)
+                    ? Math.round(Number(measureCarriedAlter))
+                    : impliedAlter;
         const alterXml = resolvedAlter !== 0 ? `<alter>${resolvedAlter}</alter>` : "";
         const accidentalText = accidToMusicXmlAccidental(visualAccid);
         const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
@@ -16439,6 +16445,9 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
         }
         else if (tieFlags.stop) {
             tieCarryByPitch.delete(pitchKey);
+        }
+        if (explicitAlter !== null) {
+            measureAccidentalByPitch.set(pitchKey, resolvedAlter);
         }
         const xmlId = (effectiveNode.getAttribute("xml:id") || effectiveNode.getAttribute("id") || "").trim();
         if (xmlId)
@@ -16522,11 +16531,16 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
             const carriedAlter = tieFlags.stop && explicitAlter === null
                 ? tieCarryByPitch.get(pitchKey)
                 : undefined;
+            const measureCarriedAlter = explicitAlter === null
+                ? measureAccidentalByPitch.get(pitchKey)
+                : undefined;
             const resolvedAlter = explicitAlter !== null
                 ? explicitAlter
                 : Number.isFinite(carriedAlter)
                     ? Math.round(Number(carriedAlter))
-                    : impliedAlter;
+                    : Number.isFinite(measureCarriedAlter)
+                        ? Math.round(Number(measureCarriedAlter))
+                        : impliedAlter;
             const alterXml = resolvedAlter !== 0 ? `<alter>${resolvedAlter}</alter>` : "";
             const accidentalText = accidToMusicXmlAccidental(visualAccid);
             const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
@@ -16558,6 +16572,9 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
             }
             else if (tieFlags.stop) {
                 tieCarryByPitch.delete(pitchKey);
+            }
+            if (explicitAlter !== null) {
+                measureAccidentalByPitch.set(pitchKey, resolvedAlter);
             }
             return `<note>${chordXml}${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${tieXml}${durationXml}<voice>${xmlEscape(voice)}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}${lyricXml}</note>`;
         })
@@ -17940,7 +17957,7 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
             const effectiveStaffDef = findEffectiveStaffDefForNode(targetStaff, staffNo, staffDefsInDocOrder);
             const measureMeta = parseMeasureMetaFromMeiStaff(targetStaff);
             const measureNo = ((_b = measureMeta === null || measureMeta === void 0 ? void 0 : measureMeta.number) !== null && _b !== void 0 ? _b : sourceMeasureNo).trim() || sourceMeasureNo;
-            const implicitAttr = (measureMeta === null || measureMeta === void 0 ? void 0 : measureMeta.implicit) ? ' implicit="yes"' : "";
+            const implicitFromMeta = Boolean(measureMeta === null || measureMeta === void 0 ? void 0 : measureMeta.implicit);
             const scoreDefBeats = parseIntSafe(effectiveScoreDef === null || effectiveScoreDef === void 0 ? void 0 : effectiveScoreDef.getAttribute("meter.count"), currentBeats);
             const scoreDefBeatType = parseIntSafe(effectiveScoreDef === null || effectiveScoreDef === void 0 ? void 0 : effectiveScoreDef.getAttribute("meter.unit"), currentBeatType);
             const scoreDefFifths = parseKeySigFromScoreDefForStaff(effectiveScoreDef, staffNo, currentFifths);
@@ -18010,6 +18027,12 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
                 };
             })
                 .filter((layer) => layer.xml.length > 0);
+            const maxLayerTicks = layers.reduce((max, layer) => Math.max(max, layer.totalTicks), 0);
+            const isLikelyPickupMeasure = !implicitFromMeta &&
+                measureIndex === 0 &&
+                maxLayerTicks > 0 &&
+                maxLayerTicks < measureTicks;
+            const implicitAttr = implicitFromMeta || isLikelyPickupMeasure ? ' implicit="yes"' : "";
             let body = "";
             if (layers.length > 0) {
                 body += layers[0].xml;
