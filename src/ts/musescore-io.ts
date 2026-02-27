@@ -198,7 +198,7 @@ const chunkString = (value: string, maxChunk: number): string[] => {
 const buildWarningMiscXml = (warnings: MuseScoreWarning[]): string => {
   if (!warnings.length) return "";
   const maxEntries = Math.min(256, warnings.length);
-  let xml = `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  let xml = `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const warning = warnings[i];
     const attrs: string[] = [
@@ -217,7 +217,7 @@ const buildWarningMiscXml = (warnings: MuseScoreWarning[]): string => {
     if (warning.occupiedDiv !== undefined) attrs.push(`occupiedDiv=${warning.occupiedDiv}`);
     if (warning.capacityDiv !== undefined) attrs.push(`capacityDiv=${warning.capacityDiv}`);
     const payload = attrs.join(";");
-    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${xmlEscape(payload)}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${xmlEscape(payload)}</miscellaneous-field>`;
   }
   return xml;
 };
@@ -226,12 +226,12 @@ const buildSourceMiscXml = (source: string): string => {
   const encoded = encodeURIComponent(source);
   const chunks = chunkString(encoded, 800);
   let xml = "";
-  xml += '<miscellaneous-field name="src:musescore:raw-encoding">uri-v1</miscellaneous-field>';
-  xml += `<miscellaneous-field name="src:musescore:raw-length">${source.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:musescore:raw-encoded-length">${encoded.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:musescore:raw-chunks">${chunks.length}</miscellaneous-field>`;
+  xml += '<miscellaneous-field name="mks:src:musescore:raw-encoding">uri-v1</miscellaneous-field>';
+  xml += `<miscellaneous-field name="mks:src:musescore:raw-length">${source.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:musescore:raw-encoded-length">${encoded.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:musescore:raw-chunks">${chunks.length}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
-    xml += `<miscellaneous-field name="src:musescore:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:src:musescore:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
   }
   return xml;
 };
@@ -1629,7 +1629,7 @@ export const convertMuseScoreToMusicXml = (
   if (sourceMetadata) {
     sourceMiscXml = buildSourceMiscXml(mscxSource);
     if (sourceVersion) {
-      sourceMiscXml += `<miscellaneous-field name="src:musescore:version">${xmlEscape(sourceVersion)}</miscellaneous-field>`;
+      sourceMiscXml += `<miscellaneous-field name="mks:src:musescore:version">${xmlEscape(sourceVersion)}</miscellaneous-field>`;
     }
   }
   const miscXml = `${debugMetadata ? buildWarningMiscXml(warnings) : ""}${sourceMiscXml}`;

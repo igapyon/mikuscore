@@ -1806,7 +1806,7 @@ const buildMeasureMidiMetaMiscXml = (measureSegments: ImportedVoiceNoteSegment[]
         : a.startDiv - b.startDiv
     );
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:midi-meta-count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:dbg:midi:meta:count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < sorted.length; i += 1) {
     const seg = sorted[i];
     const payload = [
@@ -1822,7 +1822,7 @@ const buildMeasureMidiMetaMiscXml = (measureSegments: ImportedVoiceNoteSegment[]
       `tk0=${toHex(seg.startTick, 6)}`,
       `tk1=${toHex(seg.endTick, 6)}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:midi-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:dbg:midi:meta:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1842,13 +1842,13 @@ const buildMidiSourceMiscXml = (midiBytes: Uint8Array): string => {
   }
   const truncated = chunks.join("").length < hex.length;
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="src:midi:raw-encoding">hex-v1</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-bytes">${bytes.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-hex-length">${hex.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-chunks">${chunks.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-encoding">hex-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-bytes">${bytes.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-hex-length">${hex.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-chunks">${chunks.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
-    xml += `<miscellaneous-field name="src:midi:raw-${String(i + 1).padStart(4, "0")}">${chunks[i]}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:src:midi:raw-${String(i + 1).padStart(4, "0")}">${chunks[i]}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1875,9 +1875,9 @@ const buildMidiSysExMiscXml = (payloads: string[]): string => {
     map.set(key, value);
   }
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:midi-sysex-count">${toHex(lines.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:meta:midi:sysex:count">${toHex(lines.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < lines.length; i += 1) {
-    xml += `<miscellaneous-field name="mks:midi-sysex-${String(i + 1).padStart(4, "0")}">${xmlEscape(
+    xml += `<miscellaneous-field name="mks:meta:midi:sysex:${String(i + 1).padStart(4, "0")}">${xmlEscape(
       lines[i]
     )}</miscellaneous-field>`;
   }
@@ -1899,7 +1899,7 @@ const buildMidiSysExMiscXml = (payloads: string[]): string => {
   for (const key of preferred) {
     const value = map.get(key);
     if (!value) continue;
-    xml += `<miscellaneous-field name="mks:midi-sysex:${key}">${xmlEscape(value)}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:meta:midi:sysex:${key}">${xmlEscape(value)}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1909,7 +1909,7 @@ const buildMidiDiagMiscXml = (warnings: MidiImportDiagnostic[]): string => {
   if (!warnings.length) return "";
   const maxEntries = Math.min(256, warnings.length);
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const warning = warnings[i];
     const payload = [
@@ -1918,7 +1918,7 @@ const buildMidiDiagMiscXml = (warnings: MidiImportDiagnostic[]): string => {
       "fmt=midi",
       `message=${xmlEscape(warning.message)}`,
     ].join(";");
-    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;

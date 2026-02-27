@@ -1477,7 +1477,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   ): void => {
     const fields = Array.from(
       measure.querySelectorAll(
-        ':scope > attributes > miscellaneous > miscellaneous-field[name^="diag:"]'
+        ':scope > attributes > miscellaneous > miscellaneous-field[name^="mks:diag:"]'
       )
     );
     if (!fields.length) return;
@@ -1489,8 +1489,10 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
       byName.set(name, value);
     }
     const orderedNames = Array.from(byName.keys()).sort((a, b) => {
-      if (a === "diag:count") return -1;
-      if (b === "diag:count") return 1;
+      const isCountA = a === "mks:diag:count";
+      const isCountB = b === "mks:diag:count";
+      if (isCountA && !isCountB) return -1;
+      if (!isCountA && isCountB) return 1;
       return a.localeCompare(b);
     });
     for (const name of orderedNames) {
@@ -2004,7 +2006,7 @@ const toHex = (value: number, width = 2): string => {
 const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string => {
   if (!notes.length) return "";
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:abc-meta-count">${toHex(notes.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:dbg:abc:meta:count">${toHex(notes.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < notes.length; i += 1) {
     const note = notes[i];
     const voice = normalizeVoiceForMusicXml(note.voice);
@@ -2025,7 +2027,7 @@ const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number):
       `dd=${toHex(dur, 4)}`,
       `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:abc-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:dbg:abc:meta:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2046,13 +2048,13 @@ const buildAbcSourceMiscXml = (abcSource: string): string => {
   }
   const truncated = chunks.join("").length < encoded.length;
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
-    xml += `<miscellaneous-field name="src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2073,7 +2075,7 @@ const buildAbcDiagMiscXml = (
   if (!diagnostics.length) return "";
   const maxEntries = Math.min(256, diagnostics.length);
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const item = diagnostics[i];
     const payload = [
@@ -2088,7 +2090,7 @@ const buildAbcDiagMiscXml = (
     ]
       .filter(Boolean)
       .join(";");
-    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;

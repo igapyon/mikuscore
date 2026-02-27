@@ -39,7 +39,7 @@ describe("ABC I/O compatibility", () => {
     expect(voices.every((v) => /^[1-9]\d*$/.test(v))).toBe(true);
   });
 
-  it("ABC->MusicXML writes mks:abc-meta miscellaneous fields by default", () => {
+  it("ABC->MusicXML writes mks:dbg:abc:meta miscellaneous fields by default", () => {
     const abc = `X:1
 T:Debug test
 M:4/4
@@ -51,21 +51,21 @@ C D E F |`;
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     const fields = Array.from(
-      outDoc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-meta"]')
+      outDoc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:abc:meta"]')
     );
     expect(fields.length).toBeGreaterThan(0);
     expect(fields.some((field) => (field.textContent || "").includes("st=C"))).toBe(true);
     expect(
-      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:abc:raw-truncated"]')
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:abc:raw-truncated"]')
         ?.textContent
     ).toBe("0");
     expect(
-      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:abc:raw-0001"]')
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:abc:raw-0001"]')
         ?.textContent
     ).toContain("X:1");
   });
 
-  it("ABC->MusicXML can disable mks:abc-meta miscellaneous fields", () => {
+  it("ABC->MusicXML can disable mks:dbg:abc:meta miscellaneous fields", () => {
     const abc = `X:1
 T:Debug test
 M:4/4
@@ -77,7 +77,7 @@ C D E F |`;
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(
-      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:abc-meta"]')
+      outDoc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:abc:meta"]')
     ).toBeNull();
   });
 
@@ -258,12 +258,12 @@ C D E F G A B c d |`;
     expect(measureCount).toBeGreaterThanOrEqual(2);
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:count"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:count"]'
       )?.textContent
     ).toBe("1");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:0001"]'
       )?.textContent
     ).toContain("code=OVERFULL_REFLOWED");
   });
@@ -280,7 +280,7 @@ C D E F G A B c d |`;
     const outDoc = parseMusicXmlDocument(xml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
-    expect(outDoc.querySelector('miscellaneous-field[name="diag:count"]')).toBeNull();
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
 
     const core = new ScoreCore();
     core.load(xml);
@@ -301,8 +301,8 @@ C D E F |`;
     const outDoc = parseMusicXmlDocument(xml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
-    expect(outDoc.querySelector('miscellaneous-field[name="diag:count"]')).not.toBeNull();
-    expect(outDoc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).not.toBeNull();
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "code=ABC_IMPORT_WARNING"
     );
   });
@@ -427,7 +427,7 @@ V:1
     const outDoc = parseMusicXmlDocument(xml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
-    const overfullDiag = Array.from(outDoc.querySelectorAll('miscellaneous-field[name^="diag:"]'))
+    const overfullDiag = Array.from(outDoc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'))
       .map((node) => node.textContent?.trim() ?? "")
       .find((text) => text.includes("code=OVERFULL_REFLOWED"));
     expect(overfullDiag).toBeUndefined();
@@ -451,8 +451,8 @@ V:1
         <time><beats>4</beats><beat-type>4</beat-type></time>
         <clef><sign>G</sign><line>2</line></clef>
         <miscellaneous>
-          <miscellaneous-field name="diag:count">1</miscellaneous-field>
-          <miscellaneous-field name="diag:0001">level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=1</miscellaneous-field>
+          <miscellaneous-field name="mks:diag:count">1</miscellaneous-field>
+          <miscellaneous-field name="mks:diag:0001">level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=1</miscellaneous-field>
         </miscellaneous>
       </attributes>
       <note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>
@@ -464,8 +464,8 @@ V:1
     if (!doc) return;
     const abc = exportMusicXmlDomToAbc(doc);
     expect(abc).toContain("%@mks diag");
-    expect(abc).toContain("name=diag:count");
-    expect(abc).toContain("name=diag:0001");
+    expect(abc).toContain("name=mks:diag:count");
+    expect(abc).toContain("name=mks:diag:0001");
     expect(abc).toContain("enc=uri-v1");
   });
 

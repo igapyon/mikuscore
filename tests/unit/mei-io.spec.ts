@@ -223,12 +223,12 @@ describe("MEI export", () => {
     expect(outDoc.querySelector("part > measure > note > pitch > step")?.textContent).toBe("C");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:mei-debug-count"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:mei:notes:count"]'
       )?.textContent
     ).toBe("0x0003");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:mei-debug-0001"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:mei:notes:0001"]'
       )?.textContent
     ).toContain("k=note");
   });
@@ -2601,7 +2601,7 @@ describe("MEI export", () => {
     expect(outDoc.querySelector("part > measure > note:nth-of-type(3) > notations > articulations > caesura")).not.toBeNull();
   });
 
-  it("maps non-namespaced MEI misc labels to src:mei:* namespace", () => {
+  it("maps non-namespaced MEI misc labels to mks:src:mei:* namespace", () => {
     const mei = `<?xml version="1.0" encoding="UTF-8"?>
 <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="4.0.1">
   <music>
@@ -2633,7 +2633,7 @@ describe("MEI export", () => {
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     const field = outDoc.querySelector(
-      'part > measure > attributes > miscellaneous > miscellaneous-field[name="src:mei:legacy-token"]'
+      'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:mei:legacy-token"]'
     );
     expect(field).not.toBeNull();
     expect(field?.textContent).toBe("abc123");
@@ -2678,12 +2678,12 @@ describe("MEI export", () => {
     expect(total).toBe(1440);
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:count"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:count"]'
       )?.textContent
     ).toBe("1");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:0001"]'
       )?.textContent
     ).toContain("code=OVERFULL_CLAMPED");
   });
@@ -3097,7 +3097,7 @@ describe("MEI export", () => {
     expect(measure2Notes.length).toBe(4);
     expect(
       outDoc.querySelector(
-        'part > measure:nth-of-type(2) > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+        'part > measure:nth-of-type(2) > attributes > miscellaneous > miscellaneous-field[name="mks:diag:0001"]'
       )
     ).toBeNull();
   });

@@ -471,10 +471,10 @@ const summarizeImportedDiagWarnings = (xml: string): string => {
   if (!doc) return "";
   let overfullReflowCount = 0;
   let parserWarningCount = 0;
-  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="diag:"]'));
+  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
   for (const field of fields) {
     const name = (field.getAttribute("name") || "").trim().toLowerCase();
-    if (name === "diag:count") continue;
+    if (name === "mks:diag:count") continue;
     const payload = field.textContent?.trim() ?? "";
     const m = payload.match(/(?:^|;)code=([^;]+)/);
     const code = (m?.[1] ?? "").trim().toUpperCase();

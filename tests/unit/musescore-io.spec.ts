@@ -92,7 +92,7 @@ describe("musescore-io", () => {
     expect(doc.querySelector("work > work-title")?.textContent?.trim()).toBe("MS Test");
     expect(doc.querySelector("part-list > score-part[id=\"P1\"]")).not.toBeNull();
     expect(doc.querySelector("part > measure > note > pitch > step")?.textContent?.trim()).toBe("C");
-    expect(doc.querySelector("miscellaneous-field[name=\"src:musescore:raw-encoding\"]")).not.toBeNull();
+    expect(doc.querySelector("miscellaneous-field[name=\"mks:src:musescore:raw-encoding\"]")).not.toBeNull();
   });
 
   it("imports tempo/time/key changes, repeats, and dynamics", () => {
@@ -136,7 +136,7 @@ describe("musescore-io", () => {
     expect(doc.querySelector("measure:nth-of-type(2) dynamics > p")).not.toBeNull();
     expect(doc.querySelector("measure:nth-of-type(1) direction > sound[dynamics=\"100.00\"]")).not.toBeNull();
     expect(doc.querySelector("measure:nth-of-type(2) direction > sound[dynamics=\"54.44\"]")).not.toBeNull();
-    expect(doc.querySelector("miscellaneous-field[name=\"src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
+    expect(doc.querySelector("miscellaneous-field[name=\"mks:src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
   it("imports MuseScore cut-time symbol as MusicXML time symbol", () => {
@@ -1382,7 +1382,7 @@ describe("musescore-io", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
 
-    const diag = doc.querySelector("miscellaneous-field[name=\"diag:0001\"]")?.textContent ?? "";
+    const diag = doc.querySelector("miscellaneous-field[name=\"mks:diag:0001\"]")?.textContent ?? "";
     expect(diag).toContain("reason=unknown-duration");
     expect(diag).toContain("action=dropped");
     expect(diag).toContain("measure=1");

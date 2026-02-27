@@ -95,26 +95,26 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Warn vs error boundary is documented
 - [ ] Console diagnostics and UI diagnostics are consistent
 - [ ] For bug investigation, preserve and utilize debug metadata through `miscellaneous-field` (or format-equivalent mapping) whenever possible.
-- [ ] When conversion applies degradation/auto-fix (e.g. overfull clamped), record it as structured diagnostics in `miscellaneous-field` using `diag:*`.
+- [ ] When conversion applies degradation/auto-fix (e.g. overfull clamped), record it as structured diagnostics in `miscellaneous-field` using `mks:diag:*`.
 
 ### `miscellaneous-field` Usage Patterns (MUST classify explicitly)
 
 - [ ] Classify each `miscellaneous-field` mapping into one of the following:
-  - **Source-preservation metadata** (`src:*` recommended):
-    - Purpose: preserve source-format-only information when importing `Format -> MusicXML`.
-    - Example: fields needed to reconstruct/trace original MEI/ABC semantics not directly representable in core MusicXML path.
-  - **mikuscore extension metadata** (`mks:*`):
+  - **mikuscore extension metadata** (`mks:meta:*`):
     - Purpose: preserve mikuscore-specific semantics/provenance when a target format cannot represent them natively (not debug-only).
     - Example: mikuscore extension comments/hints and restoration metadata required for compatible roundtrip behavior.
-  - **Optional debug-only metadata** (`dbg:*` recommended if separated):
-    - Purpose: investigation/tracing only.
-    - Example: event-level conversion traces used for incident analysis.
-  - **Structured conversion diagnostics** (`diag:*`):
+  - **Structured conversion diagnostics** (`mks:diag:*`):
     - Purpose: record warnings/repair actions that occurred during conversion, so issues are not silently hidden.
-    - Example: `diag:0001 = level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=8;staff=1;action=clamped;droppedTicks=240`.
-    - Recommended key order inside `diag:NNNN` payload:
+    - Example: `mks:diag:0001 = level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=8;staff=1;action=clamped;droppedTicks=240`.
+    - Recommended key order inside `mks:diag:NNNN` payload:
       - `level;code;fmt;measure;staff;voice;action;message;sourceTicks;capacityTicks;movedEvents;droppedEvents;droppedTicks`
       - Omit keys that do not apply, but keep relative order for diff/readability.
+  - **Source-preservation metadata** (`mks:src:*` recommended):
+    - Purpose: preserve source-format-only information when importing `Format -> MusicXML`.
+    - Example: fields needed to reconstruct/trace original MEI/ABC semantics not directly representable in core MusicXML path.
+  - **Optional debug-only metadata** (`mks:dbg:*`):
+    - Purpose: investigation/tracing only.
+    - Example: event-level conversion traces used for incident analysis.
 - [ ] For each format, document retention policy for both categories:
   - preserve as-is / transform / drop
   - roundtrip expectations (`MusicXML -> Format -> MusicXML`, `Format -> MusicXML -> Format`)
@@ -123,7 +123,8 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - event addressing key (`voice + measure + event`)
   - fallback when hint is absent or invalid
   - safety against conflicts with existing source comments
-- [ ] Keep namespace separation strict (`src:*` vs `mks:*` vs `diag:*` vs optional `dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
+- [ ] Keep namespace separation strict (`mks:src:*` vs `mks:meta:*` vs `mks:diag:*` vs `mks:dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
+  - During migration, allow legacy names (`src:*`, `diag:*`, old `mks:*`) only via dual-write/dual-read compatibility paths.
 
 ### LilyPond Note (Current `mks` usage)
 
