@@ -11852,6 +11852,92 @@ exports.resolveAccidentalTextForPitch = resolveAccidentalTextForPitch;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.exportMusicXmlDomToLilyPond = exports.convertLilyPondToMusicXml = void 0;
 const musicxml_io_1 = require("./musicxml-io");
+const staffClefPolicy_1 = require("../../core/staffClefPolicy");
+const expandLilyRepeatVoltaMarkers = (body) => {
+    let expanded = String(body || "");
+    const maxPasses = 8;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+        const m = expanded.match(/\\repeat\s+volta\s+(\d+)\s*\{/i);
+        if (!m || m.index === undefined)
+            break;
+        const times = Number.parseInt(m[1], 10);
+        const bracePos = expanded.indexOf("{", m.index + m[0].length - 1);
+        if (bracePos < 0)
+            break;
+        const block = findBalancedBlock(expanded, bracePos);
+        if (!block)
+            break;
+        const repeatTimes = Number.isFinite(times) && times > 1 ? Math.round(times) : 2;
+        const markerStart = " @@MKS_RPT_FWD@@ ";
+        const markerStop = ` @@MKS_RPT_BWD_${repeatTimes}@@ `;
+        expanded =
+            expanded.slice(0, m.index)
+                + markerStart
+                + block.content
+                + markerStop
+                + expanded.slice(block.endPos);
+    }
+    return expanded;
+};
+const expandLilyAlternativeMarkers = (body) => {
+    let expanded = String(body || "");
+    const maxPasses = 8;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+        const m = expanded.match(/\\alternative\s*\{/i);
+        if (!m || m.index === undefined)
+            break;
+        const outerBracePos = expanded.indexOf("{", m.index + m[0].length - 1);
+        if (outerBracePos < 0)
+            break;
+        const outer = findBalancedBlock(expanded, outerBracePos);
+        if (!outer)
+            break;
+        const children = [];
+        let cursor = 0;
+        while (cursor < outer.content.length) {
+            const next = outer.content.indexOf("{", cursor);
+            if (next < 0)
+                break;
+            const child = findBalancedBlock(outer.content, next);
+            if (!child)
+                break;
+            children.push(child.content);
+            cursor = child.endPos;
+        }
+        const replacement = children
+            .map((content, i) => {
+            const endingNo = i + 1;
+            return ` @@MKS_ENDING_START_${endingNo}@@ ${content} @@MKS_ENDING_STOP_${endingNo}@@ `;
+        })
+            .join(" ");
+        expanded = expanded.slice(0, m.index) + replacement + expanded.slice(outer.endPos);
+    }
+    return expanded;
+};
+const expandLilyTupletMarkers = (body) => {
+    let expanded = String(body || "");
+    const maxPasses = 16;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+        const m = expanded.match(/\\tuplet\s+(\d+)\s*\/\s*(\d+)\s*\{/i);
+        if (!m || m.index === undefined)
+            break;
+        const actual = Number.parseInt(m[1], 10);
+        const normal = Number.parseInt(m[2], 10);
+        const bracePos = expanded.indexOf("{", m.index + m[0].length - 1);
+        if (bracePos < 0)
+            break;
+        const block = findBalancedBlock(expanded, bracePos);
+        if (!block)
+            break;
+        const safeActual = Number.isFinite(actual) && actual > 0 ? Math.round(actual) : 3;
+        const safeNormal = Number.isFinite(normal) && normal > 0 ? Math.round(normal) : 2;
+        const replacement = ` @@MKS_TUPLET_START_${safeActual}_${safeNormal}@@ `
+            + block.content
+            + " @@MKS_TUPLET_STOP@@ ";
+        expanded = expanded.slice(0, m.index) + replacement + expanded.slice(block.endPos);
+    }
+    return expanded;
+};
 const xmlEscape = (value) => String(value !== null && value !== void 0 ? value : "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -11952,6 +12038,124 @@ const lilyPitchFromStepAlterOctave = (step, alter, octave) => {
     const octaveShift = Math.round(octave) - 3;
     const octaveMarks = octaveShift >= 0 ? "'".repeat(octaveShift) : ",".repeat(Math.abs(octaveShift));
     return `${base}${acc}${octaveMarks}`;
+};
+const pitchToMidiKey = (step, alter, octave) => {
+    const upper = String(step || "").trim().toUpperCase();
+    if (!/^[A-G]$/.test(upper))
+        return null;
+    const semitone = lilyPitchClassToSemitone(upper, alter);
+    if (!Number.isFinite(semitone) || !Number.isFinite(octave))
+        return null;
+    // MusicXML octave 4 corresponds to MIDI C4=60, so add +1 octave offset.
+    return (Math.round(octave) + 1) * 12 + semitone;
+};
+const chooseLilyClefFromMeasures = (measures) => {
+    const keys = [];
+    for (const events of measures) {
+        for (const event of events) {
+            if (event.kind === "note") {
+                const midi = pitchToMidiKey(event.pitch.step, event.pitch.alter, event.pitch.octave);
+                if (midi !== null)
+                    keys.push(midi);
+                continue;
+            }
+            if (event.kind === "chord") {
+                for (const pitch of event.pitches) {
+                    const midi = pitchToMidiKey(pitch.step, pitch.alter, pitch.octave);
+                    if (midi !== null)
+                        keys.push(midi);
+                }
+            }
+        }
+    }
+    return (0, staffClefPolicy_1.chooseSingleClefByKeys)(keys) === "F" ? "bass" : "treble";
+};
+const collectKeysFromMeasures = (measures) => {
+    const keys = [];
+    for (const events of measures) {
+        for (const event of events) {
+            if (event.kind === "note") {
+                const midi = pitchToMidiKey(event.pitch.step, event.pitch.alter, event.pitch.octave);
+                if (midi !== null)
+                    keys.push(midi);
+                continue;
+            }
+            if (event.kind === "chord") {
+                for (const pitch of event.pitches) {
+                    const midi = pitchToMidiKey(pitch.step, pitch.alter, pitch.octave);
+                    if (midi !== null)
+                        keys.push(midi);
+                }
+            }
+        }
+    }
+    return keys;
+};
+const autoSplitMeasuresToGrandStaff = (measures) => {
+    const keys = collectKeysFromMeasures(measures);
+    if (!(0, staffClefPolicy_1.shouldUseGrandStaffByRange)(keys)) {
+        return { upper: measures, lower: [], splitApplied: false };
+    }
+    const upper = [];
+    const lower = [];
+    let previousStaff = null;
+    let upperHasPitch = false;
+    let lowerHasPitch = false;
+    for (const events of measures) {
+        const upEvents = [];
+        const lowEvents = [];
+        for (const event of events) {
+            if (event.kind === "note") {
+                const midi = pitchToMidiKey(event.pitch.step, event.pitch.alter, event.pitch.octave);
+                if (midi === null) {
+                    upEvents.push(event);
+                    continue;
+                }
+                const staff = (0, staffClefPolicy_1.pickStaffForClusterWithHysteresis)(midi, midi, previousStaff);
+                previousStaff = staff;
+                if (staff === 1) {
+                    upEvents.push(event);
+                    upperHasPitch = true;
+                }
+                else {
+                    lowEvents.push(event);
+                    lowerHasPitch = true;
+                }
+                continue;
+            }
+            if (event.kind === "chord") {
+                const chordKeys = event.pitches
+                    .map((pitch) => pitchToMidiKey(pitch.step, pitch.alter, pitch.octave))
+                    .filter((value) => value !== null);
+                if (!chordKeys.length) {
+                    upEvents.push(event);
+                    continue;
+                }
+                const minKey = Math.min(...chordKeys);
+                const maxKey = Math.max(...chordKeys);
+                const staff = (0, staffClefPolicy_1.pickStaffForClusterWithHysteresis)(minKey, maxKey, previousStaff);
+                previousStaff = staff;
+                if (staff === 1) {
+                    upEvents.push(event);
+                    upperHasPitch = true;
+                }
+                else {
+                    lowEvents.push(event);
+                    lowerHasPitch = true;
+                }
+                continue;
+            }
+            // Keep directions/backup/rests on upper staff in split mode.
+            upEvents.push(event);
+        }
+        upper.push(upEvents);
+        lower.push(lowEvents);
+    }
+    // Guard: if either side has no real notes, cancel split.
+    if (!upperHasPitch || !lowerHasPitch) {
+        return { upper: measures, lower: [], splitApplied: false };
+    }
+    return { upper, lower, splitApplied: true };
 };
 const lilyKeyToAbc = (tonicRaw, modeRaw) => {
     const tonic = String(tonicRaw || "").trim().toLowerCase();
@@ -12740,6 +12944,14 @@ const extractStandaloneMusicBlocks = (source) => {
             i = block.endPos - 1;
             continue;
         }
+        const relativePrefix = source.slice(Math.max(0, i - 64), i);
+        const relativeMatch = relativePrefix.match(/\\relative(?:\s+[a-g](?:isis|eses|is|es)?[,']*)?\s*$/i);
+        if (relativeMatch && relativeMatch.index !== undefined) {
+            const relativeStart = Math.max(0, i - 64) + relativeMatch.index;
+            out.push(source.slice(relativeStart, block.endPos));
+            i = block.endPos - 1;
+            continue;
+        }
         out.push(block.content);
         i = block.endPos - 1;
     }
@@ -12798,6 +13010,96 @@ const expandLilyVariablesInBody = (body, variableMap) => {
             break;
     }
     return expanded;
+};
+const extractLilyBlocksByCommand = (source, command) => {
+    const out = [];
+    const rx = new RegExp(`\\\\${command}\\b`, "g");
+    for (;;) {
+        const m = rx.exec(source);
+        if (!m)
+            break;
+        let cursor = m.index + m[0].length;
+        while (cursor < source.length && /\s/.test(source[cursor]))
+            cursor += 1;
+        const bracePos = source.indexOf("{", cursor);
+        if (bracePos < 0)
+            continue;
+        const block = findBalancedBlock(source, bracePos);
+        if (!block)
+            continue;
+        out.push(block.content);
+        rx.lastIndex = block.endPos;
+    }
+    return out;
+};
+const parseLyricSyllablesFromText = (text) => {
+    const clean = stripLilyComments(String(text || ""))
+        .replace(/\\[A-Za-z]+/g, " ")
+        .replace(/[{}]/g, " ");
+    const rawTokens = clean.split(/\s+/).map((t) => t.trim()).filter(Boolean);
+    const out = [];
+    for (const token of rawTokens) {
+        if (token === "--" || token === "__" || token === "_" || token === "~")
+            continue;
+        out.push(token.replace(/^"|"$/g, ""));
+    }
+    return out;
+};
+const parseLilyLyricAssignments = (source) => {
+    const out = [];
+    const addLyricsBlocks = extractLilyBlocksByCommand(source, "addlyrics");
+    if (addLyricsBlocks.length > 0) {
+        out.push({
+            targetVoiceId: null,
+            syllables: parseLyricSyllablesFromText(addLyricsBlocks[0]),
+        });
+    }
+    const lyricstoRegex = /\\lyricsto\s+"([^"]+)"\s*\{/g;
+    let m;
+    while ((m = lyricstoRegex.exec(source)) !== null) {
+        const rawTarget = String(m[1] || "").trim();
+        const targetVoiceId = normalizeVoiceId(rawTarget, "");
+        const bracePos = source.indexOf("{", m.index + m[0].length - 1);
+        if (bracePos < 0)
+            continue;
+        const block = findBalancedBlock(source, bracePos);
+        if (!block)
+            continue;
+        out.push({
+            targetVoiceId: targetVoiceId || null,
+            syllables: parseLyricSyllablesFromText(block.content),
+        });
+        lyricstoRegex.lastIndex = block.endPos;
+    }
+    if (out.length === 0) {
+        const lyricModeBlocks = extractLilyBlocksByCommand(source, "lyricmode");
+        if (lyricModeBlocks.length > 0) {
+            out.push({
+                targetVoiceId: null,
+                syllables: parseLyricSyllablesFromText(lyricModeBlocks[0]),
+            });
+        }
+    }
+    return out;
+};
+const applyLyricsToMeasures = (measures, syllables) => {
+    var _a;
+    if (!syllables.length)
+        return measures;
+    let cursor = 0;
+    for (let mi = 0; mi < measures.length; mi += 1) {
+        for (const event of (_a = measures[mi]) !== null && _a !== void 0 ? _a : []) {
+            if (event.kind !== "note" && event.kind !== "chord")
+                continue;
+            if (event.durationDiv <= 0)
+                continue;
+            if (cursor >= syllables.length)
+                return measures;
+            event.lyricText = syllables[cursor];
+            cursor += 1;
+        }
+    }
+    return measures;
 };
 const lilyPitchClassToSemitone = (step, alter) => {
     var _a;
@@ -12860,33 +13162,59 @@ const parseRelativeRoot = (token) => {
         octave,
     };
 };
-const resolveRelativeOctave = (step, alter, previousMidi) => {
-    if (!Number.isFinite(previousMidi)) {
-        const fallbackOctave = 4;
+const lilyStepToIndex = (step) => {
+    const safe = String(step || "").toUpperCase();
+    if (safe === "C")
+        return 0;
+    if (safe === "D")
+        return 1;
+    if (safe === "E")
+        return 2;
+    if (safe === "F")
+        return 3;
+    if (safe === "G")
+        return 4;
+    if (safe === "A")
+        return 5;
+    if (safe === "B")
+        return 6;
+    return 0;
+};
+const resolveRelativePitch = (step, alter, previousAnchor) => {
+    if (!previousAnchor) {
+        // LilyPond's omitted \relative root behaves like starting from c' anchor.
+        // Our octave scale uses C3 as base "c", so fallback should be octave 3.
+        const fallbackOctave = 3;
         return {
+            step,
             octave: fallbackOctave,
             midi: fallbackOctave * 12 + lilyPitchClassToSemitone(step, alter),
         };
     }
-    const prevMidi = Number(previousMidi);
+    const prevIndex = previousAnchor.octave * 7 + lilyStepToIndex(previousAnchor.step);
+    const targetStepIndex = lilyStepToIndex(step);
     let bestOctave = 4;
+    let bestIndex = bestOctave * 7 + targetStepIndex;
     let bestMidi = 4 * 12 + lilyPitchClassToSemitone(step, alter);
     let bestDist = Number.POSITIVE_INFINITY;
     for (let octave = 0; octave <= 9; octave += 1) {
+        const index = octave * 7 + targetStepIndex;
+        const dist = Math.abs(index - prevIndex);
         const midi = octave * 12 + lilyPitchClassToSemitone(step, alter);
-        const dist = Math.abs(midi - prevMidi);
         if (dist < bestDist) {
             bestDist = dist;
             bestOctave = octave;
+            bestIndex = index;
             bestMidi = midi;
             continue;
         }
-        if (dist === bestDist && midi > bestMidi) {
+        if (dist === bestDist && index > bestIndex) {
             bestOctave = octave;
+            bestIndex = index;
             bestMidi = midi;
         }
     }
-    return { octave: bestOctave, midi: bestMidi };
+    return { step, octave: bestOctave, midi: bestMidi };
 };
 const applyLilyOctaveMarks = (resolved, octaveMarks, step, alter) => {
     if (!octaveMarks)
@@ -12895,6 +13223,7 @@ const applyLilyOctaveMarks = (resolved, octaveMarks, step, alter) => {
     const down = (octaveMarks.match(/,/g) || []).length;
     const octave = resolved.octave + up - down;
     return {
+        step,
         octave,
         midi: octave * 12 + lilyPitchClassToSemitone(step, alter),
     };
@@ -12902,31 +13231,41 @@ const applyLilyOctaveMarks = (resolved, octaveMarks, step, alter) => {
 const unwrapRelativeBlock = (sourceBody) => {
     const relativeMatch = sourceBody.match(/\\relative(?:\s+([a-g](?:isis|eses|is|es)?[,']*))?\s*\{/i);
     if (!relativeMatch || relativeMatch.index === undefined) {
-        return { body: sourceBody, relativeMode: false, relativeMidi: null };
+        return { body: sourceBody, relativeMode: false, relativeRoot: null };
     }
     const bracePos = sourceBody.indexOf("{", relativeMatch.index + relativeMatch[0].length - 1);
     if (bracePos < 0)
-        return { body: sourceBody, relativeMode: false, relativeMidi: null };
+        return { body: sourceBody, relativeMode: false, relativeRoot: null };
     const block = findBalancedBlock(sourceBody, bracePos);
     if (!block)
-        return { body: sourceBody, relativeMode: false, relativeMidi: null };
+        return { body: sourceBody, relativeMode: false, relativeRoot: null };
     const rootToken = String(relativeMatch[1] || "").trim();
-    const root = rootToken ? parseRelativeRoot(rootToken) : null;
-    const relativeMidi = root
-        ? root.octave * 12 + lilyPitchClassToSemitone(root.step, root.alter)
-        : null;
+    const relativeRoot = rootToken ? parseRelativeRoot(rootToken) : null;
     return {
         body: block.content,
         relativeMode: true,
-        relativeMidi,
+        relativeRoot,
     };
 };
+const hasOmittedRelativeRoot = (sourceBody) => {
+    const m = String(sourceBody || "").match(/\\relative(?:\s+([a-g](?:isis|eses|is|es)?[,']*))?\s*\{/i);
+    if (!m)
+        return false;
+    return !String(m[1] || "").trim();
+};
 const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, options = {}) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const SMALL_OVERFLOW_TOLERANCE_DIV = 8;
     const relative = unwrapRelativeBlock(body);
-    let previousMidi = relative.relativeMidi;
-    const clean = stripLilyComments(relative.body)
+    let previousAnchor = relative.relativeRoot
+        ? {
+            step: relative.relativeRoot.step,
+            octave: relative.relativeRoot.octave,
+            midi: relative.relativeRoot.octave * 12 + lilyPitchClassToSemitone(relative.relativeRoot.step, relative.relativeRoot.alter),
+        }
+        : null;
+    const preprocessed = expandLilyTupletMarkers(expandLilyAlternativeMarkers(expandLilyRepeatVoltaMarkers(relative.body)));
+    const clean = stripLilyComments(preprocessed)
         .replace(/\\key\s+[a-g](?:isis|eses|is|es)?[,']*\s+\\[A-Za-z]+/gi, " ")
         .replace(/\\time\s+\d+\s*\/\s*\d+/g, " ")
         .replace(/\\clef\s+"[^"]+"/g, " ")
@@ -12934,9 +13273,8 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
         .replace(/\\bar\s+\"[^\"]*\"/g, "|")
         .replace(/\"[^\"]*\"/g, " ")
         .replace(/\\bar/g, " ")
-        .replace(/\\[A-Za-z]+/g, " ")
-        .replace(/[{}()~]/g, " ");
-    const tokens = clean.match(/(?<![A-Za-z])<[^>]+>(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}(?![A-Za-z])|(?<![A-Za-z])[a-grs](?:isis|eses|is|es)?[,']*(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}(?![A-Za-z])|\|/g) || [];
+        .replace(/[{}]/g, " ");
+    const tokens = clean.match(/@@MKS_(?:RPT_(?:FWD|BWD_\d+)|ENDING_(?:START|STOP)_\d+|TUPLET_START_\d+_\d+|TUPLET_STOP)@@|\\(?:ppp|pp|p|mp|mf|ff|fff|f|sfz|<|>|!|\(|\)|trill|startTrillSpan|stopTrillSpan|glissando|sustainOn|sustainOff|sostenutoOn|sostenutoOff|unaCorda|treCorde|upbow|downbow|snappizzicato|flageolet|harmonic)|(?<![A-Za-z\\])<[^>]+>(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}~?(?![A-Za-z])|(?<![A-Za-z\\])[a-grs](?:isis|eses|is|es)?[,']*(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}~?(?![A-Za-z])|(?<![A-Za-z\\])(?:\d+(?:\*\d+(?:\/\d+)?)?)\.{0,3}~?(?![A-Za-z])|[()]|\|/g) || [];
     const measures = [[]];
     let currentDurationExpr = "4";
     let currentDots = 0;
@@ -12947,6 +13285,74 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
     const voiceId = options.voiceId ? normalizeVoiceId(options.voiceId, "") : "";
     const graceHintByKey = (_a = options.graceHintByKey) !== null && _a !== void 0 ? _a : new Map();
     let noteEventNoInMeasure = 0;
+    let pendingTieStop = false;
+    let pendingSlurStart = 0;
+    let pendingArticulations = [];
+    let pendingTechnicals = [];
+    let pendingTrillMark = false;
+    let pendingWavyHints = [];
+    let pendingGlissStop = false;
+    let activeTuplet = null;
+    let previousPitched = null;
+    const appendSlurStopToLastPitchedEvent = () => {
+        var _a;
+        for (let mi = measures.length - 1; mi >= 0; mi -= 1) {
+            const events = measures[mi] || [];
+            for (let ei = events.length - 1; ei >= 0; ei -= 1) {
+                const event = events[ei];
+                if (event.kind !== "note" && event.kind !== "chord")
+                    continue;
+                const hints = (_a = event.slurHints) !== null && _a !== void 0 ? _a : [];
+                hints.push({ type: "stop" });
+                event.slurHints = hints;
+                return;
+            }
+        }
+    };
+    const appendToLastPitchedEvent = (updater) => {
+        for (let mi = measures.length - 1; mi >= 0; mi -= 1) {
+            const events = measures[mi] || [];
+            for (let ei = events.length - 1; ei >= 0; ei -= 1) {
+                const event = events[ei];
+                if (event.kind !== "note" && event.kind !== "chord")
+                    continue;
+                updater(event);
+                return true;
+            }
+        }
+        return false;
+    };
+    const appendTupletStopToLastPitchedEvent = () => {
+        for (let mi = measures.length - 1; mi >= 0; mi -= 1) {
+            const events = measures[mi] || [];
+            for (let ei = events.length - 1; ei >= 0; ei -= 1) {
+                const event = events[ei];
+                if (event.kind !== "note" && event.kind !== "chord")
+                    continue;
+                event.tupletStop = true;
+                return;
+            }
+        }
+    };
+    const applyPendingOrnaments = (event) => {
+        var _a, _b, _c;
+        if (pendingArticulations.length > 0) {
+            event.articulationSubtypes = [...((_a = event.articulationSubtypes) !== null && _a !== void 0 ? _a : []), ...pendingArticulations];
+            pendingArticulations = [];
+        }
+        if (pendingTechnicals.length > 0) {
+            event.technicalSubtypes = [...((_b = event.technicalSubtypes) !== null && _b !== void 0 ? _b : []), ...pendingTechnicals];
+            pendingTechnicals = [];
+        }
+        if (pendingTrillMark) {
+            event.trillMark = true;
+            pendingTrillMark = false;
+        }
+        if (pendingWavyHints.length > 0) {
+            event.wavyLineHints = [...((_c = event.wavyLineHints) !== null && _c !== void 0 ? _c : []), ...pendingWavyHints];
+            pendingWavyHints = [];
+        }
+    };
     const pushEvent = (event) => {
         const current = measures[measures.length - 1];
         const used = current.reduce((sum, item) => sum + item.durationDiv, 0);
@@ -12973,10 +13379,292 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
             noteEventNoInMeasure = 0;
             continue;
         }
-        const chordExprMatch = token.match(/^<([^>]+)>((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
+        if (token === "@@MKS_RPT_FWD@@") {
+            pushEvent({
+                kind: "direction",
+                durationDiv: 0,
+                xml: `<barline location="left"><repeat direction="forward"/></barline>`,
+            });
+            continue;
+        }
+        if (token.startsWith("@@MKS_RPT_BWD_")) {
+            const timesText = token.replace(/^@@MKS_RPT_BWD_(\d+)@@$/, "$1");
+            const times = Number.parseInt(timesText, 10);
+            const endingXml = Number.isFinite(times) && times > 1
+                ? `<ending number="${Math.round(times)}" type="stop"/>`
+                : "";
+            pushEvent({
+                kind: "direction",
+                durationDiv: 0,
+                xml: `<barline location="right"><repeat direction="backward"/>${endingXml}</barline>`,
+            });
+            continue;
+        }
+        if (token.startsWith("@@MKS_ENDING_START_")) {
+            const nText = token.replace(/^@@MKS_ENDING_START_(\d+)@@$/, "$1");
+            const n = Number.parseInt(nText, 10);
+            const numberAttr = Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+            pushEvent({
+                kind: "direction",
+                durationDiv: 0,
+                xml: `<barline location="left"><ending number="${numberAttr}" type="start"/></barline>`,
+            });
+            continue;
+        }
+        if (token.startsWith("@@MKS_ENDING_STOP_")) {
+            const nText = token.replace(/^@@MKS_ENDING_STOP_(\d+)@@$/, "$1");
+            const n = Number.parseInt(nText, 10);
+            const numberAttr = Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+            pushEvent({
+                kind: "direction",
+                durationDiv: 0,
+                xml: `<barline location="right"><ending number="${numberAttr}" type="stop"/></barline>`,
+            });
+            continue;
+        }
+        if (token.startsWith("@@MKS_TUPLET_START_")) {
+            const m = token.match(/^@@MKS_TUPLET_START_(\d+)_(\d+)@@$/);
+            const actual = Number.parseInt((m === null || m === void 0 ? void 0 : m[1]) || "", 10);
+            const normal = Number.parseInt((m === null || m === void 0 ? void 0 : m[2]) || "", 10);
+            activeTuplet = {
+                actual: Number.isFinite(actual) && actual > 0 ? Math.round(actual) : 3,
+                normal: Number.isFinite(normal) && normal > 0 ? Math.round(normal) : 2,
+                needsStart: true,
+            };
+            continue;
+        }
+        if (token === "@@MKS_TUPLET_STOP@@") {
+            if (activeTuplet)
+                appendTupletStopToLastPitchedEvent();
+            activeTuplet = null;
+            continue;
+        }
+        if (token === "(") {
+            pendingSlurStart += 1;
+            continue;
+        }
+        if (token === ")") {
+            appendSlurStopToLastPitchedEvent();
+            continue;
+        }
+        if (token.startsWith("\\")) {
+            const dyn = token.slice(1).toLowerCase();
+            const dynamicKinds = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz"]);
+            if (dynamicKinds.has(dyn)) {
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><dynamics><${dyn}/></dynamics></direction-type></direction>`,
+                });
+                continue;
+            }
+            if (dyn === "<" || dyn === ">" || dyn === "!") {
+                const wedgeType = dyn === "<" ? "crescendo" : dyn === ">" ? "diminuendo" : "stop";
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><wedge type="${wedgeType}"/></direction-type></direction>`,
+                });
+                continue;
+            }
+            if (dyn === "(") {
+                pendingSlurStart += 1;
+                continue;
+            }
+            if (dyn === ")") {
+                appendSlurStopToLastPitchedEvent();
+                continue;
+            }
+            if (dyn === "trill") {
+                if (!appendToLastPitchedEvent((event) => {
+                    event.trillMark = true;
+                })) {
+                    pendingTrillMark = true;
+                }
+                continue;
+            }
+            if (dyn === "starttrillspan") {
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    const hints = (_a = event.wavyLineHints) !== null && _a !== void 0 ? _a : [];
+                    hints.push({ type: "start" });
+                    event.wavyLineHints = hints;
+                })) {
+                    pendingWavyHints.push({ type: "start" });
+                }
+                continue;
+            }
+            if (dyn === "stoptrillspan") {
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    const hints = (_a = event.wavyLineHints) !== null && _a !== void 0 ? _a : [];
+                    hints.push({ type: "stop" });
+                    event.wavyLineHints = hints;
+                })) {
+                    pendingWavyHints.push({ type: "stop" });
+                }
+                continue;
+            }
+            if (dyn === "glissando") {
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    const hints = (_a = event.glissHints) !== null && _a !== void 0 ? _a : [];
+                    hints.push({ type: "start" });
+                    event.glissHints = hints;
+                })) {
+                    // If no previous pitched note exists, start marker is not placeable.
+                }
+                pendingGlissStop = true;
+                continue;
+            }
+            if (dyn === "upbow" || dyn === "downbow") {
+                const articulation = dyn === "upbow" ? "up-bow" : "down-bow";
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    event.articulationSubtypes = [...((_a = event.articulationSubtypes) !== null && _a !== void 0 ? _a : []), articulation];
+                })) {
+                    pendingArticulations.push(articulation);
+                }
+                continue;
+            }
+            if (dyn === "snappizzicato") {
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    event.articulationSubtypes = [...((_a = event.articulationSubtypes) !== null && _a !== void 0 ? _a : []), "snap-pizzicato"];
+                })) {
+                    pendingArticulations.push("snap-pizzicato");
+                }
+                continue;
+            }
+            if (dyn === "flageolet" || dyn === "harmonic") {
+                if (!appendToLastPitchedEvent((event) => {
+                    var _a;
+                    event.technicalSubtypes = [...((_a = event.technicalSubtypes) !== null && _a !== void 0 ? _a : []), "harmonic"];
+                })) {
+                    pendingTechnicals.push("harmonic");
+                }
+                continue;
+            }
+            if (dyn === "sustainon" || dyn === "sustainoff") {
+                const type = dyn === "sustainon" ? "start" : "stop";
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><pedal type="${type}" number="1" line="yes"/></direction-type></direction>`,
+                });
+                continue;
+            }
+            if (dyn === "sostenutoon" || dyn === "sostenutooff") {
+                if (dyn === "sostenutoon") {
+                    pushEvent({
+                        kind: "direction",
+                        durationDiv: 0,
+                        xml: `<direction><direction-type><words>Sost. Ped.</words></direction-type></direction>`,
+                    });
+                }
+                const type = dyn === "sostenutoon" ? "start" : "stop";
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><pedal type="${type}" number="2" line="yes"/></direction-type></direction>`,
+                });
+                continue;
+            }
+            if (dyn === "unacorda" || dyn === "trecorde") {
+                const words = dyn === "unacorda" ? "una corda" : "tre corde";
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><words>${words}</words></direction-type></direction>`,
+                });
+                const type = dyn === "unacorda" ? "start" : "stop";
+                pushEvent({
+                    kind: "direction",
+                    durationDiv: 0,
+                    xml: `<direction><direction-type><pedal type="${type}" number="3" line="yes"/></direction-type></direction>`,
+                });
+                continue;
+            }
+            continue;
+        }
+        const durationOnlyMatch = token.match(/^((?:\d+(?:\*\d+(?:\/\d+)?)?))(\.*)(~?)$/);
+        if (durationOnlyMatch && previousPitched) {
+            currentDurationExpr = durationOnlyMatch[1];
+            currentDots = ((_b = durationOnlyMatch[2]) === null || _b === void 0 ? void 0 : _b.length) || 0;
+            const parsedDuration = parseLilyDurationExpr(currentDurationExpr).base;
+            const durationDiv = lilyDurationExprToDivisions(currentDurationExpr, currentDots, divisions);
+            const type = lilyDurationToMusicXmlType(parsedDuration);
+            if (previousPitched.kind === "note") {
+                const event = {
+                    kind: "note",
+                    durationDiv,
+                    type,
+                    dots: currentDots,
+                    pitch: previousPitched.pitch,
+                    tieStop: pendingTieStop || undefined,
+                    tieStart: durationOnlyMatch[3] === "~" ? true : undefined,
+                };
+                if (activeTuplet) {
+                    event.tupletActual = activeTuplet.actual;
+                    event.tupletNormal = activeTuplet.normal;
+                    if (activeTuplet.needsStart) {
+                        event.tupletStart = true;
+                        activeTuplet.needsStart = false;
+                    }
+                }
+                applyPendingOrnaments(event);
+                if (pendingGlissStop) {
+                    event.glissHints = [...((_c = event.glissHints) !== null && _c !== void 0 ? _c : []), { type: "stop" }];
+                    pendingGlissStop = false;
+                }
+                if (pendingSlurStart > 0) {
+                    event.slurHints = Array.from({ length: pendingSlurStart }, () => ({ type: "start" }));
+                    pendingSlurStart = 0;
+                }
+                pendingTieStop = durationOnlyMatch[3] === "~";
+                noteEventNoInMeasure += 1;
+                pushEvent(event);
+                previousPitched = { kind: "note", pitch: event.pitch };
+            }
+            else {
+                const copiedPitches = previousPitched.pitches.map((pitch) => ({ ...pitch }));
+                const event = {
+                    kind: "chord",
+                    durationDiv,
+                    type,
+                    dots: currentDots,
+                    pitches: copiedPitches,
+                    tieStop: pendingTieStop || undefined,
+                    tieStart: durationOnlyMatch[3] === "~" ? true : undefined,
+                };
+                if (activeTuplet) {
+                    event.tupletActual = activeTuplet.actual;
+                    event.tupletNormal = activeTuplet.normal;
+                    if (activeTuplet.needsStart) {
+                        event.tupletStart = true;
+                        activeTuplet.needsStart = false;
+                    }
+                }
+                applyPendingOrnaments(event);
+                if (pendingGlissStop) {
+                    event.glissHints = [...((_d = event.glissHints) !== null && _d !== void 0 ? _d : []), { type: "stop" }];
+                    pendingGlissStop = false;
+                }
+                if (pendingSlurStart > 0) {
+                    event.slurHints = Array.from({ length: pendingSlurStart }, () => ({ type: "start" }));
+                    pendingSlurStart = 0;
+                }
+                pendingTieStop = durationOnlyMatch[3] === "~";
+                noteEventNoInMeasure += 1;
+                pushEvent(event);
+                previousPitched = { kind: "chord", pitches: copiedPitches };
+            }
+            continue;
+        }
+        const chordExprMatch = token.match(/^<([^>]+)>((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)(~?)$/);
         if (chordExprMatch) {
             const durExprText = chordExprMatch[2] || "";
-            const dots = ((_b = chordExprMatch[3]) === null || _b === void 0 ? void 0 : _b.length) || 0;
+            const dots = ((_e = chordExprMatch[3]) === null || _e === void 0 ? void 0 : _e.length) || 0;
             if (durExprText) {
                 currentDurationExpr = durExprText;
                 currentDots = dots;
@@ -12990,8 +13678,9 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 if (!parsed)
                     return null;
                 if (relative.relativeMode) {
-                    const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
-                    previousMidi = resolved.midi;
+                    const resolvedFromAnchor = resolveRelativePitch(parsed.step, parsed.alter, previousAnchor);
+                    const resolved = applyLilyOctaveMarks(resolvedFromAnchor, parsed.octaveMarks, parsed.step, parsed.alter);
+                    previousAnchor = resolved;
                     return { step: parsed.step, alter: parsed.alter, octave: resolved.octave };
                 }
                 return parseLilyAbsolutePitch(entry);
@@ -13001,13 +13690,42 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 warnings.push(`${contextLabel}: chord had no parseable pitches; skipped.`);
                 continue;
             }
+            if (relative.relativeMode) {
+                // LilyPond relative anchoring after a chord follows the first chord tone.
+                const firstPitch = pitches[0];
+                previousAnchor = {
+                    step: firstPitch.step,
+                    octave: firstPitch.octave,
+                    midi: firstPitch.octave * 12 + lilyPitchClassToSemitone(firstPitch.step, firstPitch.alter),
+                };
+            }
             const event = {
                 kind: "chord",
                 durationDiv: lilyDurationExprToDivisions(effectiveExpr, effectiveDots, divisions),
                 type: lilyDurationToMusicXmlType(parseLilyDurationExpr(effectiveExpr).base),
                 dots: effectiveDots,
                 pitches,
+                tieStop: pendingTieStop || undefined,
+                tieStart: chordExprMatch[4] === "~" ? true : undefined,
             };
+            if (activeTuplet) {
+                event.tupletActual = activeTuplet.actual;
+                event.tupletNormal = activeTuplet.normal;
+                if (activeTuplet.needsStart) {
+                    event.tupletStart = true;
+                    activeTuplet.needsStart = false;
+                }
+            }
+            applyPendingOrnaments(event);
+            if (pendingGlissStop) {
+                event.glissHints = [...((_f = event.glissHints) !== null && _f !== void 0 ? _f : []), { type: "stop" }];
+                pendingGlissStop = false;
+            }
+            if (pendingSlurStart > 0) {
+                event.slurHints = Array.from({ length: pendingSlurStart }, () => ({ type: "start" }));
+                pendingSlurStart = 0;
+            }
+            pendingTieStop = chordExprMatch[4] === "~";
             noteEventNoInMeasure += 1;
             if (voiceId && graceHintByKey.size > 0) {
                 const graceHint = graceHintByKey.get(`${voiceId}#${measures.length}#${noteEventNoInMeasure}`);
@@ -13017,13 +13735,14 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 }
             }
             pushEvent(event);
+            previousPitched = { kind: "chord", pitches: event.pitches.map((pitch) => ({ ...pitch })) };
             continue;
         }
-        const m = token.match(/^([a-grs])(isis|eses|is|es)?([,']*)((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)$/);
+        const m = token.match(/^([a-grs])(isis|eses|is|es)?([,']*)((?:\d+(?:\*\d+(?:\/\d+)?)?)?)(\.*)(~?)$/);
         if (!m)
             continue;
         const durExprText = m[4] || "";
-        const dots = ((_c = m[5]) === null || _c === void 0 ? void 0 : _c.length) || 0;
+        const dots = ((_g = m[5]) === null || _g === void 0 ? void 0 : _g.length) || 0;
         if (durExprText) {
             currentDurationExpr = durExprText;
             currentDots = dots;
@@ -13034,6 +13753,7 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
         const durationDiv = lilyDurationExprToDivisions(effectiveExpr, effectiveDots, divisions);
         const type = lilyDurationToMusicXmlType(parsedDuration);
         if (m[1] === "r" || m[1] === "s") {
+            pendingTieStop = false;
             pushEvent({ kind: "rest", durationDiv, type, dots: effectiveDots });
             continue;
         }
@@ -13043,8 +13763,9 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 const parsed = parseLilyPitchToken(`${m[1]}${m[2] || ""}${m[3] || ""}`);
                 if (!parsed)
                     return null;
-                const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
-                previousMidi = resolved.midi;
+                const resolvedFromAnchor = resolveRelativePitch(parsed.step, parsed.alter, previousAnchor);
+                const resolved = applyLilyOctaveMarks(resolvedFromAnchor, parsed.octaveMarks, parsed.step, parsed.alter);
+                previousAnchor = resolved;
                 return { step: parsed.step, alter: parsed.alter, octave: resolved.octave };
             })()
             : pitch;
@@ -13052,7 +13773,33 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
             warnings.push(`${contextLabel}: note pitch parse failed; skipped.`);
             continue;
         }
-        const event = { kind: "note", durationDiv, type, dots: effectiveDots, pitch: pitchResolved };
+        const event = {
+            kind: "note",
+            durationDiv,
+            type,
+            dots: effectiveDots,
+            pitch: pitchResolved,
+            tieStop: pendingTieStop || undefined,
+            tieStart: m[6] === "~" ? true : undefined,
+        };
+        if (activeTuplet) {
+            event.tupletActual = activeTuplet.actual;
+            event.tupletNormal = activeTuplet.normal;
+            if (activeTuplet.needsStart) {
+                event.tupletStart = true;
+                activeTuplet.needsStart = false;
+            }
+        }
+        applyPendingOrnaments(event);
+        if (pendingGlissStop) {
+            event.glissHints = [...((_h = event.glissHints) !== null && _h !== void 0 ? _h : []), { type: "stop" }];
+            pendingGlissStop = false;
+        }
+        if (pendingSlurStart > 0) {
+            event.slurHints = Array.from({ length: pendingSlurStart }, () => ({ type: "start" }));
+            pendingSlurStart = 0;
+        }
+        pendingTieStop = m[6] === "~";
         noteEventNoInMeasure += 1;
         if (voiceId && graceHintByKey.size > 0) {
             const graceHint = graceHintByKey.get(`${voiceId}#${measures.length}#${noteEventNoInMeasure}`);
@@ -13062,6 +13809,7 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
             }
         }
         pushEvent(event);
+        previousPitched = { kind: "note", pitch: event.pitch };
     }
     while (measures.length > 1 && measures[measures.length - 1].length === 0) {
         measures.pop();
@@ -13069,8 +13817,20 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
     return measures;
 };
 const buildDirectMusicXmlFromStaffBlocks = (params) => {
+    const accidentalTextFromAlter = (alter) => {
+        const safeAlter = Number.isFinite(alter) ? Math.round(alter) : 0;
+        if (safeAlter === 2)
+            return "double-sharp";
+        if (safeAlter === 1)
+            return "sharp";
+        if (safeAlter === -1)
+            return "flat";
+        if (safeAlter === -2)
+            return "flat-flat";
+        return null;
+    };
     const buildNoteExtrasXml = (event) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         const graceXml = event.graceSlash === undefined ? "" : `<grace${event.graceSlash ? ' slash="yes"' : ""}/>`;
         const durationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
         const timeModXml = Number.isFinite(event.tupletActual)
@@ -13085,6 +13845,16 @@ const buildDirectMusicXmlFromStaffBlocks = (params) => {
             nodes.push("<staccato/>");
         if (tokens.includes("accent"))
             nodes.push("<accent/>");
+        if (tokens.includes("up-bow"))
+            nodes.push("<up-bow/>");
+        if (tokens.includes("down-bow"))
+            nodes.push("<down-bow/>");
+        if (tokens.includes("snap-pizzicato"))
+            nodes.push("<snap-pizzicato/>");
+        const technicalTokens = Array.from(new Set((_b = event.technicalSubtypes) !== null && _b !== void 0 ? _b : []));
+        const technicalNodes = [];
+        if (technicalTokens.includes("harmonic"))
+            technicalNodes.push("<harmonic/>");
         const tupletNodes = [];
         const tupletNumberAttr = Number.isFinite(event.tupletNumber) && event.tupletNumber > 0
             ? ` number="${Math.round(event.tupletNumber)}"`
@@ -13093,26 +13863,37 @@ const buildDirectMusicXmlFromStaffBlocks = (params) => {
             tupletNodes.push(`<tuplet type="start"${tupletNumberAttr}/>`);
         if (event.tupletStop)
             tupletNodes.push(`<tuplet type="stop"${tupletNumberAttr}/>`);
-        const slurNodes = ((_b = event.slurHints) !== null && _b !== void 0 ? _b : []).map((slur) => {
+        const slurNodes = ((_c = event.slurHints) !== null && _c !== void 0 ? _c : []).map((slur) => {
             const numberAttr = Number.isFinite(slur.number) && slur.number > 0
                 ? ` number="${Math.round(slur.number)}"`
                 : "";
             const placementAttr = slur.type === "start" && slur.placement ? ` placement="${slur.placement}"` : "";
             return `<slur type="${slur.type}"${numberAttr}${placementAttr}/>`;
         });
-        const wavyNodes = ((_c = event.wavyLineHints) !== null && _c !== void 0 ? _c : []).map((wavy) => {
+        const glissNodes = ((_d = event.glissHints) !== null && _d !== void 0 ? _d : []).map((gliss) => {
+            const numberAttr = Number.isFinite(gliss.number) && gliss.number > 0
+                ? ` number="${Math.round(gliss.number)}"`
+                : "";
+            return `<glissando type="${gliss.type}"${numberAttr}/>`;
+        });
+        const wavyNodes = ((_e = event.wavyLineHints) !== null && _e !== void 0 ? _e : []).map((wavy) => {
             const numberAttr = Number.isFinite(wavy.number) && wavy.number > 0
                 ? ` number="${Math.round(wavy.number)}"`
                 : "";
             return `<wavy-line type="${wavy.type}"${numberAttr}/>`;
         });
+        const tieXml = `${event.tieStart ? '<tie type="start"/>' : ""}${event.tieStop ? '<tie type="stop"/>' : ""}`;
+        const tiedXml = `${event.tieStart ? '<tied type="start"/>' : ""}${event.tieStop ? '<tied type="stop"/>' : ""}`;
         const ornamentsXml = event.trillMark || wavyNodes.length
             ? `<ornaments>${event.trillMark ? "<trill-mark/>" : ""}${wavyNodes.join("")}</ornaments>`
             : "";
-        const notationXml = nodes.length || tupletNodes.length || slurNodes.length || ornamentsXml
-            ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${tupletNodes.join("")}${slurNodes.join("")}${ornamentsXml}</notations>`
+        const lyricXml = event.lyricText
+            ? `<lyric><syllabic>single</syllabic><text>${xmlEscape(event.lyricText)}</text></lyric>`
             : "";
-        return `${graceXml}${durationXml}${timeModXml}${notationXml}`;
+        const notationXml = nodes.length || technicalNodes.length || tupletNodes.length || slurNodes.length || glissNodes.length || ornamentsXml || tiedXml
+            ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${technicalNodes.length ? `<technical>${technicalNodes.join("")}</technical>` : ""}${tupletNodes.join("")}${slurNodes.join("")}${glissNodes.join("")}${tiedXml}${ornamentsXml}</notations>`
+            : "";
+        return `${graceXml}${durationXml}${timeModXml}${tieXml}${lyricXml}${notationXml}`;
     };
     const partList = params.staffs
         .map((staff, i) => `<score-part id="P${i + 1}"><part-name>${xmlEscape(staff.voiceId || `Part ${i + 1}`)}</part-name></score-part>`)
@@ -13185,25 +13966,31 @@ const buildDirectMusicXmlFromStaffBlocks = (params) => {
                 continue;
             }
             for (const event of events) {
+                if (event.kind === "direction") {
+                    body += event.xml;
+                    continue;
+                }
                 if (event.kind === "backup") {
                     body += `<backup><duration>${event.durationDiv}</duration></backup>`;
                     continue;
                 }
-                const accidentalXml = event.kind !== "rest" && event.accidentalText
-                    ? `<accidental>${event.accidentalText}</accidental>`
-                    : "";
                 if (event.kind === "rest") {
                     body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
                     continue;
                 }
                 if (event.kind === "note") {
+                    const accidentalText = event.accidentalText || accidentalTextFromAlter(event.pitch.alter);
+                    const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
                     body += `<note>${buildNoteExtrasXml(event)}<pitch><step>${event.pitch.step}</step>${event.pitch.alter !== 0 ? `<alter>${event.pitch.alter}</alter>` : ""}<octave>${event.pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${accidentalXml}</note>`;
                     continue;
                 }
                 for (let pi = 0; pi < event.pitches.length; pi += 1) {
                     const pitch = event.pitches[pi];
                     const chordDurationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
-                    body += `<note>${pi > 0 ? "<chord/>" : ""}${pi === 0 ? buildNoteExtrasXml(event) : chordDurationXml}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${pi === 0 ? accidentalXml : ""}</note>`;
+                    const accidentalText = (pi === 0 && event.accidentalText ? event.accidentalText : null)
+                        || accidentalTextFromAlter(pitch.alter);
+                    const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
+                    body += `<note>${pi > 0 ? "<chord/>" : ""}${pi === 0 ? buildNoteExtrasXml(event) : chordDurationXml}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${accidentalXml}</note>`;
                 }
             }
             if ((hint === null || hint === void 0 ? void 0 : hint.repeat) === "forward") {
@@ -13249,6 +14036,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
     const slurHintByKey = parseMksSlurHints(source);
     const trillHintByKey = parseMksTrillHints(source);
     const octaveShiftHintByVoiceId = parseMksOctaveShiftHints(source);
+    const lyricAssignments = parseLilyLyricAssignments(source);
     const variableMap = parseLilyVariableBlocks(source);
     const standaloneBlocks = extractStandaloneMusicBlocks(source);
     if (!staffBlocks.length && !standaloneBlocks.length)
@@ -13284,13 +14072,20 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
                 measures[measureNo - 1] = merged;
             }
         }
+        const explicitClef = /\\clef\s+/i.test(staff.body);
+        const omittedRelativeRoot = hasOmittedRelativeRoot(staff.body);
         return {
             voiceId: staff.voiceId || `P${index + 1}`,
-            clef: normalizeAbcClefName(staff.clef || "treble"),
+            clef: explicitClef
+                ? normalizeAbcClefName(staff.clef || "treble")
+                : omittedRelativeRoot
+                    ? "treble"
+                    : chooseLilyClefFromMeasures(measures),
             measures: applyArticulationHintsToMeasures(measures, normalizedVoiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey, slurHintByKey, trillHintByKey),
             transpose: transposeHintByVoiceId.get(normalizedVoiceId) || staff.transpose || null,
             measureHintsByIndex: measureHintByVoiceId.get(normalizedVoiceId) || undefined,
             octaveShiftHintsByMeasure: octaveShiftHintByVoiceId.get(normalizedVoiceId) || undefined,
+            autoSplitEligible: !explicitClef,
         };
     });
     const staffsFromStandaloneBlocks = staffBlocks.length > 0
@@ -13298,21 +14093,70 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
         : standaloneBlocks
             .map((body, index) => {
             const voiceId = `P${index + 1}`;
+            const omittedRelativeRoot = hasOmittedRelativeRoot(body);
             const measures = parseLilyDirectBody(body, warnings, `block ${index + 1}`, meter.beats, meter.beatType, {
                 voiceId,
                 graceHintByKey,
             });
             return {
                 voiceId,
-                clef: "treble",
+                clef: omittedRelativeRoot ? "treble" : chooseLilyClefFromMeasures(measures),
                 measures: applyArticulationHintsToMeasures(measures, voiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey, slurHintByKey, trillHintByKey),
                 transpose: transposeHintByVoiceId.get(voiceId) || null,
                 measureHintsByIndex: measureHintByVoiceId.get(voiceId) || undefined,
                 octaveShiftHintsByMeasure: octaveShiftHintByVoiceId.get(voiceId) || undefined,
+                // Keep bare blocks conservative: avoid auto grand-staff split unless user writes explicit staff blocks.
+                autoSplitEligible: false,
             };
         })
             .filter((staff) => staff.measures.some((measure) => measure.length > 0));
-    const staffs = staffsFromStaffBlocks.length ? staffsFromStaffBlocks : staffsFromStandaloneBlocks;
+    const mergedStaffs = staffsFromStaffBlocks.length
+        ? staffsFromStaffBlocks
+        : staffsFromStandaloneBlocks;
+    const staffs = [];
+    for (const staff of mergedStaffs) {
+        if (!staff.autoSplitEligible) {
+            staffs.push(staff);
+            continue;
+        }
+        const split = autoSplitMeasuresToGrandStaff(staff.measures);
+        if (!split.splitApplied) {
+            staffs.push(staff);
+            continue;
+        }
+        staffs.push({
+            ...staff,
+            voiceId: `${staff.voiceId}_s1`,
+            clef: "treble",
+            measures: split.upper,
+            autoSplitEligible: false,
+        });
+        staffs.push({
+            ...staff,
+            voiceId: `${staff.voiceId}_s2`,
+            clef: "bass",
+            measures: split.lower,
+            autoSplitEligible: false,
+        });
+    }
+    if (lyricAssignments.length > 0 && staffs.length > 0) {
+        for (const assignment of lyricAssignments) {
+            if (!assignment.syllables.length)
+                continue;
+            if (!assignment.targetVoiceId) {
+                applyLyricsToMeasures(staffs[0].measures, assignment.syllables);
+                continue;
+            }
+            const target = staffs.find((staff) => normalizeVoiceId(staff.voiceId, "") === assignment.targetVoiceId);
+            if (target) {
+                applyLyricsToMeasures(target.measures, assignment.syllables);
+            }
+            else {
+                const fallbackSplitTarget = staffs.find((staff) => normalizeVoiceId(staff.voiceId, "").startsWith(`${assignment.targetVoiceId}_s`));
+                applyLyricsToMeasures((fallbackSplitTarget || staffs[0]).measures, assignment.syllables);
+            }
+        }
+    }
     if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
         return null;
     }
@@ -13335,7 +14179,13 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
     const out = [];
     // LilyPond absolute octave baseline: c = C3, c' = C4, c'' = C5.
     let currentOctave = 3;
-    let previousMidi = relative.relativeMidi;
+    let previousAnchor = relative.relativeRoot
+        ? {
+            step: relative.relativeRoot.step,
+            octave: relative.relativeRoot.octave,
+            midi: relative.relativeRoot.octave * 12 + lilyPitchClassToSemitone(relative.relativeRoot.step, relative.relativeRoot.alter),
+        }
+        : null;
     let currentDuration = 4;
     for (const token of tokens) {
         if (!token || token === "{" || token === "}" || token === "(" || token === ")")
@@ -13367,6 +14217,7 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
             }
             const len = lilyDurationToAbcLen(currentDuration, dots);
             const chordMembers = [];
+            let chordFirstAnchor = null;
             for (const memberRaw of bodyText.split(/\s+/).filter(Boolean)) {
                 const parsed = parseLilyPitchToken(memberRaw);
                 if (!parsed) {
@@ -13375,9 +14226,12 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
                 }
                 let octave = currentOctave;
                 if (relative.relativeMode) {
-                    const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
+                    const resolvedFromAnchor = resolveRelativePitch(parsed.step, parsed.alter, previousAnchor);
+                    const resolved = applyLilyOctaveMarks(resolvedFromAnchor, parsed.octaveMarks, parsed.step, parsed.alter);
                     octave = resolved.octave;
-                    previousMidi = resolved.midi;
+                    if (!chordFirstAnchor)
+                        chordFirstAnchor = resolved;
+                    previousAnchor = resolved;
                 }
                 else if (parsed.octaveMarks.length > 0) {
                     const up = (parsed.octaveMarks.match(/'/g) || []).length;
@@ -13394,6 +14248,8 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
             }
             if (chordMembers.length > 0) {
                 out.push(`[${chordMembers.join("")}]${len}`);
+                if (relative.relativeMode && chordFirstAnchor)
+                    previousAnchor = chordFirstAnchor;
             }
             continue;
         }
@@ -13427,15 +14283,10 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
                 alter = -1;
             if (accidentalText === "eses")
                 alter = -2;
-            const resolved = resolveRelativeOctave(step, alter, previousMidi);
+            const resolvedFromAnchor = resolveRelativePitch(step, alter, previousAnchor);
+            const resolved = applyLilyOctaveMarks(resolvedFromAnchor, octaveMarks, step, alter);
             currentOctave = resolved.octave;
-            previousMidi = resolved.midi;
-            if (octaveMarks.length > 0) {
-                const up = (octaveMarks.match(/'/g) || []).length;
-                const down = (octaveMarks.match(/,/g) || []).length;
-                currentOctave += up - down;
-                previousMidi = currentOctave * 12 + lilyPitchClassToSemitone(step, alter);
-            }
+            previousAnchor = resolved;
         }
         else if (octaveMarks.length > 0) {
             const up = (octaveMarks.match(/'/g) || []).length;
@@ -13613,7 +14464,7 @@ const collectActiveStaffNumbersForPart = (part) => {
     return Array.from(set.values()).sort((a, b) => a - b);
 };
 const resolveLilyClefForPartStaff = (part, staffNo) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
         const clefNodes = Array.from(measure.querySelectorAll(":scope > attributes > clef"));
         for (const clefNode of clefNodes) {
@@ -13636,24 +14487,21 @@ const resolveLilyClefForPartStaff = (part, staffNo) => {
             return "treble";
         }
     }
-    const octaves = [];
+    const keys = [];
     for (const note of Array.from(part.querySelectorAll(":scope > measure > note"))) {
         const noteStaff = Number.parseInt(((_c = note.querySelector(":scope > staff")) === null || _c === void 0 ? void 0 : _c.textContent) || "1", 10);
         if (noteStaff !== staffNo)
             continue;
         if (note.querySelector(":scope > rest"))
             continue;
-        const octave = Number.parseInt(((_d = note.querySelector(":scope > pitch > octave")) === null || _d === void 0 ? void 0 : _d.textContent) || "", 10);
-        if (Number.isFinite(octave))
-            octaves.push(octave);
+        const step = (((_d = note.querySelector(":scope > pitch > step")) === null || _d === void 0 ? void 0 : _d.textContent) || "").trim().toUpperCase();
+        const alter = Number.parseInt(((_e = note.querySelector(":scope > pitch > alter")) === null || _e === void 0 ? void 0 : _e.textContent) || "0", 10);
+        const octave = Number.parseInt(((_f = note.querySelector(":scope > pitch > octave")) === null || _f === void 0 ? void 0 : _f.textContent) || "", 10);
+        const midi = pitchToMidiKey(step, alter, octave);
+        if (midi !== null)
+            keys.push(midi);
     }
-    if (octaves.length > 0) {
-        const sorted = octaves.slice().sort((a, b) => a - b);
-        const median = sorted[Math.floor(sorted.length / 2)];
-        if (median <= 3)
-            return "bass";
-    }
-    return "treble";
+    return (0, staffClefPolicy_1.chooseSingleClefByKeys)(keys) === "F" ? "bass" : "treble";
 };
 const buildLilyBodyFromPart = (part, warnings, options = {}) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;

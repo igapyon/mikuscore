@@ -38,6 +38,63 @@ describe("LilyPond I/O", () => {
     expect(notes.slice(0, 4)).toEqual(["C", "E", "G", "E"]);
   });
 
+  it("chooses bass clef for low-range bare block when \\clef is omitted", () => {
+    const lily = `\\version "2.24.4"
+{
+  c,4 d,4 e,4 f,4
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("F");
+  });
+
+  it("chooses bass clef for low-range \\new Staff when \\clef is omitted", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c,4 d,4 e,4 f,4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("F");
+  });
+
+  it("auto-splits wide-range \\new Staff block into treble+bass staffs (policy-based)", () => {
+    const lily = `\\version "2.24.4"
+\\score {
+  \\new Staff = "P1" { c,4 g'4 c,4 g'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const parts = doc.querySelectorAll("score-partwise > part");
+    expect(parts.length).toBe(2);
+    expect(doc.querySelector("part:nth-of-type(1) > measure > attributes > clef > sign")?.textContent?.trim()).toBe("G");
+    expect(doc.querySelector("part:nth-of-type(2) > measure > attributes > clef > sign")?.textContent?.trim()).toBe("F");
+    expect(doc.querySelectorAll("part:nth-of-type(1) > measure > note > pitch").length).toBeGreaterThan(0);
+    expect(doc.querySelectorAll("part:nth-of-type(2) > measure > note > pitch").length).toBeGreaterThan(0);
+  });
+
+  it("keeps bare top-level block as single staff (no auto grand-staff split)", () => {
+    const lily = `\\version "2.24.4"
+{
+  c,4 g'4 c,4 g'4
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const parts = doc.querySelectorAll("score-partwise > part");
+    expect(parts.length).toBe(1);
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("G");
+  });
+
   it("writes LilyPond import warnings into diag:* fields", () => {
     const lily = `\\version "2.24.0"
 \\time 4/4
@@ -86,6 +143,406 @@ describe("LilyPond I/O", () => {
       (n.textContent || "").trim()
     );
     expect(octaves.slice(0, 2)).toEqual(["5", "5"]);
+  });
+
+  it("resolves \\relative octave by letter-name distance (not semitone distance)", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\relative c' { f4 bis4 } }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const secondStep = doc.querySelector("part > measure > note:nth-of-type(2) > pitch > step")?.textContent?.trim();
+    const secondAlter = doc.querySelector("part > measure > note:nth-of-type(2) > pitch > alter")?.textContent?.trim();
+    const secondOctave = doc.querySelector("part > measure > note:nth-of-type(2) > pitch > octave")?.textContent?.trim();
+    expect(secondStep).toBe("B");
+    expect(secondAlter).toBe("1");
+    expect(secondOctave).toBe("4");
+  });
+
+  it("uses first chord tone as post-chord \\relative anchor", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\relative c' { <c e g>4 b4 } }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const secondStep = doc.querySelector("part > measure > note:nth-of-type(4) > pitch > step")?.textContent?.trim();
+    const secondOctave = doc.querySelector("part > measure > note:nth-of-type(4) > pitch > octave")?.textContent?.trim();
+    expect(secondStep).toBe("B");
+    expect(secondOctave).toBe("3");
+  });
+
+  it("imports native tie marker (~) as MusicXML tie/tied", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'2~ c'2 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > tie[type=\"start\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > notations > tied[type=\"start\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > tie[type=\"stop\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > notations > tied[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("imports isolated duration tokens after tie (a'2~ 4~ 16) without pitch loss", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { a'2~ 4~ 16 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = doc.querySelectorAll("part > measure > note");
+    expect(notes.length).toBe(3);
+    const steps = Array.from(doc.querySelectorAll("part > measure > note > pitch > step")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    const octaves = Array.from(doc.querySelectorAll("part > measure > note > pitch > octave")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    const durations = Array.from(doc.querySelectorAll("part > measure > note > duration")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    expect(steps).toEqual(["A", "A", "A"]);
+    expect(octaves).toEqual(["4", "4", "4"]);
+    expect(durations).toEqual(["960", "480", "120"]);
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > tie[type=\"start\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > tie[type=\"stop\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > tie[type=\"start\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(3) > tie[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("imports native dynamic commands (p/mf/sfz) as MusicXML directions", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\p c'4 \\mf d'4 \\sfz e'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > direction > direction-type > dynamics > p")).not.toBeNull();
+    expect(doc.querySelector("part > measure > direction > direction-type > dynamics > mf")).not.toBeNull();
+    expect(doc.querySelector("part > measure > direction > direction-type > dynamics > sfz")).not.toBeNull();
+  });
+
+  it("imports native wedge commands (\\< / \\> / \\!) as MusicXML wedge directions", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 \\< d'4 \\> e'4 \\! f'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > direction > direction-type > wedge[type=\"crescendo\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > direction > direction-type > wedge[type=\"diminuendo\"]")).not.toBeNull();
+    expect(doc.querySelector("part > measure > direction > direction-type > wedge[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("imports native slur markers (() and )) as MusicXML slur start/stop", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { ( c'4 d'4 ) e'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > note:nth-of-type(1) > notations > slur[type="start"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > note:nth-of-type(2) > notations > slur[type="stop"]')).not.toBeNull();
+  });
+
+  it("imports native slur commands (\\( and \\)) as MusicXML slur start/stop", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\( c'4 d'4 \\) e'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > note:nth-of-type(1) > notations > slur[type="start"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > note:nth-of-type(2) > notations > slur[type="stop"]')).not.toBeNull();
+  });
+
+  it("imports native \\trill command as MusicXML trill-mark", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 \\trill d'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > notations > ornaments > trill-mark")).not.toBeNull();
+  });
+
+  it("imports native \\startTrillSpan / \\stopTrillSpan as wavy-line start/stop", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 \\startTrillSpan d'4 \\stopTrillSpan e'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > note:nth-of-type(1) > notations > ornaments > wavy-line[type="start"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > note:nth-of-type(2) > notations > ornaments > wavy-line[type="stop"]')).not.toBeNull();
+  });
+
+  it("imports native \\glissando as glissando start/stop between adjacent notes", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 \\glissando d'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > note:nth-of-type(1) > notations > glissando[type="start"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > note:nth-of-type(2) > notations > glissando[type="stop"]')).not.toBeNull();
+  });
+
+  it("imports native pedal commands (sustain/sostenuto/unaCorda) as pedal directions", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" {
+    \\sustainOn c'4 \\sustainOff
+    \\sostenutoOn d'4 \\sostenutoOff
+    \\unaCorda e'4 \\treCorde
+  }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="start"][number="1"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="stop"][number="1"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="start"][number="2"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="stop"][number="2"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="start"][number="3"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > direction > direction-type > pedal[type="stop"][number="3"]')).not.toBeNull();
+    const words = Array.from(doc.querySelectorAll("part > measure > direction > direction-type > words")).map((n) =>
+      (n.textContent || "").trim().toLowerCase()
+    );
+    expect(words).toContain("sost. ped.");
+    expect(words).toContain("una corda");
+    expect(words).toContain("tre corde");
+  });
+
+  it("imports native \\upbow / \\downbow as articulations", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\upbow c'4 d'4 \\downbow }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > notations > articulations > up-bow")).not.toBeNull();
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > notations > articulations > down-bow")).not.toBeNull();
+  });
+
+  it("imports native \\snappizzicato and harmonic commands as notation", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\snappizzicato c'4 \\flageolet d'4 \\harmonic e'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > notations > articulations > snap-pizzicato")).not.toBeNull();
+    expect(doc.querySelectorAll("part > measure > note > notations > technical > harmonic").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps omitted-root relative pedal sample in treble with full first measure notes", () => {
+    const lily = `\\relative {
+  c''4\\sustainOn d e g
+  <c, f a>1\\sustainOff
+  c4\\sostenutoOn e g c,
+  <bes d f>1\\sostenutoOff
+  c4\\unaCorda d e g
+  <d fis a>1\\treCorde
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure:nth-of-type(1) > attributes > clef > sign")?.textContent?.trim()).toBe("G");
+    expect(doc.querySelectorAll("part > measure:nth-of-type(1) > note > pitch").length).toBe(4);
+    expect(doc.querySelector("part > measure:nth-of-type(1) > note:nth-of-type(1) > pitch > octave")?.textContent?.trim()).toBe("5");
+    expect(doc.querySelector("part > measure:nth-of-type(4) > note > accidental")?.textContent?.trim()).toBe("flat");
+    expect(doc.querySelector("part > measure:nth-of-type(6) > note > accidental")?.textContent?.trim()).toBe("sharp");
+  });
+
+  it("imports native \\repeat volta into MusicXML repeat barlines", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\repeat volta 2 { c'4 d'4 e'4 f'4 } }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector('part > measure > barline[location="left"] > repeat[direction="forward"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > barline[location="right"] > repeat[direction="backward"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > barline[location="right"] > ending[type="stop"][number="2"]')).not.toBeNull();
+  });
+
+  it("imports basic lyrics from \\addlyrics block", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 d'4 }
+  \\addlyrics { la le }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > lyric > text")?.textContent?.trim()).toBe("la");
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > lyric > text")?.textContent?.trim()).toBe("le");
+  });
+
+  it("imports basic lyrics from standalone \\lyricmode block", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\lyricmode { do re }
+\\score {
+  \\new Staff = "P1" { c'4 d'4 }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > lyric > text")?.textContent?.trim()).toBe("do");
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > lyric > text")?.textContent?.trim()).toBe("re");
+  });
+
+  it("imports basic lyrics from \\lyricsto block", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { c'4 d'4 }
+  \\lyricsto "P1" { mi fa }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > lyric > text")?.textContent?.trim()).toBe("mi");
+    expect(doc.querySelector("part > measure > note:nth-of-type(2) > lyric > text")?.textContent?.trim()).toBe("fa");
+  });
+
+  it("applies \\lyricsto target to matching staff id", () => {
+    const lily = `\\version "2.24.0"
+\\time 4/4
+\\key c \\major
+\\score {
+  <<
+    \\new Staff = "P1" { c'4 d'4 }
+    \\new Staff = "P2" { e'4 f'4 }
+  >>
+  \\lyricsto "P2" { lo rem }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part:nth-of-type(1) > measure > note:nth-of-type(1) > lyric")).toBeNull();
+    expect(doc.querySelector("part:nth-of-type(2) > measure > note:nth-of-type(1) > lyric > text")?.textContent?.trim()).toBe("lo");
+    expect(doc.querySelector("part:nth-of-type(2) > measure > note:nth-of-type(2) > lyric > text")?.textContent?.trim()).toBe("rem");
+  });
+
+  it("imports \\alternative block with multiple endings", () => {
+    const lily = `\\version "2.24.0"
+\\time 2/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" {
+    \\repeat volta 2 { c'4 d'4 }
+    \\alternative {
+      { e'4 }
+      { f'4 }
+    }
+  }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const steps = Array.from(doc.querySelectorAll("part > measure > note > pitch > step")).map((n) =>
+      (n.textContent || "").trim()
+    );
+    expect(steps).toContain("E");
+    expect(steps).toContain("F");
+    expect(doc.querySelector('part > measure > barline > ending[type="start"][number="1"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > barline > ending[type="stop"][number="1"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > barline > ending[type="start"][number="2"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > barline > ending[type="stop"][number="2"]')).not.toBeNull();
+  });
+
+  it("imports native \\tuplet ratio into MusicXML tuplet/time-modification", () => {
+    const lily = `\\version "2.24.0"
+\\time 2/4
+\\key c \\major
+\\score {
+  \\new Staff = "P1" { \\tuplet 3/2 { c'8 d'8 e'8 } }
+}`;
+    const xml = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const notes = doc.querySelectorAll("part > measure > note");
+    expect(notes.length).toBe(3);
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(doc.querySelector("part > measure > note:nth-of-type(1) > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+    expect(doc.querySelector('part > measure > note:nth-of-type(1) > notations > tuplet[type="start"]')).not.toBeNull();
+    expect(doc.querySelector('part > measure > note:nth-of-type(3) > notations > tuplet[type="stop"]')).not.toBeNull();
   });
 
   it("imports basic chord token <...>", () => {
