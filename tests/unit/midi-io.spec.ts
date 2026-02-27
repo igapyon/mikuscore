@@ -28,6 +28,13 @@ const vlq = (value: number): number[] => {
   return bytes;
 };
 
+const asciiTextBytes = (text: string): number[] => Array.from(text).map((ch) => ch.charCodeAt(0) & 0xff);
+
+const metaTextEvent = (deltaTicks: number, text: string, metaType = 0x01): number[] => {
+  const payload = asciiTextBytes(text);
+  return [...vlq(deltaTicks), 0xff, metaType & 0xff, ...vlq(payload.length), ...payload];
+};
+
 const buildSmfFormat0 = (trackEvents: number[], ticksPerQuarter = 480): Uint8Array => {
   const track = [...trackEvents, 0x00, 0xff, 0x2f, 0x00];
   const header = [
@@ -1340,5 +1347,41 @@ describe("midi-io MIDI import MVP", () => {
     const doc = parseDoc(xml);
     const timeEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, 128);
     expect(timeEvents).toEqual([{ startTicks: 0, beats: 2, beatType: 4 }]);
+  });
+
+  it("restores title/composer/part-name from mks text meta", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:title:Roundtrip%20Title"),
+      ...metaTextEvent(0, "mks:composer:Roundtrip%20Composer"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Violin%20Solo"),
+      ...vlq(0),
+      0xff,
+      0x51,
+      0x03,
+      0x07,
+      0xa1,
+      0x20, // tempo=120
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0),
+      0x90,
+      60,
+      100,
+      ...vlq(480),
+      0x80,
+      60,
+      0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("work > work-title")?.textContent?.trim()).toBe("Roundtrip Title");
+    expect(doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim()).toBe(
+      "Roundtrip Composer"
+    );
+    expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Violin Solo");
   });
 });

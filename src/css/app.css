@@ -379,6 +379,12 @@ body {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.ms-score-header-meta {
+  margin: -0.2rem 0 0.5rem;
+  font-size: 0.88rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 .ms-settings-card {
   margin-top: 2rem;
   padding-top: 1rem;

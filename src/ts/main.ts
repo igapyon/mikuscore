@@ -180,6 +180,7 @@ const outputXml = qo<HTMLTextAreaElement>("#outputXml");
 const diagArea = qo<HTMLDivElement>("#diagArea");
 const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
+const scoreHeaderMetaText = q<HTMLParagraphElement>("#scoreHeaderMetaText");
 const inputUiMessage = q<HTMLDivElement>("#inputUiMessage");
 const uiMessage = q<HTMLDivElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
@@ -217,6 +218,8 @@ let nodeIdToLocation = new Map<string, NoteLocation>();
 let partIdToName = new Map<string, string>();
 let partOrder: string[] = [];
 let measureNumbersByPart = new Map<string, string[]>();
+let scoreTitleText = "";
+let scoreComposerText = "";
 let selectedMeasure: NoteLocation | null = null;
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
@@ -783,6 +786,18 @@ const renderStatus = (): void => {
     : "Not loaded (please load first)";
 };
 
+const renderScoreHeaderMeta = (): void => {
+  if (!state.loaded) {
+    scoreHeaderMetaText.textContent = "";
+    scoreHeaderMetaText.classList.add("md-hidden");
+    return;
+  }
+  const title = scoreTitleText || "Untitled";
+  const composer = scoreComposerText || "Unknown";
+  scoreHeaderMetaText.textContent = `Title: ${title} / Composer: ${composer}`;
+  scoreHeaderMetaText.classList.remove("md-hidden");
+};
+
 const renderNotes = (): void => {
   const selectedNodeId =
     state.selectedNodeId && draftNoteNodeIds.includes(state.selectedNodeId)
@@ -1305,6 +1320,7 @@ const renderAll = (): void => {
   renderNotes();
   syncStepFromSelectedDraftNote();
   renderStatus();
+  renderScoreHeaderMeta();
   renderUiMessage();
   renderDiagnostics();
   renderOutput();
@@ -1373,6 +1389,19 @@ const rebuildMeasureStructureMap = (doc: Document): void => {
   }
 };
 
+const rebuildScoreHeaderMeta = (doc: Document): void => {
+  const title =
+    doc.querySelector("score-partwise > work > work-title")?.textContent?.trim()
+    || doc.querySelector("score-partwise > movement-title")?.textContent?.trim()
+    || "";
+  const composer =
+    doc.querySelector('score-partwise > identification > creator[type="composer"]')?.textContent?.trim()
+    || doc.querySelector("score-partwise > identification > creator")?.textContent?.trim()
+    || "";
+  scoreTitleText = title;
+  scoreComposerText = composer;
+};
+
 type MeasureNavDirection = "left" | "right" | "up" | "down";
 
 const getMeasureNavigationTarget = (
@@ -1425,17 +1454,62 @@ const navigateSelectedMeasure = (direction: MeasureNavDirection): void => {
   highlightSelectedMeasureInMainPreview();
 };
 
-const stripPartNamesInRenderDoc = (doc: Document): void => {
-  const removableSelectors = [
-    "score-partwise > part-list > score-part > part-name",
-    "score-partwise > part-list > score-part > part-abbreviation",
-    "score-partwise > part > measure > attributes > part-name-display",
-    "score-partwise > part > measure > attributes > part-abbreviation-display",
-    "score-partwise > part > measure > attributes > staff-details > staff-name",
-  ];
-  for (const selector of removableSelectors) {
-    for (const node of Array.from(doc.querySelectorAll(selector))) {
-      node.remove();
+const normalizeTextForRenderKey = (value: string | null | undefined): string => {
+  return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+};
+
+const localNameOf = (el: Element): string => (el.localName || el.tagName || "").toLowerCase();
+
+const directChildrenByName = (parent: Element, name: string): Element[] =>
+  Array.from(parent.children).filter((child) => localNameOf(child) === name.toLowerCase());
+
+const firstDescendantByName = (parent: Element, name: string): Element | null => {
+  const nsHit = parent.getElementsByTagNameNS("*", name).item(0);
+  if (nsHit) return nsHit;
+  return parent.getElementsByTagName(name).item(0);
+};
+
+const extractTempoDirectionRenderKey = (direction: Element): string | null => {
+  const directSound = directChildrenByName(direction, "sound")[0] ?? null;
+  const directionType = directChildrenByName(direction, "direction-type")[0] ?? null;
+  const metronome = directionType ? firstDescendantByName(directionType, "metronome") : null;
+  const wordsEl = directionType ? firstDescendantByName(directionType, "words") : null;
+  const perMinuteEl = metronome ? firstDescendantByName(metronome, "per-minute") : null;
+  const beatUnitEl = metronome ? firstDescendantByName(metronome, "beat-unit") : null;
+  const directOffset = directChildrenByName(direction, "offset")[0] ?? null;
+
+  const soundTempo = normalizeTextForRenderKey(directSound?.getAttribute("tempo"));
+  const perMinute = normalizeTextForRenderKey(perMinuteEl?.textContent);
+  const beatUnit = normalizeTextForRenderKey(beatUnitEl?.textContent);
+  const words = normalizeTextForRenderKey(wordsEl?.textContent);
+  const hasTempoSignal = Boolean(soundTempo || perMinute || words);
+  if (!hasTempoSignal) return null;
+  const offset = normalizeTextForRenderKey(directOffset?.textContent || "0");
+  return `off=${offset}|sound=${soundTempo}|pm=${perMinute}|unit=${beatUnit}|words=${words}`;
+};
+
+const dedupeGlobalTempoDirectionsInRenderDoc = (doc: Document): void => {
+  const root = doc.documentElement;
+  if (!root || localNameOf(root) !== "score-partwise") return;
+  const parts = directChildrenByName(root, "part");
+  if (parts.length <= 1) return;
+  const seen = new Set<string>();
+  for (let pi = 0; pi < parts.length; pi += 1) {
+    const part = parts[pi];
+    const measures = directChildrenByName(part, "measure");
+    for (const measure of measures) {
+      const measureNo = (measure.getAttribute("number") ?? "").trim();
+      const directions = directChildrenByName(measure, "direction");
+      for (const direction of directions) {
+        const tempoKey = extractTempoDirectionRenderKey(direction);
+        if (!tempoKey) continue;
+        const dedupeKey = `m=${measureNo}|${tempoKey}`;
+        if (seen.has(dedupeKey)) {
+          direction.remove();
+          continue;
+        }
+        seen.add(dedupeKey);
+      }
     }
   }
 };
@@ -1452,13 +1526,18 @@ const buildRenderXmlForVerovio = (
     };
   }
   if (!state.loaded) {
+    dedupeGlobalTempoDirectionsInRenderDoc(sourceDoc);
     return {
       renderDoc: sourceDoc,
       svgIdToNodeId: new Map<string, string>(),
       noteCount: 0,
     };
   }
-  return buildRenderDocWithNodeIds(sourceDoc, state.noteNodeIds.slice(), "mks-main");
+  const renderBundle = buildRenderDocWithNodeIds(sourceDoc, state.noteNodeIds.slice(), "mks-main");
+  if (renderBundle.renderDoc) {
+    dedupeGlobalTempoDirectionsInRenderDoc(renderBundle.renderDoc);
+  }
+  return renderBundle;
 };
 
 const deriveRenderedNoteIds = (root: Element): string[] => {
@@ -1710,13 +1789,7 @@ const renderScorePreview = (): void => {
     setSvgIdMap: (map) => {
       currentSvgIdToNodeId = map;
     },
-    buildRenderXmlForVerovio: (sourceXml) => {
-      const renderBundle = buildRenderXmlForVerovio(sourceXml);
-      if (renderBundle.renderDoc) {
-        stripPartNamesInRenderDoc(renderBundle.renderDoc);
-      }
-      return renderBundle;
-    },
+    buildRenderXmlForVerovio,
     deriveRenderedNoteIds,
     buildFallbackSvgIdMap,
     onRendered: () => {
@@ -1758,17 +1831,22 @@ const refreshNotesFromCore = (): void => {
       rebuildNodeLocationMap(currentDoc);
       rebuildPartNameMap(currentDoc);
       rebuildMeasureStructureMap(currentDoc);
+      rebuildScoreHeaderMeta(currentDoc);
     } else {
       nodeIdToLocation = new Map<string, NoteLocation>();
       partIdToName = new Map<string, string>();
       partOrder = [];
       measureNumbersByPart = new Map<string, string[]>();
+      scoreTitleText = "";
+      scoreComposerText = "";
     }
   } else {
     nodeIdToLocation = new Map<string, NoteLocation>();
     partIdToName = new Map<string, string>();
     partOrder = [];
     measureNumbersByPart = new Map<string, string[]>();
+    scoreTitleText = "";
+    scoreComposerText = "";
   }
 };
 

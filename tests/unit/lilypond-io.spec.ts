@@ -526,6 +526,38 @@ describe("LilyPond I/O", () => {
     expect(doc.querySelector('part > measure > barline > ending[type="stop"][number="2"]')).not.toBeNull();
   });
 
+  it("preserves part-name across MusicXML -> LilyPond -> MusicXML", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Violin</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const lily = exportMusicXmlDomToLilyPond(doc);
+    expect(lily).toContain('instrumentName = "Violin"');
+    const roundtrip = convertLilyPondToMusicXml(lily, { debugMetadata: true });
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("score-partwise > part-list > score-part > part-name")?.textContent?.trim()).toBe(
+      "Violin"
+    );
+  });
+
   it("imports native \\tuplet ratio into MusicXML tuplet/time-modification", () => {
     const lily = `\\version "2.24.0"
 \\time 2/4
@@ -1613,7 +1645,7 @@ PedalOrganMusic = \\relative {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const lily = exportMusicXmlDomToLilyPond(doc);
-    expect(lily).toContain("\\new Staff = \"P1\" { \\clef bass ");
+    expect(lily).toContain("\\new Staff = \"P1\" \\with { instrumentName = \"Bass\" } { \\clef bass ");
   });
 
   it("infers bass clef for low staff when explicit clef number is missing", () => {
@@ -1638,7 +1670,7 @@ PedalOrganMusic = \\relative {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const lily = exportMusicXmlDomToLilyPond(doc);
-    expect(lily).toContain("\\new Staff = \"P1_s1\" { ");
-    expect(lily).toContain("\\new Staff = \"P1_s2\" { \\clef bass ");
+    expect(lily).toContain("\\new Staff = \"P1_s1\" \\with { instrumentName = \"Piano\" } { ");
+    expect(lily).toContain("\\new Staff = \"P1_s2\" \\with { instrumentName = \"Piano\" } { \\clef bass ");
   });
 });
