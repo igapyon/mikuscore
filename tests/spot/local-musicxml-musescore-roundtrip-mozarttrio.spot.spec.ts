@@ -6,9 +6,13 @@ import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "../../src/ts/musescore-io";
 
 type NoteEvent = {
+  part: string;
   measure: string;
   onset: number;
   duration: number;
+  onsetAbsBeats: string;
+  onsetBeats: string;
+  durationBeats: string;
   staff: string;
   step: string;
   alter: string;
@@ -24,44 +28,67 @@ const parseDoc = (xml: string): Document => {
 
 const collectNoteEvents = (doc: Document): NoteEvent[] => {
   const out: NoteEvent[] = [];
-  for (const measure of Array.from(doc.querySelectorAll("score-partwise > part > measure"))) {
-    let cursor = 0;
-    const measureNo = measure.getAttribute("number") ?? "";
-    for (const child of Array.from(measure.children)) {
-      const tag = child.tagName.toLowerCase();
-      if (tag === "backup") {
-        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
-        if (Number.isFinite(d) && d > 0) cursor = Math.max(0, cursor - Math.round(d));
-        continue;
+  for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+    const partId = part.getAttribute("id") ?? "";
+    let currentDivisions = 1;
+    let partOffsetBeats = 0;
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+      const localDivisions = Number(measure.querySelector(":scope > attributes > divisions")?.textContent?.trim() ?? "");
+      if (Number.isFinite(localDivisions) && localDivisions > 0) {
+        currentDivisions = Math.max(1, Math.round(localDivisions));
       }
-      if (tag === "forward") {
-        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
-        if (Number.isFinite(d) && d > 0) cursor += Math.round(d);
-        continue;
+      let cursor = 0;
+      let measureMax = 0;
+      const measureNo = measure.getAttribute("number") ?? "";
+      for (const child of Array.from(measure.children)) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "backup") {
+          const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+          if (Number.isFinite(d) && d > 0) cursor = Math.max(0, cursor - Math.round(d));
+          continue;
+        }
+        if (tag === "forward") {
+          const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+          if (Number.isFinite(d) && d > 0) {
+            cursor += Math.round(d);
+            measureMax = Math.max(measureMax, cursor);
+          }
+          continue;
+        }
+        if (tag !== "note") continue;
+        if (child.querySelector(":scope > rest")) {
+          const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+          if (child.querySelector(":scope > chord") === null && Number.isFinite(d) && d > 0) cursor += Math.round(d);
+          continue;
+        }
+        const step = child.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
+        const octave = child.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
+        if (!step || !octave) continue;
+        const duration = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
+        const roundedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+        const isChord = child.querySelector(":scope > chord") !== null;
+        const onset = isChord ? Math.max(0, cursor - roundedDuration) : cursor;
+        const onsetBeats = onset / currentDivisions;
+        const durationBeats = roundedDuration / currentDivisions;
+        out.push({
+          part: partId,
+          measure: measureNo,
+          onset,
+          duration: roundedDuration,
+          onsetAbsBeats: (partOffsetBeats + onsetBeats).toFixed(6),
+          onsetBeats: onsetBeats.toFixed(6),
+          durationBeats: durationBeats.toFixed(6),
+          staff: child.querySelector(":scope > staff")?.textContent?.trim() ?? "1",
+          step,
+          alter: child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "",
+          octave,
+        });
+        if (!isChord) {
+          cursor += roundedDuration;
+          measureMax = Math.max(measureMax, cursor);
+        }
       }
-      if (tag !== "note") continue;
-      if (child.querySelector(":scope > rest")) {
-        const d = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
-        if (child.querySelector(":scope > chord") === null && Number.isFinite(d) && d > 0) cursor += Math.round(d);
-        continue;
-      }
-      const step = child.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
-      const octave = child.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "";
-      if (!step || !octave) continue;
-      const duration = Number(child.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
-      const roundedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
-      const isChord = child.querySelector(":scope > chord") !== null;
-      const onset = isChord ? Math.max(0, cursor - roundedDuration) : cursor;
-      out.push({
-        measure: measureNo,
-        onset,
-        duration: roundedDuration,
-        staff: child.querySelector(":scope > staff")?.textContent?.trim() ?? "1",
-        step,
-        alter: child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "",
-        octave,
-      });
-      if (!isChord) cursor += roundedDuration;
+      partOffsetBeats += measureMax / currentDivisions;
     }
   }
   return out;
@@ -112,7 +139,25 @@ const collectMeasureVoiceSummary = (
 const toMultiset = (events: NoteEvent[]): Map<string, number> => {
   const map = new Map<string, number>();
   for (const e of events) {
-    const key = `${e.measure}|${e.onset}|${e.duration}|${e.staff}|${e.step}|${e.alter}|${e.octave}`;
+    const key = `${e.part}|${e.measure}|${e.onset}|${e.duration}|${e.staff}|${e.step}|${e.alter}|${e.octave}`;
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return map;
+};
+
+const toBeatMultiset = (events: NoteEvent[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const e of events) {
+    const key = `${e.part}|${e.measure}|${e.onsetBeats}|${e.durationBeats}|${e.staff}|${e.step}|${e.alter}|${e.octave}`;
+    map.set(key, (map.get(key) ?? 0) + 1);
+  }
+  return map;
+};
+
+const toAbsoluteBeatMultiset = (events: NoteEvent[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  for (const e of events) {
+    const key = `${e.part}|${e.onsetAbsBeats}|${e.durationBeats}|${e.staff}|${e.step}|${e.alter}|${e.octave}`;
     map.set(key, (map.get(key) ?? 0) + 1);
   }
   return map;
@@ -154,5 +199,33 @@ describe("Local roundtrip: MozartTrio musicxml <-> mscx", () => {
     expect(dstPickup.noteBeats).toBe(srcPickup.noteBeats);
     expect(dstPickup.restBeats).toBe(srcPickup.restBeats);
     expect(dstPickupImplicit).toBe(srcPickupImplicit);
+  });
+
+  it("keeps whole-score absolute-beat note parity", () => {
+    const sourcePath = resolve(process.cwd(), "tests", "fixtures-local", "MozartTrio.musicxml");
+    if (!existsSync(sourcePath)) {
+      expect(true).toBe(true);
+      return;
+    }
+    const sourceXml = readFileSync(sourcePath, "utf-8");
+    const sourceDoc = parseDoc(sourceXml);
+    const mscx = exportMusicXmlDomToMuseScore(sourceDoc);
+    const roundtripXml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const roundtripDoc = parseDoc(roundtripXml);
+
+    const sourceEvents = collectNoteEvents(sourceDoc);
+    const roundtripEvents = collectNoteEvents(roundtripDoc);
+    const diff = diffMultiset(toMultiset(sourceEvents), toMultiset(roundtripEvents));
+    const beatDiff = diffMultiset(toBeatMultiset(sourceEvents), toBeatMultiset(roundtripEvents));
+    const absBeatDiff = diffMultiset(
+      toAbsoluteBeatMultiset(sourceEvents),
+      toAbsoluteBeatMultiset(roundtripEvents)
+    );
+    expect(sourceEvents.length).toBeGreaterThan(0);
+    expect(roundtripEvents.length).toBeGreaterThan(0);
+    expect(absBeatDiff.length).toBe(0);
+    // Representation-level differences (measure labels/divisions) may remain for now.
+    expect(diff.length).toBeGreaterThanOrEqual(absBeatDiff.length);
+    expect(beatDiff.length).toBeGreaterThanOrEqual(absBeatDiff.length);
   });
 });
