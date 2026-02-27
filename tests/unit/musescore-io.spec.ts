@@ -164,6 +164,36 @@ describe("musescore-io", () => {
     expect(time?.querySelector(":scope > beat-type")?.textContent?.trim()).toBe("4");
   });
 
+  it("imports MuseScore Instrument transpose into MusicXML attributes transpose", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Part>
+      <trackName>Clarinet in A</trackName>
+      <Instrument>
+        <transposeDiatonic>-2</transposeDiatonic>
+        <transposeChromatic>-3</transposeChromatic>
+      </Instrument>
+      <Staff id="1"/>
+    </Part>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > attributes > transpose > diatonic")?.textContent?.trim()).toBe("-2");
+    expect(doc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
+  });
+
   it("optionally normalizes MuseScore cut-time to 2/2 in MusicXML", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="2.06">
@@ -2098,6 +2128,40 @@ describe("musescore-io", () => {
     const srcEvents = collectMeasurePitchEvents(srcDoc, 3, 4);
     const dstEvents = collectMeasurePitchEvents(dstDoc, 3, 4);
     expect(dstEvents).toEqual(srcEvents);
+  });
+
+  it("roundtrips MusicXML transpose through MuseScore Instrument transpose", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Clarinet in A</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+        <transpose><diatonic>-2</diatonic><chromatic>-3</chromatic></transpose>
+      </attributes>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const sourceDoc = parseMusicXmlDocument(xml);
+    expect(sourceDoc).not.toBeNull();
+    if (!sourceDoc) return;
+    const mscx = exportMusicXmlDomToMuseScore(sourceDoc);
+    expect(mscx).toContain("<transposeDiatonic>-2</transposeDiatonic>");
+    expect(mscx).toContain("<transposeChromatic>-3</transposeChromatic>");
+
+    const roundtrip = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const outDoc = parseMusicXmlDocument(roundtrip);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > attributes > transpose > diatonic")?.textContent?.trim()).toBe("-2");
+    expect(outDoc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
   });
 
   it("keeps sample2 measure 7 staff 4 natural accidental on roundtrip", () => {

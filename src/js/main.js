@@ -9576,6 +9576,40 @@ const readPartNameFromMusePart = (part, fallback) => {
         || ((_k = (_j = part.querySelector(":scope > Instrument > instrumentId")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim();
     return candidate || fallback;
 };
+const readPartTransposeFromMusicXml = (part) => {
+    var _a, _b, _c, _d, _e, _f;
+    const transpose = part.querySelector(":scope > measure > attributes > transpose");
+    if (!transpose)
+        return null;
+    const diatonic = Number((_c = (_b = (_a = transpose.querySelector(":scope > diatonic")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "");
+    const chromatic = Number((_f = (_e = (_d = transpose.querySelector(":scope > chromatic")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "");
+    const out = {};
+    if (Number.isFinite(diatonic))
+        out.diatonic = Math.round(diatonic);
+    if (Number.isFinite(chromatic))
+        out.chromatic = Math.round(chromatic);
+    return Object.keys(out).length ? out : null;
+};
+const readPartTransposeFromMusePart = (part) => {
+    var _a, _b, _c, _d;
+    const diatonic = (_b = (_a = firstNumber(part, ":scope > Instrument > transposeDiatonic")) !== null && _a !== void 0 ? _a : firstNumber(part, ":scope > Instrument > mksTransposeDiatonic")) !== null && _b !== void 0 ? _b : firstNumber(part, ":scope > transpose > diatonic");
+    const chromatic = (_d = (_c = firstNumber(part, ":scope > Instrument > transposeChromatic")) !== null && _c !== void 0 ? _c : firstNumber(part, ":scope > Instrument > mksTransposeChromatic")) !== null && _d !== void 0 ? _d : firstNumber(part, ":scope > transpose > chromatic");
+    const out = {};
+    if (Number.isFinite(diatonic))
+        out.diatonic = Math.round(Number(diatonic));
+    if (Number.isFinite(chromatic))
+        out.chromatic = Math.round(Number(chromatic));
+    return Object.keys(out).length ? out : null;
+};
+const buildTransposeXml = (transpose) => {
+    if (!transpose)
+        return "";
+    const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
+    const chromatic = Number.isFinite(transpose.chromatic) ? Math.round(Number(transpose.chromatic)) : null;
+    if (diatonic === null && chromatic === null)
+        return "";
+    return `<transpose>${diatonic !== null ? `<diatonic>${diatonic}</diatonic>` : ""}${chromatic !== null ? `<chromatic>${chromatic}</chromatic>` : ""}</transpose>`;
+};
 const readClefForMuseStaff = (staff) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
     const clefTypeText = ((_b = (_a = staff.querySelector(":scope > Measure > voice > Clef > concertClefType")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
@@ -10588,7 +10622,8 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                 measures: parsedMeasures,
             });
         }
-        parsedByPart.push({ partId, partName: group.partName, staffs: parsedStaffs });
+        const partTranspose = group.partEl ? readPartTransposeFromMusePart(group.partEl) : null;
+        parsedByPart.push({ partId, partName: group.partName, transpose: partTranspose, staffs: parsedStaffs });
     }
     if (unknownTagSet.size > 0) {
         pushWarning({
@@ -10675,7 +10710,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                 || primaryMeasure.mode !== prevMode;
             if (needsAttributes) {
                 const timeSymbolAttr = primaryMeasure.timeSymbol ? ` symbol="${primaryMeasure.timeSymbol}"` : "";
-                body += `<attributes><divisions>${divisions}</divisions><key><fifths>${primaryMeasure.fifths}</fifths><mode>${primaryMeasure.mode}</mode></key><time${timeSymbolAttr}><beats>${primaryMeasure.beats}</beats><beat-type>${primaryMeasure.beatType}</beat-type></time>`;
+                body += `<attributes><divisions>${divisions}</divisions><key><fifths>${primaryMeasure.fifths}</fifths><mode>${primaryMeasure.mode}</mode></key><time${timeSymbolAttr}><beats>${primaryMeasure.beats}</beats><beat-type>${primaryMeasure.beatType}</beat-type></time>${buildTransposeXml(part.transpose)}`;
                 if (part.staffs.length > 1) {
                     body += `<staves>${part.staffs.length}</staves>`;
                     for (let si = 0; si < part.staffs.length; si += 1) {
@@ -11594,6 +11629,7 @@ const exportMusicXmlDomToMuseScore = (doc, options = {}) => {
         const partId = ((_e = part.getAttribute("id")) !== null && _e !== void 0 ? _e : "").trim();
         const partName = (_f = partNameById.get(partId)) !== null && _f !== void 0 ? _f : (partId || `P${pi + 1}`);
         const laneCount = getPartStaffCountFromMusicXml(part);
+        const partTranspose = readPartTransposeFromMusicXml(part);
         const pitchByStaff = collectMusicXmlPitchesByStaff(part);
         const initialClefByStaff = new Map();
         for (let staffNo = 1; staffNo <= laneCount; staffNo += 1) {
@@ -11602,7 +11638,10 @@ const exportMusicXmlDomToMuseScore = (doc, options = {}) => {
             initialClefByStaff.set(staffNo, explicit !== null && explicit !== void 0 ? explicit : fallback);
         }
         const staffIds = Array.from({ length: laneCount }, () => nextStaffId++);
-        partDefs.push(`<Part><trackName>${xmlEscape(partName)}</trackName>${staffIds
+        const instrumentTransposeXml = partTranspose
+            ? `<Instrument>${Number.isFinite(partTranspose.diatonic) ? `<transposeDiatonic>${Math.round(Number(partTranspose.diatonic))}</transposeDiatonic><mksTransposeDiatonic>${Math.round(Number(partTranspose.diatonic))}</mksTransposeDiatonic>` : ""}${Number.isFinite(partTranspose.chromatic) ? `<transposeChromatic>${Math.round(Number(partTranspose.chromatic))}</transposeChromatic><mksTransposeChromatic>${Math.round(Number(partTranspose.chromatic))}</mksTransposeChromatic>` : ""}</Instrument>`
+            : "";
+        partDefs.push(`<Part><trackName>${xmlEscape(partName)}</trackName>${instrumentTransposeXml}${staffIds
             .map((id) => `<Staff id="${id}"/>`)
             .join("")}</Part>`);
         const measures = Array.from(part.querySelectorAll(":scope > measure"));
