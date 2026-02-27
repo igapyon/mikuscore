@@ -241,6 +241,9 @@
     - https://music-encoding.org/
     - https://music-encoding.org/guidelines/v5/content/
     - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
+  - [ ] Local-fixture-dependent MEI unit tests (`tests/fixtures-local/**`) are temporary:
+    - keep auto-skip behavior when fixtures are missing;
+    - once CFFP/spot parity coverage is sufficient, consolidate and remove redundant local-fixture tests.
   - MEI v5 spec-gap follow-up candidates (format has representation, current `mei-io` still partial):
     - [ ] Transposing instruments (`trans.diat` / `trans.semi`) end-to-end conformance:
       - [x] Import: map MEI transposition metadata to MusicXML `<transpose>` per staff/part. (minimal `staffDef/scoreDef` attrs)
@@ -577,6 +580,9 @@
     - https://music-encoding.org/
     - https://music-encoding.org/guidelines/v5/content/
     - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
+  - [ ] `tests/fixtures-local/**` に依存する MEI 単体テストは暫定運用とする:
+    - fixture 不在時は自動 skip を維持する。
+    - CFFP/spot parity の網羅が十分になったら、重複する local-fixture テストを整理・削除する。
   - MEI v5 仕様差分フォロー候補（仕様上は表現可能だが `mei-io` 実装が未完/部分対応）:
     - [ ] Slur/Tie を MEI 制御イベント（`<slur>`, `<tie>`）または note属性として往復保持する。
       - [x] staff内 `<slur startid/endid>` の最小取り込み（同一layer id参照）を実装。

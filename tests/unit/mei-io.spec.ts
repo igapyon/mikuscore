@@ -1,11 +1,25 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "../../src/ts/mei-io";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
 describe("MEI export", () => {
+  const itWithLocalFixture = (
+    fixturePath: string,
+    testName: string,
+    fn: () => void,
+    timeout?: number
+  ): void => {
+    const runner = existsSync(resolve(process.cwd(), fixturePath)) ? it : it.skip;
+    if (typeof timeout === "number") {
+      runner(testName, fn, timeout);
+      return;
+    }
+    runner(testName, fn);
+  };
+
   it("exports simple MusicXML into MEI with scoreDef and notes", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -3210,7 +3224,10 @@ describe("MEI export", () => {
     expect(m3Durations).toEqual([480, 960]);
   });
 
-  it("imports official MEI fixture (CMN Listing 132 excerpt) with grace pitch/timing semantics", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei",
+    "imports official MEI fixture (CMN Listing 132 excerpt) with grace pitch/timing semantics",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei"),
       "utf8"
@@ -3255,9 +3272,13 @@ describe("MEI export", () => {
     expect(notes[3].querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("continue");
     expect(notes[4].querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("continue");
     expect(notes[5].querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
-  });
+    }
+  );
 
-  it("imports official MEI fixture (CMN Listing 142 excerpt) with breaksec secondary-beam split semantics", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei",
+    "imports official MEI fixture (CMN Listing 142 excerpt) with breaksec secondary-beam split semantics",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei"),
       "utf8"
@@ -3290,9 +3311,13 @@ describe("MEI export", () => {
     expect(notes[3].querySelector(':scope > beam[number="3"]')?.textContent?.trim()).toBe("end");
     expect(notes[5].querySelector(':scope > beam[number="3"]')?.textContent?.trim()).toBe("begin");
     expect(notes[8].querySelector(':scope > beam[number="3"]')?.textContent?.trim()).toBe("end");
-  });
+    }
+  );
 
-  it("imports Bach Brandenburg fixture and preserves first-measure key signature from keysig", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "imports Bach Brandenburg fixture and preserves first-measure key signature from keysig",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
@@ -3309,9 +3334,14 @@ describe("MEI export", () => {
     for (const node of keyFifthsNodes) {
       expect(node.textContent?.trim()).toBe("1");
     }
-  }, 15000);
+    },
+    15000
+  );
 
-  it("imports Bach Brandenburg fixture and keeps viola clef as C3 on part 6", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "imports Bach Brandenburg fixture and keeps viola clef as C3 on part 6",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
@@ -3326,9 +3356,14 @@ describe("MEI export", () => {
     if (!part6Measure1) return;
     expect(part6Measure1.querySelector(":scope > attributes > clef > sign")?.textContent?.trim()).toBe("C");
     expect(part6Measure1.querySelector(":scope > attributes > clef > line")?.textContent?.trim()).toBe("3");
-  }, 15000);
+    },
+    15000
+  );
 
-  it("imports beamSpan minimal fixture and keeps beam continuity on listed notes", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei",
+    "imports beamSpan minimal fixture and keeps beam continuity on listed notes",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei"),
       "utf8"
@@ -3346,9 +3381,13 @@ describe("MEI export", () => {
     expect(m1n2?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("continue");
     expect(m1n3?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("continue");
     expect(m1n4?.querySelector(':scope > beam[number="1"]')?.textContent?.trim()).toBe("end");
-  });
+    }
+  );
 
-  it("imports tie-crossbar minimal fixture and keeps tie start/stop across measures", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei",
+    "imports tie-crossbar minimal fixture and keeps tie start/stop across measures",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei"),
       "utf8"
@@ -3364,9 +3403,13 @@ describe("MEI export", () => {
     expect(m1?.querySelector(':scope > notations > tied[type="start"]')).not.toBeNull();
     expect(m2?.querySelector(':scope > tie[type="stop"]')).not.toBeNull();
     expect(m2?.querySelector(':scope > notations > tied[type="stop"]')).not.toBeNull();
-  });
+    }
+  );
 
-  it("imports slur minimal fixture and maps i/m/t slur markers", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei",
+    "imports slur minimal fixture and maps i/m/t slur markers",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei"),
       "utf8"
@@ -3383,9 +3426,13 @@ describe("MEI export", () => {
     expect(n2?.querySelector(':scope > notations > slur[type="start"][number="1"]')).not.toBeNull();
     expect(n2?.querySelector(':scope > notations > slur[type="stop"][number="1"]')).not.toBeNull();
     expect(n3?.querySelector(':scope > notations > slur[type="stop"][number="1"]')).not.toBeNull();
-  });
+    }
+  );
 
-  it("imports hairpin minimal fixture and maps startid/endid to wedge start/stop", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei",
+    "imports hairpin minimal fixture and maps startid/endid to wedge start/stop",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei"),
       "utf8"
@@ -3400,7 +3447,8 @@ describe("MEI export", () => {
     const stop = directions.find((d) => d.querySelector(':scope > direction-type > wedge[type="stop"]'));
     expect(start).toBeTruthy();
     expect(stop).toBeTruthy();
-  });
+    }
+  );
 
   it("resolves staff-level control-event ids across layers by tick (hairpin startid/endid)", () => {
     const mei = `<?xml version="1.0" encoding="UTF-8"?>
@@ -3445,7 +3493,10 @@ describe("MEI export", () => {
     expect(stop?.querySelector(":scope > offset")?.textContent?.trim()).toBe("480");
   });
 
-  it("imports dynam minimal fixture and maps MEI dynam text to MusicXML dynamics mark", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei",
+    "imports dynam minimal fixture and maps MEI dynam text to MusicXML dynamics mark",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei"),
       "utf8"
@@ -3457,9 +3508,13 @@ describe("MEI export", () => {
 
     const dynamics = outDoc.querySelector("part > measure:nth-of-type(1) > direction > direction-type > dynamics > mf");
     expect(dynamics).not.toBeNull();
-  });
+    }
+  );
 
-  it("imports tuplet minimal fixture and keeps 3:2 time-modification on notes", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei",
+    "imports tuplet minimal fixture and keeps 3:2 time-modification on notes",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei"),
       "utf8"
@@ -3474,9 +3529,13 @@ describe("MEI export", () => {
       expect(n.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("3");
       expect(n.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("2");
     }
-  });
+    }
+  );
 
-  it("imports fermata minimal fixture and maps to MusicXML fermata notation", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei",
+    "imports fermata minimal fixture and maps to MusicXML fermata notation",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei"),
       "utf8"
@@ -3487,9 +3546,13 @@ describe("MEI export", () => {
     if (!outDoc) return;
     const third = outDoc.querySelector('part > measure[number="1"] > note:nth-of-type(3)');
     expect(third?.querySelector(":scope > notations > fermata")).not.toBeNull();
-  });
+    }
+  );
 
-  it("imports gliss minimal fixture and maps to MusicXML glissando start/stop", () => {
+  itWithLocalFixture(
+    "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei",
+    "imports gliss minimal fixture and maps to MusicXML glissando start/stop",
+    () => {
     const mei = readFileSync(
       resolve(process.cwd(), "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei"),
       "utf8"
@@ -3502,5 +3565,6 @@ describe("MEI export", () => {
     const fourth = outDoc.querySelector('part > measure[number="1"] > note:nth-of-type(4)');
     expect(first?.querySelector(':scope > notations > glissando[type="start"]')).not.toBeNull();
     expect(fourth?.querySelector(':scope > notations > glissando[type="stop"]')).not.toBeNull();
-  });
+    }
+  );
 });

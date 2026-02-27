@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { convertMuseScoreToMusicXml } from "../../src/ts/musescore-io";
@@ -92,10 +92,12 @@ const diffMultiset = (a: Map<string, number>, b: Map<string, number>): string[] 
 };
 
 describe("Local parity (moonlight): mscx vs reference musicxml", () => {
-  it("converts local mscx fixture and reports current semantic diffs", () => {
-    const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
-    const mscxPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mscx");
-    const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
+  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
+  const mscxPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mscx");
+  const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
+  const itWithLocalFixture = existsSync(mscxPath) && existsSync(referencePath) ? it : it.skip;
+
+  itWithLocalFixture("converts local mscx fixture and reports current semantic diffs", () => {
 
     const mscx = readFileSync(mscxPath, "utf-8");
     const referenceXml = readFileSync(referencePath, "utf-8");
