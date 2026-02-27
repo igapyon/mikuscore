@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { computeBeamAssignments } from "./beam-common";
+import { chooseSingleClefByKeys } from "../../core/staffClefPolicy";
 
 export type Fraction = { num: number; den: number };
 
@@ -1877,6 +1878,43 @@ const normalizeVoiceForMusicXml = (voice?: string): string => {
   return String(Math.round(n));
 };
 
+const midiByStepForAbcImport: Record<string, number> = {
+  C: 0,
+  D: 2,
+  E: 4,
+  F: 5,
+  G: 7,
+  A: 9,
+  B: 11,
+};
+
+const noteToMidiForAbcClefInference = (note?: AbcParsedNote): number | null => {
+  if (!note || note.isRest) return null;
+  const step = String(note.step || "").trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(midiByStepForAbcImport, step)) {
+    return null;
+  }
+  const octave = Number.isFinite(note.octave) ? Math.round(Number(note.octave)) : 4;
+  const alter = Number.isFinite(note.alter) ? Math.round(Number(note.alter)) : 0;
+  return (octave + 1) * 12 + midiByStepForAbcImport[step] + alter;
+};
+
+const resolveAbcImportClef = (part: AbcParsedPart): string => {
+  const explicit = String(part?.clef || "").trim().toLowerCase();
+  if (explicit) return explicit;
+  const keys: number[] = [];
+  for (const measure of part?.measures || []) {
+    for (const note of measure || []) {
+      const midi = noteToMidiForAbcClefInference(note);
+      if (Number.isFinite(midi)) {
+        keys.push(midi as number);
+      }
+    }
+  }
+  if (!keys.length) return "";
+  return chooseSingleClefByKeys(keys) === "F" ? "bass" : "treble";
+};
+
 export const clefXmlFromAbcClef = (rawClef?: string): string => {
   const clef = String(rawClef || "").trim().toLowerCase();
   if (clef === "bass" || clef === "f") {
@@ -2085,7 +2123,11 @@ const buildMusicXmlFromAbcParsed = (
     parsed.parts && parsed.parts.length > 0
       ? parsed.parts
       : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
-  const measureCount = parts.reduce((max, part) => Math.max(max, part.measures.length), 1);
+  const resolvedParts = parts.map((part) => ({
+    ...part,
+    clef: resolveAbcImportClef(part),
+  }));
+  const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
   const title = parsed.meta?.title || "mikuscore";
   const composer = parsed.meta?.composer || "Unknown";
   const beats = parsed.meta?.meter?.beats || 4;
@@ -2100,7 +2142,7 @@ const buildMusicXmlFromAbcParsed = (
       ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
       : null;
 
-  const partListXml = parts
+  const partListXml = resolvedParts
     .map((part, index) => {
       const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
       return [
@@ -2115,7 +2157,7 @@ const buildMusicXmlFromAbcParsed = (
     })
     .join("");
 
-  const partBodyXml = parts
+  const partBodyXml = resolvedParts
     .map((part, partIndex) => {
       const measuresXml: string[] = [];
       let currentPartFifths = Math.max(-7, Math.min(7, Math.round(defaultFifths)));

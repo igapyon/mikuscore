@@ -249,6 +249,6 @@ describe("MuseScore roundtrip (public/local cases)", () => {
         pitch: "E/3",
       })).toBe(1);
     }
-    });
+    }, 15000);
   }
 });

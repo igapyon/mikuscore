@@ -216,6 +216,25 @@ C D E F |`;
     expect(save.ok).toBe(true);
   });
 
+  it("ABC import infers bass clef from low notes when clef is omitted", () => {
+    const abc = `X:1
+T:Clef inference
+M:4/4
+L:1/4
+K:C
+V:1
+C,, D,, E,, F,, |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const sign = outDoc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim();
+    const line = outDoc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim();
+    expect(sign).toBe("F");
+    expect(line).toBe("4");
+  });
+
   it("ABC import reflows overfull measure content to avoid MEASURE_OVERFULL", () => {
     const overfullAbc = `X:1
 T:Overfull
