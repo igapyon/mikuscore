@@ -173,8 +173,8 @@ All topics should still keep baseline checks across all formats:
   - Status: implemented
   - Test: `tests/unit/cffp-series.spec.ts`
   - Current policy:
-    - `must-preserve`: none
-    - `allowed-degrade`: `abc`, `mei`, `lilypond`, `musescore`, `midi`, `vsqx`
+    - `must-preserve`: `musescore`
+    - `allowed-degrade`: `abc`, `mei`, `lilypond`, `midi`, `vsqx`
   - Scope:
     - `direction-type/segno` + `direction-type/coda`
 

@@ -12727,6 +12727,78 @@ const extractAllStaffBlocks = (source) => {
     }
     return out;
 };
+const extractStandaloneMusicBlocks = (source) => {
+    const out = [];
+    for (let i = 0; i < source.length; i += 1) {
+        if (source[i] !== "{")
+            continue;
+        const block = findBalancedBlock(source, i);
+        if (!block)
+            continue;
+        const lookbehind = source.slice(Math.max(0, i - 24), i);
+        if (/\\(header|paper|layout|midi|with|bookpart|book|score)\s*$/i.test(lookbehind)) {
+            i = block.endPos - 1;
+            continue;
+        }
+        out.push(block.content);
+        i = block.endPos - 1;
+    }
+    return out;
+};
+const parseLilyVariableBlocks = (source) => {
+    const out = new Map();
+    const assignRegex = /(^|\n)\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*/g;
+    let m;
+    while ((m = assignRegex.exec(source)) !== null) {
+        const name = String(m[2] || "").trim();
+        if (!name)
+            continue;
+        let cursor = assignRegex.lastIndex;
+        while (cursor < source.length && /\s/.test(source[cursor]))
+            cursor += 1;
+        if (cursor >= source.length)
+            continue;
+        if (source.startsWith("\\relative", cursor)) {
+            const bracePos = source.indexOf("{", cursor + "\\relative".length);
+            if (bracePos < 0)
+                continue;
+            const block = findBalancedBlock(source, bracePos);
+            if (!block)
+                continue;
+            out.set(name, source.slice(cursor, block.endPos));
+            assignRegex.lastIndex = block.endPos;
+            continue;
+        }
+        if (source[cursor] === "{") {
+            const block = findBalancedBlock(source, cursor);
+            if (!block)
+                continue;
+            out.set(name, source.slice(cursor, block.endPos));
+            assignRegex.lastIndex = block.endPos;
+        }
+    }
+    return out;
+};
+const expandLilyVariablesInBody = (body, variableMap) => {
+    if (!variableMap.size)
+        return body;
+    let expanded = String(body || "");
+    const maxPasses = 8;
+    for (let pass = 0; pass < maxPasses; pass += 1) {
+        let replacedAny = false;
+        expanded = expanded.replace(/\\([A-Za-z][A-Za-z0-9_]*)\b/g, (full, nameRaw) => {
+            const name = String(nameRaw || "").trim();
+            const replacement = variableMap.get(name);
+            if (!replacement)
+                return full;
+            replacedAny = true;
+            return ` ${replacement} `;
+        });
+        if (!replacedAny)
+            break;
+    }
+    return expanded;
+};
 const lilyPitchClassToSemitone = (step, alter) => {
     var _a;
     const baseByStep = {
@@ -12816,8 +12888,19 @@ const resolveRelativeOctave = (step, alter, previousMidi) => {
     }
     return { octave: bestOctave, midi: bestMidi };
 };
+const applyLilyOctaveMarks = (resolved, octaveMarks, step, alter) => {
+    if (!octaveMarks)
+        return resolved;
+    const up = (octaveMarks.match(/'/g) || []).length;
+    const down = (octaveMarks.match(/,/g) || []).length;
+    const octave = resolved.octave + up - down;
+    return {
+        octave,
+        midi: octave * 12 + lilyPitchClassToSemitone(step, alter),
+    };
+};
 const unwrapRelativeBlock = (sourceBody) => {
-    const relativeMatch = sourceBody.match(/\\relative\s+([a-g](?:isis|eses|is|es)?[,']*)\s*\{/i);
+    const relativeMatch = sourceBody.match(/\\relative(?:\s+([a-g](?:isis|eses|is|es)?[,']*))?\s*\{/i);
     if (!relativeMatch || relativeMatch.index === undefined) {
         return { body: sourceBody, relativeMode: false, relativeMidi: null };
     }
@@ -12827,7 +12910,8 @@ const unwrapRelativeBlock = (sourceBody) => {
     const block = findBalancedBlock(sourceBody, bracePos);
     if (!block)
         return { body: sourceBody, relativeMode: false, relativeMidi: null };
-    const root = parseRelativeRoot(relativeMatch[1]);
+    const rootToken = String(relativeMatch[1] || "").trim();
+    const root = rootToken ? parseRelativeRoot(rootToken) : null;
     const relativeMidi = root
         ? root.octave * 12 + lilyPitchClassToSemitone(root.step, root.alter)
         : null;
@@ -12843,12 +12927,16 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
     const relative = unwrapRelativeBlock(body);
     let previousMidi = relative.relativeMidi;
     const clean = stripLilyComments(relative.body)
+        .replace(/\\key\s+[a-g](?:isis|eses|is|es)?[,']*\s+\\[A-Za-z]+/gi, " ")
+        .replace(/\\time\s+\d+\s*\/\s*\d+/g, " ")
+        .replace(/\\clef\s+"[^"]+"/g, " ")
         .replace(/\\clef\s+[A-Za-z]+/g, " ")
         .replace(/\\bar\s+\"[^\"]*\"/g, "|")
+        .replace(/\"[^\"]*\"/g, " ")
         .replace(/\\bar/g, " ")
         .replace(/\\[A-Za-z]+/g, " ")
         .replace(/[{}()~]/g, " ");
-    const tokens = clean.match(/<[^>]+>(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}|[a-grs](?:isis|eses|is|es)?[,']*(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}|\|/g) || [];
+    const tokens = clean.match(/(?<![A-Za-z])<[^>]+>(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}(?![A-Za-z])|(?<![A-Za-z])[a-grs](?:isis|eses|is|es)?[,']*(?:\d+(?:\*\d+(?:\/\d+)?)?)?\.{0,3}(?![A-Za-z])|\|/g) || [];
     const measures = [[]];
     let currentDurationExpr = "4";
     let currentDots = 0;
@@ -12902,7 +12990,7 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 if (!parsed)
                     return null;
                 if (relative.relativeMode) {
-                    const resolved = resolveRelativeOctave(parsed.step, parsed.alter, previousMidi);
+                    const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
                     previousMidi = resolved.midi;
                     return { step: parsed.step, alter: parsed.alter, octave: resolved.octave };
                 }
@@ -12955,7 +13043,7 @@ const parseLilyDirectBody = (body, warnings, contextLabel, beats, beatType, opti
                 const parsed = parseLilyPitchToken(`${m[1]}${m[2] || ""}${m[3] || ""}`);
                 if (!parsed)
                     return null;
-                const resolved = resolveRelativeOctave(parsed.step, parsed.alter, previousMidi);
+                const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
                 previousMidi = resolved.midi;
                 return { step: parsed.step, alter: parsed.alter, octave: resolved.octave };
             })()
@@ -13161,13 +13249,16 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
     const slurHintByKey = parseMksSlurHints(source);
     const trillHintByKey = parseMksTrillHints(source);
     const octaveShiftHintByVoiceId = parseMksOctaveShiftHints(source);
-    if (!staffBlocks.length)
+    const variableMap = parseLilyVariableBlocks(source);
+    const standaloneBlocks = extractStandaloneMusicBlocks(source);
+    if (!staffBlocks.length && !standaloneBlocks.length)
         return null;
     const warnings = [];
-    const staffs = staffBlocks.map((staff, index) => {
+    const staffsFromStaffBlocks = staffBlocks.map((staff, index) => {
         var _a;
         const normalizedVoiceId = normalizeVoiceId(staff.voiceId, `P${index + 1}`);
-        const measures = parseLilyDirectBody(staff.body, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
+        const expandedBody = expandLilyVariablesInBody(staff.body, variableMap);
+        const measures = parseLilyDirectBody(expandedBody, warnings, `staff ${index + 1}`, meter.beats, meter.beatType, {
             voiceId: normalizedVoiceId,
             graceHintByKey,
         });
@@ -13202,6 +13293,26 @@ const tryConvertLilyPondToMusicXmlDirect = (source) => {
             octaveShiftHintsByMeasure: octaveShiftHintByVoiceId.get(normalizedVoiceId) || undefined,
         };
     });
+    const staffsFromStandaloneBlocks = staffBlocks.length > 0
+        ? []
+        : standaloneBlocks
+            .map((body, index) => {
+            const voiceId = `P${index + 1}`;
+            const measures = parseLilyDirectBody(body, warnings, `block ${index + 1}`, meter.beats, meter.beatType, {
+                voiceId,
+                graceHintByKey,
+            });
+            return {
+                voiceId,
+                clef: "treble",
+                measures: applyArticulationHintsToMeasures(measures, voiceId, articulationHintByKey, graceHintByKey, tupletHintByKey, accidentalHintByKey, slurHintByKey, trillHintByKey),
+                transpose: transposeHintByVoiceId.get(voiceId) || null,
+                measureHintsByIndex: measureHintByVoiceId.get(voiceId) || undefined,
+                octaveShiftHintsByMeasure: octaveShiftHintByVoiceId.get(voiceId) || undefined,
+            };
+        })
+            .filter((staff) => staff.measures.some((measure) => measure.length > 0));
+    const staffs = staffsFromStaffBlocks.length ? staffsFromStaffBlocks : staffsFromStandaloneBlocks;
     if (!staffs.some((staff) => staff.measures.some((measure) => measure.length > 0))) {
         return null;
     }
@@ -13264,7 +13375,7 @@ const parseLilyBodyToAbc = (body, warnings, contextLabel) => {
                 }
                 let octave = currentOctave;
                 if (relative.relativeMode) {
-                    const resolved = resolveRelativeOctave(parsed.step, parsed.alter, previousMidi);
+                    const resolved = applyLilyOctaveMarks(resolveRelativeOctave(parsed.step, parsed.alter, previousMidi), parsed.octaveMarks, parsed.step, parsed.alter);
                     octave = resolved.octave;
                     previousMidi = resolved.midi;
                 }

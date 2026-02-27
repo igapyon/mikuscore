@@ -182,6 +182,17 @@
   - [x] `pedal start/stop` cross-format policy test.
   - [x] `harmony chord symbol` cross-format policy test (`root` / `bass` / `kind`).
   - [x] `ending type` cross-format policy test (`start` / `stop` / `discontinue`).
+  - [ ] CFFP preserve-policy promotion backlog (format supports feature, implementation still degrades):
+    - [ ] Promote `CFFP-TIE` for `lilypond` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-DYNAMICS-WEDGE` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-GLISSANDO` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-PEDAL` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [x] Promote `CFFP-SEGNO-CODA` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-REHEARSAL-MARK` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-HARMONY-CHORDSYMBOL` for `musescore` and `mei` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-CHORD-SYMBOL-ALTER` for `musescore` and `mei` from `allowed-degrade` to `must-preserve`.
+    - [x] Promote `CFFP-NOTE-TIES-CROSS-MEASURE` for `musescore` from `allowed-degrade` to `must-preserve`.
+    - [ ] Promote `CFFP-NOTE-TIES-CROSS-MEASURE` for `lilypond` from `allowed-degrade` to `must-preserve`.
   - [x] CFFP practical priority queue:
     - [x] `breath-mark / caesura`
     - [x] `glissando`
@@ -191,7 +202,19 @@
 - [ ] Add ABC import compatibility mode for overfull legacy exports and surface warning summary in UI.
 - [x] Add LilyPond octave-shift (`8va` / `8vb`) roundtrip preservation (currently degrade-policy).
 - [x] Add LilyPond (`.ly`) import/export support.
+- [ ] Expand LilyPond unit tests (coverage is still insufficient):
+  - Add focused unit tests for `\relative` octave behavior (single note/chord/mixed explicit marks).
+  - Add unit tests for multi-staff parsing edge cases (`<< >>`, `\new Staff`, `\new Voice`, variable expansion).
+  - Add unit tests for command-argument non-note tokens (`\key`, `\time`, `\clef`, header/layout blocks) to prevent false note parsing.
+  - Add regression unit tests from recent incidents (overcount notes, octave shift mismatch, missing events in dense measures).
+- [ ] Apply shared clef/staff policy (`core/staffClefPolicy.ts`) to LilyPond import path:
+  - Use `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` for single-block imports.
+  - Apply hysteresis-based staff assignment when auto-splitting to grand staff.
 - [ ] Add MEI (Music Encoding Initiative) import/export support.
+- [ ] Strengthen MEI test strategy beyond unit level (unit-only is likely insufficient):
+  - Add MEI roundtrip golden tests (`MusicXML -> MEI -> MusicXML`) with semantic comparators.
+  - Add MEI spot/parity tests on larger real-world fixtures (e.g., piano multi-voice / ornaments / repeats).
+  - Define MEI preserve/degrade acceptance gates and fail CI when regressions exceed thresholds.
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
 - [ ] Add VSQX import/export support.
 - [ ] Add lyrics support (import/edit/export with format-specific preserve/degrade rules).
@@ -396,6 +419,17 @@
   - [x] `pedal start/stop` の横断ポリシーテスト。
   - [x] `harmony chord symbol` の横断ポリシーテスト（`root` / `bass` / `kind`）。
   - [x] `ending type` の横断ポリシーテスト（`start` / `stop` / `discontinue`）。
+  - [ ] CFFP 保持ポリシー格上げバックログ（フォーマット仕様上は対応可能だが実装が劣化扱い）:
+    - [ ] `CFFP-TIE` の `lilypond` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-DYNAMICS-WEDGE` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-GLISSANDO` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-PEDAL` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [x] `CFFP-SEGNO-CODA` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-REHEARSAL-MARK` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-HARMONY-CHORDSYMBOL` の `musescore` / `mei` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-CHORD-SYMBOL-ALTER` の `musescore` / `mei` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
+    - [ ] `CFFP-NOTE-TIES-CROSS-MEASURE` の `lilypond` を `allowed-degrade` から `must-preserve` へ格上げ。
   - [x] CFFP 実用優先キュー:
     - [x] `breath-mark / caesura`
     - [x] `glissando`
@@ -405,7 +439,19 @@
 - [ ] 旧ABC由来の小節過充填に対する互換モードを整備し、UIに警告サマリを表示。
 - [x] LilyPond の octave-shift（`8va` / `8vb`）往復保持を実装する（現状は劣化ポリシー）。
 - [x] LilyPond（`.ly`）の入出力対応を追加。
+- [ ] LilyPond の単体テストを拡充する（現状はまだ不足）:
+  - `\relative` のオクターブ挙動（単音/和音/明示オクターブ記号混在）を追加。
+  - 多段譜解析の境界ケース（`<< >>` / `\new Staff` / `\new Voice` / 変数展開）を追加。
+  - `\key` / `\time` / `\clef` / header/layout など「音符でないトークン」の誤認識防止テストを追加。
+  - 直近不具合（音符過剰生成・オクターブずれ・密集小節での欠落）を回帰テスト化する。
+- [ ] LilyPond 取り込み経路に共通の clef/staff 判定（`core/staffClefPolicy.ts`）を適用する。
+  - 単一ブロック取り込み時に `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` を適用。
+  - 大譜表へ自動分割する場合はヒステリシス方式の staff 割当を適用。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
+- [ ] MEI のテスト戦略を単体レベル以上に強化する（unit だけでは不足の可能性）:
+  - `MusicXML -> MEI -> MusicXML` の roundtrip golden テストを追加する。
+  - 実運用に近い大きめ fixture（多声・装飾・リピート等）で spot/parity テストを追加する。
+  - preserve/degrade の許容基準を定義し、閾値超過で CI を失敗させる。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
 - [ ] VSQX 形式の入出力対応を追加。
 - [ ] 歌詞（lyrics）の対応を追加（取り込み/編集/出力と、形式ごとの保持/劣化ルール定義を含む）。
