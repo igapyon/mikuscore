@@ -768,7 +768,7 @@ describe("midi-io MIDI import MVP", () => {
     );
     expect(drumPart).toBeDefined();
     expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
-    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "MIDI_DRUM_CHANNEL_SEPARATED"
     );
   });
@@ -1092,11 +1092,11 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     const metaFields = Array.from(
-      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
+      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta"]')
     );
     expect(metaFields.length).toBeGreaterThan(0);
     const firstPayload = metaFields.find((node) =>
-      /^mks:midi-meta-\d{4}$/.test(node.getAttribute("name") ?? "")
+      /^mks:dbg:midi:meta:\d{4}$/.test(node.getAttribute("name") ?? "")
     )?.textContent;
     expect(firstPayload ?? "").toContain("key=0x3C");
     expect(firstPayload ?? "").toContain("vel=0x60");
@@ -1111,16 +1111,16 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-encoding"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:midi:raw-encoding"]')
         ?.textContent
     ).toBe("hex-v1");
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-0001"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:midi:raw-0001"]')
         ?.textContent
     ).toMatch(/^[0-9A-F]+$/);
   });
 
-  it("reads mikuscore SysEx metadata into mks:midi-sysex miscellaneous fields", () => {
+  it("reads mikuscore SysEx metadata into mks:meta:midi:sysex miscellaneous fields", () => {
     const payloadText =
       "mks|v=1|m=0001|i=0001|n=0001|d=" +
       encodeURIComponent("schema=mks-sysex-v1\napp=mikuscore\nsource=musicxml");
@@ -1145,12 +1145,12 @@ describe("midi-io MIDI import MVP", () => {
     const doc = parseDoc(result.xml);
     expect(
       doc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:schema"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:meta:midi:sysex:schema"]'
       )?.textContent
     ).toBe("mks-sysex-v1");
     expect(
       doc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:app"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:meta:midi:sysex:app"]'
       )?.textContent
     ).toBe("mikuscore");
   });
@@ -1184,7 +1184,7 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta"]')
     ).toBeNull();
   });
 
@@ -1199,8 +1199,8 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     expect(result.warnings.some((warning) => warning.code === "MIDI_POLYPHONY_VOICE_ASSIGNED")).toBe(true);
     const doc = parseDoc(result.xml);
-    expect(doc.querySelector('miscellaneous-field[name="diag:count"]')?.textContent).toBe("1");
-    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent).toBe("1");
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "code=MIDI_POLYPHONY_VOICE_ASSIGNED"
     );
   });

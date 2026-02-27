@@ -2611,15 +2611,15 @@ const buildLilySourceMiscFields = (source: string): Array<{ name: string; value:
   }
   const truncated = chunks.join("").length < encoded.length;
   const fields: Array<{ name: string; value: string }> = [
-    { name: "src:lilypond:raw-encoding", value: "escape-v1" },
-    { name: "src:lilypond:raw-length", value: String(raw.length) },
-    { name: "src:lilypond:raw-encoded-length", value: String(encoded.length) },
-    { name: "src:lilypond:raw-chunks", value: String(chunks.length) },
-    { name: "src:lilypond:raw-truncated", value: truncated ? "1" : "0" },
+    { name: "mks:src:lilypond:raw-encoding", value: "escape-v1" },
+    { name: "mks:src:lilypond:raw-length", value: String(raw.length) },
+    { name: "mks:src:lilypond:raw-encoded-length", value: String(encoded.length) },
+    { name: "mks:src:lilypond:raw-chunks", value: String(chunks.length) },
+    { name: "mks:src:lilypond:raw-truncated", value: truncated ? "1" : "0" },
   ];
   for (let i = 0; i < chunks.length; i += 1) {
     fields.push({
-      name: `src:lilypond:raw-${String(i + 1).padStart(4, "0")}`,
+      name: `mks:src:lilypond:raw-${String(i + 1).padStart(4, "0")}`,
       value: chunks[i],
     });
   }
@@ -2629,11 +2629,14 @@ const buildLilySourceMiscFields = (source: string): Array<{ name: string; value:
 const buildLilyDiagMiscFields = (warnings: string[]): Array<{ name: string; value: string }> => {
   if (!warnings.length) return [];
   const maxEntries = Math.min(256, warnings.length);
-  const fields: Array<{ name: string; value: string }> = [{ name: "diag:count", value: String(maxEntries) }];
+  const fields: Array<{ name: string; value: string }> = [
+    { name: "mks:diag:count", value: String(maxEntries) },
+  ];
   for (let i = 0; i < maxEntries; i += 1) {
+    const payload = `level=warn;code=LILYPOND_IMPORT_WARNING;fmt=lilypond;message=${warnings[i]}`;
     fields.push({
-      name: `diag:${String(i + 1).padStart(4, "0")}`,
-      value: `level=warn;code=LILYPOND_IMPORT_WARNING;fmt=lilypond;message=${warnings[i]}`,
+      name: `mks:diag:${String(i + 1).padStart(4, "0")}`,
+      value: payload,
     });
   }
   return fields;
@@ -3197,7 +3200,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
   const diagComments: string[] = [];
   for (const measure of Array.from(doc.querySelectorAll("score-partwise > part > measure"))) {
     const measureNo = (measure.getAttribute("number") || "").trim() || "1";
-    for (const field of Array.from(measure.querySelectorAll(':scope > attributes > miscellaneous > miscellaneous-field[name^="diag:"]'))) {
+    for (const field of Array.from(measure.querySelectorAll(':scope > attributes > miscellaneous > miscellaneous-field[name^="mks:diag:"]'))) {
       const name = field.getAttribute("name")?.trim() || "";
       if (!name) continue;
       const value = field.textContent?.trim() || "";

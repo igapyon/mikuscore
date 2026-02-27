@@ -106,8 +106,8 @@ describe("LilyPond I/O", () => {
     const doc = parseMusicXmlDocument(xml);
     expect(doc).not.toBeNull();
     if (!doc) return;
-    expect(doc.querySelector('miscellaneous-field[name="diag:count"]')).not.toBeNull();
-    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:count"]')).not.toBeNull();
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "code=LILYPOND_IMPORT_WARNING"
     );
   });
@@ -944,7 +944,7 @@ PedalOrganMusic = \\relative {
     const doc = parseMusicXmlDocument(xml);
     expect(doc).not.toBeNull();
     if (!doc) return;
-    expect(doc.querySelector('miscellaneous-field[name="diag:count"]')).not.toBeNull();
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:count"]')).not.toBeNull();
     const core = new ScoreCore();
     core.load(xml);
     const saved = core.save();

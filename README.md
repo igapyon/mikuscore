@@ -69,6 +69,7 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `docs/spec/MIDI_IO.md`
 - `docs/spec/PLAYBACK.md`
 - `docs/spec/ABC_IO.md`
+- `docs/spec/MISCELLANEOUS_FIELDS.md`
 - `docs/spec/TEST_MATRIX.md`
 - `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`
@@ -157,6 +158,7 @@ mikuscore は、MusicXML、MuseScore、MIDI、VSQX、ABC、MEI、LilyPond の入
 - `docs/spec/MIDI_IO.md`
 - `docs/spec/PLAYBACK.md`
 - `docs/spec/ABC_IO.md`
+- `docs/spec/MISCELLANEOUS_FIELDS.md`
 - `docs/spec/TEST_MATRIX.md`
 - `docs/spec/LOCAL_WORKFLOW.md`
 - `docs/spec/BUILD_PROCESS.md`

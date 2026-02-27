@@ -3240,8 +3240,9 @@ const extractMiscFieldsFromMeiStaff = (staff: Element): Array<{ name: string; va
     const name = rawName.trim();
     if (!name) return "";
     if (name.startsWith("mks:")) return name;
-    if (name.startsWith("src:")) return name;
-    return `src:mei:${name}`;
+    if (name.startsWith("src:")) return `mks:${name}`;
+    if (name.startsWith("diag:")) return `mks:${name}`;
+    return `mks:src:mei:${name}`;
   };
   for (const child of Array.from(staff.children)) {
     if (localNameOf(child) !== "annot") continue;
@@ -3357,11 +3358,11 @@ const buildMeiDebugFieldsFromStaff = (
 
   if (entries.length === 0) return [];
   const fields: Array<{ name: string; value: string }> = [
-    { name: "mks:mei-debug-count", value: toHex(entries.length, 4) },
+    { name: "mks:dbg:mei:notes:count", value: toHex(entries.length, 4) },
   ];
   for (let i = 0; i < entries.length; i += 1) {
     fields.push({
-      name: `mks:mei-debug-${String(i + 1).padStart(4, "0")}`,
+      name: `mks:dbg:mei:notes:${String(i + 1).padStart(4, "0")}`,
       value: entries[i],
     });
   }
@@ -3632,9 +3633,9 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           const overflowFields: Array<{ name: string; value: string }> =
             overfullDetected
               ? [
-                  { name: "diag:count", value: "1" },
+                  { name: "mks:diag:count", value: "1" },
                   {
-                    name: "diag:0001",
+                    name: "mks:diag:0001",
                     value: `level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=${measureNo};staff=${staffNo};action=clamped;sourceTicks=${sourceTotalTicks};capacityTicks=${measureTicks};droppedEvents=${droppedEvents};droppedTicks=${droppedTicks};trimmedEvents=${trimmedEvents};trimmedTicks=${trimmedTicks}`,
                   },
                 ]
