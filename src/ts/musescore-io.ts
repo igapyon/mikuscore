@@ -2357,10 +2357,16 @@ const readFirstExplicitClefInPart = (part: Element, staffNo: number): ClefSign |
 
 const buildMuseVoiceEventsByStaff = (
   measure: Element,
-  divisions: number
+  targetDivisions: number,
+  sourceDivisions: number
 ): Map<number, Map<number, MuseVoiceEvent[]>> => {
   const byStaff = new Map<number, Map<number, MuseVoiceEvent[]>>();
   let cursorDiv = 0;
+  const normalizeDuration = (rawDuration: number): number => {
+    const src = Math.max(1, Math.round(sourceDivisions));
+    const dst = Math.max(1, Math.round(targetDivisions));
+    return Math.max(0, Math.round((Math.max(0, rawDuration) * dst) / src));
+  };
   const pendingDirectionMarks: Array<{
     staffNo: number;
     voiceNo: number;
@@ -2415,12 +2421,14 @@ const buildMuseVoiceEventsByStaff = (
   for (const child of children) {
     const tag = child.tagName.toLowerCase();
     if (tag === "backup") {
-      const duration = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      const durationRaw = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      const duration = normalizeDuration(durationRaw);
       cursorDiv = Math.max(0, cursorDiv - duration);
       continue;
     }
     if (tag === "forward") {
-      const duration = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      const durationRaw = Math.max(0, Math.round(firstNumber(child, ":scope > duration") ?? 0));
+      const duration = normalizeDuration(durationRaw);
       cursorDiv += duration;
       continue;
     }
@@ -2452,9 +2460,12 @@ const buildMuseVoiceEventsByStaff = (
     const voiceNo = Math.max(1, Math.round(firstNumber(child, ":scope > voice") ?? 1));
     const isGrace = child.querySelector(":scope > grace") !== null;
     const isGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
+    const durationRaw = isGrace
+      ? 0
+      : Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? sourceDivisions));
     const durationDiv = isGrace
       ? 0
-      : Math.max(1, Math.round(firstNumber(child, ":scope > duration") ?? divisions));
+      : Math.max(1, normalizeDuration(durationRaw));
     const isChordFollow = child.querySelector(":scope > chord") !== null;
     const isRest = child.querySelector(":scope > rest") !== null;
     const tupletTimeModification = parseMusicXmlTupletTimeModification(child);
@@ -2581,6 +2592,38 @@ const readPartNameMapFromMusicXml = (score: Element): Map<string, string> => {
   return map;
 };
 
+const gcdForDivisions = (a: number, b: number): number => {
+  let x = Math.max(1, Math.abs(Math.round(a)));
+  let y = Math.max(1, Math.abs(Math.round(b)));
+  while (y !== 0) {
+    const t = x % y;
+    x = y;
+    y = t;
+  }
+  return Math.max(1, x);
+};
+
+const lcmForDivisions = (a: number, b: number): number => {
+  const x = Math.max(1, Math.abs(Math.round(a)));
+  const y = Math.max(1, Math.abs(Math.round(b)));
+  return Math.max(1, Math.round((x / gcdForDivisions(x, y)) * y));
+};
+
+const computeGlobalMusicXmlDivisions = (score: Element): number => {
+  const values = Array.from(score.querySelectorAll(":scope > part > measure > attributes > divisions"))
+    .map((el) => Number((el.textContent ?? "").trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .map((n) => Math.max(1, Math.round(n)));
+  if (!values.length) return 480;
+  let lcm = values[0];
+  for (let i = 1; i < values.length; i += 1) {
+    lcm = lcmForDivisions(lcm, values[i]);
+    // Guard against pathological growth.
+    if (lcm > 3840) return 3840;
+  }
+  return lcm;
+};
+
 type MuseScoreExportOptions = {
   normalizeCutTimeToTwoTwo?: boolean;
 };
@@ -2593,7 +2636,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
     (score.querySelector("work > work-title")?.textContent ?? "").trim()
     || (score.querySelector("movement-title")?.textContent ?? "").trim()
     || "mikuscore export";
-  const divisions = firstNumberInDoc(score, ["part > measure > attributes > divisions"], 480);
+  const divisions = computeGlobalMusicXmlDivisions(score);
   const partNodes = Array.from(score.querySelectorAll(":scope > part"));
   const partNameById = readPartNameMapFromMusicXml(score);
 
@@ -2633,6 +2676,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
     );
 
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    let currentSourceDivisions = firstNumber(part, ":scope > measure > attributes > divisions") ?? divisions;
     let currentBeats = Math.max(1, Math.round(firstNumber(part, ":scope > measure > attributes > time > beats") ?? 4));
     let currentBeatType = Math.max(
       1,
@@ -2648,7 +2692,11 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
 
       for (let mi = 0; mi < measures.length; mi += 1) {
         const measure = measures[mi];
-        const byStaffVoice = buildMuseVoiceEventsByStaff(measure, divisions);
+        const measureSourceDivisions = Math.max(
+          1,
+          Math.round(firstNumber(measure, ":scope > attributes > divisions") ?? currentSourceDivisions)
+        );
+        const byStaffVoice = buildMuseVoiceEventsByStaff(measure, divisions, measureSourceDivisions);
         const byVoice = byStaffVoice.get(staffNo) ?? new Map<number, MuseVoiceEvent[]>();
         const measureBeats = Math.max(1, Math.round(firstNumber(measure, ":scope > attributes > time > beats") ?? currentBeats));
         const measureBeatType = Math.max(
@@ -2696,6 +2744,8 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
           return Math.max(maxEnd, laneEnd);
         }, 0);
         const implicitLenDiv = hasImplicitMeasureInMusicXml ? Math.max(1, Math.min(capacityDiv, usedDiv)) : null;
+        // For pickup/implicit measures, do not pad voice content to nominal bar capacity.
+        const renderCapacityDiv = implicitLenDiv ?? capacityDiv;
         const lenAttr = implicitLenDiv !== null && implicitLenDiv < capacityDiv
           ? formatMeasureLenFromDivisions(implicitLenDiv, divisions)
           : null;
@@ -2760,8 +2810,11 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
           const activeTupletRefByNumber = new Map<number, string>();
           for (const event of events) {
             if (event.atDiv > cursorDiv) {
-              voiceXml += makeMuseRestXml(event.atDiv - cursorDiv, event.atDiv - cursorDiv, divisions);
-              cursorDiv = event.atDiv;
+              const gap = Math.min(event.atDiv, renderCapacityDiv) - cursorDiv;
+              if (gap > 0) {
+                voiceXml += makeMuseRestXml(gap, gap, divisions);
+                cursorDiv += gap;
+              }
             }
             const startNumbers = event.tupletStarts ?? [];
             const stopNumbers = event.tupletStops ?? [];
@@ -2825,8 +2878,8 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
             }
             cursorDiv += event.durationDiv;
           }
-          if (cursorDiv < capacityDiv) {
-            voiceXml += makeMuseRestXml(capacityDiv - cursorDiv, capacityDiv - cursorDiv, divisions);
+          if (cursorDiv < renderCapacityDiv) {
+            voiceXml += makeMuseRestXml(renderCapacityDiv - cursorDiv, renderCapacityDiv - cursorDiv, divisions);
           }
           if (vi === 0 && measure.querySelector(':scope > barline[location="right"] > repeat[direction="backward"]')) {
             voiceXml += "<endRepeat/>";
@@ -2841,6 +2894,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
         currentBeatType = effectiveMeasureBeatType;
         currentTimeSymbol = measureTimeSymbol;
         currentFifths = measureFifths;
+        currentSourceDivisions = measureSourceDivisions;
       }
       staffXml += "</Staff>";
       return staffXml;

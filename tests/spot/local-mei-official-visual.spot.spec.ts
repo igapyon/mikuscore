@@ -102,7 +102,22 @@ const assertStructuralSemantics = (fixtureId: string, musicXml: string): void =>
 };
 
 describe("local mei official visual compare", () => {
-  it("converts official MEI fixtures and compares rendered images", async () => {
+  const localFixtureRoot = resolve(process.cwd(), "tests", "fixtures-local", "mei-official");
+  const requiredFixturePaths = [
+    resolve(localFixtureRoot, "beam-grace", "source-listing-132-snippet.mei"),
+    resolve(localFixtureRoot, "beam-secondary", "source-listing-142-snippet.mei"),
+    resolve(localFixtureRoot, "beamspan-min", "source-listing-147-inspired.mei"),
+    resolve(localFixtureRoot, "tie-crossbar-min", "source-listing-148-inspired.mei"),
+    resolve(localFixtureRoot, "slur-min", "source-listing-152-inspired.mei"),
+    resolve(localFixtureRoot, "hairpin-min", "source-hairpin-inspired.mei"),
+    resolve(localFixtureRoot, "dynam-min", "source-dynam-inspired.mei"),
+    resolve(localFixtureRoot, "tuplet-min", "source-tuplet-inspired.mei"),
+    resolve(localFixtureRoot, "fermata-min", "source-fermata-inspired.mei"),
+    resolve(localFixtureRoot, "gliss-min", "source-gliss-inspired.mei"),
+  ];
+  const itWithLocalFixtures = requiredFixturePaths.every((p) => existsSync(p)) ? it : it.skip;
+
+  itWithLocalFixtures("converts official MEI fixtures and compares rendered images", async () => {
     const magick = run("which", ["magick"], true).stdout.trim();
     const rsvgConvert = run("which", ["rsvg-convert"], true).stdout.trim();
     if (!magick || !rsvgConvert) {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exportMusicXmlDomToMei, convertMeiToMusicXml } from "../../src/ts/mei-io";
@@ -48,9 +48,11 @@ const countByKey = (notes: NoteKey[], key: NoteKey): number =>
   ).length;
 
 describe("Local parity: MusicXML -> MEI -> MusicXML (paganini)", () => {
-  it("keeps known previously-missing pitch+timing notes in measures 138/140/153", { timeout: 20000 }, () => {
-    const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "paganini");
-    const referencePath = resolve(root, "24no-qi-xiang-qu-di24fan-i-duan-diao-paganini.musicxml");
+  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "paganini");
+  const referencePath = resolve(root, "24no-qi-xiang-qu-di24fan-i-duan-diao-paganini.musicxml");
+  const itWithLocalFixture = existsSync(referencePath) ? it : it.skip;
+
+  itWithLocalFixture("keeps known previously-missing pitch+timing notes in measures 138/140/153", { timeout: 20000 }, () => {
     const referenceXml = readFileSync(referencePath, "utf-8");
 
     const sourceDoc = parseDoc(referenceXml);
