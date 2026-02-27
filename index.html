@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>mikuscore</title>
   <style>
     :root {
@@ -125,16 +128,17 @@
     <section class="lang-block" aria-label="English">
       <h2>English</h2>
       <p>
-        mikuscore is a browser-based score editor for loading MusicXML/ABC, previewing notation,
-        editing notes, and exporting MusicXML/ABC/MIDI.
+        mikuscore is a browser-based score editor for importing and exporting MusicXML, MuseScore,
+        MIDI, VSQX, ABC, MEI, and LilyPond, with notation preview and note editing.
       </p>
       <ul>
         <li>Designed to preserve existing MusicXML as much as possible.</li>
         <li>Works offline in a single HTML distribution.</li>
         <li>Smartphone-centered workflows, with PC use also supported.</li>
+        <li>ABC, MEI, and LilyPond support is currently experimental.</li>
       </ul>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html">Open mikuscore</a>
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">Open mikuscore</a>
         <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
@@ -152,19 +156,52 @@
     <section class="lang-block" aria-label="日本語">
       <h2>日本語</h2>
       <p>
-        mikuscore は、MusicXML/ABC の読み込み、譜面プレビュー、ノート編集、
-        MusicXML/ABC/MIDI 出力をブラウザ上で行うスコアエディタです。
+        mikuscore は、MusicXML、MuseScore、MIDI、VSQX、ABC、MEI、LilyPond の入出力に対応し、
+        譜面プレビューとノート編集をブラウザ上で行うスコアエディタです。
       </p>
       <ul>
         <li>既存 MusicXML を極力壊さない編集を重視しています。</li>
         <li>単一 HTML 配布でオフライン動作します。</li>
         <li>スマホ中心のワークフローを重視しつつ、PC利用にも対応します。</li>
+        <li>ABC、MEI、LilyPond 対応は現在 Experimental（試験対応）です。</li>
       </ul>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html">mikuscore を開く</a>
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">mikuscore を開く</a>
         <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
   </main>
+  <script>
+    (() => {
+      // Cache-busting: append a timestamp query right before opening mikuscore.html.
+      const selector = 'a[href^="./mikuscore.html"]';
+      const buildVersionStamp = () => {
+        const d = new Date();
+        return (
+          d.getFullYear().toString() +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          String(d.getDate()).padStart(2, "0") +
+          String(d.getHours()).padStart(2, "0") +
+          String(d.getMinutes()).padStart(2, "0")
+        );
+      };
+      const stampAndGo = (anchor) => {
+        const u = new URL(anchor.getAttribute("href"), location.href);
+        u.searchParams.set("v", buildVersionStamp());
+        anchor.setAttribute("href", u.pathname + u.search);
+      };
+      document.addEventListener("click", (ev) => {
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+      document.addEventListener("auxclick", (ev) => {
+        if (ev.button !== 1) return;
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+    })();
+  </script>
 </body>
 </html>

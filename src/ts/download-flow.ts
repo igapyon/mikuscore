@@ -49,6 +49,23 @@ const buildFileTimestamp = (): string => {
   ].join("");
 };
 
+const prettyPrintXmlWithTwoSpaceIndent = (xml: string): string => {
+  const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+  const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+  let indentLevel = 0;
+  const lines: string[] = [];
+  for (const rawToken of split) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    if (/^<\//.test(token)) indentLevel = Math.max(0, indentLevel - 1);
+    lines.push(`${"  ".repeat(indentLevel)}${token}`);
+    const isOpening = /^<[^!?/][^>]*>$/.test(token);
+    const isSelfClosing = /\/>$/.test(token);
+    if (isOpening && !isSelfClosing) indentLevel += 1;
+  }
+  return lines.join("\n");
+};
+
 export const triggerFileDownload = (payload: DownloadFilePayload): void => {
   const url = URL.createObjectURL(payload.blob);
   const a = document.createElement("a");
@@ -90,6 +107,18 @@ const writeU32 = (target: Uint8Array, offset: number, value: number): void => {
   target[offset + 3] = (value >>> 24) & 0xff;
 };
 
+const toDosDateTime = (date: Date): { dosTime: number; dosDate: number } => {
+  const year = Math.max(1980, Math.min(2107, date.getFullYear()));
+  const month = Math.max(1, Math.min(12, date.getMonth() + 1));
+  const day = Math.max(1, Math.min(31, date.getDate()));
+  const hours = Math.max(0, Math.min(23, date.getHours()));
+  const minutes = Math.max(0, Math.min(59, date.getMinutes()));
+  const seconds = Math.max(0, Math.min(59, date.getSeconds()));
+  const dosTime = ((hours & 0x1f) << 11) | ((minutes & 0x3f) << 5) | ((Math.floor(seconds / 2)) & 0x1f);
+  const dosDate = (((year - 1980) & 0x7f) << 9) | ((month & 0x0f) << 5) | (day & 0x1f);
+  return { dosTime, dosDate };
+};
+
 const compressDeflateRaw = async (input: Uint8Array): Promise<Uint8Array | null> => {
   const CS = (globalThis as { CompressionStream?: new (format: string) => unknown }).CompressionStream;
   if (!CS) return null;
@@ -109,6 +138,7 @@ const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boole
   const localChunks: Uint8Array[] = [];
   const centralChunks: Uint8Array[] = [];
   let localOffset = 0;
+  const nowDos = toDosDateTime(new Date());
 
   const encodedEntries: EncodedZipEntry[] = [];
   for (const entry of entries) {
@@ -141,8 +171,8 @@ const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boole
     writeU16(localHeader, 4, 20);
     writeU16(localHeader, 6, 0x0800);
     writeU16(localHeader, 8, method);
-    writeU16(localHeader, 10, 0);
-    writeU16(localHeader, 12, 0);
+    writeU16(localHeader, 10, nowDos.dosTime);
+    writeU16(localHeader, 12, nowDos.dosDate);
     writeU32(localHeader, 14, crc);
     writeU32(localHeader, 18, compressedSize);
     writeU32(localHeader, 22, uncompressedSize);
@@ -157,8 +187,8 @@ const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boole
     writeU16(centralHeader, 6, 20);
     writeU16(centralHeader, 8, 0x0800);
     writeU16(centralHeader, 10, method);
-    writeU16(centralHeader, 12, 0);
-    writeU16(centralHeader, 14, 0);
+    writeU16(centralHeader, 12, nowDos.dosTime);
+    writeU16(centralHeader, 14, nowDos.dosDate);
     writeU32(centralHeader, 16, crc);
     writeU32(centralHeader, 20, compressedSize);
     writeU32(centralHeader, 24, uncompressedSize);
@@ -255,9 +285,10 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
 
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
   const ts = buildFileTimestamp();
+  const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
   return {
     fileName: `mikuscore-${ts}.vsqx`,
-    blob: new Blob([vsqxText], { type: "application/xml;charset=utf-8" }),
+    blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
   };
 };
 
@@ -297,6 +328,18 @@ export const createMidiDownloadPayload = (
 
   let midiBytes: Uint8Array;
   try {
+    const scoreTitle =
+      playbackDoc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
+      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
+      "";
+    const movementTitle =
+      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ?? "";
+    const scoreComposer =
+      playbackDoc
+        .querySelector('score-partwise > identification > creator[type="composer"]')
+        ?.textContent?.trim() ??
+      playbackDoc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
+      "";
     midiBytes = buildMidiBytesForPlayback(
       parsedPlayback.events,
       parsedPlayback.tempo,
@@ -312,6 +355,11 @@ export const createMidiDownloadPayload = (
         normalizeForParity: runtime.normalizeForParity,
         rawWriter: runtime.rawWriter,
         rawRetriggerPolicy: runtime.rawRetriggerPolicy,
+        metadata: {
+          title: scoreTitle,
+          movementTitle,
+          composer: scoreComposer,
+        },
       }
     );
   } catch {
@@ -405,10 +453,11 @@ export const createMuseScoreDownloadPayload = async (
   } catch {
     return null;
   }
+  const formattedMscx = prettyPrintXmlWithTwoSpaceIndent(mscxText);
 
   const ts = buildFileTimestamp();
   if (options.compressed === true) {
-    const msczBytes = await makeMsczBytes(mscxText);
+    const msczBytes = await makeMsczBytes(formattedMscx);
     return {
       fileName: `mikuscore-${ts}.mscz`,
       blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
@@ -416,6 +465,26 @@ export const createMuseScoreDownloadPayload = async (
   }
   return {
     fileName: `mikuscore-${ts}.mscx`,
-    blob: new Blob([mscxText], { type: "application/xml;charset=utf-8" }),
+    blob: new Blob([formattedMscx], { type: "application/xml;charset=utf-8" }),
+  };
+};
+
+export const createZipBundleDownloadPayload = async (
+  entries: Array<{ fileName: string; blob: Blob }>,
+  options: { baseName?: string; compressed?: boolean } = {}
+): Promise<DownloadFilePayload> => {
+  const ts = buildFileTimestamp();
+  const safeBase = String(options.baseName || "mikuscore-all").trim() || "mikuscore-all";
+  const zipEntries: ZipEntryPayload[] = [];
+  for (const entry of entries) {
+    const fileName = String(entry.fileName || "").trim();
+    if (!fileName) continue;
+    const bytes = new Uint8Array(await entry.blob.arrayBuffer());
+    zipEntries.push({ path: fileName, bytes });
+  }
+  const zipBytes = await makeZipBytes(zipEntries, options.compressed !== false);
+  return {
+    fileName: `${safeBase}-${ts}.zip`,
+    blob: new Blob([bytesToArrayBuffer(zipBytes)], { type: "application/zip" }),
   };
 };

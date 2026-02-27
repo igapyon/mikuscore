@@ -1,4 +1,7 @@
 // @ts-nocheck
+import { computeBeamAssignments } from "./beam-common";
+import { chooseSingleClefByKeys } from "../../core/staffClefPolicy";
+
 export type Fraction = { num: number; den: number };
 
 const DEFAULT_UNIT: Fraction = { num: 1, den: 8 };
@@ -394,6 +397,7 @@ const abcCommon = AbcCommon;
       let lastEventNotes = [];
       let pendingTieToNext = false;
       let pendingTrill = false;
+      let pendingTurn: "" | "turn" | "inverted-turn" = "";
       let pendingStaccato = false;
       let pendingSlurStart = 0;
       let pendingRhythmScale = null;
@@ -503,6 +507,10 @@ const abcCommon = AbcCommon;
           const decoration = text.slice(idx + 1, endMark).trim().toLowerCase();
           if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
             pendingTrill = true;
+          } else if (decoration === "turn") {
+            pendingTurn = "turn";
+          } else if (decoration === "invertedturn" || decoration === "inverted-turn" || decoration === "lowerturn") {
+            pendingTurn = "inverted-turn";
           } else if (
             decoration === "staccato" ||
             decoration === "stacc" ||
@@ -612,6 +620,10 @@ const abcCommon = AbcCommon;
             if (chordIndex === 0 && pendingTrill && !note.isRest) {
               note.trill = true;
               pendingTrill = false;
+            }
+            if (chordIndex === 0 && pendingTurn && !note.isRest) {
+              note.turnType = pendingTurn;
+              pendingTurn = "";
             }
             if (chordIndex === 0 && pendingSlurStart > 0 && !note.isRest) {
               note.slurStart = true;
@@ -754,6 +766,10 @@ const abcCommon = AbcCommon;
           note.trill = true;
           pendingTrill = false;
         }
+        if (pendingTurn && !note.isRest) {
+          note.turnType = pendingTurn;
+          pendingTurn = "";
+        }
         if (pendingSlurStart > 0 && !note.isRest) {
           note.slurStart = true;
           pendingSlurStart = 0;
@@ -808,24 +824,29 @@ const abcCommon = AbcCommon;
       Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960)
     );
     const importDiagnostics = [];
+    const overfullCompatibilityMode = settings?.overfullCompatibilityMode !== false;
     const parts = orderedVoiceIds.map((voiceId, index) => {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
       const transpose =
         transposeHintByVoiceId.get(voiceId) ||
         voiceTransposeById[voiceId] ||
         (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
-      const normalized = normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity);
+      const normalized = overfullCompatibilityMode
+        ? normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity)
+        : { measures: measuresByVoice[voiceId] || [[]], diagnostics: [] };
       const normalizedMeasures = normalized.measures;
-      for (const diag of normalized.diagnostics) {
-        importDiagnostics.push({
-          level: "warn",
-          code: "OVERFULL_REFLOWED",
-          fmt: "abc",
-          voiceId,
-          measure: diag.sourceMeasure,
-          action: "reflowed",
-          movedEvents: diag.movedEvents,
-        });
+      if (overfullCompatibilityMode) {
+        for (const diag of normalized.diagnostics) {
+          importDiagnostics.push({
+            level: "warn",
+            code: "OVERFULL_REFLOWED",
+            fmt: "abc",
+            voiceId,
+            measure: diag.sourceMeasure,
+            action: "reflowed",
+            movedEvents: diag.movedEvents,
+          });
+        }
       }
       const keyByMeasure: Record<number, number> = {};
       const measureMetaByIndex: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }> = {};
@@ -1073,9 +1094,15 @@ const abcCommon = AbcCommon;
     const graceAccidentals = { ...measureAccidentals };
     const notes = [];
     let idx = 0;
+    let graceSlashPending = false;
     while (idx < inner.length) {
       const ch = inner[idx];
       if (ch === " " || ch === "\t") {
+        idx += 1;
+        continue;
+      }
+      if (ch === "/") {
+        graceSlashPending = true;
         idx += 1;
         continue;
       }
@@ -1117,6 +1144,8 @@ const abcCommon = AbcCommon;
       );
       note.voice = voiceId;
       note.grace = true;
+      note.graceSlash = graceSlashPending;
+      graceSlashPending = false;
       notes.push(note);
     }
     return { notes, nextIdx: closeIdx + 1 };
@@ -1313,7 +1342,10 @@ const abcCommon = AbcCommon;
           continue;
         }
 
-        const duration = Math.max(1, Math.round(Number(note.duration) || 1));
+        // Grace notes are notation-time ornaments and should not consume measure capacity.
+        const duration = note.grace
+          ? 0
+          : Math.max(1, Math.round(Number(note.duration) || 1));
         if (occupied + duration <= capacity || out.length === 0) {
           out.push(note);
           occupied += duration;
@@ -1665,6 +1697,8 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
           const hasTieStart = Boolean(child.querySelector(':scope > tie[type="start"]'));
           const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
+          const hasTurn = Boolean(child.querySelector(":scope > notations > ornaments > turn"));
+          const hasInvertedTurn = Boolean(child.querySelector(":scope > notations > ornaments > inverted-turn"));
           const hasWavyLineStart = Array.from(
             child.querySelectorAll(":scope > notations > ornaments > wavy-line")
           ).some((node) => {
@@ -1672,10 +1706,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             return type === "" || type === "start";
           });
           const hasTrill = hasTrillMark || hasWavyLineStart;
+          const turnType: "" | "turn" | "inverted-turn" = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
           const trillAccidentalText = child.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() || "";
           const hasStaccato = Boolean(child.querySelector(":scope > notations > articulations > staccato"));
           const hasSlurStart = Boolean(child.querySelector(':scope > notations > slur[type="start"]'));
           const hasSlurStop = Boolean(child.querySelector(':scope > notations > slur[type="stop"]'));
+          const hasGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
           const hasTupletStart = Boolean(child.querySelector(':scope > notations > tuplet[type="start"]'));
           const tmActual = Number(child.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() || "");
           const tmNormal = Number(child.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim() || "");
@@ -1727,13 +1763,14 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
           }
           if (isGrace) {
+            const graceSlashPrefix = hasGraceSlash ? "/" : "";
             if (!isChord || pendingGraceTokens.length === 0) {
-              pendingGraceTokens.push(`${pitchToken}${len}${hasTieStart ? "-" : ""}`);
+              pendingGraceTokens.push(`${graceSlashPrefix}${pitchToken}${len}${hasTieStart ? "-" : ""}`);
             } else {
               const last = pendingGraceTokens.pop() ?? "";
               const merged = last.startsWith("[")
-                ? last.replace("]", `${pitchToken}]`)
-                : `[${last}${pitchToken}]`;
+                ? last.replace("]", `${graceSlashPrefix}${pitchToken}]`)
+                : `[${last}${graceSlashPrefix}${pitchToken}]`;
               pendingGraceTokens.push(merged);
             }
             continue;
@@ -1755,9 +1792,10 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
                   : "")
               : "";
           const trillPrefix = hasTrill ? "!trill!" : "";
+          const turnPrefix = turnType === "inverted-turn" ? "!invertedturn!" : (turnType === "turn" ? "!turn!" : "");
           const staccatoPrefix = hasStaccato ? "!staccato!" : "";
           const slurStartPrefix = hasSlurStart ? "(" : "";
-          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${staccatoPrefix}`;
+          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${staccatoPrefix}`;
           if (pendingGraceTokens.length > 0) {
             pendingGraceTokens.length = 0;
           }
@@ -1840,6 +1878,43 @@ const normalizeVoiceForMusicXml = (voice?: string): string => {
   return String(Math.round(n));
 };
 
+const midiByStepForAbcImport: Record<string, number> = {
+  C: 0,
+  D: 2,
+  E: 4,
+  F: 5,
+  G: 7,
+  A: 9,
+  B: 11,
+};
+
+const noteToMidiForAbcClefInference = (note?: AbcParsedNote): number | null => {
+  if (!note || note.isRest) return null;
+  const step = String(note.step || "").trim().toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(midiByStepForAbcImport, step)) {
+    return null;
+  }
+  const octave = Number.isFinite(note.octave) ? Math.round(Number(note.octave)) : 4;
+  const alter = Number.isFinite(note.alter) ? Math.round(Number(note.alter)) : 0;
+  return (octave + 1) * 12 + midiByStepForAbcImport[step] + alter;
+};
+
+const resolveAbcImportClef = (part: AbcParsedPart): string => {
+  const explicit = String(part?.clef || "").trim().toLowerCase();
+  if (explicit) return explicit;
+  const keys: number[] = [];
+  for (const measure of part?.measures || []) {
+    for (const note of measure || []) {
+      const midi = noteToMidiForAbcClefInference(note);
+      if (Number.isFinite(midi)) {
+        keys.push(midi as number);
+      }
+    }
+  }
+  if (!keys.length) return "";
+  return chooseSingleClefByKeys(keys) === "F" ? "bass" : "treble";
+};
+
 export const clefXmlFromAbcClef = (rawClef?: string): string => {
   const clef = String(rawClef || "").trim().toLowerCase();
   if (clef === "bass" || clef === "f") {
@@ -1876,8 +1951,10 @@ type AbcParsedNote = {
   slurStop?: boolean;
   chord?: boolean;
   grace?: boolean;
+  graceSlash?: boolean;
   trill?: boolean;
   trillAccidentalText?: string;
+  turnType?: "turn" | "inverted-turn";
   staccato?: boolean;
   timeModification?: { actual: number; normal: number };
   tupletStart?: boolean;
@@ -1916,6 +1993,7 @@ export type AbcImportOptions = {
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
   sourceMetadata?: boolean;
+  overfullCompatibilityMode?: boolean;
 };
 
 const toHex = (value: number, width = 2): string => {
@@ -2045,18 +2123,26 @@ const buildMusicXmlFromAbcParsed = (
     parsed.parts && parsed.parts.length > 0
       ? parsed.parts
       : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
-  const measureCount = parts.reduce((max, part) => Math.max(max, part.measures.length), 1);
+  const resolvedParts = parts.map((part) => ({
+    ...part,
+    clef: resolveAbcImportClef(part),
+  }));
+  const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
   const title = parsed.meta?.title || "mikuscore";
   const composer = parsed.meta?.composer || "Unknown";
   const beats = parsed.meta?.meter?.beats || 4;
   const beatType = parsed.meta?.meter?.beatType || 4;
   const defaultFifths = Number.isFinite(parsed.meta?.keyInfo?.fifths) ? parsed.meta.keyInfo.fifths : 0;
+  const divisions = 960;
+  const beatDiv = Math.max(1, Math.round((divisions * 4) / Math.max(1, Math.round(beatType))));
+  const measureDurationDiv = Math.max(1, Math.round((divisions * 4 * Math.max(1, Math.round(beats))) / Math.max(1, Math.round(beatType))));
+  const emptyMeasureRestType = normalizeTypeForMusicXml(typeFromDuration(measureDurationDiv, divisions));
   const tempoBpm =
     Number.isFinite(parsed.meta?.tempoBpm as number) && Number(parsed.meta?.tempoBpm) > 0
       ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
       : null;
 
-  const partListXml = parts
+  const partListXml = resolvedParts
     .map((part, index) => {
       const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
       return [
@@ -2071,7 +2157,7 @@ const buildMusicXmlFromAbcParsed = (
     })
     .join("");
 
-  const partBodyXml = parts
+  const partBodyXml = resolvedParts
     .map((part, partIndex) => {
       const measuresXml: string[] = [];
       let currentPartFifths = Math.max(-7, Math.min(7, Math.round(defaultFifths)));
@@ -2116,11 +2202,70 @@ const buildMusicXmlFromAbcParsed = (
 
         const notesXml =
           notes.length > 0
-            ? notes
-                .map((note) => {
+            ? (() => {
+                const beamXmlByNoteIndex = (() => {
+                  const out = new Map();
+                  const levelFromType = (typeText) => {
+                    switch (String(typeText || "").trim().toLowerCase()) {
+                      case "eighth":
+                        return 1;
+                      case "16th":
+                        return 2;
+                      case "32nd":
+                        return 3;
+                      case "64th":
+                        return 4;
+                      default:
+                        return 0;
+                    }
+                  };
+                  const byVoice = new Map();
+                  for (let i = 0; i < notes.length; i += 1) {
+                    const n = notes[i];
+                    const voice = normalizeVoiceForMusicXml(n.voice);
+                    const bucket = byVoice.get(voice) ?? [];
+                    bucket.push({ note: n, noteIndex: i });
+                    byVoice.set(voice, bucket);
+                  }
+                  for (const events of byVoice.values()) {
+                    const primary = events.filter((ev) => !ev.note?.chord);
+                    if (!primary.length) continue;
+                    const assignments = computeBeamAssignments(
+                      primary,
+                      beatDiv,
+                      (ev) => {
+                        const type = normalizeTypeForMusicXml(ev.note?.type);
+                        return {
+                          timed: true,
+                          chord: !Boolean(ev.note?.isRest),
+                          grace: Boolean(ev.note?.grace),
+                          durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
+                          levels: levelFromType(type),
+                        };
+                      },
+                      { splitAtBeatBoundaryWhenImplicit: true }
+                    );
+                    for (const [eventIndex, assignment] of assignments.entries()) {
+                      if (!assignment || assignment.levels <= 0) continue;
+                      let beamXml = "";
+                      for (let level = 1; level <= assignment.levels; level += 1) {
+                        beamXml += `<beam number="${level}">${assignment.state}</beam>`;
+                      }
+                      if (!beamXml) continue;
+                      const target = primary[eventIndex];
+                      if (!target) continue;
+                      out.set(target.noteIndex, beamXml);
+                    }
+                  }
+                  return out;
+                })();
+                return notes
+                  .map((note, noteIndex) => {
                   const chunks: string[] = ["<note>"];
                   if (note.chord) chunks.push("<chord/>");
-                  if (note.grace) chunks.push("<grace/>");
+                  if (note.grace) {
+                    chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
+                  }
                   if (note.isRest) {
                     chunks.push("<rest/>");
                   } else {
@@ -2144,6 +2289,9 @@ const buildMusicXmlFromAbcParsed = (
                   }
                   chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
                   chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+                  if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) {
+                    chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
+                  }
                   if (
                     note.timeModification &&
                     Number.isFinite(note.timeModification.actual) &&
@@ -2166,6 +2314,7 @@ const buildMusicXmlFromAbcParsed = (
                     note.slurStart ||
                     note.slurStop ||
                     note.trill ||
+                    note.turnType ||
                     note.staccato ||
                     note.tupletStart ||
                     note.tupletStop
@@ -2185,14 +2334,19 @@ const buildMusicXmlFromAbcParsed = (
                       }
                       chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
                     }
+                    if (note.turnType) {
+                      const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
+                      chunks.push(`<ornaments><${tag}/></ornaments>`);
+                    }
                     if (note.staccato) chunks.push("<articulations><staccato/></articulations>");
                     chunks.push("</notations>");
                   }
                   chunks.push("</note>");
                   return chunks.join("");
                 })
-                .join("")
-            : '<note><rest/><duration>3840</duration><voice>1</voice><type>whole</type></note>';
+                .join("");
+              })()
+            : `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type></note>`;
 
         const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
         const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";
@@ -2246,6 +2400,7 @@ export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOption
     defaultTitle: "mikuscore",
     defaultComposer: "Unknown",
     inferTransposeFromPartName: true,
+    overfullCompatibilityMode: options.overfullCompatibilityMode !== false,
   }) as AbcParsedResult;
   return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };

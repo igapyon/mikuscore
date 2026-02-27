@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { exportMusicXmlDomToMuseScore } from "../../src/ts/musescore-io";
@@ -79,9 +79,11 @@ const collectCandidateSignals = (candidateDoc: Document): CandidateMeasureSignal
 };
 
 describe("Local parity (moonlight): reference musicxml -> mscx", () => {
-  it("keeps known high-value semantics on import to MuseScore", () => {
-    const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
-    const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
+  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
+  const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
+  const itWithLocalFixture = existsSync(referencePath) ? it : it.skip;
+
+  itWithLocalFixture("keeps known high-value semantics on import to MuseScore", () => {
     const referenceXml = readFileSync(referencePath, "utf-8");
     const sourceDoc = parseDoc(referenceXml);
 

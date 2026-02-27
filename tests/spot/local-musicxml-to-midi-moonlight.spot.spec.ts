@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -271,11 +271,13 @@ const excludeSamplingMeasures = (events: NoteEvent[]): NoteEvent[] =>
   });
 
 describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
-  it("exports MIDI from musicxml and reports semantic diffs against reference MIDI import", () => {
+  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
+  const sourcePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
+  const referenceMidPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mid");
+  const itWithLocalFixture = existsSync(sourcePath) && existsSync(referenceMidPath) ? it : it.skip;
+
+  itWithLocalFixture("exports MIDI from musicxml and reports semantic diffs against reference MIDI import", () => {
     ensureMidiWriterLoaded();
-    const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
-    const sourcePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
-    const referenceMidPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mid");
 
     const sourceXml = readFileSync(sourcePath, "utf-8");
     const sourceDoc = parseDoc(sourceXml);
@@ -650,11 +652,8 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
     expect(bestPractical).toBeLessThanOrEqual(8000);
   }, 20000);
 
-  it("reports practical diff focused on head measures", () => {
+  itWithLocalFixture("reports practical diff focused on head measures", () => {
     ensureMidiWriterLoaded();
-    const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
-    const sourcePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
-    const referenceMidPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mid");
 
     const sourceXml = readFileSync(sourcePath, "utf-8");
     const sourceDoc = parseDoc(sourceXml);
