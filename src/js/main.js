@@ -353,7 +353,7 @@ const stripMetadataFromMusicXml = (xml, keepMetadata) => {
     const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
     if (!doc)
         return xml;
-    const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="src:"], part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
+    const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
     for (const field of fields) {
         field.remove();
     }
