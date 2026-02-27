@@ -318,13 +318,22 @@ type TrackChannelKey = `${number}:${number}`;
 type SmfParseSummary = {
   notes: SmfImportedNote[];
   channels: Set<number>;
+  trackName: string | null;
   programByTrackChannel: Map<TrackChannelKey, number>;
   controllerEvents: Array<{ tick: number; channel: number; controllerNumber: number; controllerValue: number }>;
   timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
   keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }>;
   tempoEvents: Array<{ tick: number; bpm: number }>;
   mksSysExPayloads: string[];
+  mksTextMetaLines: string[];
   parseWarnings: MidiImportDiagnostic[];
+};
+
+type MksMidiTextMetadata = {
+  title?: string;
+  movementTitle?: string;
+  composer?: string;
+  partNameByTrackIndex: Map<number, string>;
 };
 
 type MksSysExChunk = {
@@ -863,6 +872,60 @@ const asciiBytesToString = (bytes: Uint8Array): string => {
   return out;
 };
 
+const decodeMetaTextBytes = (bytes: Uint8Array): string => {
+  if (!bytes.length) return "";
+  try {
+    if (typeof TextDecoder !== "undefined") {
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    }
+  } catch {
+    // fallback below
+  }
+  return asciiBytesToString(bytes);
+};
+
+const safeDecodeURIComponent = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const parseMksMidiTextMetadata = (lines: string[]): MksMidiTextMetadata => {
+  const metadata: MksMidiTextMetadata = {
+    partNameByTrackIndex: new Map<number, string>(),
+  };
+  for (const rawLine of lines) {
+    const line = String(rawLine ?? "").trim();
+    if (!line.startsWith("mks:")) continue;
+    if (line.startsWith("mks:title:")) {
+      if (!metadata.title) metadata.title = safeDecodeURIComponent(line.slice("mks:title:".length));
+      continue;
+    }
+    if (line.startsWith("mks:movement-title:")) {
+      if (!metadata.movementTitle) {
+        metadata.movementTitle = safeDecodeURIComponent(line.slice("mks:movement-title:".length));
+      }
+      continue;
+    }
+    if (line.startsWith("mks:composer:")) {
+      if (!metadata.composer) metadata.composer = safeDecodeURIComponent(line.slice("mks:composer:".length));
+      continue;
+    }
+    if (line.startsWith("mks:part-name-track:")) {
+      const payload = line.slice("mks:part-name-track:".length);
+      const sep = payload.indexOf(":");
+      if (sep <= 0) continue;
+      const trackIndex = Number.parseInt(payload.slice(0, sep), 10);
+      if (!Number.isFinite(trackIndex) || trackIndex < 0) continue;
+      if (metadata.partNameByTrackIndex.has(trackIndex)) continue;
+      metadata.partNameByTrackIndex.set(trackIndex, safeDecodeURIComponent(payload.slice(sep + 1)));
+    }
+  }
+  return metadata;
+};
+
 const parseMksSysExChunk = (payloadBytes: Uint8Array): MksSysExChunk | null => {
   if (!payloadBytes.length) return null;
   const trimmed =
@@ -1011,6 +1074,7 @@ const parseSmfHeader = (midiBytes: Uint8Array): {
 const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseSummary => {
   const notes: SmfImportedNote[] = [];
   const channels = new Set<number>();
+  let trackName: string | null = null;
   const programByTrackChannel = new Map<TrackChannelKey, number>();
   const controllerEvents: Array<{
     tick: number;
@@ -1022,6 +1086,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoEvents: Array<{ tick: number; bpm: number }> = [];
   const mksSysExChunks: MksSysExChunk[] = [];
+  const mksTextMetaLines: string[] = [];
   const parseWarnings: MidiImportDiagnostic[] = [];
   const activeNoteStartTicks = new Map<string, Array<{ startTick: number; velocity: number }>>();
   let cursor = 0;
@@ -1093,6 +1158,15 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
         if (microsPerQuarter > 0) {
           const bpm = clampTempo(60000000 / microsPerQuarter);
           tempoEvents.push({ tick: absTick, bpm });
+        }
+      } else if (metaType === 0x01 || metaType === 0x03) {
+        const payloadBytes = trackData.slice(payloadStart, payloadEnd);
+        const text = decodeMetaTextBytes(payloadBytes).trim();
+        if (metaType === 0x03 && text && !trackName) {
+          trackName = text;
+        }
+        if (text.startsWith("mks:")) {
+          mksTextMetaLines.push(text);
         }
       }
       cursor = payloadEnd;
@@ -1205,12 +1279,14 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   return {
     notes,
     channels,
+    trackName,
     programByTrackChannel,
     controllerEvents,
     timeSignatureEvents,
     keySignatureEvents,
     tempoEvents,
     mksSysExPayloads: assembleMksSysExPayloads(mksSysExChunks),
+    mksTextMetaLines,
     parseWarnings,
   };
 };
@@ -2250,6 +2326,8 @@ const buildPartMusicXml = (params: {
 
 const buildImportSkeletonMusicXml = (params: {
   title: string;
+  movementTitle?: string;
+  composer?: string;
   quantizeGrid: MidiImportQuantizeGrid;
   divisionsOverride?: number;
   ticksPerQuarter: number;
@@ -2266,9 +2344,13 @@ const buildImportSkeletonMusicXml = (params: {
   debugImportMetadata: boolean;
   mksSysExMetadataXml: string;
   sourceMetadataXml: string;
+  trackNameByIndex?: Map<number, string>;
+  mksTextMetadata?: MksMidiTextMetadata;
 }): string => {
   const {
     title,
+    movementTitle = "",
+    composer = "",
     quantizeGrid,
     divisionsOverride,
     ticksPerQuarter,
@@ -2285,6 +2367,8 @@ const buildImportSkeletonMusicXml = (params: {
     debugImportMetadata,
     mksSysExMetadataXml,
     sourceMetadataXml,
+    trackNameByIndex = new Map<number, string>(),
+    mksTextMetadata,
   } = params;
   const divisions = Math.max(1, Math.round(divisionsOverride ?? quantizeGridToDivisions(quantizeGrid)));
   const measureTicks = Math.max(1, Math.round((ticksPerQuarter * 4 * beats) / Math.max(1, beatType)));
@@ -2304,6 +2388,13 @@ const buildImportSkeletonMusicXml = (params: {
     return { measureIndex, offsetDiv };
   };
   const partDefs: Array<{ partId: string; name: string; channel: number; program: number; key: TrackChannelKey }> = [];
+  const channelCountByTrackIndex = new Map<number, number>();
+  for (const group of partGroups) {
+    channelCountByTrackIndex.set(
+      group.trackIndex,
+      (channelCountByTrackIndex.get(group.trackIndex) ?? 0) + 1
+    );
+  }
 
   let index = 1;
   for (const group of partGroups) {
@@ -2311,9 +2402,18 @@ const buildImportSkeletonMusicXml = (params: {
     const isDrum = group.channel === 10;
     partDefs.push({
       partId: `P${index}`,
-      name: isDrum
-        ? `Drums (Track ${group.trackIndex + 1})`
-        : `Track ${group.trackIndex + 1} Ch ${group.channel}`,
+      name: (() => {
+        const mksName = mksTextMetadata?.partNameByTrackIndex.get(group.trackIndex)?.trim() ?? "";
+        const trackName = trackNameByIndex.get(group.trackIndex)?.trim() ?? "";
+        const preferred = mksName || trackName;
+        if (preferred) {
+          const channelCount = channelCountByTrackIndex.get(group.trackIndex) ?? 1;
+          return channelCount > 1 ? `${preferred} Ch ${group.channel}` : preferred;
+        }
+        return isDrum
+          ? `Drums (Track ${group.trackIndex + 1})`
+          : `Track ${group.trackIndex + 1} Ch ${group.channel}`;
+      })(),
       channel: group.channel,
       program: normalizeMidiProgramNumber(programByTrackChannel.get(key) ?? NaN) ?? 1,
       key,
@@ -2381,7 +2481,13 @@ const buildImportSkeletonMusicXml = (params: {
     )
     .join("");
 
-  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(title)}</work-title></work><part-list>${partList}</part-list>${parts}</score-partwise>`;
+  const movementTitleXml = movementTitle.trim()
+    ? `<movement-title>${xmlEscape(movementTitle)}</movement-title>`
+    : "";
+  const composerXml = composer.trim()
+    ? `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(title)}</work-title></work>${movementTitleXml}${composerXml}<part-list>${partList}</part-list>${parts}</score-partwise>`;
 };
 
 const numberToVariableLength = (value: number): number[] => {
@@ -2408,6 +2514,21 @@ const buildMksSysexEventData = (deltaTicks: number, payloadText: string): number
     ...numberToVariableLength(payloadLength),
     ...bytes,
     0xf7,
+  ];
+};
+
+const buildTextMetaEventData = (deltaTicks: number, text: string, metaType = 0x01): number[] => {
+  const safeText = String(text ?? "");
+  const bytes: number[] = [];
+  for (let i = 0; i < safeText.length; i += 1) {
+    bytes.push(safeText.charCodeAt(i) & 0xff);
+  }
+  return [
+    ...numberToVariableLength(deltaTicks),
+    0xff,
+    metaType & 0xff,
+    ...numberToVariableLength(bytes.length),
+    ...bytes,
   ];
 };
 
@@ -2591,6 +2712,7 @@ const buildRawMidiBytesForPlayback = (
     embedMksSysEx: boolean;
     sysexChunkTexts: string[];
     retriggerPolicy: RawMidiRetriggerPolicy;
+    mksTextMetaLines: string[];
   }
 ): Uint8Array => {
   const tracksById = new Map<string, PlaybackEvent[]>();
@@ -2652,6 +2774,11 @@ const buildRawMidiBytesForPlayback = (
       const body = sysexBytes.slice(numberToVariableLength(0).length);
       tempoEvents.push({ tick: 0, order: 3, bytes: body });
     }
+  }
+  for (const line of options.mksTextMetaLines) {
+    const textBytes = buildTextMetaEventData(0, line, 0x01);
+    const body = textBytes.slice(numberToVariableLength(0).length);
+    tempoEvents.push({ tick: 0, order: 4, bytes: body });
   }
   trackChunks.push(encodeRawTrackChunk(tempoEvents));
 
@@ -3361,6 +3488,11 @@ export const buildMidiBytesForPlayback = (
     normalizeForParity?: boolean;
     rawWriter?: boolean;
     rawRetriggerPolicy?: RawMidiRetriggerPolicy;
+    metadata?: {
+      title?: string;
+      movementTitle?: string;
+      composer?: string;
+    };
   } = {}
 ): Uint8Array => {
   const rawWriter = options.rawWriter === true;
@@ -3384,6 +3516,23 @@ export const buildMidiBytesForPlayback = (
   }
 
   const midiTracks: unknown[] = [];
+  const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
+  const mksTextMetaLines: string[] = ["mks:meta-version:1"];
+  const metaTitle = String(options.metadata?.title ?? "").trim();
+  const metaMovementTitle = String(options.metadata?.movementTitle ?? "").trim();
+  const metaComposer = String(options.metadata?.composer ?? "").trim();
+  if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
+  if (metaMovementTitle) {
+    mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
+  }
+  if (metaComposer) mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
+  for (let index = 0; index < sortedTrackIds.length; index += 1) {
+    const trackId = sortedTrackIds[index];
+    const trackEvents = tracksById.get(trackId) ?? [];
+    const trackName = trackEvents[0]?.trackName?.trim() ?? "";
+    if (!trackName) continue;
+    mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+  }
   const normalizedTempoEvents = (tempoEvents.length ? tempoEvents : [{ startTicks: 0, bpm: tempo }])
     .map((event) => ({
       startTicks: Math.max(0, Math.round(event.startTicks)),
@@ -3499,6 +3648,7 @@ export const buildMidiBytesForPlayback = (
         embedMksSysEx,
         sysexChunkTexts: sysexChunks,
         retriggerPolicy: options.rawRetriggerPolicy ?? "off_before_on",
+        mksTextMetaLines,
       }
     );
   }
@@ -3540,8 +3690,10 @@ export const buildMidiBytesForPlayback = (
       tempoTrack.addEvent({ data: buildMksSysexEventData(0, chunk) });
     }
   }
+  for (const line of mksTextMetaLines) {
+    tempoTrack.addEvent({ data: buildTextMetaEventData(0, line, 0x01) });
+  }
   midiTracks.push(tempoTrack);
-  const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
   sortedTrackIds.forEach((trackId, index) => {
     const trackEvents = (tracksById.get(trackId) ?? [])
       .slice()
@@ -3641,7 +3793,6 @@ export const convertMidiToMusicXml = (
   const diagnostics: MidiImportDiagnostic[] = [];
   const warnings: MidiImportDiagnostic[] = [];
   const quantizeGridOption = normalizeMidiImportQuantizeGridOption(options.quantizeGrid);
-  const title = String(options.title ?? "").trim() || "Imported MIDI";
   const debugImportMetadata = options.debugMetadata ?? true;
   const sourceImportMetadata = options.sourceMetadata ?? true;
   const tripletAwareQuantize = options.tripletAwareQuantize !== false;
@@ -3676,6 +3827,8 @@ export const convertMidiToMusicXml = (
   const keySignatureEvents: Array<{ tick: number; fifths: number; mode: "major" | "minor" }> = [];
   const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
   const mksSysExPayloads: string[] = [];
+  const mksTextMetaLines: string[] = [];
+  const trackNameByIndex = new Map<number, string>();
 
   for (let i = 0; i < header.trackCount; i += 1) {
     if (offset + 8 > midiBytes.length) {
@@ -3702,6 +3855,9 @@ export const convertMidiToMusicXml = (
     }
     const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
     const summary = parseTrackSummary(trackData, i);
+    if (summary.trackName) {
+      trackNameByIndex.set(i, summary.trackName);
+    }
     collectedNotes.push(...summary.notes);
     controllerEvents.push(
       ...summary.controllerEvents.map((event) => ({ ...event, trackIndex: i }))
@@ -3710,6 +3866,7 @@ export const convertMidiToMusicXml = (
     keySignatureEvents.push(...summary.keySignatureEvents);
     tempoMetaEvents.push(...summary.tempoEvents);
     mksSysExPayloads.push(...summary.mksSysExPayloads);
+    mksTextMetaLines.push(...summary.mksTextMetaLines);
     for (const note of summary.notes) trackChannelSet.add(`${i}:${note.channel}`);
     for (const [trackChannel, program] of summary.programByTrackChannel.entries()) {
       if (!programByTrackChannel.has(trackChannel)) {
@@ -3719,6 +3876,11 @@ export const convertMidiToMusicXml = (
     warnings.push(...summary.parseWarnings);
     offset += 8 + trackLength;
   }
+  const parsedMksTextMetadata = parseMksMidiTextMetadata(mksTextMetaLines);
+  const title =
+    parsedMksTextMetadata.title?.trim() ||
+    String(options.title ?? "").trim() ||
+    "Imported MIDI";
 
   const quantizeGrid =
     quantizeGridOption === "auto"
@@ -3804,6 +3966,8 @@ export const convertMidiToMusicXml = (
   }
   const xml = buildImportSkeletonMusicXml({
     title,
+    movementTitle: parsedMksTextMetadata.movementTitle,
+    composer: parsedMksTextMetadata.composer,
     quantizeGrid,
     divisionsOverride: quantized.divisions,
     ticksPerQuarter: header.ticksPerQuarter,
@@ -3820,6 +3984,8 @@ export const convertMidiToMusicXml = (
     debugImportMetadata,
     mksSysExMetadataXml: debugImportMetadata ? buildMidiSysExMiscXml(mksSysExPayloads) : "",
     sourceMetadataXml: sourceImportMetadata ? buildMidiSourceMiscXml(midiBytes) : "",
+    trackNameByIndex,
+    mksTextMetadata: parsedMksTextMetadata,
   });
 
   return {

@@ -1062,11 +1062,12 @@ const applyArticulationHintsToMeasures = (
 
 const extractAllStaffBlocks = (source: string): Array<{
   voiceId: string;
+  partName: string;
   body: string;
   clef: string;
   transpose: LilyTransposeHint | null;
 }> => {
-  const out: Array<{ voiceId: string; body: string; clef: string; transpose: LilyTransposeHint | null }> = [];
+  const out: Array<{ voiceId: string; partName: string; body: string; clef: string; transpose: LilyTransposeHint | null }> = [];
   const regex = /\\new\s+Staff/g;
   for (;;) {
     const m = regex.exec(source);
@@ -1092,6 +1093,8 @@ const extractAllStaffBlocks = (source: string): Array<{
       if (source[cursor] === "{") {
         const withBlock = findBalancedBlock(source, cursor);
         if (withBlock) {
+          const withInstrumentNameMatch = withBlock.content.match(/(?:^|[\s;])instrumentName\s*=\s*"([^"]*)"/i);
+          const withPartName = (withInstrumentNameMatch?.[1] ?? "").trim();
           const withTranspositionMatch = withBlock.content.match(
             /\\transposition\s+([a-g](?:isis|eses|is|es)?[,']*)/i
           );
@@ -1106,6 +1109,8 @@ const extractAllStaffBlocks = (source: string): Array<{
           if (!block) continue;
           const clefMatch = block.content.match(/\\clef\s+([A-Za-z]+)/);
           const clef = normalizeAbcClefName(clefMatch?.[1] || "treble");
+          const bodyInstrumentNameMatch = block.content.match(/\\set\s+Staff\.instrumentName\s*=\s*"([^"]*)"/i);
+          const bodyPartName = (bodyInstrumentNameMatch?.[1] ?? "").trim();
           const bodyTranspositionMatch = block.content.match(
             /\\transposition\s+([a-g](?:isis|eses|is|es)?[,']*)/i
           );
@@ -1114,6 +1119,7 @@ const extractAllStaffBlocks = (source: string): Array<{
             : null;
           out.push({
             voiceId: normalizeVoiceId(voiceId, `P${out.length + 1}`),
+            partName: withPartName || bodyPartName || normalizeVoiceId(voiceId, `P${out.length + 1}`),
             body: block.content,
             clef,
             transpose: withTranspose || bodyTranspose,
@@ -1129,12 +1135,16 @@ const extractAllStaffBlocks = (source: string): Array<{
     if (!block) continue;
     const clefMatch = block.content.match(/\\clef\s+([A-Za-z]+)/);
     const clef = normalizeAbcClefName(clefMatch?.[1] || "treble");
+    const bodyInstrumentNameMatch = block.content.match(/\\set\s+Staff\.instrumentName\s*=\s*"([^"]*)"/i);
+    const bodyPartName = (bodyInstrumentNameMatch?.[1] ?? "").trim();
     const bodyTranspositionMatch = block.content.match(/\\transposition\s+([a-g](?:isis|eses|is|es)?[,']*)/i);
     const bodyTranspose = bodyTranspositionMatch
       ? lilyTranspositionTokenToHint(bodyTranspositionMatch[1])
       : null;
+    const normalizedVoiceId = normalizeVoiceId(voiceId, `P${out.length + 1}`);
     out.push({
-      voiceId: normalizeVoiceId(voiceId, `P${out.length + 1}`),
+      voiceId: normalizedVoiceId,
+      partName: bodyPartName || normalizedVoiceId,
       body: block.content,
       clef,
       transpose: bodyTranspose,
@@ -2059,6 +2069,7 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
   mode: "major" | "minor";
   staffs: Array<{
     voiceId: string;
+    partName?: string;
     clef: string;
     measures: LilyDirectEvent[][];
     transpose?: LilyTransposeHint | null;
@@ -2134,7 +2145,10 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
     return `${graceXml}${durationXml}${timeModXml}${tieXml}${lyricXml}${notationXml}`;
   };
   const partList = params.staffs
-    .map((staff, i) => `<score-part id="P${i + 1}"><part-name>${xmlEscape(staff.voiceId || `Part ${i + 1}`)}</part-name></score-part>`)
+    .map((staff, i) => {
+      const name = (staff.partName ?? "").trim() || staff.voiceId || `Part ${i + 1}`;
+      return `<score-part id="P${i + 1}"><part-name>${xmlEscape(name)}</part-name></score-part>`;
+    })
     .join("");
   const measureCount = params.staffs.reduce((max, staff) => Math.max(max, staff.measures.length), 1);
   const parts = params.staffs
@@ -2282,6 +2296,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
   const warnings: string[] = [];
   type LilyImportStaff = {
     voiceId: string;
+    partName?: string;
     clef: string;
     measures: LilyDirectEvent[][];
     transpose?: LilyTransposeHint | null;
@@ -2331,6 +2346,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
     const omittedRelativeRoot = hasOmittedRelativeRoot(staff.body);
     return {
       voiceId: staff.voiceId || `P${index + 1}`,
+      partName: (staff.partName || "").trim() || staff.voiceId || `P${index + 1}`,
       clef: explicitClef
         ? normalizeAbcClefName(staff.clef || "treble")
         : omittedRelativeRoot
@@ -2365,6 +2381,7 @@ const tryConvertLilyPondToMusicXmlDirect = (source: string): { xml: string; warn
             });
             return {
               voiceId,
+              partName: voiceId,
               clef: omittedRelativeRoot ? "treble" : chooseLilyClefFromMeasures(measures),
               measures: applyArticulationHintsToMeasures(
                 measures,
@@ -2961,6 +2978,16 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
   if (!parts.length) {
     throw new Error("MusicXML part is missing.");
   }
+  const partNameById = new Map<string, string>();
+  for (const scorePart of Array.from(doc.querySelectorAll("score-partwise > part-list > score-part"))) {
+    const partId = scorePart.getAttribute("id")?.trim() ?? "";
+    if (!partId) continue;
+    const partName =
+      scorePart.querySelector(":scope > part-name")?.textContent?.trim() ||
+      scorePart.querySelector(":scope > part-abbreviation")?.textContent?.trim() ||
+      partId;
+    partNameById.set(partId, partName);
+  }
   const title =
     doc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ||
     doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ||
@@ -2987,6 +3014,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i];
     const partId = part.getAttribute("id") || `P${i + 1}`;
+    const partName = partNameById.get(partId) || partId;
     let partTranspose: LilyTransposeHint | null = null;
     for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
       const transposeNode = measure.querySelector(":scope > attributes > transpose");
@@ -3142,7 +3170,8 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       });
       const clef = resolveLilyClefForPartStaff(part, staffNo);
       const clefPrefix = clef === "treble" ? "" : `\\clef ${clef} `;
-      blocks.push(`\\new Staff = "${partId}" { ${clefPrefix}${body} }`);
+      const withPartName = `\\with { instrumentName = "${xmlEscape(partName)}" }`;
+      blocks.push(`\\new Staff = "${partId}" ${withPartName} { ${clefPrefix}${body} }`);
       const transposeComment = transposeCommentForVoice(partId);
       if (transposeComment) transposeComments.push(transposeComment);
       measureComments.push(...measureCommentsForVoice(partId, staffNo));
@@ -3160,7 +3189,8 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
       const transposeComment = transposeCommentForVoice(voiceId);
       if (transposeComment) transposeComments.push(transposeComment);
       measureComments.push(...measureCommentsForVoice(voiceId, staffNo));
-      return `\\new Staff = "${partId}_s${staffNo}" { ${clefPrefix}${body} }`;
+      const withPartName = `\\with { instrumentName = "${xmlEscape(partName)}" }`;
+      return `\\new Staff = "${partId}_s${staffNo}" ${withPartName} { ${clefPrefix}${body} }`;
     });
     blocks.push(`\\new PianoStaff = "${partId}" << ${staffBlocks.join(" ")} >>`);
   }

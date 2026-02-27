@@ -539,6 +539,18 @@ export const startPlayback = async (
 
   let midiBytes: Uint8Array;
   try {
+    const scoreTitle =
+      playbackDoc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
+      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
+      "";
+    const movementTitle =
+      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ?? "";
+    const scoreComposer =
+      playbackDoc
+        .querySelector('score-partwise > identification > creator[type="composer"]')
+        ?.textContent?.trim() ??
+      playbackDoc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
+      "";
     midiBytes = buildMidiBytesForPlayback(
       events,
       effectiveParsedPlayback.tempo,
@@ -547,7 +559,14 @@ export const startPlayback = async (
       effectiveControlEvents,
       effectiveTempoEvents,
       timeSignatureEvents,
-      keySignatureEvents
+      keySignatureEvents,
+      {
+        metadata: {
+          title: scoreTitle,
+          movementTitle,
+          composer: scoreComposer,
+        },
+      }
     );
   } catch (error) {
     options.setPlaybackText(

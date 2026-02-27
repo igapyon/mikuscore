@@ -71,6 +71,11 @@
   - [x] MEI: articulation (`staccato` / `accent`) minimal roundtrip-equivalent test and preservation path.
 
 #### P3: Feature expansion
+- [ ] Investigation: add `lightweight playback mode` for dense-note scores (classified as design consideration):
+  - limit max simultaneous voices (e.g., 32-48) to avoid browser audio-node saturation.
+  - optionally drop/merge ultra-short or duplicate-nearby notes for stability-first playback.
+  - allow omitting ornaments/grace in lightweight mode with explicit UI toggle and policy.
+  - define quality vs stability presets and default behavior for large scores.
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
 - [ ] Reconfirm in-session `xml:id` strategy and operation rules.
 - [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
@@ -406,6 +411,11 @@
   - [x] MEI: アーティキュレーション（`staccato` / `accent`）最小同等テストと保持経路。
 
 #### P3: 仕様拡張
+- [ ] 検討事項: ノート密度が高い譜面向けに `軽量再生モード` を追加する。
+  - ブラウザの音声ノード飽和を避けるため、同時発音数の上限（例: 32-48）を設ける。
+  - 安定再生優先として、極短音や近接重複音の間引き/マージを任意適用できるようにする。
+  - 軽量モードでは装飾音（trill/grace 等）を省略可能にし、UIトグルと方針を明示する。
+  - 大規模譜面向けに「音質優先/安定優先」プリセットと既定値を定義する。
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。
 - [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
 - [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。
