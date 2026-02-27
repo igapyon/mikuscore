@@ -617,6 +617,41 @@ describe("MEI export", () => {
     expect(n1?.querySelector(":scope > accidental")).toBeNull();
   });
 
+  it("carries explicit accidental within the same measure when following note omits accid", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="4" meter.unit="4" key.sig="0">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2"/></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1">
+                <layer n="1">
+                  <note pname="f" oct="4" dur="4" accid="s"/>
+                  <note pname="f" oct="4" dur="4"/>
+                </layer>
+              </staff>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes.length).toBe(2);
+    expect(notes[0]?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("1");
+    expect(notes[1]?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("1");
+  });
+
   it("prefers staffDef key.sig over scoreDef key.sig for the target staff", () => {
     const mei = `<?xml version="1.0" encoding="UTF-8"?>
 <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
@@ -790,6 +825,40 @@ describe("MEI export", () => {
 
     expect(outDoc.querySelector("part > measure > attributes > key > fifths")?.textContent?.trim()).toBe("6");
     expect(outDoc.querySelector("part > measure > note > pitch > alter")?.textContent?.trim()).toBe("1");
+  });
+
+  it("marks first short measure as implicit pickup when duration is shorter than meter", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="4" meter.unit="4" key.sig="0">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2"/></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1"><layer n="1"><note pname="c" oct="4" dur="8"/></layer></staff>
+            </measure>
+            <measure n="2">
+              <staff n="1"><layer n="1"><note pname="d" oct="4" dur="1"/></layer></staff>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const m1 = outDoc.querySelector('part > measure[number="1"]');
+    expect(m1).not.toBeNull();
+    if (!m1) return;
+    expect((m1.getAttribute("implicit") || "").trim().toLowerCase()).toBe("yes");
+    expect(m1.querySelector(":scope > note > duration")?.textContent?.trim()).toBe("240");
   });
 
   it("imports first child <mei> with score content when root is <meiCorpus>", () => {
