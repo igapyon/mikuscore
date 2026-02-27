@@ -19,8 +19,7 @@
 
 補足:
 
-- 現行実装には legacy 名（`src:*`, `diag:*`, `mks:...` 旧形式）が混在する。
-- 移行期間は **dual-write + dual-read** を採用し、段階的に新命名へ寄せる。
+- 出力時の `miscellaneous-field` は本ドキュメントの `mks:*` 命名を基準とする。
 
 ## mks:dbg:* Fields (Target)
 
@@ -115,23 +114,6 @@ Payload keys:
 - `level=warn;code=...;fmt=midi;...`
 - `level=warn;code=...;fmt=lilypond;...`
 - `level=warn;code=...;fmt=musescore;...`
-
-## Legacy Names (Current)
-
-現行の実装・既存データで使われる名称:
-
-- debug:
-  - `mks:mei-debug-*`
-  - `mks:abc-meta-*`
-  - `mks:midi-meta-*`
-  - `mks:midi-sysex-*`
-- source:
-  - `src:abc:*`
-  - `src:midi:*`
-  - `src:musescore:*`
-  - `src:mei:*`
-- diagnostics:
-  - `diag:*`
 
 ## Notes
 

@@ -124,7 +124,6 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - fallback when hint is absent or invalid
   - safety against conflicts with existing source comments
 - [ ] Keep namespace separation strict (`mks:src:*` vs `mks:meta:*` vs `mks:diag:*` vs `mks:dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
-  - During migration, allow legacy names (`src:*`, `diag:*`, old `mks:*`) only via dual-write/dual-read compatibility paths.
 
 ### LilyPond Note (Current `mks` usage)
 

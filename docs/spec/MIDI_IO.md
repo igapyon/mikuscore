@@ -298,13 +298,13 @@ Rules:
 
 When analyzing rendering/import issues, inspect:
 
-- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-meta-count"]`
-- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta-"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:midi:meta:count"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta:"]`
 
 Recommended flow:
 
 1. identify the problematic measure and note on screen.
-2. open the same measure in MusicXML and read `mks:midi-meta-*`.
+2. open the same measure in MusicXML and read `mks:dbg:midi:meta:*`.
 3. compare note duration/type and debug payload (`key`, `vel`, `sd`, `dd`, `tk0`, `tk1`) to detect where conversion diverged.
 
 ### Drum note rendering
