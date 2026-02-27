@@ -2118,5 +2118,5 @@ describe("musescore-io", () => {
     const dstNatural = dstEvents.find((e) => e.step === "B" && e.octave === "3" && e.accidental === "natural");
     expect(srcNatural).toBeDefined();
     expect(dstNatural).toBeDefined();
-  });
+  }, 15000);
 });

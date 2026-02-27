@@ -40,6 +40,8 @@ Its primary goal is reliability, not feature volume: edit while preserving exist
 - `utaformatix3-ts-plus` is bundled as a vendored integration (`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`) for VSQX <-> MusicXML conversion.
 - We sincerely appreciate the UtaFormatix / utaformatix3 ecosystem and contributors for making this VSQX interoperability possible.
 - MEI support is currently experimental.
+- MEI reference samples used for compatibility/parity work:
+  - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
 - LilyPond (`.ly`) support is currently experimental.
 
 ### Distribution and Development
@@ -126,6 +128,8 @@ mikuscore は、MusicXML、MuseScore、MIDI、VSQX、ABC、MEI、LilyPond の入
 - VSQX <-> MusicXML 変換のため、`utaformatix3-ts-plus` を同梱連携しています（`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`）。
 - VSQX 相互運用を実現する基盤を築いてくださった UtaFormatix / utaformatix3 のエコシステムと貢献者の皆さまに、深く感謝します。
 - MEI 対応は現在 Experimental（試験対応）です。
+- MEI 互換性/パリティ確認で参照する公式サンプル:
+  - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
 - LilyPond（`.ly`）対応は現在 Experimental（試験対応）です。
 
 ### 配布と開発方針

@@ -90,6 +90,10 @@
 - [ ] Add articulation input support (at least staccato and tenuto) in editor/core and preserve them across import/export.
 - [ ] Expand articulation support beyond staccato/tenuto (e.g., accent, marcato) with clear per-format preserve/degrade rules.
 - [ ] Add dynamics marking input support (`pp` to `ff`, including intermediate levels) and preserve semantics across import/export.
+- [ ] Rework MIDI velocity mapping for symbolic dynamics without numeric value (`pp`/`p`/`mp`/`mf`/`f`/`ff` etc.):
+  - Avoid near-inaudible defaults at low dynamics (`pp` currently too quiet in some outputs).
+  - Define floor/ceiling and curve (or table) so perceived loudness remains musical.
+  - Add regression tests for dynamics-to-velocity mapping (including playback audibility checks where possible).
 - [ ] Add band score workflow support (common band instrumentation templates, part handling, and layout defaults).
 - [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
 - [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
@@ -236,6 +240,76 @@
   - Verify implementation conformance against official MEI references and track gaps in TODO:
     - https://music-encoding.org/
     - https://music-encoding.org/guidelines/v5/content/
+    - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
+  - MEI v5 spec-gap follow-up candidates (format has representation, current `mei-io` still partial):
+    - [ ] Transposing instruments (`trans.diat` / `trans.semi`) end-to-end conformance:
+      - [x] Import: map MEI transposition metadata to MusicXML `<transpose>` per staff/part. (minimal `staffDef/scoreDef` attrs)
+      - [x] Export: preserve/reconstruct transposition metadata back to MEI `staffDef`/`scoreDef`. (minimal `staffDef trans.diat/trans.semi`)
+      - Add focused tests (e.g., Clarinet in A / Eb Clarinet) for written vs concert pitch intent.
+    - [ ] Alto clef visibility regression (Viola):
+      - Investigate cases where MEI `clef.shape="C"` + `clef.line="3"` is not rendered as MusicXML `<clef><sign>C</sign><line>3</line></clef>`.
+      - Cover both forms: `staffDef` attributes and `staffDef > clef` child element.
+      - Add fixture-based regression test from real viola score and keep it in CI.
+    - [ ] Slur/Tie as MEI control events (`<slur>`, `<tie>`) and/or note-level tie/slur attributes.
+      - [x] Import minimal staff-level `<slur startid/endid>` into MusicXML `notations/slur` (same-layer id refs).
+      - [x] Import minimal staff-level `<tie startid/endid>` into MusicXML `tie` + `notations/tied` (same-layer id refs).
+      - [x] Import minimal layer-level `<slur>/<tie startid/endid>` (same-layer id refs).
+      - [x] Import minimal note-level `@tie` / `@slur` attributes into MusicXML `tie+tied` / `notations/slur`.
+      - [x] Export minimal MusicXML note `tie/slur` into MEI note attributes `@tie` / `@slur`.
+    - [ ] Dynamics and wedges (`<dynam>`, `<hairpin>`).
+      - [x] Minimal `<dynam>` import to MusicXML direction (`dynamics` or `words`, supports `tstamp` offset).
+      - [x] Minimal export of MusicXML `direction(dynamics/wedge)` to MEI `<dynam>` / `<hairpin>` (same-measure pairing).
+    - [ ] Ornaments/control events (`<trill>`, `<turn>`, `<mordent>`, `<fermata>`).
+      - [x] Minimal export of MusicXML note ornaments/fermata to MEI control events (`<trill>`, `<turn>`, `<mordent>`, `<fermata>`).
+    - [ ] Glissando/slide (`<gliss>`).
+      - [x] Minimal export of MusicXML note `notations(glissando/slide)` to MEI `<gliss>` / `<slide>` via same-measure pairing.
+      - [x] Minimal `<slide>` import (`startid/endid` and `tstamp/tstamp2` -> MusicXML `notations/slide` start/stop).
+    - [ ] Pedal and octave-shift (`<pedal>`, `<octave>`).
+      - [x] Minimal export of MusicXML `direction(pedal/octave-shift)` to MEI `<pedal>` / `<octave>` (same-measure pairing).
+    - [ ] Breath/Caesura (`<breath>`, `<caesura>`).
+      - [x] Minimal export of MusicXML note articulations (`breath-mark` / `caesura`) to MEI `<breath>` / `<caesura>`.
+    - [ ] Repeat/jump control marks (`<repeatMark>`, segno/coda/fine mapping).
+      - [x] Minimal export of MusicXML segno/coda/fine (direction symbols/words) to MEI `<repeatMark>`.
+    - [ ] Harmony/chord symbols (`<harm>`) including altered tensions.
+    - [ ] Tuplet span support for cross-measure cases (`<tupletSpan>`).
+  - MEI parity deep-check findings (2026-02-27):
+    - [x] Fix note-drop on complex real fixture (`paganini`) in `MusicXML -> MEI -> MusicXML`:
+      - currently observed pitch+timing misses: m138 (`D7`), m140 (`C7`), m153 (`C#4`, short value).
+      - likely related to overfull/clamp or dense-layer event handling in `mei-io` import path.
+    - [x] Normalize accidental-zero representation policy (`alter=0` vs omitted alter) to reduce non-semantic diff noise.
+  - [ ] MEI reliability reset (assume current implementation is not trustworthy until proven):
+    - [ ] Phase 0 (safety gate): prohibit silent data loss and add strict-mode failure on overfull/clamped import.
+    - [ ] Phase 1 (parity baseline): establish external-MEI fixture set and pitch/octave/onset/duration parity checks.
+      - [x] Import `accid.ges` / `accid-ges` as sounding alter fallback when visual `accid` is omitted (keep display accidental unchanged).
+    - [ ] Phase 2 (spec elements): implement core control events and rhythmic containers in native MEI mapping.
+    - [ ] Phase 3 (cross-hierarchy timing): implement `tstamp`/`startid`/`endid`/`plist` resolution and cross-measure spans.
+    - [ ] Phase 4 (compat policy): define v5 compatibility contract, downgrade rules, and CI acceptance thresholds.
+    - [ ] Replace silent note-drop behavior (`OVERFULL_CLAMPED`) with strict mode + explicit failure option; no data-loss by default.
+      - [x] Added `failOnOverfullDrop` option to throw on actual event drop (`convertMeiToMusicXml`).
+    - [ ] Add external-MEI ingestion tests (non-mikuscore-generated MEI samples) for pitch/octave/onset/duration parity.
+      - [x] Minimal external-style MEI unit case added (dur/dots/chord without `mks:*`) for pitch+duration baseline.
+      - [x] Official MEI v5 sample source URLs recorded in fixture docs:
+        - `tests/fixtures-local/mei-official/beam-grace/SOURCE.md`
+      - [x] `meiCorpus` import selection support (`meiCorpusIndex`) + index/out-of-range tests added.
+    - [ ] Support MEI control events (spec-based) in import/export instead of relying on `mks:*` metadata:
+      - `<slur>`, `<tie>`, `<hairpin>`, `<dynam>`, `<gliss>`, `<pedal>`, `<octave>`, `<repeatMark>`.
+      - [x] Tie control-event accidental carry: when tied stop omits accidental/alter, inherit pitch alter from tie start (same layer timeline).
+    - [ ] Support structural rhythmic containers from MEI CMN:
+      - `<beam>`, `<beamSpan>`, `<tuplet>`, `<tupletSpan>`, `<graceGrp>`.
+      - [x] import 側で `<beam>` / `<tuplet>` / `<graceGrp>` の最小展開を追加し、子ノートを取りこぼさないようにした。
+      - [x] Map MEI `@breaksec` (secondary beam breaks) into MusicXML multi-level beam/hook encoding with regression test (official Listing 142 fixture).
+      - [x] Add `beamSpan` import handling (`startid` / `endid` / `plist`) and regression tests.
+      - [ ] `beamSpan` / `hairpin` / `dynam` / `fermata` / `gliss` の視覚比較は Verovio が未描画/無視するケースがあるため、画像差分のみを合否基準にしない（構造アサート優先）。
+    - [ ] Support timing anchors from `att.controlEvent` (`tstamp`, `startid`, `endid`, `plist`) for cross-hierarchy events.
+      - [x] Minimal `tstamp/tstamp2` import for staff-level `<slur>` / `<tie>` (same layer, numeric beat position).
+      - [x] Minimal `plist` import for single-target control events (e.g. `<trill plist="#id ...">`).
+      - [x] Minimal `plist` import for span-like events start resolution (e.g. `<slur>/<tie>/<gliss>/<slide>/<tupletSpan>` start side).
+    - [ ] Handle score changes beyond first `scoreDef`:
+      - [x] Mid-score `staffDef` overrides (key/clef/transpose) are now applied per target staff in import.
+      - mid-score meter/key/clef/staffDef changes (do not assume single global `scoreDef`).
+    - [ ] Upgrade export target from fixed `meiversion=\"4.0.1\"` to v5-compatible policy and document compatibility contract.
+      - [x] Export default `meiversion` switched to `5.1`, with explicit override option (`MeiExportOptions.meiVersion`) for compatibility.
+    - [ ] Reduce dependency on `annot type=\"musicxml-misc-field\"` for core semantics (keep as auxiliary only).
 - [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
 - [ ] Add VSQX import/export support.
 - [ ] Add lyrics support (import/edit/export with format-specific preserve/degrade rules).
@@ -348,6 +422,10 @@
 - [ ] アーティキュレーション入力対応を追加（最低限スタッカート/テヌート）し、入出力で保持できるようにする。
 - [ ] スタッカート/テヌート以外のアーティキュレーション（例: アクセント、マルカート）対応を拡張し、形式ごとの保持/劣化ルールを定義する。
 - [ ] 強弱記号（`pp`-`ff` と中間段階）の記入機能を追加し、入出力で意味を保持できるようにする。
+- [ ] 数値なし強弱記号（`pp`/`p`/`mp`/`mf`/`f`/`ff` など）を MIDI 化したときの velocity 設計を見直す。
+  - `pp` が聞こえなくなるような過小値を避ける（低強弱の最小音量を再定義）。
+  - floor/ceiling とカーブ（またはテーブル）を定義し、知覚上の音量差が音楽的になるようにする。
+  - 強弱記号→velocity の回帰テストを追加する（可能なら可聴性観点のチェックも含む）。
 - [ ] バンド譜面への対応を追加（一般的な編成テンプレート、パート管理、レイアウト初期値を含む）。
 - [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
 - [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
@@ -486,6 +564,10 @@
   - [x] `\clef` 未指定時のフォールバックに `chooseSingleClefByKeys` を適用する（単一ブロック / `\new Staff`）。
   - [x] 単一ブロック取り込み時に `shouldUseGrandStaffByRange` を使い、大譜表相当（上下staff）への自動分割を適用する。
   - [x] 大譜表相当へ自動分割する場合はヒステリシス方式の staff 割当を適用する。
+- [ ] 独自 clef 判定ロジックの共通化方針を策定し、可能な経路で `core/staffClefPolicy.ts` を利用する。
+  - [ ] 対象整理: どの入出力（ABC/MEI/LilyPond/MIDI など）が独自 clef 判定を持つかを棚卸しする。
+  - [ ] 適用方針: 既存挙動互換を保ちつつ `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` への置換可否を判定する。
+  - [ ] 検証: 既存 fixture + CFFP で回帰を確認し、必要なら format 別に opt-in フラグを用意する。
 - [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
 - [ ] MEI のテスト戦略を単体レベル以上に強化する（unit だけでは不足の可能性）:
   - `MusicXML -> MEI -> MusicXML` の roundtrip golden テストを追加する。
@@ -494,6 +576,82 @@
   - MEI 公式リファレンスに照らして実装適合を確認し、差分は TODO で管理する:
     - https://music-encoding.org/
     - https://music-encoding.org/guidelines/v5/content/
+    - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
+  - MEI v5 仕様差分フォロー候補（仕様上は表現可能だが `mei-io` 実装が未完/部分対応）:
+    - [ ] Slur/Tie を MEI 制御イベント（`<slur>`, `<tie>`）または note属性として往復保持する。
+      - [x] staff内 `<slur startid/endid>` の最小取り込み（同一layer id参照）を実装。
+      - [x] staff内 `<tie startid/endid>` の最小取り込み（同一layer id参照）を実装。
+      - [x] layer内 `<slur>/<tie startid/endid>` の最小取り込み（同一layer id参照）を実装。
+      - [x] note属性 `@tie` / `@slur` の最小取り込み（`tie+tied` / `notations/slur`）を実装。
+      - [x] MusicXML note `tie/slur` から MEI note属性 `@tie` / `@slur` への最小出力を実装。
+    - [ ] 強弱とクレッシェンド/デクレッシェンド（`<dynam>`, `<hairpin>`）を保持する。
+      - [x] `<dynam>` の最小取り込み（MusicXML direction/dynamics・自由テキスト words・`tstamp` offset）を実装。
+      - [x] `<hairpin>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `wedge start/stop`）を実装。
+      - [x] MusicXML `direction(dynamics/wedge)` から MEI `<dynam>` / `<hairpin>` への最小出力（同一小節内 pairing）を実装。
+    - [ ] 装飾・制御イベント（`<trill>`, `<turn>`, `<mordent>`, `<fermata>`）を保持する。
+      - [x] `<trill>` / `<fermata>` の最小取り込み（control event -> note notations）を実装。
+      - [x] `<turn>` / `<mordent>` の最小取り込み（control event -> ornaments）を実装。
+      - [x] MusicXML note の ornament/fermata から MEI 制御イベント（`<trill>`, `<turn>`, `<mordent>`, `<fermata>`）への最小出力を実装。
+    - [ ] グリッサンド/スライド（`<gliss>`）を保持する。
+      - [x] `<gliss>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/glissando` start/stop）を実装。
+      - [x] `<slide>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/slide` start/stop）を実装。
+      - [x] MusicXML note `notations(glissando/slide)` から MEI `<gliss>` / `<slide>` への最小出力（同一小節内 pairing）を実装。
+    - [ ] ペダル/オクターブ記号（`<pedal>`, `<octave>`）を保持する。
+      - [x] `<pedal>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `direction/pedal` start/stop）を実装。
+      - [x] `<octave>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `direction/octave-shift`）を実装。
+      - [x] MusicXML `direction(pedal/octave-shift)` から MEI `<pedal>` / `<octave>` への最小出力（同一小節内 pairing）を実装。
+    - [ ] ブレス/カエスーラ（`<breath>`, `<caesura>`）を保持する。
+      - [x] `<breath>` / `<caesura>` の最小取り込み（control event -> articulations）を実装。
+      - [x] MusicXML note の `breath-mark` / `caesura` から MEI `<breath>` / `<caesura>` への最小出力を実装。
+    - [ ] 反復・ジャンプ記号（`<repeatMark>`、segno/coda/fine 対応）を保持する。
+      - [x] `<repeatMark>` の最小取り込み（segno/coda/fine と基本 jump words を MusicXML direction へ）を実装。
+      - [x] MusicXML segno/coda/fine（direction 記号/words）から MEI `<repeatMark>` への最小出力を実装。
+    - [ ] コードネーム（`<harm>`）とテンションalterを保持する。
+      - [x] `<harm>` の最小取り込み（chord text から MusicXML `harmony` の root/bass/kind/degree を推定）を実装。
+    - [ ] 小節跨ぎ連符向け `tupletSpan`（`<tupletSpan>`）を扱う。
+      - [x] `<tupletSpan>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/tuplet` start/stop）を実装。
+  - MEI parity 詳細確認メモ（2026-02-27）:
+    - [x] 実運用fixture（`paganini`）で `MusicXML -> MEI -> MusicXML` 時に音符欠落を修正する:
+      - 観測済みの pitch+timing 欠落: m138（`D7`）、m140（`C7`）、m153（`C#4` 短音価）。
+      - `mei-io` import 側の overfull/clamp または dense-layer 処理が原因候補。
+    - [x] `alter=0` と `alter省略` の表現差を正規化し、非意味差分ノイズを低減する。
+  - [ ] MEI 実装の信頼性リセット（現状は「信用しない前提」で監査）:
+    - [ ] フェーズ0（安全策）: 黙殺欠落を禁止し、overfull/clamp は strict で明示失敗にする。
+    - [ ] フェーズ1（parity基線）: 外部MEI fixture 群を整備し、音高/オクターブ/発音タイミングの同値検証を常設する。
+      - [x] `accid.ges` / `accid-ges` を visual `accid` 省略時の音高alterフォールバックとして取り込み（表示accidentalは据え置き）。
+      - [x] `key.sig` の暗黙臨時記号（accid省略時）を import pitch alter に反映する最小対応と unit 追加。
+      - [x] `staffDef@key.sig` を `scoreDef@key.sig` より優先して取り込み、調号表示/音高反映に使う修正と unit 追加。
+      - [x] staff が初小節不在でも「そのstaffの最初に出現する小節」で初期 `<attributes>`（divisions/key/time/clef）を出力する修正と unit 追加。
+    - [ ] フェーズ2（仕様要素）: MEI 標準の制御イベント/リズム構造要素をネイティブ対応する。
+    - [ ] フェーズ3（階層横断時刻）: `tstamp`/`startid`/`endid`/`plist` の解決と小節跨ぎspanを実装する。
+    - [ ] フェーズ4（互換方針）: v5互換契約・劣化ルール・CI受け入れ閾値を定義する。
+    - [ ] `OVERFULL_CLAMPED` による黙殺欠落をやめ、strictモードでは明示エラー化する（デフォルトでデータ欠落させない）。
+      - [x] `convertMeiToMusicXml` に `failOnOverfullDrop` を追加し、実ドロップ時は例外化可能にした。
+    - [ ] mikuscore生成物ではない外部MEIを入力にした parity テストを追加し、音高/オクターブ/発音タイミングを検証する。
+      - [x] `mks:*` なしの外部MEI最小ケース（dur/dots/chord）を unit に追加し、音高+音価基線を検証。
+      - [x] `meiCorpus` の読み取り対象指定（`meiCorpusIndex`）と範囲外エラーを unit で追加。
+    - [ ] `mks:*` メタ依存ではなく、MEI仕様の制御イベントを import/export で扱う:
+      - `<slur>`, `<tie>`, `<hairpin>`, `<dynam>`, `<gliss>`, `<pedal>`, `<octave>`, `<repeatMark>`。
+      - [x] export 側で MusicXML `notations(tie/slur)` から MEI 制御イベント `<tie>` / `<slur>`（`tstamp/tstamp2`）の最小出力を追加。
+      - [x] tie 制御イベントで stop 側に accid/alter が無い場合、start 側の alter を引き継ぐ最小対応を追加（同一layer時系列）。
+    - [ ] MEI CMN のリズム構造コンテナを扱う:
+      - `<beam>`, `<beamSpan>`, `<tuplet>`, `<tupletSpan>`, `<graceGrp>`。
+      - [x] import 側で `<mRest>` / `<mSpace>` / `<space>` を timing-preserving rest として解釈する最小対応と unit 追加。
+      - [x] export 側で全小節休符（MusicXML）を `<mRest>` として出力する最小対応と unit 追加。
+      - [x] export 側で non-printing rest（`print-object="no"`）を `<space>` / `<mSpace>` に対応させる最小対応と unit 追加。
+      - [x] `<mRest>/<mSpace>` の `dur/dots` を拍子長から推定して、import後の `type/dot` と `duration` の整合を改善。
+      - [x] export 側で連続 grace note を `<graceGrp>` にグルーピングする回帰テストを追加。
+    - [ ] `att.controlEvent` 系の時点指定（`tstamp`, `startid`, `endid`, `plist`）で階層横断イベントを正しく解釈する。
+      - [x] 数値 `tstamp/tstamp2` の最小取り込み（staff内 `<slur>` / `<tie>`、同一layer）を追加。
+      - [x] `plist` の最小取り込み（単一点制御イベント、例: `<trill plist="#id ...">`）を追加。
+      - [x] `plist` の最小取り込み（span系の開始点解決、例: `<slur>/<tie>/<gliss>/<slide>/<tupletSpan>`）を追加。
+      - [x] 同一staff内で layer をまたぐ `startid/endid` 参照を ID→tick 共有で解決する最小対応（hairpin 回帰テスト追加）。
+    - [ ] 先頭 `scoreDef` 固定前提をやめ、中間の拍子/調号/clef/staffDef変更を扱う。
+      - [x] 中間 `staffDef` による staff別 key/clef/transpose 上書きを import で反映。
+      - [x] import 側で中間 `scoreDef` の拍子・調号・clef 変更を反映（measure属性へ出力）する最小対応とunit追加。
+    - [ ] 出力 `meiversion=\"4.0.1\"` 固定を見直し、v5互換方針と互換契約を明文化する。
+      - [x] 出力の既定 `meiversion` を `5.1` に変更し、互換目的で明示上書き（`MeiExportOptions.meiVersion`）を追加。
+    - [ ] `annot type=\"musicxml-misc-field\"` への意味情報退避を補助用途に限定し、コア意味は標準MEI要素で保持する。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
 - [ ] VSQX 形式の入出力対応を追加。
 - [ ] 歌詞（lyrics）の対応を追加（取り込み/編集/出力と、形式ごとの保持/劣化ルール定義を含む）。
