@@ -331,6 +331,52 @@ body {
   flex-wrap: wrap;
 }
 
+.ms-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(17, 13, 27, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.ms-loading-dialog {
+  min-width: 13rem;
+  border-radius: 16px;
+  border: 1px solid #ded4ef;
+  background: #ffffff;
+  box-shadow: 0 18px 36px rgba(24, 18, 36, 0.24);
+  padding: 1rem 1.2rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+}
+
+.ms-loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 3px solid #d8caee;
+  border-top-color: #6200ee;
+  animation: ms-loading-spin 0.95s linear infinite;
+}
+
+.ms-loading-text {
+  margin: 0;
+  color: #383247;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+@keyframes ms-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .ms-file-select-button {
   background: #6200ee;
   color: #ffffff;
@@ -351,6 +397,10 @@ body {
 
 .ms-actions .md-button {
   width: auto;
+}
+
+#zipEntrySelectBlock {
+  margin-top: 0.5rem;
 }
 
 .ms-preview-actions {

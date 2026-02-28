@@ -5,7 +5,12 @@ import {
   createMusicXmlDownloadPayload,
   createVsqxDownloadPayload,
 } from "../../src/ts/download-flow";
-import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../../src/ts/mxl-io";
+import {
+  extractMusicXmlTextFromMxl,
+  extractTextFromZipByExtensions,
+  extractZipEntryBytesByPath,
+  listZipRootEntryPathsByExtensions,
+} from "../../src/ts/mxl-io";
 
 const readBlobAsArrayBuffer = async (blob: Blob): Promise<ArrayBuffer> => {
   const reader = new FileReader();
@@ -88,5 +93,32 @@ describe("download-flow compressed export", () => {
     const text = await readBlobAsText(payload.blob);
     expect(text).toContain("\n  <vVoiceTable>");
     expect(text).toContain("\n    <vVoice/>");
+  });
+
+  it("lists only ZIP root entries by extension", async () => {
+    const payload = await createMusicXmlDownloadPayload(
+      `<score-partwise version="4.0"><part-list/></score-partwise>`,
+      { compressed: true }
+    );
+    const archiveBuffer = await readBlobAsArrayBuffer(payload.blob);
+    const rootEntries = await listZipRootEntryPathsByExtensions(archiveBuffer, [".xml", ".musicxml"]);
+    expect(rootEntries.some((entry) => entry.toLowerCase() === "meta-inf/container.xml")).toBe(false);
+    expect(rootEntries.length).toBeGreaterThan(0);
+  });
+
+  it("extracts ZIP entry bytes by exact path", async () => {
+    const payload = await createMuseScoreDownloadPayload(
+      `<score-partwise version="4.0"><part-list/></score-partwise>`,
+      () => `<?xml version="1.0" encoding="UTF-8"?><museScore version="4.0"><Score/></museScore>`,
+      { compressed: true }
+    );
+    expect(payload).not.toBeNull();
+    if (!payload) return;
+    const archiveBuffer = await readBlobAsArrayBuffer(payload.blob);
+    const rootEntries = await listZipRootEntryPathsByExtensions(archiveBuffer, [".mscx"]);
+    expect(rootEntries.length).toBe(1);
+    const extracted = await extractZipEntryBytesByPath(archiveBuffer, rootEntries[0]);
+    const extractedText = new TextDecoder().decode(extracted);
+    expect(extractedText).toContain("<museScore");
   });
 });

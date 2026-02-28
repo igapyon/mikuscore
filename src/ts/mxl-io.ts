@@ -159,6 +159,16 @@ const findFirstEntryByExtensions = (entries: ZipEntry[], extensions: string[]): 
   return null;
 };
 
+const listRootEntriesByExtensions = (entries: ZipEntry[], extensions: string[]): ZipEntry[] => {
+  const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+  if (!normalized.length) return [];
+  return entries.filter((entry) => {
+    if (entry.path.includes("/")) return false;
+    const p = entry.path.toLowerCase();
+    return normalized.some((ext) => p.endsWith(ext));
+  });
+};
+
 const parseContainerRootFilePath = (containerXmlText: string): string | null => {
   const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
   if (doc.querySelector("parsererror")) return null;
@@ -212,4 +222,32 @@ export const extractTextFromZipByExtensions = async (
   }
   const bytes = await extractEntryBytes(archiveBytes, entry);
   return new TextDecoder("utf-8").decode(bytes);
+};
+
+export const listZipRootEntryPathsByExtensions = async (
+  archiveBuffer: ArrayBuffer,
+  extensions: string[]
+): Promise<string[]> => {
+  const archiveBytes = new Uint8Array(archiveBuffer);
+  const entries = readZipEntries(archiveBytes);
+  if (!entries.length) {
+    throw new Error("The ZIP archive is empty.");
+  }
+  return listRootEntriesByExtensions(entries, extensions).map((entry) => entry.path);
+};
+
+export const extractZipEntryBytesByPath = async (
+  archiveBuffer: ArrayBuffer,
+  entryPath: string
+): Promise<Uint8Array> => {
+  const archiveBytes = new Uint8Array(archiveBuffer);
+  const entries = readZipEntries(archiveBytes);
+  if (!entries.length) {
+    throw new Error("The ZIP archive is empty.");
+  }
+  const entry = findEntryByPath(entries, entryPath);
+  if (!entry) {
+    throw new Error(`ZIP entry not found: ${entryPath}`);
+  }
+  return extractEntryBytes(archiveBytes, entry);
 };

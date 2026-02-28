@@ -43,6 +43,7 @@ import {
 } from "./download-flow";
 import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
 import { resolveLoadFlow } from "./load-flow";
+import { extractZipEntryBytesByPath, listZipRootEntryPathsByExtensions } from "./mxl-io";
 import {
   createBasicWaveSynthEngine,
   PLAYBACK_TICKS_PER_QUARTER,
@@ -130,6 +131,9 @@ const loadSample2Btn = q<HTMLButtonElement>("#loadSample2Btn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
+const zipEntrySelectBlock = q<HTMLDivElement>("#zipEntrySelectBlock");
+const zipEntrySelect = q<HTMLSelectElement>("#zipEntrySelect");
+const fileLoadOverlay = q<HTMLDivElement>("#fileLoadOverlay");
 const loadBtn = q<HTMLButtonElement>("#loadBtn");
 const noteSelect = qo<HTMLSelectElement>("#noteSelect");
 const statusText = qo<HTMLParagraphElement>("#statusText");
@@ -228,6 +232,7 @@ let selectedDraftVoice = DEFAULT_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue: number | null = null;
+let isFileLoadInProgress = false;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
@@ -238,6 +243,20 @@ const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_MIDI_EXPORT_PROFILE: MidiExportProfile = "musescore_parity";
+const ZIP_IMPORT_EXTENSIONS = [
+  ".musicxml",
+  ".xml",
+  ".mxl",
+  ".abc",
+  ".mid",
+  ".midi",
+  ".vsqx",
+  ".mei",
+  ".ly",
+  ".mscx",
+  ".mscz",
+] as const;
+let selectedZipEntryVirtualFile: File | null = null;
 const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID: MidiImportQuantizeGrid = "1/64";
 const DEFAULT_MIDI_IMPORT_TRIPLET_AWARE = true;
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
@@ -696,6 +715,91 @@ const renderInputMode = (): void => {
     loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
+};
+
+const resetZipEntrySelectionUi = (): void => {
+  zipEntrySelect.innerHTML = "";
+  zipEntrySelectBlock.classList.add("md-hidden");
+  selectedZipEntryVirtualFile = null;
+};
+
+const setFileLoadInProgress = (inProgress: boolean): void => {
+  isFileLoadInProgress = inProgress;
+  fileSelectBtn.disabled = inProgress;
+  loadBtn.disabled = inProgress;
+  zipEntrySelect.disabled = inProgress;
+  fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
+  fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+  fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+};
+
+const waitForNextPaint = async (): Promise<void> => {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+};
+
+const isZipFileName = (name: string): boolean => {
+  return name.toLowerCase().endsWith(".zip");
+};
+
+const loadZipEntryAsVirtualFile = async (archive: File, entryPath: string): Promise<File> => {
+  const entryBytes = await extractZipEntryBytesByPath(await archive.arrayBuffer(), entryPath);
+  const copiedBuffer = new ArrayBuffer(entryBytes.byteLength);
+  new Uint8Array(copiedBuffer).set(entryBytes);
+  return new File([copiedBuffer], entryPath, { type: "application/octet-stream" });
+};
+
+const prepareZipEntrySelection = async (
+  archive: File
+): Promise<{ ok: true; autoLoad: boolean } | { ok: false; message: string }> => {
+  resetZipEntrySelectionUi();
+  let entryPaths: string[] = [];
+  try {
+    entryPaths = await listZipRootEntryPathsByExtensions(await archive.arrayBuffer(), [...ZIP_IMPORT_EXTENSIONS]);
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Failed to parse ZIP: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  if (!entryPaths.length) {
+    return {
+      ok: false,
+      message:
+        "No supported root files were found in ZIP. Use root-level .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
+    };
+  }
+  zipEntrySelectBlock.classList.remove("md-hidden");
+  if (entryPaths.length === 1) {
+    const onlyOption = document.createElement("option");
+    onlyOption.value = entryPaths[0];
+    onlyOption.textContent = entryPaths[0];
+    zipEntrySelect.appendChild(onlyOption);
+    try {
+      selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPaths[0]);
+      return { ok: true, autoLoad: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a ZIP root entry";
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  zipEntrySelect.appendChild(placeholder);
+  for (const path of entryPaths) {
+    const option = document.createElement("option");
+    option.value = path;
+    option.textContent = path;
+    zipEntrySelect.appendChild(option);
+  }
+  selectedZipEntryVirtualFile = null;
+  return { ok: true, autoLoad: false };
 };
 
 const normalizeNewPartCount = (): number => {
@@ -2084,81 +2188,121 @@ const loadFromText = (xml: string): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
-  const selectedSourceType = getSelectedSourceType();
-  const keepMetadata = keepMetadataInMusicXml.checked;
-  const result = await resolveLoadFlow({
-    isNewType: inputEntryNew.checked,
-    sourceType: selectedSourceType,
-    isFileMode: inputEntryFile.checked,
-    selectedFile: fileInput.files?.[0] ?? null,
-    xmlSourceText: xmlInput.value,
-    museScoreSourceText: museScoreInput.value,
-    vsqxSourceText: vsqxInput.value,
-    abcSourceText: abcInput.value,
-    meiSourceText: meiInput.value,
-    lilyPondSourceText: lilyPondInput.value,
-    createNewMusicXml,
-    formatImportedMusicXml: normalizeImportedMusicXmlText,
-    convertAbcToMusicXml: (abcSource) =>
-      convertAbcToMusicXml(abcSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-        overfullCompatibilityMode: true,
-      }),
-    convertMeiToMusicXml: (meiSource) =>
-      convertMeiToMusicXml(meiSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertLilyPondToMusicXml: (lilySource) =>
-      convertLilyPondToMusicXml(lilySource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertMuseScoreToMusicXml: (musescoreSource) =>
-      convertMuseScoreToMusicXml(musescoreSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertVsqxToMusicXml: (vsqxSource) =>
-      convertVsqxToMusicXml(vsqxSource, {
-        defaultLyric: DEFAULT_VSQX_LYRIC,
-      }),
-    convertMidiToMusicXml: (midiBytes) =>
-      convertMidiToMusicXml(midiBytes, {
-        quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
-        tripletAwareQuantize: midiImportTripletAware.checked,
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-  });
+  if (isFileLoadInProgress) return;
+  const isFileMode = inputEntryFile.checked;
+  if (isFileMode) {
+    setFileLoadInProgress(true);
+    // Ensure progress UI is painted before heavy parsing/conversion starts.
+    await waitForNextPaint();
+  }
+  try {
+    const selectedSourceType = getSelectedSourceType();
+    const keepMetadata = keepMetadataInMusicXml.checked;
+    const selectedRawFile = fileInput.files?.[0] ?? null;
+    let selectedFile = selectedZipEntryVirtualFile ?? selectedRawFile;
 
-  if (!result.ok) {
-    state.importWarningSummary = "";
-    state.lastDispatchResult = {
-      ok: false,
-      dirtyChanged: false,
-      changedNodeIds: [],
-      affectedMeasureNumbers: [],
-      diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
-      warnings: [],
-    };
-    renderAll();
-    return;
-  }
+    if (
+      inputEntryFile.checked &&
+      selectedRawFile &&
+      isZipFileName(selectedRawFile.name) &&
+      !selectedZipEntryVirtualFile
+    ) {
+      const prepared = await prepareZipEntrySelection(selectedRawFile);
+      if (!prepared.ok) {
+        state.importWarningSummary = "";
+        state.lastDispatchResult = {
+          ok: false,
+          dirtyChanged: false,
+          changedNodeIds: [],
+          affectedMeasureNumbers: [],
+          diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: prepared.message }],
+          warnings: [],
+        };
+        renderAll();
+        return;
+      }
+      if (!prepared.autoLoad) {
+        return;
+      }
+      selectedFile = selectedZipEntryVirtualFile ?? selectedRawFile;
+    }
 
-  if (result.nextAbcInputText !== undefined) {
-    abcInput.value = result.nextAbcInputText;
+    const result = await resolveLoadFlow({
+      isNewType: inputEntryNew.checked,
+      sourceType: selectedSourceType,
+      isFileMode: inputEntryFile.checked,
+      selectedFile,
+      xmlSourceText: xmlInput.value,
+      museScoreSourceText: museScoreInput.value,
+      vsqxSourceText: vsqxInput.value,
+      abcSourceText: abcInput.value,
+      meiSourceText: meiInput.value,
+      lilyPondSourceText: lilyPondInput.value,
+      createNewMusicXml,
+      formatImportedMusicXml: normalizeImportedMusicXmlText,
+      convertAbcToMusicXml: (abcSource) =>
+        convertAbcToMusicXml(abcSource, {
+          sourceMetadata: keepMetadata,
+          debugMetadata: keepMetadata,
+          overfullCompatibilityMode: true,
+        }),
+      convertMeiToMusicXml: (meiSource) =>
+        convertMeiToMusicXml(meiSource, {
+          sourceMetadata: keepMetadata,
+          debugMetadata: keepMetadata,
+        }),
+      convertLilyPondToMusicXml: (lilySource) =>
+        convertLilyPondToMusicXml(lilySource, {
+          sourceMetadata: keepMetadata,
+          debugMetadata: keepMetadata,
+        }),
+      convertMuseScoreToMusicXml: (musescoreSource) =>
+        convertMuseScoreToMusicXml(musescoreSource, {
+          sourceMetadata: keepMetadata,
+          debugMetadata: keepMetadata,
+        }),
+      convertVsqxToMusicXml: (vsqxSource) =>
+        convertVsqxToMusicXml(vsqxSource, {
+          defaultLyric: DEFAULT_VSQX_LYRIC,
+        }),
+      convertMidiToMusicXml: (midiBytes) =>
+        convertMidiToMusicXml(midiBytes, {
+          quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
+          tripletAwareQuantize: midiImportTripletAware.checked,
+          sourceMetadata: keepMetadata,
+          debugMetadata: keepMetadata,
+        }),
+    });
+
+    if (!result.ok) {
+      state.importWarningSummary = "";
+      state.lastDispatchResult = {
+        ok: false,
+        dirtyChanged: false,
+        changedNodeIds: [],
+        affectedMeasureNumbers: [],
+        diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
+        warnings: [],
+      };
+      renderAll();
+      return;
+    }
+
+    if (result.nextAbcInputText !== undefined) {
+      abcInput.value = result.nextAbcInputText;
+    }
+    if (result.nextXmlInputText !== undefined) {
+      xmlInput.value = result.nextXmlInputText;
+    }
+    state.importWarningSummary =
+      selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
+    // Persist immediately on explicit load actions (Load / Load sample).
+    writeLocalDraft(result.xmlToLoad);
+    loadFromText(result.xmlToLoad);
+    activateTopTab("score");
+  } finally {
+    if (isFileMode) setFileLoadInProgress(false);
   }
-  if (result.nextXmlInputText !== undefined) {
-    xmlInput.value = result.nextXmlInputText;
-  }
-  state.importWarningSummary =
-    selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
-  // Persist immediately on explicit load actions (Load / Load sample).
-  writeLocalDraft(result.xmlToLoad);
-  loadFromText(result.xmlToLoad);
-  activateTopTab("score");
 };
 
 const onDiscardLocalDraft = (): void => {
@@ -2925,9 +3069,24 @@ measureSelectGuideBtn.addEventListener("click", () => {
   activateTopTab("score");
 });
 
-inputEntryFile.addEventListener("change", renderInputMode);
-inputEntrySource.addEventListener("change", renderInputMode);
-inputEntryNew.addEventListener("change", renderInputMode);
+inputEntryFile.addEventListener("change", () => {
+  if (!inputEntryFile.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
+inputEntrySource.addEventListener("change", () => {
+  if (inputEntrySource.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
+inputEntryNew.addEventListener("change", () => {
+  if (inputEntryNew.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
 sourceTypeXml.addEventListener("change", renderInputMode);
 sourceTypeMuseScore.addEventListener("change", renderInputMode);
 sourceTypeVsqx.addEventListener("change", renderInputMode);
@@ -2939,20 +3098,53 @@ newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
 fileSelectBtn.addEventListener("click", () => {
   // Clear selection so choosing the same file again still fires `change`.
+  resetZipEntrySelectionUi();
   fileInput.value = "";
   fileInput.click();
 });
-fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", async () => {
   const f = fileInput.files?.[0];
   fileNameText.textContent = f ? f.name : "No file selected";
   fileNameText.classList.toggle("md-hidden", !f);
-  if (!f) return;
+  if (!f) {
+    resetZipEntrySelectionUi();
+    return;
+  }
   inputEntryFile.checked = true;
   inputEntrySource.checked = false;
   inputEntryNew.checked = false;
+  if (!isZipFileName(f.name)) {
+    resetZipEntrySelectionUi();
+  }
   renderInputMode();
   if (inputEntryNew.checked || !inputEntryFile.checked) return;
-  void onLoadClick();
+  await onLoadClick();
+});
+zipEntrySelect.addEventListener("change", async () => {
+  const archive = fileInput.files?.[0];
+  const entryPath = zipEntrySelect.value;
+  if (!archive || !entryPath || !isZipFileName(archive.name)) return;
+  try {
+    selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPath);
+  } catch (error) {
+    state.importWarningSummary = "";
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [
+        {
+          code: "MVP_INVALID_COMMAND_PAYLOAD",
+          message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      warnings: [],
+    };
+    renderAll();
+    return;
+  }
+  await onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
   void onLoadClick();

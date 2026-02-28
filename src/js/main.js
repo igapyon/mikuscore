@@ -15,6 +15,7 @@ const musicxml_io_1 = require("./musicxml-io");
 const download_flow_1 = require("./download-flow");
 const midi_musescore_io_1 = require("./midi-musescore-io");
 const load_flow_1 = require("./load-flow");
+const mxl_io_1 = require("./mxl-io");
 const playback_flow_1 = require("./playback-flow");
 const preview_flow_1 = require("./preview-flow");
 const sampleXml_1 = require("./sampleXml");
@@ -68,6 +69,9 @@ const loadSample2Btn = q("#loadSample2Btn");
 const fileSelectBtn = q("#fileSelectBtn");
 const fileInput = q("#fileInput");
 const fileNameText = q("#fileNameText");
+const zipEntrySelectBlock = q("#zipEntrySelectBlock");
+const zipEntrySelect = q("#zipEntrySelect");
+const fileLoadOverlay = q("#fileLoadOverlay");
 const loadBtn = q("#loadBtn");
 const noteSelect = qo("#noteSelect");
 const statusText = qo("#statusText");
@@ -164,6 +168,7 @@ let selectedDraftVoice = DEFAULT_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue = null;
+let isFileLoadInProgress = false;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
@@ -174,6 +179,20 @@ const DEFAULT_PLAYBACK_WAVEFORM = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_MIDI_EXPORT_PROFILE = "musescore_parity";
+const ZIP_IMPORT_EXTENSIONS = [
+    ".musicxml",
+    ".xml",
+    ".mxl",
+    ".abc",
+    ".mid",
+    ".midi",
+    ".vsqx",
+    ".mei",
+    ".ly",
+    ".mscx",
+    ".mscz",
+];
+let selectedZipEntryVirtualFile = null;
 const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID = "1/64";
 const DEFAULT_MIDI_IMPORT_TRIPLET_AWARE = true;
 const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
@@ -595,6 +614,84 @@ const renderInputMode = () => {
     if (loadLabel) {
         loadLabel.textContent = isNewEntry ? "Create" : "Load";
     }
+};
+const resetZipEntrySelectionUi = () => {
+    zipEntrySelect.innerHTML = "";
+    zipEntrySelectBlock.classList.add("md-hidden");
+    selectedZipEntryVirtualFile = null;
+};
+const setFileLoadInProgress = (inProgress) => {
+    isFileLoadInProgress = inProgress;
+    fileSelectBtn.disabled = inProgress;
+    loadBtn.disabled = inProgress;
+    zipEntrySelect.disabled = inProgress;
+    fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
+    fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+    fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+};
+const waitForNextPaint = async () => {
+    await new Promise((resolve) => {
+        requestAnimationFrame(() => resolve());
+    });
+};
+const isZipFileName = (name) => {
+    return name.toLowerCase().endsWith(".zip");
+};
+const loadZipEntryAsVirtualFile = async (archive, entryPath) => {
+    const entryBytes = await (0, mxl_io_1.extractZipEntryBytesByPath)(await archive.arrayBuffer(), entryPath);
+    const copiedBuffer = new ArrayBuffer(entryBytes.byteLength);
+    new Uint8Array(copiedBuffer).set(entryBytes);
+    return new File([copiedBuffer], entryPath, { type: "application/octet-stream" });
+};
+const prepareZipEntrySelection = async (archive) => {
+    resetZipEntrySelectionUi();
+    let entryPaths = [];
+    try {
+        entryPaths = await (0, mxl_io_1.listZipRootEntryPathsByExtensions)(await archive.arrayBuffer(), [...ZIP_IMPORT_EXTENSIONS]);
+    }
+    catch (error) {
+        return {
+            ok: false,
+            message: `Failed to parse ZIP: ${error instanceof Error ? error.message : String(error)}`,
+        };
+    }
+    if (!entryPaths.length) {
+        return {
+            ok: false,
+            message: "No supported root files were found in ZIP. Use root-level .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
+        };
+    }
+    zipEntrySelectBlock.classList.remove("md-hidden");
+    if (entryPaths.length === 1) {
+        const onlyOption = document.createElement("option");
+        onlyOption.value = entryPaths[0];
+        onlyOption.textContent = entryPaths[0];
+        zipEntrySelect.appendChild(onlyOption);
+        try {
+            selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPaths[0]);
+            return { ok: true, autoLoad: true };
+        }
+        catch (error) {
+            return {
+                ok: false,
+                message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+            };
+        }
+    }
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a ZIP root entry";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    zipEntrySelect.appendChild(placeholder);
+    for (const path of entryPaths) {
+        const option = document.createElement("option");
+        option.value = path;
+        option.textContent = path;
+        zipEntrySelect.appendChild(option);
+    }
+    selectedZipEntryVirtualFile = null;
+    return { ok: true, autoLoad: false };
 };
 const normalizeNewPartCount = () => {
     const raw = Number(newPartCountInput.value);
@@ -1943,73 +2040,112 @@ const loadFromText = (xml) => {
 };
 const onLoadClick = async () => {
     var _a, _b;
-    const selectedSourceType = getSelectedSourceType();
-    const keepMetadata = keepMetadataInMusicXml.checked;
-    const result = await (0, load_flow_1.resolveLoadFlow)({
-        isNewType: inputEntryNew.checked,
-        sourceType: selectedSourceType,
-        isFileMode: inputEntryFile.checked,
-        selectedFile: (_b = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : null,
-        xmlSourceText: xmlInput.value,
-        museScoreSourceText: museScoreInput.value,
-        vsqxSourceText: vsqxInput.value,
-        abcSourceText: abcInput.value,
-        meiSourceText: meiInput.value,
-        lilyPondSourceText: lilyPondInput.value,
-        createNewMusicXml,
-        formatImportedMusicXml: musicxml_io_1.normalizeImportedMusicXmlText,
-        convertAbcToMusicXml: (abcSource) => (0, abc_io_1.convertAbcToMusicXml)(abcSource, {
-            sourceMetadata: keepMetadata,
-            debugMetadata: keepMetadata,
-            overfullCompatibilityMode: true,
-        }),
-        convertMeiToMusicXml: (meiSource) => (0, mei_io_1.convertMeiToMusicXml)(meiSource, {
-            sourceMetadata: keepMetadata,
-            debugMetadata: keepMetadata,
-        }),
-        convertLilyPondToMusicXml: (lilySource) => (0, lilypond_io_1.convertLilyPondToMusicXml)(lilySource, {
-            sourceMetadata: keepMetadata,
-            debugMetadata: keepMetadata,
-        }),
-        convertMuseScoreToMusicXml: (musescoreSource) => (0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreSource, {
-            sourceMetadata: keepMetadata,
-            debugMetadata: keepMetadata,
-        }),
-        convertVsqxToMusicXml: (vsqxSource) => (0, vsqx_io_1.convertVsqxToMusicXml)(vsqxSource, {
-            defaultLyric: DEFAULT_VSQX_LYRIC,
-        }),
-        convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
-            quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
-            tripletAwareQuantize: midiImportTripletAware.checked,
-            sourceMetadata: keepMetadata,
-            debugMetadata: keepMetadata,
-        }),
-    });
-    if (!result.ok) {
-        state.importWarningSummary = "";
-        state.lastDispatchResult = {
-            ok: false,
-            dirtyChanged: false,
-            changedNodeIds: [],
-            affectedMeasureNumbers: [],
-            diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
-            warnings: [],
-        };
-        renderAll();
+    if (isFileLoadInProgress)
         return;
+    const isFileMode = inputEntryFile.checked;
+    if (isFileMode) {
+        setFileLoadInProgress(true);
+        // Ensure progress UI is painted before heavy parsing/conversion starts.
+        await waitForNextPaint();
     }
-    if (result.nextAbcInputText !== undefined) {
-        abcInput.value = result.nextAbcInputText;
+    try {
+        const selectedSourceType = getSelectedSourceType();
+        const keepMetadata = keepMetadataInMusicXml.checked;
+        const selectedRawFile = (_b = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : null;
+        let selectedFile = selectedZipEntryVirtualFile !== null && selectedZipEntryVirtualFile !== void 0 ? selectedZipEntryVirtualFile : selectedRawFile;
+        if (inputEntryFile.checked &&
+            selectedRawFile &&
+            isZipFileName(selectedRawFile.name) &&
+            !selectedZipEntryVirtualFile) {
+            const prepared = await prepareZipEntrySelection(selectedRawFile);
+            if (!prepared.ok) {
+                state.importWarningSummary = "";
+                state.lastDispatchResult = {
+                    ok: false,
+                    dirtyChanged: false,
+                    changedNodeIds: [],
+                    affectedMeasureNumbers: [],
+                    diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: prepared.message }],
+                    warnings: [],
+                };
+                renderAll();
+                return;
+            }
+            if (!prepared.autoLoad) {
+                return;
+            }
+            selectedFile = selectedZipEntryVirtualFile !== null && selectedZipEntryVirtualFile !== void 0 ? selectedZipEntryVirtualFile : selectedRawFile;
+        }
+        const result = await (0, load_flow_1.resolveLoadFlow)({
+            isNewType: inputEntryNew.checked,
+            sourceType: selectedSourceType,
+            isFileMode: inputEntryFile.checked,
+            selectedFile,
+            xmlSourceText: xmlInput.value,
+            museScoreSourceText: museScoreInput.value,
+            vsqxSourceText: vsqxInput.value,
+            abcSourceText: abcInput.value,
+            meiSourceText: meiInput.value,
+            lilyPondSourceText: lilyPondInput.value,
+            createNewMusicXml,
+            formatImportedMusicXml: musicxml_io_1.normalizeImportedMusicXmlText,
+            convertAbcToMusicXml: (abcSource) => (0, abc_io_1.convertAbcToMusicXml)(abcSource, {
+                sourceMetadata: keepMetadata,
+                debugMetadata: keepMetadata,
+                overfullCompatibilityMode: true,
+            }),
+            convertMeiToMusicXml: (meiSource) => (0, mei_io_1.convertMeiToMusicXml)(meiSource, {
+                sourceMetadata: keepMetadata,
+                debugMetadata: keepMetadata,
+            }),
+            convertLilyPondToMusicXml: (lilySource) => (0, lilypond_io_1.convertLilyPondToMusicXml)(lilySource, {
+                sourceMetadata: keepMetadata,
+                debugMetadata: keepMetadata,
+            }),
+            convertMuseScoreToMusicXml: (musescoreSource) => (0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreSource, {
+                sourceMetadata: keepMetadata,
+                debugMetadata: keepMetadata,
+            }),
+            convertVsqxToMusicXml: (vsqxSource) => (0, vsqx_io_1.convertVsqxToMusicXml)(vsqxSource, {
+                defaultLyric: DEFAULT_VSQX_LYRIC,
+            }),
+            convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
+                quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
+                tripletAwareQuantize: midiImportTripletAware.checked,
+                sourceMetadata: keepMetadata,
+                debugMetadata: keepMetadata,
+            }),
+        });
+        if (!result.ok) {
+            state.importWarningSummary = "";
+            state.lastDispatchResult = {
+                ok: false,
+                dirtyChanged: false,
+                changedNodeIds: [],
+                affectedMeasureNumbers: [],
+                diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
+                warnings: [],
+            };
+            renderAll();
+            return;
+        }
+        if (result.nextAbcInputText !== undefined) {
+            abcInput.value = result.nextAbcInputText;
+        }
+        if (result.nextXmlInputText !== undefined) {
+            xmlInput.value = result.nextXmlInputText;
+        }
+        state.importWarningSummary =
+            selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
+        // Persist immediately on explicit load actions (Load / Load sample).
+        writeLocalDraft(result.xmlToLoad);
+        loadFromText(result.xmlToLoad);
+        activateTopTab("score");
     }
-    if (result.nextXmlInputText !== undefined) {
-        xmlInput.value = result.nextXmlInputText;
+    finally {
+        if (isFileMode)
+            setFileLoadInProgress(false);
     }
-    state.importWarningSummary =
-        selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
-    // Persist immediately on explicit load actions (Load / Load sample).
-    writeLocalDraft(result.xmlToLoad);
-    loadFromText(result.xmlToLoad);
-    activateTopTab("score");
 };
 const onDiscardLocalDraft = () => {
     clearLocalDraft();
@@ -2749,9 +2885,24 @@ if (topTabButtons.length > 0 && topTabPanels.length > 0) {
 measureSelectGuideBtn.addEventListener("click", () => {
     activateTopTab("score");
 });
-inputEntryFile.addEventListener("change", renderInputMode);
-inputEntrySource.addEventListener("change", renderInputMode);
-inputEntryNew.addEventListener("change", renderInputMode);
+inputEntryFile.addEventListener("change", () => {
+    if (!inputEntryFile.checked) {
+        resetZipEntrySelectionUi();
+    }
+    renderInputMode();
+});
+inputEntrySource.addEventListener("change", () => {
+    if (inputEntrySource.checked) {
+        resetZipEntrySelectionUi();
+    }
+    renderInputMode();
+});
+inputEntryNew.addEventListener("change", () => {
+    if (inputEntryNew.checked) {
+        resetZipEntrySelectionUi();
+    }
+    renderInputMode();
+});
 sourceTypeXml.addEventListener("change", renderInputMode);
 sourceTypeMuseScore.addEventListener("change", renderInputMode);
 sourceTypeVsqx.addEventListener("change", renderInputMode);
@@ -2763,23 +2914,58 @@ newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
 fileSelectBtn.addEventListener("click", () => {
     // Clear selection so choosing the same file again still fires `change`.
+    resetZipEntrySelectionUi();
     fileInput.value = "";
     fileInput.click();
 });
-fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", async () => {
     var _a;
     const f = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
     fileNameText.textContent = f ? f.name : "No file selected";
     fileNameText.classList.toggle("md-hidden", !f);
-    if (!f)
+    if (!f) {
+        resetZipEntrySelectionUi();
         return;
+    }
     inputEntryFile.checked = true;
     inputEntrySource.checked = false;
     inputEntryNew.checked = false;
+    if (!isZipFileName(f.name)) {
+        resetZipEntrySelectionUi();
+    }
     renderInputMode();
     if (inputEntryNew.checked || !inputEntryFile.checked)
         return;
-    void onLoadClick();
+    await onLoadClick();
+});
+zipEntrySelect.addEventListener("change", async () => {
+    var _a;
+    const archive = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
+    const entryPath = zipEntrySelect.value;
+    if (!archive || !entryPath || !isZipFileName(archive.name))
+        return;
+    try {
+        selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPath);
+    }
+    catch (error) {
+        state.importWarningSummary = "";
+        state.lastDispatchResult = {
+            ok: false,
+            dirtyChanged: false,
+            changedNodeIds: [],
+            affectedMeasureNumbers: [],
+            diagnostics: [
+                {
+                    code: "MVP_INVALID_COMMAND_PAYLOAD",
+                    message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+                },
+            ],
+            warnings: [],
+        };
+        renderAll();
+        return;
+    }
+    await onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
     void onLoadClick();
@@ -8225,6 +8411,235 @@ exports.startMeasurePlayback = startMeasurePlayback;
 Object.defineProperty(exports, "__esModule", { value: true });
 
   },
+  "src/ts/mxl-io.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractZipEntryBytesByPath = exports.listZipRootEntryPathsByExtensions = exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = void 0;
+const ZIP_EOCD_SIG = 0x06054b50;
+const ZIP_CDFH_SIG = 0x02014b50;
+const ZIP_LFH_SIG = 0x04034b50;
+const readU16 = (bytes, offset) => {
+    return bytes[offset] | (bytes[offset + 1] << 8);
+};
+const readU32 = (bytes, offset) => {
+    return (bytes[offset] |
+        (bytes[offset + 1] << 8) |
+        (bytes[offset + 2] << 16) |
+        (bytes[offset + 3] << 24)) >>> 0;
+};
+const normalizeZipPath = (value) => {
+    return value.replace(/\\/g, "/").replace(/^\.?\//, "");
+};
+const decodeZipFileName = (bytes, utf8Flag) => {
+    if (utf8Flag)
+        return new TextDecoder("utf-8").decode(bytes);
+    let out = "";
+    for (const b of bytes)
+        out += String.fromCharCode(b);
+    return out;
+};
+const findEndOfCentralDirectoryOffset = (bytes) => {
+    // EOCD is within the last 65,557 bytes by ZIP spec.
+    const minOffset = Math.max(0, bytes.length - 65557);
+    for (let offset = bytes.length - 22; offset >= minOffset; offset -= 1) {
+        if (readU32(bytes, offset) === ZIP_EOCD_SIG)
+            return offset;
+    }
+    return -1;
+};
+const readZipEntries = (bytes) => {
+    const eocdOffset = findEndOfCentralDirectoryOffset(bytes);
+    if (eocdOffset < 0)
+        throw new Error("Invalid ZIP: end of central directory was not found.");
+    const centralDirectorySize = readU32(bytes, eocdOffset + 12);
+    const centralDirectoryOffset = readU32(bytes, eocdOffset + 16);
+    const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
+    if (centralDirectoryEnd > bytes.length) {
+        throw new Error("Invalid ZIP: central directory is out of range.");
+    }
+    const entries = [];
+    let offset = centralDirectoryOffset;
+    while (offset < centralDirectoryEnd) {
+        if (readU32(bytes, offset) !== ZIP_CDFH_SIG) {
+            throw new Error("Invalid ZIP: central directory entry is malformed.");
+        }
+        const flags = readU16(bytes, offset + 8);
+        const compressionMethod = readU16(bytes, offset + 10);
+        const compressedSize = readU32(bytes, offset + 20);
+        const uncompressedSize = readU32(bytes, offset + 24);
+        const fileNameLength = readU16(bytes, offset + 28);
+        const extraLength = readU16(bytes, offset + 30);
+        const commentLength = readU16(bytes, offset + 32);
+        const localHeaderOffset = readU32(bytes, offset + 42);
+        const fileNameStart = offset + 46;
+        const fileNameEnd = fileNameStart + fileNameLength;
+        if (fileNameEnd > bytes.length) {
+            throw new Error("Invalid ZIP: entry filename is out of range.");
+        }
+        const fileName = decodeZipFileName(bytes.slice(fileNameStart, fileNameEnd), (flags & 0x0800) !== 0);
+        const normalizedPath = normalizeZipPath(fileName);
+        if (localHeaderOffset + 30 > bytes.length || readU32(bytes, localHeaderOffset) !== ZIP_LFH_SIG) {
+            throw new Error(`Invalid ZIP: local header is missing for "${normalizedPath}".`);
+        }
+        const localNameLength = readU16(bytes, localHeaderOffset + 26);
+        const localExtraLength = readU16(bytes, localHeaderOffset + 28);
+        const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
+        if (dataOffset + compressedSize > bytes.length) {
+            throw new Error(`Invalid ZIP: data is out of range for "${normalizedPath}".`);
+        }
+        if (normalizedPath && !normalizedPath.endsWith("/")) {
+            entries.push({
+                path: normalizedPath,
+                compressionMethod,
+                compressedSize,
+                uncompressedSize,
+                dataOffset,
+            });
+        }
+        offset = fileNameEnd + extraLength + commentLength;
+    }
+    return entries;
+};
+const inflateDeflateRaw = async (compressed) => {
+    const DS = globalThis.DecompressionStream;
+    if (!DS) {
+        throw new Error("DecompressionStream is not available in this browser.");
+    }
+    const copied = new Uint8Array(compressed.length);
+    copied.set(compressed);
+    const stream = new Blob([copied.buffer]).stream().pipeThrough(new DS("deflate-raw"));
+    const arrayBuffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(arrayBuffer);
+};
+const extractEntryBytes = async (archiveBytes, entry) => {
+    const compressed = archiveBytes.slice(entry.dataOffset, entry.dataOffset + entry.compressedSize);
+    if (entry.compressionMethod === 0) {
+        return compressed;
+    }
+    if (entry.compressionMethod === 8) {
+        const inflated = await inflateDeflateRaw(compressed);
+        if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
+            // Keep going: some archives are inconsistent here, but data is often still valid.
+        }
+        return inflated;
+    }
+    throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}.`);
+};
+const findEntryByPath = (entries, path) => {
+    var _a;
+    const normalized = normalizeZipPath(path);
+    return (_a = entries.find((entry) => entry.path === normalized)) !== null && _a !== void 0 ? _a : null;
+};
+const findLikelyMusicXmlEntry = (entries) => {
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (p.endsWith(".musicxml"))
+            return entry;
+    }
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (p.endsWith(".xml") && p !== "meta-inf/container.xml")
+            return entry;
+    }
+    return null;
+};
+const findFirstEntryByExtensions = (entries, extensions) => {
+    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    if (!normalized.length)
+        return null;
+    for (const entry of entries) {
+        const p = entry.path.toLowerCase();
+        if (normalized.some((ext) => p.endsWith(ext)))
+            return entry;
+    }
+    return null;
+};
+const listRootEntriesByExtensions = (entries, extensions) => {
+    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    if (!normalized.length)
+        return [];
+    return entries.filter((entry) => {
+        if (entry.path.includes("/"))
+            return false;
+        const p = entry.path.toLowerCase();
+        return normalized.some((ext) => p.endsWith(ext));
+    });
+};
+const parseContainerRootFilePath = (containerXmlText) => {
+    var _a, _b;
+    const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
+    if (doc.querySelector("parsererror"))
+        return null;
+    const rootFileNode = doc.querySelector("rootfile[full-path]");
+    const fullPath = (_b = (_a = rootFileNode === null || rootFileNode === void 0 ? void 0 : rootFileNode.getAttribute("full-path")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+    return fullPath || null;
+};
+const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (entries.length === 0) {
+        throw new Error("The MXL archive is empty.");
+    }
+    const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
+    if (containerEntry) {
+        const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
+        const containerText = new TextDecoder("utf-8").decode(containerBytes);
+        const rootPath = parseContainerRootFilePath(containerText);
+        if (rootPath) {
+            const rootEntry = findEntryByPath(entries, rootPath);
+            if (!rootEntry) {
+                throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
+            }
+            const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
+            return new TextDecoder("utf-8").decode(xmlBytes);
+        }
+    }
+    const fallbackEntry = findLikelyMusicXmlEntry(entries);
+    if (!fallbackEntry) {
+        throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
+    }
+    const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
+    return new TextDecoder("utf-8").decode(xmlBytes);
+};
+exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
+const extractTextFromZipByExtensions = async (archiveBuffer, extensions) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+    }
+    const entry = findFirstEntryByExtensions(entries, extensions);
+    if (!entry) {
+        throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
+    }
+    const bytes = await extractEntryBytes(archiveBytes, entry);
+    return new TextDecoder("utf-8").decode(bytes);
+};
+exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
+const listZipRootEntryPathsByExtensions = async (archiveBuffer, extensions) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+    }
+    return listRootEntriesByExtensions(entries, extensions).map((entry) => entry.path);
+};
+exports.listZipRootEntryPathsByExtensions = listZipRootEntryPathsByExtensions;
+const extractZipEntryBytesByPath = async (archiveBuffer, entryPath) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+    }
+    const entry = findEntryByPath(entries, entryPath);
+    if (!entry) {
+        throw new Error(`ZIP entry not found: ${entryPath}`);
+    }
+    return extractEntryBytes(archiveBytes, entry);
+};
+exports.extractZipEntryBytesByPath = extractZipEntryBytesByPath;
+
+  },
   "src/ts/load-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -8628,202 +9043,6 @@ const resolveLoadFlow = async (params) => {
     }
 };
 exports.resolveLoadFlow = resolveLoadFlow;
-
-  },
-  "src/ts/mxl-io.js": function (require, module, exports) {
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = void 0;
-const ZIP_EOCD_SIG = 0x06054b50;
-const ZIP_CDFH_SIG = 0x02014b50;
-const ZIP_LFH_SIG = 0x04034b50;
-const readU16 = (bytes, offset) => {
-    return bytes[offset] | (bytes[offset + 1] << 8);
-};
-const readU32 = (bytes, offset) => {
-    return (bytes[offset] |
-        (bytes[offset + 1] << 8) |
-        (bytes[offset + 2] << 16) |
-        (bytes[offset + 3] << 24)) >>> 0;
-};
-const normalizeZipPath = (value) => {
-    return value.replace(/\\/g, "/").replace(/^\.?\//, "");
-};
-const decodeZipFileName = (bytes, utf8Flag) => {
-    if (utf8Flag)
-        return new TextDecoder("utf-8").decode(bytes);
-    let out = "";
-    for (const b of bytes)
-        out += String.fromCharCode(b);
-    return out;
-};
-const findEndOfCentralDirectoryOffset = (bytes) => {
-    // EOCD is within the last 65,557 bytes by ZIP spec.
-    const minOffset = Math.max(0, bytes.length - 65557);
-    for (let offset = bytes.length - 22; offset >= minOffset; offset -= 1) {
-        if (readU32(bytes, offset) === ZIP_EOCD_SIG)
-            return offset;
-    }
-    return -1;
-};
-const readZipEntries = (bytes) => {
-    const eocdOffset = findEndOfCentralDirectoryOffset(bytes);
-    if (eocdOffset < 0)
-        throw new Error("Invalid ZIP: end of central directory was not found.");
-    const centralDirectorySize = readU32(bytes, eocdOffset + 12);
-    const centralDirectoryOffset = readU32(bytes, eocdOffset + 16);
-    const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
-    if (centralDirectoryEnd > bytes.length) {
-        throw new Error("Invalid ZIP: central directory is out of range.");
-    }
-    const entries = [];
-    let offset = centralDirectoryOffset;
-    while (offset < centralDirectoryEnd) {
-        if (readU32(bytes, offset) !== ZIP_CDFH_SIG) {
-            throw new Error("Invalid ZIP: central directory entry is malformed.");
-        }
-        const flags = readU16(bytes, offset + 8);
-        const compressionMethod = readU16(bytes, offset + 10);
-        const compressedSize = readU32(bytes, offset + 20);
-        const uncompressedSize = readU32(bytes, offset + 24);
-        const fileNameLength = readU16(bytes, offset + 28);
-        const extraLength = readU16(bytes, offset + 30);
-        const commentLength = readU16(bytes, offset + 32);
-        const localHeaderOffset = readU32(bytes, offset + 42);
-        const fileNameStart = offset + 46;
-        const fileNameEnd = fileNameStart + fileNameLength;
-        if (fileNameEnd > bytes.length) {
-            throw new Error("Invalid ZIP: entry filename is out of range.");
-        }
-        const fileName = decodeZipFileName(bytes.slice(fileNameStart, fileNameEnd), (flags & 0x0800) !== 0);
-        const normalizedPath = normalizeZipPath(fileName);
-        if (localHeaderOffset + 30 > bytes.length || readU32(bytes, localHeaderOffset) !== ZIP_LFH_SIG) {
-            throw new Error(`Invalid ZIP: local header is missing for "${normalizedPath}".`);
-        }
-        const localNameLength = readU16(bytes, localHeaderOffset + 26);
-        const localExtraLength = readU16(bytes, localHeaderOffset + 28);
-        const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
-        if (dataOffset + compressedSize > bytes.length) {
-            throw new Error(`Invalid ZIP: data is out of range for "${normalizedPath}".`);
-        }
-        if (normalizedPath && !normalizedPath.endsWith("/")) {
-            entries.push({
-                path: normalizedPath,
-                compressionMethod,
-                compressedSize,
-                uncompressedSize,
-                dataOffset,
-            });
-        }
-        offset = fileNameEnd + extraLength + commentLength;
-    }
-    return entries;
-};
-const inflateDeflateRaw = async (compressed) => {
-    const DS = globalThis.DecompressionStream;
-    if (!DS) {
-        throw new Error("DecompressionStream is not available in this browser.");
-    }
-    const copied = new Uint8Array(compressed.length);
-    copied.set(compressed);
-    const stream = new Blob([copied.buffer]).stream().pipeThrough(new DS("deflate-raw"));
-    const arrayBuffer = await new Response(stream).arrayBuffer();
-    return new Uint8Array(arrayBuffer);
-};
-const extractEntryBytes = async (archiveBytes, entry) => {
-    const compressed = archiveBytes.slice(entry.dataOffset, entry.dataOffset + entry.compressedSize);
-    if (entry.compressionMethod === 0) {
-        return compressed;
-    }
-    if (entry.compressionMethod === 8) {
-        const inflated = await inflateDeflateRaw(compressed);
-        if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
-            // Keep going: some archives are inconsistent here, but data is often still valid.
-        }
-        return inflated;
-    }
-    throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}.`);
-};
-const findEntryByPath = (entries, path) => {
-    var _a;
-    const normalized = normalizeZipPath(path);
-    return (_a = entries.find((entry) => entry.path === normalized)) !== null && _a !== void 0 ? _a : null;
-};
-const findLikelyMusicXmlEntry = (entries) => {
-    for (const entry of entries) {
-        const p = entry.path.toLowerCase();
-        if (p.endsWith(".musicxml"))
-            return entry;
-    }
-    for (const entry of entries) {
-        const p = entry.path.toLowerCase();
-        if (p.endsWith(".xml") && p !== "meta-inf/container.xml")
-            return entry;
-    }
-    return null;
-};
-const findFirstEntryByExtensions = (entries, extensions) => {
-    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
-    if (!normalized.length)
-        return null;
-    for (const entry of entries) {
-        const p = entry.path.toLowerCase();
-        if (normalized.some((ext) => p.endsWith(ext)))
-            return entry;
-    }
-    return null;
-};
-const parseContainerRootFilePath = (containerXmlText) => {
-    var _a, _b;
-    const doc = new DOMParser().parseFromString(containerXmlText, "application/xml");
-    if (doc.querySelector("parsererror"))
-        return null;
-    const rootFileNode = doc.querySelector("rootfile[full-path]");
-    const fullPath = (_b = (_a = rootFileNode === null || rootFileNode === void 0 ? void 0 : rootFileNode.getAttribute("full-path")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
-    return fullPath || null;
-};
-const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
-    const archiveBytes = new Uint8Array(archiveBuffer);
-    const entries = readZipEntries(archiveBytes);
-    if (entries.length === 0) {
-        throw new Error("The MXL archive is empty.");
-    }
-    const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
-    if (containerEntry) {
-        const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
-        const containerText = new TextDecoder("utf-8").decode(containerBytes);
-        const rootPath = parseContainerRootFilePath(containerText);
-        if (rootPath) {
-            const rootEntry = findEntryByPath(entries, rootPath);
-            if (!rootEntry) {
-                throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
-            }
-            const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
-            return new TextDecoder("utf-8").decode(xmlBytes);
-        }
-    }
-    const fallbackEntry = findLikelyMusicXmlEntry(entries);
-    if (!fallbackEntry) {
-        throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
-    }
-    const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
-    return new TextDecoder("utf-8").decode(xmlBytes);
-};
-exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
-const extractTextFromZipByExtensions = async (archiveBuffer, extensions) => {
-    const archiveBytes = new Uint8Array(archiveBuffer);
-    const entries = readZipEntries(archiveBytes);
-    if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-    }
-    const entry = findFirstEntryByExtensions(entries, extensions);
-    if (!entry) {
-        throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
-    }
-    const bytes = await extractEntryBytes(archiveBytes, entry);
-    return new TextDecoder("utf-8").decode(bytes);
-};
-exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
 
   },
   "src/ts/midi-musescore-io.js": function (require, module, exports) {

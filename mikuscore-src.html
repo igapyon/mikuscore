@@ -167,7 +167,7 @@
             <div class="ms-file-meta">
               <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
             </div>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,text/plain,text/xml,application/xml,application/mei+xml" hidden />
+            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,.zip,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,application/vnd.recordare.musicxml-container,application/mxl+xml,audio/midi,audio/x-midi,audio/mid,text/vnd.abc,application/abc,text/x-abc,application/mei+xml,text/x-vsqx,application/vsqx,text/x-lilypond,text/x-ly,application/vnd.musescore.mscx,application/vnd.musescore.mscz,application/zip,application/x-zip-compressed,text/plain,text/xml,application/xml" hidden />
           </div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
@@ -219,6 +219,9 @@
             </button>
             <button id="loadSampleBtn1" type="button" class="md-button md-button--tonal">Load sample 1</button>
             <button id="loadSample2Btn" type="button" class="md-button md-button--tonal">Load sample 2</button>
+          </div>
+          <div id="zipEntrySelectBlock" class="ms-block md-hidden">
+            <select id="zipEntrySelect" class="md-select"></select>
           </div>
           <div id="inputUiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
           <div id="localDraftNotice" class="ms-local-draft md-hidden" role="status" aria-live="polite">
@@ -895,6 +898,12 @@
 
     </section>
   </main>
+  <div id="fileLoadOverlay" class="ms-loading-overlay md-hidden" role="status" aria-live="polite" aria-hidden="true">
+    <div class="ms-loading-dialog">
+      <div class="ms-loading-spinner" aria-hidden="true"></div>
+      <p class="ms-loading-text">Loading file...</p>
+    </div>
+  </div>
 
   <script src="src/js/verovio.js"></script>
   <script src="src/js/midi-writer.js"></script>
