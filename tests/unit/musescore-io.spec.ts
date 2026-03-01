@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "../../src/ts/musescore-io";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
@@ -93,6 +94,34 @@ describe("musescore-io", () => {
     expect(doc.querySelector("part-list > score-part[id=\"P1\"]")).not.toBeNull();
     expect(doc.querySelector("part > measure > note > pitch > step")?.textContent?.trim()).toBe("C");
     expect(doc.querySelector("miscellaneous-field[name=\"mks:src:musescore:raw-encoding\"]")).not.toBeNull();
+  });
+
+  it("prefers VBox title/composer when MuseScore meta tags are placeholders", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.60">
+  <Score>
+    <Division>480</Division>
+    <metaTag name="workTitle">無題のスコア</metaTag>
+    <metaTag name="composer">作曲者 / 編曲者</metaTag>
+    <Staff id="1">
+      <VBox>
+        <Text><style>title</style><text>String Quartet No.15 K.421</text></Text>
+        <Text><style>composer</style><text>W.A.Mozart</text></Text>
+      </VBox>
+      <Measure>
+        <voice>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("work > work-title")?.textContent?.trim()).toBe("String Quartet No.15 K.421");
+    expect(doc.querySelector("identification > creator[type=\"composer\"]")?.textContent?.trim()).toBe("W.A.Mozart");
   });
 
   it("imports tempo/time/key changes, repeats, and dynamics", () => {
@@ -302,6 +331,34 @@ describe("musescore-io", () => {
       .map((node) => node.textContent?.trim() ?? "");
     expect(words).toContain("Quasi Presto");
     expect(words).toContain("Tema");
+  });
+
+  it("does not emit words for hidden MuseScore Tempo text (visible=0)", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Tempo>
+            <tempo>1.0</tempo>
+            <followText>1</followText>
+            <visible>0</visible>
+            <text><sym>metNoteQuarterUp</sym><sym>noSym</sym><sym>metAugmentationDot</sym> = 60</text>
+          </Tempo>
+          <Rest><durationType>quarter</durationType></Rest>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > direction > direction-type > words")).toBeNull();
+    expect(doc.querySelector("part > measure > direction > sound")?.getAttribute("tempo")).toBe("60");
   });
 
   it("skips hidden MuseScore Dynamic (visible=0)", () => {
@@ -1408,6 +1465,73 @@ describe("musescore-io", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     expect(doc.querySelector("part > measure > attributes > clef[number=\"2\"] > sign")?.textContent?.trim()).toBe("F");
+  });
+
+  it("imports MuseScore C clef (C3) from measure clef", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Clef><concertClefType>C3</concertClefType></Clef>
+          <Rest><durationType>quarter</durationType></Rest>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
+  });
+
+  it("uses Part staff defaultClef C3 when measure-level clef is absent", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Part>
+      <Staff id="1"><defaultClef>C3</defaultClef></Staff>
+    </Part>
+    <Staff id="1"><Measure><voice><Rest><durationType>quarter</durationType></Rest></voice></Measure></Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
+  });
+
+  it("imports local Mozart SQ fixture clefs from mscz (P1/P2=G2, P3=C3, P4=F4)", async () => {
+    const fixturePath = resolve(process.cwd(), "tests", "fixtures-local", "Mozart_SQ_No15_K421_Mvt4.mscz");
+    const mscx = execSync(`unzip -p "${fixturePath}" "Mozart_SQ_No15_K421_Mvt4.mscx"`, { encoding: "utf-8" });
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const clef = (part: number): string => (
+      doc.querySelector(`part:nth-of-type(${part}) > measure:nth-of-type(1) > attributes > clef > sign`)?.textContent?.trim() ?? ""
+    );
+    const line = (part: number): string => (
+      doc.querySelector(`part:nth-of-type(${part}) > measure:nth-of-type(1) > attributes > clef > line`)?.textContent?.trim() ?? ""
+    );
+
+    expect(clef(1)).toBe("G");
+    expect(line(1)).toBe("2");
+    expect(clef(2)).toBe("G");
+    expect(line(2)).toBe("2");
+    expect(clef(3)).toBe("C");
+    expect(line(3)).toBe("3");
+    expect(clef(4)).toBe("F");
+    expect(line(4)).toBe("4");
   });
 
   it("handles tuplet and measure-rest duration without unknown-duration diag", () => {

@@ -114,6 +114,32 @@ const xmlEscape = (value: string): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
+const readFirstVBoxTextByStyle = (score: Element, styleName: string): string => {
+  const lowerStyle = styleName.trim().toLowerCase();
+  const textNodes = Array.from(score.querySelectorAll(":scope > Staff > VBox > Text"));
+  for (const textNode of textNodes) {
+    const style = (textNode.querySelector(":scope > style")?.textContent ?? "").trim().toLowerCase();
+    if (style !== lowerStyle) continue;
+    const value = (textNode.querySelector(":scope > text")?.textContent ?? "").trim();
+    if (value) return value;
+  }
+  return "";
+};
+
+const isMuseDefaultWorkTitle = (title: string): boolean => {
+  const trimmed = title.trim();
+  if (!trimmed) return true;
+  const normalized = trimmed.toLowerCase();
+  return normalized === "untitled score" || normalized === "untitled" || trimmed === "無題のスコア";
+};
+
+const isMuseDefaultComposer = (composer: string): boolean => {
+  const trimmed = composer.trim();
+  if (!trimmed) return true;
+  const normalized = trimmed.toLowerCase();
+  return normalized === "composer / arranger" || normalized === "unknown" || trimmed === "作曲者 / 編曲者";
+};
+
 const firstNumber = (scope: ParentNode, selector: string): number | null => {
   const text = (scope.querySelector(selector)?.textContent ?? "").trim();
   if (!text) return null;
@@ -421,10 +447,11 @@ const parseExpressionDirectionXml = (expression: Element): string | null => {
 };
 
 const parseTempoDirectionXml = (tempoEl: Element): string | null => {
+  const visible = isMuseElementVisible(tempoEl);
   const qps = firstNumber(tempoEl, ":scope > tempo");
   const bpm = qps !== null && qps > 0 ? Math.max(20, Math.min(300, Math.round(qps * 60))) : null;
   const text = (tempoEl.querySelector(":scope > text")?.textContent ?? "").trim();
-  if (text) {
+  if (visible && text) {
     return buildWordsDirectionXml(text, { placement: "above", soundTempo: bpm });
   }
   if (bpm !== null) {
@@ -475,7 +502,7 @@ const formatMeasureLenFromDivisions = (measureLenDiv: number, divisions: number)
 
 type ParsedMuseScoreStaff = {
   sourceStaffId: string;
-  clefSign: "G" | "F";
+  clefSign: "G" | "F" | "C";
   clefLine: number;
   measures: ParsedMuseScoreMeasure[];
 };
@@ -529,7 +556,29 @@ const buildTransposeXml = (transpose: { diatonic?: number; chromatic?: number } 
   return `<transpose>${diatonic !== null ? `<diatonic>${diatonic}</diatonic>` : ""}${chromatic !== null ? `<chromatic>${chromatic}</chromatic>` : ""}</transpose>`;
 };
 
-const readClefForMuseStaff = (staff: Element): { sign: "G" | "F"; line: number } => {
+const parseMuseClefText = (raw: string): { sign: "G" | "F" | "C"; line: number } | null => {
+  const text = (raw ?? "").trim().toUpperCase();
+  if (!text) return null;
+  if (text.includes("PERC")) return { sign: "G", line: 2 };
+  if (text.includes("TENOR")) return { sign: "C", line: 4 };
+  if (text.includes("ALTO")) return { sign: "C", line: 3 };
+  if (text.includes("BASS")) return { sign: "F", line: 4 };
+  if (text.includes("TREBLE")) return { sign: "G", line: 2 };
+
+  const explicit = text.match(/\b([CFG])\s*([1-5])\b/);
+  if (explicit) {
+    const sign = explicit[1] as "G" | "F" | "C";
+    const line = Number.parseInt(explicit[2], 10);
+    if (Number.isFinite(line) && line >= 1 && line <= 5) return { sign, line };
+  }
+
+  if (text.includes("F")) return { sign: "F", line: 4 };
+  if (text.includes("C")) return { sign: "C", line: 3 };
+  if (text.includes("G")) return { sign: "G", line: 2 };
+  return null;
+};
+
+const readClefForMuseStaff = (staff: Element): { sign: "G" | "F" | "C"; line: number } => {
   const clefTypeText =
     (staff.querySelector(":scope > Measure > voice > Clef > concertClefType")?.textContent ?? "").trim()
     || (staff.querySelector(":scope > Measure > voice > Clef > subtype")?.textContent ?? "").trim()
@@ -537,38 +586,40 @@ const readClefForMuseStaff = (staff: Element): { sign: "G" | "F"; line: number }
     || (staff.querySelector(":scope > Measure > Clef > subtype")?.textContent ?? "").trim()
     || (staff.querySelector(":scope > Clef > concertClefType")?.textContent ?? "").trim()
     || (staff.querySelector(":scope > Clef > subtype")?.textContent ?? "").trim();
-  const lower = clefTypeText.toLowerCase();
-  if (lower.includes("f")) return { sign: "F", line: 4 };
+  const parsed = parseMuseClefText(clefTypeText);
+  if (parsed) return parsed;
   return { sign: "G", line: 2 };
 };
 
-const readStaffClefOverridesFromMusePart = (part: Element): Map<string, { sign: "G" | "F"; line: number }> => {
-  const overrides = new Map<string, { sign: "G" | "F"; line: number }>();
-  for (const staffDef of Array.from(part.querySelectorAll(":scope > Staff[id]"))) {
-    const staffId = (staffDef.getAttribute("id") ?? "").trim();
+const readStaffClefOverridesFromMusePart = (
+  part: Element,
+  fallbackStaffIds: string[] = []
+): Map<string, { sign: "G" | "F" | "C"; line: number }> => {
+  const overrides = new Map<string, { sign: "G" | "F" | "C"; line: number }>();
+  const partStaffDefs = Array.from(part.querySelectorAll(":scope > Staff"));
+  for (let i = 0; i < partStaffDefs.length; i += 1) {
+    const staffDef = partStaffDefs[i];
+    const explicitId = (staffDef.getAttribute("id") ?? "").trim();
+    const staffId = explicitId || (fallbackStaffIds[i] ?? "");
     if (!staffId) continue;
     const defaultClef = (staffDef.querySelector(":scope > defaultClef")?.textContent ?? "").trim().toUpperCase();
-    if (defaultClef.includes("F")) {
-      overrides.set(staffId, { sign: "F", line: 4 });
-      continue;
-    }
-    if (defaultClef.includes("G")) {
-      overrides.set(staffId, { sign: "G", line: 2 });
-      continue;
-    }
+    const parsed = parseMuseClefText(defaultClef);
+    if (!parsed) continue;
+    overrides.set(staffId, parsed);
   }
   for (const clefDef of Array.from(part.querySelectorAll(":scope > Instrument > clef[staff]"))) {
     const staffId = (clefDef.getAttribute("staff") ?? "").trim();
     if (!staffId) continue;
     const clef = (clefDef.textContent ?? "").trim().toUpperCase();
-    if (clef.includes("F")) {
-      overrides.set(staffId, { sign: "F", line: 4 });
-      continue;
-    }
-    if (clef.includes("G")) {
-      overrides.set(staffId, { sign: "G", line: 2 });
-      continue;
-    }
+    const parsed = parseMuseClefText(clef);
+    if (!parsed) continue;
+    overrides.set(staffId, parsed);
+  }
+  const instrumentDefaultClef = (part.querySelector(":scope > Instrument > clef:not([staff])")?.textContent ?? "").trim();
+  const parsedInstrumentDefaultClef = parseMuseClefText(instrumentDefaultClef);
+  if (parsedInstrumentDefaultClef && fallbackStaffIds[0]) {
+    const targetStaffId = fallbackStaffIds[0];
+    if (!overrides.has(targetStaffId)) overrides.set(targetStaffId, parsedInstrumentDefaultClef);
   }
   return overrides;
 };
@@ -801,8 +852,17 @@ export const convertMuseScoreToMusicXml = (
   }
   const divisions = Math.max(1, Math.round(firstNumber(score, ":scope > Division") ?? 480));
   const sourceVersion = (doc.querySelector("museScore")?.getAttribute("version") ?? "").trim();
-  const workTitle =
-    (score.querySelector(':scope > metaTag[name="workTitle"]')?.textContent ?? "").trim() || "Imported MuseScore";
+  const workTitleMeta = (score.querySelector(':scope > metaTag[name="workTitle"]')?.textContent ?? "").trim();
+  const movementTitleMeta = (score.querySelector(':scope > metaTag[name="movementTitle"]')?.textContent ?? "").trim();
+  const titleFromVBox = readFirstVBoxTextByStyle(score, "title");
+  const workTitle = !isMuseDefaultWorkTitle(workTitleMeta)
+    ? workTitleMeta
+    : (titleFromVBox || movementTitleMeta || "Imported MuseScore");
+  const composerMeta = (score.querySelector(':scope > metaTag[name="composer"]')?.textContent ?? "").trim();
+  const composerFromVBox = readFirstVBoxTextByStyle(score, "composer");
+  const composer = !isMuseDefaultComposer(composerMeta)
+    ? composerMeta
+    : (!isMuseDefaultComposer(composerFromVBox) ? composerFromVBox : "");
 
   const globalBeats = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure > TimeSig > sigN") ?? 4));
   const globalBeatType = Math.max(1, Math.round(firstNumber(score, ":scope > Staff > Measure > TimeSig > sigD") ?? 4));
@@ -845,15 +905,34 @@ export const convertMuseScoreToMusicXml = (
     (part) => (part.parentElement?.tagName ?? "").toLowerCase() === "score"
   );
   const groupedStaffIds: Array<{ partName: string; staffIds: string[]; partEl: Element | null }> = [];
+  const orderedStaffIds = Array.from(staffById.keys());
+  let nextFallbackStaffIndex = 0;
   for (let partIndex = 0; partIndex < partNodes.length; partIndex += 1) {
     const part = partNodes[partIndex];
     const partName = readPartNameFromMusePart(part, `P${partIndex + 1}`);
-    const staffIds = Array.from(part.querySelectorAll(":scope > Staff"))
+    const partStaffDefs = Array.from(part.querySelectorAll(":scope > Staff"));
+    const explicitIds = partStaffDefs
       .map((staffEl) => (staffEl.getAttribute("id") ?? "").trim())
       .filter((id) => id.length > 0 && staffById.has(id));
+    const staffIds: string[] = [];
+    for (const id of explicitIds) {
+      if (usedStaffIds.has(id)) continue;
+      staffIds.push(id);
+      usedStaffIds.add(id);
+    }
+    const missingCount = Math.max(0, partStaffDefs.length - staffIds.length);
+    for (let i = 0; i < missingCount; i += 1) {
+      while (nextFallbackStaffIndex < orderedStaffIds.length && usedStaffIds.has(orderedStaffIds[nextFallbackStaffIndex]!)) {
+        nextFallbackStaffIndex += 1;
+      }
+      const nextId = orderedStaffIds[nextFallbackStaffIndex];
+      if (!nextId) break;
+      staffIds.push(nextId);
+      usedStaffIds.add(nextId);
+      nextFallbackStaffIndex += 1;
+    }
     if (!staffIds.length) continue;
     groupedStaffIds.push({ partName, staffIds, partEl: part });
-    for (const id of staffIds) usedStaffIds.add(id);
   }
   for (const [id] of staffById) {
     if (usedStaffIds.has(id)) continue;
@@ -868,8 +947,8 @@ export const convertMuseScoreToMusicXml = (
     const partId = `P${partIndex + 1}`;
     const parsedStaffs: ParsedMuseScoreStaff[] = [];
     const partClefOverrides = group.partEl
-      ? readStaffClefOverridesFromMusePart(group.partEl)
-      : new Map<string, { sign: "G" | "F"; line: number }>();
+      ? readStaffClefOverridesFromMusePart(group.partEl, group.staffIds)
+      : new Map<string, { sign: "G" | "F" | "C"; line: number }>();
 
     for (let localStaffIndex = 0; localStaffIndex < Math.max(1, group.staffIds.length); localStaffIndex += 1) {
       const sourceStaffId = group.staffIds[localStaffIndex] ?? `${localStaffIndex + 1}`;
@@ -1920,7 +1999,10 @@ export const convertMuseScoreToMusicXml = (
     partXml.push(`<part id="${part.partId}">${measuresXml.join("")}</part>`);
   }
 
-  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(workTitle)}</work-title></work><part-list>${partList.join("")}</part-list>${partXml.join("")}</score-partwise>`;
+  const identificationXml = composer
+    ? `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>${xmlEscape(workTitle)}</work-title></work>${identificationXml}<part-list>${partList.join("")}</part-list>${partXml.join("")}</score-partwise>`;
 };
 
 const firstNumberInDoc = (scope: ParentNode, selectors: string[], fallback: number): number => {
