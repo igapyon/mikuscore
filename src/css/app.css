@@ -254,6 +254,35 @@ body {
   color: #5a4b79;
 }
 
+.ms-edit-subtabs {
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.5rem;
+  border-top: 1px solid #e6e1ee;
+  padding-top: 0.6rem;
+}
+
+.ms-edit-subtab-btn {
+  border: 1px solid #d8cfeb;
+  border-radius: 999px;
+  background: #f4f0fb;
+  color: #564d67;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.45rem 0.8rem;
+}
+
+.ms-edit-subtab-btn.is-active {
+  border-color: rgba(98, 0, 238, 0.45);
+  color: #4d2aa5;
+  background: rgba(98, 0, 238, 0.12);
+}
+
+.ms-edit-subtab-panel {
+  min-width: 0;
+}
+
 .ms-step-no {
   display: inline-flex;
   align-items: center;
@@ -859,6 +888,52 @@ body {
 .ms-measure-editor .ms-note-selected * {
   fill: #ff0000 !important;
   stroke: #ff0000 !important;
+}
+
+.ms-measure-xml {
+  margin-top: 0.75rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ms-measure-xml-title {
+  margin: 0;
+  padding: 0.55rem 0.7rem 0.25rem;
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+}
+
+.ms-measure-xml-viewer + .ms-measure-xml-title {
+  padding-top: 0.35rem;
+}
+
+.ms-measure-xml-label {
+  margin: 0 0.7rem 0.35rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ms-measure-xml-viewer {
+  width: calc(100% - 1.4rem);
+  margin: 0 0.7rem 0.7rem;
+  min-height: 180px;
+  max-height: 42vh;
+  resize: vertical;
+  border: 1px solid #c8c5d0;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--md-sys-color-on-surface);
+  background: #ffffff;
+}
+
+.ms-measure-xml-viewer:focus {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 1px;
 }
 
 .ms-debug-score .ms-measure-selected {

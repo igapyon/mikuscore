@@ -339,80 +339,144 @@
               </svg>
               <span>Discard</span>
             </button>
-          </div>
-          <div class="ms-actions">
-            <button id="convertRestBtn" type="button" class="md-button md-button--tonal ms-icon-button">
-              <svg aria-hidden="true" viewBox="0 0 34 24" class="ms-btn-icon ms-btn-icon--wide" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <!-- quarter rest (wide, readable silhouette) -->
-                <path d="M6.5 3.6c4 1.7 5.4 4.2 2.9 7.3-1.2 1.4-1.2 2.7.6 4.1 1.5 1.2 3.6 2 5.2 3.5"></path>
-                <path d="M9.2 7.6c2.2 1.2 3.4 2.8 2 4.6"></path>
-                <path d="M11.8 15.3c1.6.8 2.8 1.5 4 2.6"></path>
-                <!-- convert arrow -->
-                <path d="M16.8 12h5.2"></path>
-                <path d="M20.2 9.5l2.6 2.5-2.6 2.5"></path>
-                <!-- quarter note -->
-                <circle cx="27.3" cy="15.9" r="2.2" fill="currentColor" stroke="none"></circle>
-                <path d="M29.3 15.9V7.1"></path>
-              </svg>
-              <span>Convert Rest to Note</span>
-            </button>
-            <button id="splitNoteBtn" type="button" class="md-button md-button--tonal ms-icon-button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="7.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
-                <path d="M10 15.5V8"></path>
-                <path d="M12 6v12"></path>
-                <circle cx="16.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
-                <path d="M19 15.5V8"></path>
-              </svg>
-              <span>Split Note</span>
-            </button>
-            <button id="deleteBtn" type="button" class="md-button md-button--surface ms-icon-button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 7h16"></path>
-                <path d="M9 7V5h6v2"></path>
-                <rect x="6.5" y="7" width="11" height="13" rx="1.5"></rect>
-                <path d="M10 10v7"></path>
-                <path d="M14 10v7"></path>
-              </svg>
-              <span>Delete Note</span>
-            </button>
             <button id="playMeasureBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="currentColor">
                 <path d="M8 6.5v11l9-5.5z"></path>
               </svg>
               <span>Play</span>
             </button>
+            <button id="downloadMeasureMusicXmlBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3v12"></path>
+                <path d="M8 11l4 4 4-4"></path>
+                <path d="M4 19h16"></path>
+              </svg>
+              <span>MusicXML</span>
+            </button>
+            <button id="downloadMeasureMidiBtn" type="button" class="md-button md-button--tonal ms-icon-button" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 9a6 6 0 0 1 12 0v3a6 6 0 0 1-12 0z"></path>
+                <path d="M8.5 10.2h7"></path>
+                <circle cx="9.2" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="11.1" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12.9" cy="13.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="14.8" cy="12.6" r="0.6" fill="currentColor" stroke="none"></circle>
+                <circle cx="12" cy="11.8" r="0.6" fill="currentColor" stroke="none"></circle>
+              </svg>
+              <span>MIDI</span>
+            </button>
           </div>
+          <div id="editSubTabList" class="ms-edit-subtabs md-hidden" role="tablist" aria-label="Edit detail panel">
+            <button
+              id="editSubTabEditorBtn"
+              type="button"
+              class="ms-edit-subtab-btn is-active"
+              role="tab"
+              aria-controls="editSubTabEditorPanel"
+              aria-selected="true"
+            >
+              Editor
+            </button>
+            <button
+              id="editSubTabXmlBtn"
+              type="button"
+              class="ms-edit-subtab-btn"
+              role="tab"
+              aria-controls="editSubTabXmlPanel"
+              aria-selected="false"
+            >
+              Measure XML
+            </button>
+          </div>
+          <div id="editSubTabEditorPanel" class="ms-edit-subtab-panel md-hidden" role="tabpanel">
+            <div class="ms-actions">
+              <button id="convertRestBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+                <svg aria-hidden="true" viewBox="0 0 34 24" class="ms-btn-icon ms-btn-icon--wide" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <!-- quarter rest (wide, readable silhouette) -->
+                  <path d="M6.5 3.6c4 1.7 5.4 4.2 2.9 7.3-1.2 1.4-1.2 2.7.6 4.1 1.5 1.2 3.6 2 5.2 3.5"></path>
+                  <path d="M9.2 7.6c2.2 1.2 3.4 2.8 2 4.6"></path>
+                  <path d="M11.8 15.3c1.6.8 2.8 1.5 4 2.6"></path>
+                  <!-- convert arrow -->
+                  <path d="M16.8 12h5.2"></path>
+                  <path d="M20.2 9.5l2.6 2.5-2.6 2.5"></path>
+                  <!-- quarter note -->
+                  <circle cx="27.3" cy="15.9" r="2.2" fill="currentColor" stroke="none"></circle>
+                  <path d="M29.3 15.9V7.1"></path>
+                </svg>
+                <span>Convert Rest to Note</span>
+              </button>
+              <button id="splitNoteBtn" type="button" class="md-button md-button--tonal ms-icon-button">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="7.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
+                  <path d="M10 15.5V8"></path>
+                  <path d="M12 6v12"></path>
+                  <circle cx="16.5" cy="15.5" r="2.5" fill="currentColor" stroke="none"></circle>
+                  <path d="M19 15.5V8"></path>
+                </svg>
+                <span>Split Note</span>
+              </button>
+              <button id="deleteBtn" type="button" class="md-button md-button--surface ms-icon-button">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 7h16"></path>
+                  <path d="M9 7V5h6v2"></path>
+                  <rect x="6.5" y="7" width="11" height="13" rx="1.5"></rect>
+                  <path d="M10 10v7"></path>
+                  <path d="M14 10v7"></path>
+                </svg>
+                <span>Delete Note</span>
+              </button>
+            </div>
 
-          <div class="ms-grid">
-            <label class="ms-field">
-              <span class="ms-field-label">Pitch step</span>
-              <div class="ms-step-row">
-                <input id="pitchStep" type="hidden" value="" />
-                <span id="pitchStepValue" class="ms-step-value" aria-live="polite">Rest</span>
-                <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Lower pitch step">↓</button>
-                <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Raise pitch step">↑</button>
-              </div>
-            </label>
-            <label class="ms-field">
-              <span class="ms-field-label">Accidental</span>
-              <div class="ms-alter-row" role="group" aria-label="Accidental">
-                <input id="pitchAlter" type="hidden" value="none" />
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="No accidental">None</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="Double flat">♭♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="Flat">♭</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="Natural">♮</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="Sharp">♯</button>
-                <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="Double sharp">♯♯</button>
-              </div>
-            </label>
-            <input id="pitchOctave" type="hidden" value="4" />
-            <label class="ms-field">
-              <span class="ms-field-label">Duration</span>
-              <select id="durationPreset" class="md-select" aria-label="Duration preset">
-                <option value="">(Select duration)</option>
-              </select>
-            </label>
+            <div class="ms-grid">
+              <label class="ms-field">
+                <span class="ms-field-label">Pitch step</span>
+                <div class="ms-step-row">
+                  <input id="pitchStep" type="hidden" value="" />
+                  <span id="pitchStepValue" class="ms-step-value" aria-live="polite">Rest</span>
+                  <button id="pitchStepDownBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Lower pitch step">↓</button>
+                  <button id="pitchStepUpBtn" type="button" class="md-button md-button--surface ms-step-btn" aria-label="Raise pitch step">↑</button>
+                </div>
+              </label>
+              <label class="ms-field">
+                <span class="ms-field-label">Accidental</span>
+                <div class="ms-alter-row" role="group" aria-label="Accidental">
+                  <input id="pitchAlter" type="hidden" value="none" />
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="none" aria-label="No accidental">None</button>
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-2" aria-label="Double flat">♭♭</button>
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="-1" aria-label="Flat">♭</button>
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="0" aria-label="Natural">♮</button>
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="1" aria-label="Sharp">♯</button>
+                  <button type="button" class="md-button md-button--surface ms-alter-btn" data-alter="2" aria-label="Double sharp">♯♯</button>
+                </div>
+              </label>
+              <input id="pitchOctave" type="hidden" value="4" />
+              <label class="ms-field">
+                <span class="ms-field-label">Duration</span>
+                <select id="durationPreset" class="md-select" aria-label="Duration preset">
+                  <option value="">(Select duration)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div id="editSubTabXmlPanel" class="ms-edit-subtab-panel md-hidden" role="tabpanel">
+            <div id="measureXmlInspector" class="ms-measure-xml">
+              <p class="ms-measure-xml-title">Measure DOM</p>
+              <textarea
+                id="measureXmlMeasureViewer"
+                class="ms-measure-xml-viewer"
+                readonly
+                spellcheck="false"
+                aria-label="Current measure DOM only (read-only)"
+              ></textarea>
+              <p class="ms-measure-xml-title">Self-contained MusicXML DOM</p>
+              <textarea
+                id="measureXmlDocumentViewer"
+                class="ms-measure-xml-viewer"
+                readonly
+                spellcheck="false"
+                aria-label="Current self-contained MusicXML DOM (read-only)"
+              ></textarea>
+            </div>
           </div>
         </section>
 

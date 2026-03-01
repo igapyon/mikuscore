@@ -130,6 +130,14 @@ const measureEmptyState = q("#measureEmptyState");
 const measureSelectGuideBtn = q("#measureSelectGuideBtn");
 const measureEditorWrap = q("#measureEditorWrap");
 const measureEditorArea = q("#measureEditorArea");
+const editSubTabList = q("#editSubTabList");
+const editSubTabEditorBtn = q("#editSubTabEditorBtn");
+const editSubTabXmlBtn = q("#editSubTabXmlBtn");
+const editSubTabEditorPanel = q("#editSubTabEditorPanel");
+const editSubTabXmlPanel = q("#editSubTabXmlPanel");
+const measureXmlInspector = q("#measureXmlInspector");
+const measureXmlMeasureViewer = q("#measureXmlMeasureViewer");
+const measureXmlDocumentViewer = q("#measureXmlDocumentViewer");
 const measureApplyBtn = q("#measureApplyBtn");
 const measureDiscardBtn = q("#measureDiscardBtn");
 const measureNavLeftBtn = q("#measureNavLeftBtn");
@@ -138,6 +146,8 @@ const measureNavUpBtn = q("#measureNavUpBtn");
 const measureNavRightBtn = q("#measureNavRightBtn");
 const appendMeasureBtn = q("#appendMeasureBtn");
 const playMeasureBtn = q("#playMeasureBtn");
+const downloadMeasureMusicXmlBtn = q("#downloadMeasureMusicXmlBtn");
+const downloadMeasureMidiBtn = q("#downloadMeasureMidiBtn");
 const topTabButtons = Array.from(document.querySelectorAll(".ms-top-tab"));
 const topTabPanels = Array.from(document.querySelectorAll(".ms-tab-panel"));
 const core = new ScoreCore_1.ScoreCore();
@@ -164,6 +174,7 @@ let selectedMeasure = null;
 let draftCore = null;
 let draftNoteNodeIds = [];
 let draftSvgIdToNodeId = new Map();
+let activeEditSubTab = "editor";
 let selectedDraftVoice = DEFAULT_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
@@ -1102,6 +1113,9 @@ const renderMeasureEditorState = () => {
         measurePartNameText.classList.add("md-hidden");
         measureEmptyState.classList.remove("md-hidden");
         measureEditorWrap.classList.add("md-hidden");
+        measureXmlMeasureViewer.value = "";
+        measureXmlDocumentViewer.value = "";
+        renderEditSubTabState(false);
         measureApplyBtn.disabled = true;
         measureDiscardBtn.disabled = true;
         return;
@@ -1111,9 +1125,49 @@ const renderMeasureEditorState = () => {
     measurePartNameText.classList.remove("md-hidden");
     measureEmptyState.classList.add("md-hidden");
     measureEditorWrap.classList.remove("md-hidden");
+    renderEditSubTabState(true);
+    const inspectorText = buildMeasureXmlInspectorText();
+    measureXmlMeasureViewer.value = inspectorText.measureOnly;
+    measureXmlDocumentViewer.value = inspectorText.selfContainedDocument;
     const hasDirtyDraft = draftCore.isDirty();
     measureDiscardBtn.disabled = !hasDirtyDraft;
     measureApplyBtn.disabled = !hasDirtyDraft;
+};
+const serializeElementXml = (element) => {
+    return new XMLSerializer().serializeToString(element);
+};
+const buildMeasureXmlInspectorText = () => {
+    var _a, _b;
+    if (!draftCore) {
+        return { measureOnly: "", selfContainedDocument: "" };
+    }
+    const draftXml = (_a = draftCore.debugSerializeCurrentXml()) !== null && _a !== void 0 ? _a : "";
+    const draftDoc = (0, musicxml_io_1.parseMusicXmlDocument)(draftXml);
+    const measureOnly = draftDoc
+        ? (0, musicxml_io_1.prettyPrintMusicXmlText)(serializeElementXml((_b = draftDoc.querySelector("part > measure")) !== null && _b !== void 0 ? _b : draftDoc.documentElement)).trim()
+        : draftXml;
+    const prettyDoc = (0, musicxml_io_1.prettyPrintMusicXmlText)(draftXml).trim();
+    return {
+        measureOnly: measureOnly || draftXml,
+        selfContainedDocument: prettyDoc || draftXml,
+    };
+};
+const activateEditSubTab = (tabName) => {
+    activeEditSubTab = tabName;
+    renderEditSubTabState(Boolean(selectedMeasure && draftCore));
+};
+const renderEditSubTabState = (hasMeasure) => {
+    editSubTabList.classList.remove("md-hidden");
+    editSubTabEditorBtn.disabled = false;
+    editSubTabEditorPanel.classList.toggle("md-hidden", !hasMeasure || activeEditSubTab !== "editor");
+    editSubTabXmlPanel.classList.toggle("md-hidden", activeEditSubTab !== "xml");
+    measureXmlInspector.classList.toggle("md-hidden", activeEditSubTab !== "xml");
+    const editorActive = hasMeasure && activeEditSubTab === "editor";
+    const xmlActive = activeEditSubTab === "xml";
+    editSubTabEditorBtn.classList.toggle("is-active", editorActive);
+    editSubTabXmlBtn.classList.toggle("is-active", xmlActive);
+    editSubTabEditorBtn.setAttribute("aria-selected", editorActive ? "true" : "false");
+    editSubTabXmlBtn.setAttribute("aria-selected", xmlActive ? "true" : "false");
 };
 const highlightSelectedDraftNoteInEditor = () => {
     measureEditorArea
@@ -1266,6 +1320,8 @@ const renderControlState = () => {
     convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
     deleteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
     playMeasureBtn.disabled = !hasDraft || isPlaying;
+    downloadMeasureMusicXmlBtn.disabled = !hasDraft;
+    downloadMeasureMidiBtn.disabled = !hasDraft;
     playBtn.disabled = !state.loaded || isPlaying;
     stopBtn.disabled = !isPlaying;
     scoreEditBtn.disabled = !state.loaded || !selectedMeasure;
@@ -2855,6 +2911,62 @@ const onDownloadSvg = () => {
         failExport("SVG", err instanceof Error ? err.message : "Unknown download error.");
     }
 };
+const onDownloadMeasureMusicXml = () => {
+    var _a, _b, _c;
+    const xmlText = (_a = draftCore === null || draftCore === void 0 ? void 0 : draftCore.debugSerializeCurrentXml()) !== null && _a !== void 0 ? _a : "";
+    if (!xmlText) {
+        failExport("MusicXML", "No editable measure XML is available.");
+        return;
+    }
+    const ts = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 12);
+    const partId = (_b = selectedMeasure === null || selectedMeasure === void 0 ? void 0 : selectedMeasure.partId) !== null && _b !== void 0 ? _b : "part";
+    const measureNumber = (_c = selectedMeasure === null || selectedMeasure === void 0 ? void 0 : selectedMeasure.measureNumber) !== null && _c !== void 0 ? _c : "measure";
+    const safePartId = partId.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeMeasureNumber = measureNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
+    try {
+        (0, download_flow_1.triggerFileDownload)({
+            fileName: `mikuscore-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
+            blob: new Blob([(0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText)], { type: "application/xml;charset=utf-8" }),
+        });
+    }
+    catch (err) {
+        failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
+const onDownloadMeasureMidi = () => {
+    var _a;
+    const xmlText = (_a = draftCore === null || draftCore === void 0 ? void 0 : draftCore.debugSerializeCurrentXml()) !== null && _a !== void 0 ? _a : "";
+    if (!xmlText) {
+        failExport("MIDI", "No editable measure XML is available.");
+        return;
+    }
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!sourceDoc) {
+        failExport("MIDI", "Current measure MusicXML could not be parsed.");
+        return;
+    }
+    const parsedForCheck = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(sourceDoc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, {
+        mode: "midi",
+        graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+        metricAccentEnabled: metricAccentEnabledInput.checked,
+        metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+    });
+    if (parsedForCheck.events.length === 0) {
+        failExport("MIDI", "No notes to export (MIDI events are empty).");
+        return;
+    }
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value));
+    if (!payload) {
+        failExport("MIDI", "Could not build MIDI payload from current measure MusicXML.");
+        return;
+    }
+    try {
+        (0, download_flow_1.triggerFileDownload)(payload);
+    }
+    catch (err) {
+        failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
 const activateTopTab = (tabName) => {
     const activeIndex = topTabButtons.findIndex((button) => button.dataset.tab === tabName);
     for (const button of topTabButtons) {
@@ -3079,6 +3191,12 @@ generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
+editSubTabEditorBtn.addEventListener("click", () => {
+    activateEditSubTab("editor");
+});
+editSubTabXmlBtn.addEventListener("click", () => {
+    activateEditSubTab("xml");
+});
 measureApplyBtn.addEventListener("click", onMeasureApply);
 measureDiscardBtn.addEventListener("click", onMeasureDiscard);
 measureNavLeftBtn.addEventListener("click", () => navigateSelectedMeasure("left"));
@@ -3089,6 +3207,8 @@ appendMeasureBtn.addEventListener("click", onAppendMeasureAtEnd);
 playMeasureBtn.addEventListener("click", () => {
     void startMeasurePlayback();
 });
+downloadMeasureMusicXmlBtn.addEventListener("click", onDownloadMeasureMusicXml);
+downloadMeasureMidiBtn.addEventListener("click", onDownloadMeasureMidi);
 playMeasureBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
 playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 renderNewPartClefControls();
