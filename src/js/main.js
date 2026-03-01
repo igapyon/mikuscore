@@ -102,7 +102,9 @@ const midiExportProfileSelect = q("#midiExportProfile");
 const midiImportQuantizeGridSelect = q("#midiImportQuantizeGrid");
 const midiImportTripletAware = q("#midiImportTripletAware");
 const forceMidiProgramOverride = q("#forceMidiProgramOverride");
-const keepMetadataInMusicXml = q("#keepMetadataInMusicXml");
+const keepMksMetaMetadataInMusicXml = q("#keepMksMetaMetadataInMusicXml");
+const keepMksSrcMetadataInMusicXml = q("#keepMksSrcMetadataInMusicXml");
+const keepMksDbgMetadataInMusicXml = q("#keepMksDbgMetadataInMusicXml");
 const exportMusicXmlAsXmlExtension = q("#exportMusicXmlAsXmlExtension");
 const compressXmlMuseScoreExport = q("#compressXmlMuseScoreExport");
 const generalSettingsAccordion = q("#generalSettingsAccordion");
@@ -206,7 +208,9 @@ const ZIP_IMPORT_EXTENSIONS = [
 let selectedZipEntryVirtualFile = null;
 const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID = "1/64";
 const DEFAULT_MIDI_IMPORT_TRIPLET_AWARE = true;
-const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML = true;
 const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
 const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = true;
 const DEFAULT_GRACE_TIMING_MODE = "before_beat";
@@ -240,7 +244,7 @@ const normalizeWaveformSetting = (value) => {
 const normalizeForceMidiProgramOverride = (value) => {
     return value === true;
 };
-const normalizeKeepMetadataInMusicXml = (value) => {
+const normalizeKeepMksMetadataInMusicXml = (value) => {
     return value !== false;
 };
 const normalizeCompressXmlMuseScoreExport = (value) => {
@@ -280,6 +284,7 @@ const readPlaybackSettings = () => {
         if (!raw)
             return null;
         const parsed = JSON.parse(raw);
+        const legacyKeepMetadataInMusicXml = normalizeKeepMksMetadataInMusicXml(parsed.keepMetadataInMusicXml);
         return {
             midiProgram: normalizeMidiProgram(String((_a = parsed.midiProgram) !== null && _a !== void 0 ? _a : "")),
             waveform: normalizeWaveformSetting(String((_b = parsed.waveform) !== null && _b !== void 0 ? _b : "")),
@@ -291,7 +296,15 @@ const readPlaybackSettings = () => {
             midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(parsed.midiImportQuantizeGrid),
             midiImportTripletAware: normalizeMidiImportTripletAware(parsed.midiImportTripletAware),
             forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
-            keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+            keepMksMetaMetadataInMusicXml: parsed.keepMksMetaMetadataInMusicXml === undefined
+                ? legacyKeepMetadataInMusicXml
+                : normalizeKeepMksMetadataInMusicXml(parsed.keepMksMetaMetadataInMusicXml),
+            keepMksSrcMetadataInMusicXml: parsed.keepMksSrcMetadataInMusicXml === undefined
+                ? legacyKeepMetadataInMusicXml
+                : normalizeKeepMksMetadataInMusicXml(parsed.keepMksSrcMetadataInMusicXml),
+            keepMksDbgMetadataInMusicXml: parsed.keepMksDbgMetadataInMusicXml === undefined
+                ? legacyKeepMetadataInMusicXml
+                : normalizeKeepMksMetadataInMusicXml(parsed.keepMksDbgMetadataInMusicXml),
             exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
             compressXmlMuseScoreExport: normalizeCompressXmlMuseScoreExport(parsed.compressXmlMuseScoreExport),
             generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
@@ -316,7 +329,9 @@ const writePlaybackSettings = () => {
             midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
             midiImportTripletAware: midiImportTripletAware.checked,
             forceMidiProgramOverride: forceMidiProgramOverride.checked,
-            keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+            keepMksMetaMetadataInMusicXml: keepMksMetaMetadataInMusicXml.checked,
+            keepMksSrcMetadataInMusicXml: keepMksSrcMetadataInMusicXml.checked,
+            keepMksDbgMetadataInMusicXml: keepMksDbgMetadataInMusicXml.checked,
             exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
             compressXmlMuseScoreExport: compressXmlMuseScoreExport.checked,
             generalSettingsExpanded: generalSettingsAccordion.open,
@@ -335,7 +350,7 @@ const syncGeneralExportSettings = () => {
     }
 };
 const applyInitialPlaybackSettings = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
     const stored = readPlaybackSettings();
     midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_PROGRAM;
     playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : DEFAULT_PLAYBACK_WAVEFORM;
@@ -350,14 +365,19 @@ const applyInitialPlaybackSettings = () => {
         (_j = stored === null || stored === void 0 ? void 0 : stored.midiImportTripletAware) !== null && _j !== void 0 ? _j : DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
     forceMidiProgramOverride.checked =
         (_k = stored === null || stored === void 0 ? void 0 : stored.forceMidiProgramOverride) !== null && _k !== void 0 ? _k : DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
-    keepMetadataInMusicXml.checked = (_l = stored === null || stored === void 0 ? void 0 : stored.keepMetadataInMusicXml) !== null && _l !== void 0 ? _l : DEFAULT_KEEP_METADATA_IN_MUSICXML;
+    keepMksMetaMetadataInMusicXml.checked =
+        (_l = stored === null || stored === void 0 ? void 0 : stored.keepMksMetaMetadataInMusicXml) !== null && _l !== void 0 ? _l : DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML;
+    keepMksSrcMetadataInMusicXml.checked =
+        (_m = stored === null || stored === void 0 ? void 0 : stored.keepMksSrcMetadataInMusicXml) !== null && _m !== void 0 ? _m : DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML;
+    keepMksDbgMetadataInMusicXml.checked =
+        (_o = stored === null || stored === void 0 ? void 0 : stored.keepMksDbgMetadataInMusicXml) !== null && _o !== void 0 ? _o : DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML;
     exportMusicXmlAsXmlExtension.checked =
-        (_m = stored === null || stored === void 0 ? void 0 : stored.exportMusicXmlAsXmlExtension) !== null && _m !== void 0 ? _m : DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
+        (_p = stored === null || stored === void 0 ? void 0 : stored.exportMusicXmlAsXmlExtension) !== null && _p !== void 0 ? _p : DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
     compressXmlMuseScoreExport.checked =
-        (_o = stored === null || stored === void 0 ? void 0 : stored.compressXmlMuseScoreExport) !== null && _o !== void 0 ? _o : DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
+        (_q = stored === null || stored === void 0 ? void 0 : stored.compressXmlMuseScoreExport) !== null && _q !== void 0 ? _q : DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
     syncGeneralExportSettings();
-    generalSettingsAccordion.open = (_p = stored === null || stored === void 0 ? void 0 : stored.generalSettingsExpanded) !== null && _p !== void 0 ? _p : false;
-    settingsAccordion.open = (_q = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _q !== void 0 ? _q : false;
+    generalSettingsAccordion.open = (_r = stored === null || stored === void 0 ? void 0 : stored.generalSettingsExpanded) !== null && _r !== void 0 ? _r : false;
+    settingsAccordion.open = (_s = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _s !== void 0 ? _s : false;
 };
 const onResetPlaybackSettings = () => {
     midiProgramSelect.value = DEFAULT_MIDI_PROGRAM;
@@ -370,21 +390,46 @@ const onResetPlaybackSettings = () => {
     midiImportQuantizeGridSelect.value = DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
     midiImportTripletAware.checked = DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
     forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
-    keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
+    keepMksMetaMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML;
+    keepMksSrcMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML;
+    keepMksDbgMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML;
     exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
     compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
     syncGeneralExportSettings();
     writePlaybackSettings();
     renderControlState();
 };
-const stripMetadataFromMusicXml = (xml, keepMetadata) => {
-    if (keepMetadata)
+const getMksMetadataOutputSettings = () => {
+    return {
+        keepMeta: keepMksMetaMetadataInMusicXml.checked,
+        keepSrc: keepMksSrcMetadataInMusicXml.checked,
+        keepDbg: keepMksDbgMetadataInMusicXml.checked,
+    };
+};
+const shouldRemoveMksField = (fieldName, settings) => {
+    const lowered = fieldName.trim().toLowerCase();
+    if (!lowered.startsWith("mks:"))
+        return false;
+    if (lowered.startsWith("mks:meta:"))
+        return !settings.keepMeta;
+    if (lowered.startsWith("mks:src:"))
+        return !settings.keepSrc;
+    if (lowered.startsWith("mks:dbg:"))
+        return !settings.keepDbg;
+    return false;
+};
+const stripMetadataFromMusicXml = (xml, settings) => {
+    var _a;
+    if (settings.keepMeta && settings.keepSrc && settings.keepDbg)
         return xml;
     const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
     if (!doc)
         return xml;
     const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
     for (const field of fields) {
+        const name = (_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "";
+        if (!shouldRemoveMksField(name, settings))
+            continue;
         field.remove();
     }
     for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
@@ -429,7 +474,7 @@ const summarizeImportedDiagWarnings = (xml) => {
 const resolveMusicXmlOutput = () => {
     if (!state.lastSuccessfulSaveXml)
         return "";
-    return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, keepMetadataInMusicXml.checked);
+    return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, getMksMetadataOutputSettings());
 };
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
@@ -2172,7 +2217,9 @@ const onLoadClick = async () => {
     }
     try {
         const selectedSourceType = getSelectedSourceType();
-        const keepMetadata = keepMetadataInMusicXml.checked;
+        const metadataOutputSettings = getMksMetadataOutputSettings();
+        const keepSourceMetadata = metadataOutputSettings.keepSrc;
+        const keepDebugMetadata = metadataOutputSettings.keepDbg;
         const selectedRawFile = (_b = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : null;
         let selectedFile = selectedZipEntryVirtualFile !== null && selectedZipEntryVirtualFile !== void 0 ? selectedZipEntryVirtualFile : selectedRawFile;
         if (inputEntryFile.checked &&
@@ -2212,21 +2259,21 @@ const onLoadClick = async () => {
             createNewMusicXml,
             formatImportedMusicXml: musicxml_io_1.normalizeImportedMusicXmlText,
             convertAbcToMusicXml: (abcSource) => (0, abc_io_1.convertAbcToMusicXml)(abcSource, {
-                sourceMetadata: keepMetadata,
-                debugMetadata: keepMetadata,
+                sourceMetadata: keepSourceMetadata,
+                debugMetadata: keepDebugMetadata,
                 overfullCompatibilityMode: true,
             }),
             convertMeiToMusicXml: (meiSource) => (0, mei_io_1.convertMeiToMusicXml)(meiSource, {
-                sourceMetadata: keepMetadata,
-                debugMetadata: keepMetadata,
+                sourceMetadata: keepSourceMetadata,
+                debugMetadata: keepDebugMetadata,
             }),
             convertLilyPondToMusicXml: (lilySource) => (0, lilypond_io_1.convertLilyPondToMusicXml)(lilySource, {
-                sourceMetadata: keepMetadata,
-                debugMetadata: keepMetadata,
+                sourceMetadata: keepSourceMetadata,
+                debugMetadata: keepDebugMetadata,
             }),
             convertMuseScoreToMusicXml: (musescoreSource) => (0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreSource, {
-                sourceMetadata: keepMetadata,
-                debugMetadata: keepMetadata,
+                sourceMetadata: keepSourceMetadata,
+                debugMetadata: keepDebugMetadata,
             }),
             convertVsqxToMusicXml: (vsqxSource) => (0, vsqx_io_1.convertVsqxToMusicXml)(vsqxSource, {
                 defaultLyric: DEFAULT_VSQX_LYRIC,
@@ -2234,8 +2281,8 @@ const onLoadClick = async () => {
             convertMidiToMusicXml: (midiBytes) => (0, midi_io_1.convertMidiToMusicXml)(midiBytes, {
                 quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
                 tripletAwareQuantize: midiImportTripletAware.checked,
-                sourceMetadata: keepMetadata,
-                debugMetadata: keepMetadata,
+                sourceMetadata: keepSourceMetadata,
+                debugMetadata: keepDebugMetadata,
             }),
         });
         if (!result.ok) {
@@ -3242,7 +3289,15 @@ metricAccentEnabledInput.addEventListener("change", () => {
     renderControlState();
 });
 metricAccentProfileSelect.addEventListener("change", writePlaybackSettings);
-keepMetadataInMusicXml.addEventListener("change", () => {
+keepMksMetaMetadataInMusicXml.addEventListener("change", () => {
+    writePlaybackSettings();
+    renderOutput();
+});
+keepMksSrcMetadataInMusicXml.addEventListener("change", () => {
+    writePlaybackSettings();
+    renderOutput();
+});
+keepMksDbgMetadataInMusicXml.addEventListener("change", () => {
     writePlaybackSettings();
     renderOutput();
 });

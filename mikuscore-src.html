@@ -618,7 +618,35 @@
                 <div class="ms-settings-block">
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
-                      <span>Keep source/extension metadata (`src:*`, `mks:*`)</span>
+                      <span>Keep roundtrip metadata (`mks:meta:*`)</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MusicXML roundtrip metadata help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Controls `mks:meta:*` fields in MusicXML output/export.
+                          Turn this OFF if you want to omit roundtrip restoration metadata.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksMetaMetadataInMusicXml">
+                      <input
+                        id="keepMksMetaMetadataInMusicXml"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Keep mks meta metadata"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Keep source metadata (`mks:src:*`)</span>
                       <span class="md-tooltip-group">
                         <span class="md-info-chip" aria-label="MusicXML source metadata help">
                           <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
@@ -628,18 +656,46 @@
                           </svg>
                         </span>
                         <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
-                          When enabled, metadata is preserved during import and kept in MusicXML output/export.
-                          When disabled, metadata generation on import is turned off, and existing `src:*` / `mks:*` fields are omitted from MusicXML output/export.
+                          Controls `mks:src:*` fields in MusicXML output/export.
+                          Also affects generation of source metadata during import.
                         </span>
                       </span>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMetadataInMusicXml">
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksSrcMetadataInMusicXml">
                       <input
-                        id="keepMetadataInMusicXml"
+                        id="keepMksSrcMetadataInMusicXml"
                         type="checkbox"
                         class="md-switch-input"
                         checked
-                        aria-label="Keep source and extension metadata"
+                        aria-label="Keep mks source metadata"
+                      />
+                      <span class="md-switch" aria-hidden="true"></span>
+                    </label>
+                  </div>
+                  <div class="ms-field ms-field--switch">
+                    <span class="ms-field-label">
+                      <span>Keep debug metadata (`mks:dbg:*`)</span>
+                      <span class="md-tooltip-group">
+                        <span class="md-info-chip" aria-label="MusicXML debug metadata help">
+                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
+                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
+                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
+                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
+                          </svg>
+                        </span>
+                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                          Controls `mks:dbg:*` fields in MusicXML output/export.
+                          Also affects generation of debug metadata during import.
+                        </span>
+                      </span>
+                    </span>
+                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksDbgMetadataInMusicXml">
+                      <input
+                        id="keepMksDbgMetadataInMusicXml"
+                        type="checkbox"
+                        class="md-switch-input"
+                        checked
+                        aria-label="Keep mks debug metadata"
                       />
                       <span class="md-switch" aria-hidden="true"></span>
                     </label>
