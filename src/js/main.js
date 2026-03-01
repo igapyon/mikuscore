@@ -1136,6 +1136,70 @@ const renderMeasureEditorState = () => {
 const serializeElementXml = (element) => {
     return new XMLSerializer().serializeToString(element);
 };
+const collectEffectiveSrcFieldsForSelectedMeasure = () => {
+    var _a, _b, _c, _d, _e;
+    if (!selectedMeasure)
+        return [];
+    const xml = (_a = core.debugSerializeCurrentXml()) !== null && _a !== void 0 ? _a : "";
+    if (!xml)
+        return [];
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!sourceDoc)
+        return [];
+    const part = sourceDoc.querySelector(`score-partwise > part[id="${CSS.escape(selectedMeasure.partId)}"]`);
+    if (!part)
+        return [];
+    const latestByName = new Map();
+    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+        const attrs = measure.querySelector(":scope > attributes");
+        if (attrs) {
+            const srcFields = attrs.querySelectorAll(':scope > miscellaneous > miscellaneous-field[name^="mks:src:mei:"]');
+            for (const field of Array.from(srcFields)) {
+                const name = ((_b = field.getAttribute("name")) !== null && _b !== void 0 ? _b : "").trim();
+                if (!name)
+                    continue;
+                latestByName.set(name, (_d = (_c = field.textContent) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "");
+            }
+        }
+        if (((_e = measure.getAttribute("number")) !== null && _e !== void 0 ? _e : "") === selectedMeasure.measureNumber) {
+            break;
+        }
+    }
+    return Array.from(latestByName.entries()).map(([name, value]) => ({ name, value }));
+};
+const injectSrcFieldsIntoSelfContainedXml = (selfContainedXml, fields) => {
+    if (fields.length === 0)
+        return selfContainedXml;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(selfContainedXml);
+    if (!doc)
+        return selfContainedXml;
+    const measure = doc.querySelector("part > measure");
+    if (!measure)
+        return selfContainedXml;
+    let attrs = measure.querySelector(":scope > attributes");
+    if (!attrs) {
+        attrs = doc.createElement("attributes");
+        measure.insertBefore(attrs, measure.firstChild);
+    }
+    let miscellaneous = attrs.querySelector(":scope > miscellaneous");
+    if (!miscellaneous) {
+        miscellaneous = doc.createElement("miscellaneous");
+        attrs.appendChild(miscellaneous);
+    }
+    const existingNames = new Set(Array.from(miscellaneous.querySelectorAll(":scope > miscellaneous-field"))
+        .map((field) => { var _a; return ((_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "").trim(); })
+        .filter(Boolean));
+    for (const field of fields) {
+        if (existingNames.has(field.name))
+            continue;
+        const node = doc.createElement("miscellaneous-field");
+        node.setAttribute("name", field.name);
+        node.textContent = field.value;
+        miscellaneous.appendChild(node);
+        existingNames.add(field.name);
+    }
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+};
 const buildMeasureXmlInspectorText = () => {
     var _a, _b;
     if (!draftCore) {
@@ -1146,10 +1210,12 @@ const buildMeasureXmlInspectorText = () => {
     const measureOnly = draftDoc
         ? (0, musicxml_io_1.prettyPrintMusicXmlText)(serializeElementXml((_b = draftDoc.querySelector("part > measure")) !== null && _b !== void 0 ? _b : draftDoc.documentElement)).trim()
         : draftXml;
-    const prettyDoc = (0, musicxml_io_1.prettyPrintMusicXmlText)(draftXml).trim();
+    const srcFields = collectEffectiveSrcFieldsForSelectedMeasure();
+    const xmlWithSrc = injectSrcFieldsIntoSelfContainedXml(draftXml, srcFields);
+    const prettyDoc = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlWithSrc).trim();
     return {
         measureOnly: measureOnly || draftXml,
-        selfContainedDocument: prettyDoc || draftXml,
+        selfContainedDocument: prettyDoc || xmlWithSrc,
     };
 };
 const activateEditSubTab = (tabName) => {
@@ -17046,6 +17112,74 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
             return null;
         return Math.round(raw);
     };
+    const parseStemSlashCount = (node) => {
+        const stemMod = String(node.getAttribute("stem.mod") || "").trim().toLowerCase();
+        if (!stemMod.includes("slash"))
+            return 0;
+        const m = stemMod.match(/(\d+)\s*slash/);
+        const count = m ? parseIntSafe(m[1], 1) : 1;
+        return Math.max(1, Math.min(4, Math.round(count)));
+    };
+    const expandStemSlashNodes = (node) => {
+        const name = localNameOf(node);
+        if (name !== "note" && name !== "chord")
+            return null;
+        const graceAttr = (node.getAttribute("grace") || "").trim().toLowerCase();
+        if (graceAttr === "acc" || graceAttr === "unacc")
+            return null;
+        const slashCount = parseStemSlashCount(node);
+        if (slashCount <= 0)
+            return null;
+        const durAttr = node.getAttribute("dur") || "4";
+        const dots = parseIntSafe(node.getAttribute("dots"), 0);
+        const actual = parseIntSafe(node.getAttribute("num"), NaN);
+        const normal = parseIntSafe(node.getAttribute("numbase"), NaN);
+        const tupletRatio = Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
+            ? Math.max(0.0001, Math.round(normal) / Math.round(actual))
+            : 1;
+        const baseTicks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions * tupletRatio));
+        const totalTicks = resolveDurTicksFromMetadata(node, baseTicks, divisions);
+        const unitTicks = Math.max(1, Math.round(divisions / (2 ** slashCount)));
+        if (totalTicks < unitTicks * 2 || totalTicks % unitTicks !== 0)
+            return null;
+        const repeatCount = Math.max(2, Math.round(totalTicks / unitTicks));
+        const expanded = [];
+        for (let i = 0; i < repeatCount; i += 1) {
+            const clone = node.cloneNode(true);
+            const inferred = inferMeiDurAndDotsFromTicks(unitTicks, divisions);
+            clone.setAttribute("dur", inferred.dur);
+            if (inferred.dots > 0)
+                clone.setAttribute("dots", String(inferred.dots));
+            else
+                clone.removeAttribute("dots");
+            clone.removeAttribute("stem.mod");
+            clone.setAttribute("mks-dur-div", String(Math.max(1, Math.round(divisions))));
+            clone.setAttribute("mks-dur-480", String(toMksDur480(unitTicks, divisions)));
+            clone.setAttribute("mks-dur-ticks", String(unitTicks));
+            if (i > 0) {
+                clone.removeAttribute("xml:id");
+                clone.removeAttribute("id");
+                clone.removeAttribute("tie");
+                clone.removeAttribute("slur");
+                clone.removeAttribute("mks-tuplet-start");
+                for (const child of Array.from(clone.children)) {
+                    if (!(child instanceof Element))
+                        continue;
+                    if (localNameOf(child) !== "note")
+                        continue;
+                    child.removeAttribute("xml:id");
+                    child.removeAttribute("id");
+                    child.removeAttribute("tie");
+                    child.removeAttribute("slur");
+                }
+            }
+            if (i < repeatCount - 1) {
+                clone.removeAttribute("mks-tuplet-stop");
+            }
+            expanded.push(clone);
+        }
+        return expanded;
+    };
     const pushNoteEvent = (node, forcedTuplet = null) => {
         let effectiveNode = node;
         if (forcedTuplet
@@ -17374,6 +17508,18 @@ const parseLayerEvents = (layer, divisions, voice, measureTicks, measureFifths, 
         if (forcedGrace && !effectiveNode.getAttribute("grace") && (name === "note" || name === "chord" || name === "rest")) {
             effectiveNode = node.cloneNode(true);
             effectiveNode.setAttribute("grace", forcedGrace);
+        }
+        if (name === "note" || name === "chord") {
+            const slashExpanded = expandStemSlashNodes(effectiveNode);
+            if (slashExpanded && slashExpanded.length > 1) {
+                for (const expandedNode of slashExpanded) {
+                    if (name === "note")
+                        pushNoteEvent(expandedNode, forcedTuplet);
+                    else
+                        pushChordEvent(expandedNode, forcedTuplet);
+                }
+                return;
+            }
         }
         if (name === "note") {
             pushNoteEvent(effectiveNode, forcedTuplet);
@@ -18446,6 +18592,36 @@ const extractMiscFieldsFromMeiStaff = (staff) => {
     }
     return out;
 };
+const buildMeiSourceRawMiscFields = (source) => {
+    const raw = String(source !== null && source !== void 0 ? source : "");
+    if (!raw.length)
+        return [];
+    const encoded = raw
+        .replace(/\\/g, "\\\\")
+        .replace(/\r/g, "\\r")
+        .replace(/\n/g, "\\n");
+    const chunkSize = 240;
+    const maxChunks = 512;
+    const chunks = [];
+    for (let i = 0; i < encoded.length && chunks.length < maxChunks; i += chunkSize) {
+        chunks.push(encoded.slice(i, i + chunkSize));
+    }
+    const truncated = chunks.join("").length < encoded.length;
+    const fields = [
+        { name: "mks:src:mei:raw-encoding", value: "escape-v1" },
+        { name: "mks:src:mei:raw-length", value: String(raw.length) },
+        { name: "mks:src:mei:raw-encoded-length", value: String(encoded.length) },
+        { name: "mks:src:mei:raw-chunks", value: String(chunks.length) },
+        { name: "mks:src:mei:raw-truncated", value: truncated ? "1" : "0" },
+    ];
+    for (let i = 0; i < chunks.length; i += 1) {
+        fields.push({
+            name: `mks:src:mei:raw-${String(i + 1).padStart(4, "0")}`,
+            value: chunks[i],
+        });
+    }
+    return fields;
+};
 const parseMeasureMetaFromMeiStaff = (staff) => {
     var _a;
     const metaAnnot = childElementsByName(staff, "annot").find((annot) => {
@@ -18556,6 +18732,7 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const debugMetadata = (_a = options.debugMetadata) !== null && _a !== void 0 ? _a : true;
     const sourceMetadata = (_b = options.sourceMetadata) !== null && _b !== void 0 ? _b : true;
+    const meiSourceRawFields = buildMeiSourceRawMiscFields(meiSource);
     const failOnOverfullDrop = (_c = options.failOnOverfullDrop) !== null && _c !== void 0 ? _c : false;
     const meiCorpusIndex = Number.isFinite(options.meiCorpusIndex)
         ? Math.max(0, Math.floor(options.meiCorpusIndex))
@@ -18749,6 +18926,7 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
                 }
             }
             const miscFields = sourceMetadata ? extractMiscFieldsFromMeiStaff(targetStaff) : [];
+            const rawSourceFields = !hasEmittedInitialAttributes ? meiSourceRawFields : [];
             const meiDebugFields = debugMetadata
                 ? buildMeiDebugFieldsFromStaff(targetStaff, measureNo, divisions)
                 : [];
@@ -18770,7 +18948,7 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
                     },
                 ]
                 : [];
-            const allFields = [...miscFields, ...meiDebugFields, ...overflowFields];
+            const allFields = [...rawSourceFields, ...miscFields, ...meiDebugFields, ...overflowFields];
             const miscellaneousXml = allFields.length > 0
                 ? `<miscellaneous>${allFields
                     .map((field) => `<miscellaneous-field name="${xmlEscape(field.name)}">${xmlEscape(field.value)}</miscellaneous-field>`)

@@ -1259,6 +1259,72 @@ const serializeElementXml = (element: Element): string => {
   return new XMLSerializer().serializeToString(element);
 };
 
+const collectEffectiveSrcFieldsForSelectedMeasure = (): Array<{ name: string; value: string }> => {
+  if (!selectedMeasure) return [];
+  const xml = core.debugSerializeCurrentXml() ?? "";
+  if (!xml) return [];
+  const sourceDoc = parseMusicXmlDocument(xml);
+  if (!sourceDoc) return [];
+  const part = sourceDoc.querySelector(`score-partwise > part[id="${CSS.escape(selectedMeasure.partId)}"]`);
+  if (!part) return [];
+
+  const latestByName = new Map<string, string>();
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const attrs = measure.querySelector(":scope > attributes");
+    if (attrs) {
+      const srcFields = attrs.querySelectorAll(
+        ':scope > miscellaneous > miscellaneous-field[name^="mks:src:mei:"]'
+      );
+      for (const field of Array.from(srcFields)) {
+        const name = (field.getAttribute("name") ?? "").trim();
+        if (!name) continue;
+        latestByName.set(name, field.textContent?.trim() ?? "");
+      }
+    }
+    if ((measure.getAttribute("number") ?? "") === selectedMeasure.measureNumber) {
+      break;
+    }
+  }
+  return Array.from(latestByName.entries()).map(([name, value]) => ({ name, value }));
+};
+
+const injectSrcFieldsIntoSelfContainedXml = (
+  selfContainedXml: string,
+  fields: Array<{ name: string; value: string }>
+): string => {
+  if (fields.length === 0) return selfContainedXml;
+  const doc = parseMusicXmlDocument(selfContainedXml);
+  if (!doc) return selfContainedXml;
+  const measure = doc.querySelector("part > measure");
+  if (!measure) return selfContainedXml;
+
+  let attrs = measure.querySelector(":scope > attributes");
+  if (!attrs) {
+    attrs = doc.createElement("attributes");
+    measure.insertBefore(attrs, measure.firstChild);
+  }
+  let miscellaneous = attrs.querySelector(":scope > miscellaneous");
+  if (!miscellaneous) {
+    miscellaneous = doc.createElement("miscellaneous");
+    attrs.appendChild(miscellaneous);
+  }
+
+  const existingNames = new Set(
+    Array.from(miscellaneous.querySelectorAll(":scope > miscellaneous-field"))
+      .map((field) => (field.getAttribute("name") ?? "").trim())
+      .filter(Boolean)
+  );
+  for (const field of fields) {
+    if (existingNames.has(field.name)) continue;
+    const node = doc.createElement("miscellaneous-field");
+    node.setAttribute("name", field.name);
+    node.textContent = field.value;
+    miscellaneous.appendChild(node);
+    existingNames.add(field.name);
+  }
+  return serializeMusicXmlDocument(doc);
+};
+
 const buildMeasureXmlInspectorText = (): { measureOnly: string; selfContainedDocument: string } => {
   if (!draftCore) {
     return { measureOnly: "", selfContainedDocument: "" };
@@ -1268,10 +1334,12 @@ const buildMeasureXmlInspectorText = (): { measureOnly: string; selfContainedDoc
   const measureOnly = draftDoc
     ? prettyPrintMusicXmlText(serializeElementXml(draftDoc.querySelector("part > measure") ?? draftDoc.documentElement)).trim()
     : draftXml;
-  const prettyDoc = prettyPrintMusicXmlText(draftXml).trim();
+  const srcFields = collectEffectiveSrcFieldsForSelectedMeasure();
+  const xmlWithSrc = injectSrcFieldsIntoSelfContainedXml(draftXml, srcFields);
+  const prettyDoc = prettyPrintMusicXmlText(xmlWithSrc).trim();
   return {
     measureOnly: measureOnly || draftXml,
-    selfContainedDocument: prettyDoc || draftXml,
+    selfContainedDocument: prettyDoc || xmlWithSrc,
   };
 };
 

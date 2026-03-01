@@ -1445,6 +1445,69 @@ const parseLayerEvents = (
     if (!Number.isFinite(raw) || raw <= 0) return null;
     return Math.round(raw);
   };
+  const parseStemSlashCount = (node: Element): number => {
+    const stemMod = String(node.getAttribute("stem.mod") || "").trim().toLowerCase();
+    if (!stemMod.includes("slash")) return 0;
+    const m = stemMod.match(/(\d+)\s*slash/);
+    const count = m ? parseIntSafe(m[1], 1) : 1;
+    return Math.max(1, Math.min(4, Math.round(count)));
+  };
+  const expandStemSlashNodes = (node: Element): Element[] | null => {
+    const name = localNameOf(node);
+    if (name !== "note" && name !== "chord") return null;
+    const graceAttr = (node.getAttribute("grace") || "").trim().toLowerCase();
+    if (graceAttr === "acc" || graceAttr === "unacc") return null;
+    const slashCount = parseStemSlashCount(node);
+    if (slashCount <= 0) return null;
+
+    const durAttr = node.getAttribute("dur") || "4";
+    const dots = parseIntSafe(node.getAttribute("dots"), 0);
+    const actual = parseIntSafe(node.getAttribute("num"), NaN);
+    const normal = parseIntSafe(node.getAttribute("numbase"), NaN);
+    const tupletRatio =
+      Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
+        ? Math.max(0.0001, Math.round(normal) / Math.round(actual))
+        : 1;
+    const baseTicks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions * tupletRatio));
+    const totalTicks = resolveDurTicksFromMetadata(node, baseTicks, divisions);
+    const unitTicks = Math.max(1, Math.round(divisions / (2 ** slashCount)));
+    if (totalTicks < unitTicks * 2 || totalTicks % unitTicks !== 0) return null;
+
+    const repeatCount = Math.max(2, Math.round(totalTicks / unitTicks));
+    const expanded: Element[] = [];
+    for (let i = 0; i < repeatCount; i += 1) {
+      const clone = node.cloneNode(true) as Element;
+      const inferred = inferMeiDurAndDotsFromTicks(unitTicks, divisions);
+      clone.setAttribute("dur", inferred.dur);
+      if (inferred.dots > 0) clone.setAttribute("dots", String(inferred.dots));
+      else clone.removeAttribute("dots");
+      clone.removeAttribute("stem.mod");
+      clone.setAttribute("mks-dur-div", String(Math.max(1, Math.round(divisions))));
+      clone.setAttribute("mks-dur-480", String(toMksDur480(unitTicks, divisions)));
+      clone.setAttribute("mks-dur-ticks", String(unitTicks));
+
+      if (i > 0) {
+        clone.removeAttribute("xml:id");
+        clone.removeAttribute("id");
+        clone.removeAttribute("tie");
+        clone.removeAttribute("slur");
+        clone.removeAttribute("mks-tuplet-start");
+        for (const child of Array.from(clone.children)) {
+          if (!(child instanceof Element)) continue;
+          if (localNameOf(child) !== "note") continue;
+          child.removeAttribute("xml:id");
+          child.removeAttribute("id");
+          child.removeAttribute("tie");
+          child.removeAttribute("slur");
+        }
+      }
+      if (i < repeatCount - 1) {
+        clone.removeAttribute("mks-tuplet-stop");
+      }
+      expanded.push(clone);
+    }
+    return expanded;
+  };
   const pushNoteEvent = (node: Element, forcedTuplet: { num: number; numbase: number } | null = null) => {
     let effectiveNode = node;
     if (
@@ -1784,6 +1847,17 @@ const parseLayerEvents = (
     if (forcedGrace && !effectiveNode.getAttribute("grace") && (name === "note" || name === "chord" || name === "rest")) {
       effectiveNode = node.cloneNode(true) as Element;
       effectiveNode.setAttribute("grace", forcedGrace);
+    }
+
+    if (name === "note" || name === "chord") {
+      const slashExpanded = expandStemSlashNodes(effectiveNode);
+      if (slashExpanded && slashExpanded.length > 1) {
+        for (const expandedNode of slashExpanded) {
+          if (name === "note") pushNoteEvent(expandedNode, forcedTuplet);
+          else pushChordEvent(expandedNode, forcedTuplet);
+        }
+        return;
+      }
     }
 
     if (name === "note") {
@@ -3257,6 +3331,36 @@ const extractMiscFieldsFromMeiStaff = (staff: Element): Array<{ name: string; va
   return out;
 };
 
+const buildMeiSourceRawMiscFields = (source: string): Array<{ name: string; value: string }> => {
+  const raw = String(source ?? "");
+  if (!raw.length) return [];
+  const encoded = raw
+    .replace(/\\/g, "\\\\")
+    .replace(/\r/g, "\\r")
+    .replace(/\n/g, "\\n");
+  const chunkSize = 240;
+  const maxChunks = 512;
+  const chunks: string[] = [];
+  for (let i = 0; i < encoded.length && chunks.length < maxChunks; i += chunkSize) {
+    chunks.push(encoded.slice(i, i + chunkSize));
+  }
+  const truncated = chunks.join("").length < encoded.length;
+  const fields: Array<{ name: string; value: string }> = [
+    { name: "mks:src:mei:raw-encoding", value: "escape-v1" },
+    { name: "mks:src:mei:raw-length", value: String(raw.length) },
+    { name: "mks:src:mei:raw-encoded-length", value: String(encoded.length) },
+    { name: "mks:src:mei:raw-chunks", value: String(chunks.length) },
+    { name: "mks:src:mei:raw-truncated", value: truncated ? "1" : "0" },
+  ];
+  for (let i = 0; i < chunks.length; i += 1) {
+    fields.push({
+      name: `mks:src:mei:raw-${String(i + 1).padStart(4, "0")}`,
+      value: chunks[i],
+    });
+  }
+  return fields;
+};
+
 const parseMeasureMetaFromMeiStaff = (staff: Element): {
   number?: string;
   implicit?: boolean;
@@ -3372,6 +3476,7 @@ const buildMeiDebugFieldsFromStaff = (
 export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOptions = {}): string => {
   const debugMetadata = options.debugMetadata ?? true;
   const sourceMetadata = options.sourceMetadata ?? true;
+  const meiSourceRawFields = buildMeiSourceRawMiscFields(meiSource);
   const failOnOverfullDrop = options.failOnOverfullDrop ?? false;
   const meiCorpusIndex = Number.isFinite(options.meiCorpusIndex)
     ? Math.max(0, Math.floor(options.meiCorpusIndex as number))
@@ -3616,6 +3721,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           }
 
           const miscFields = sourceMetadata ? extractMiscFieldsFromMeiStaff(targetStaff) : [];
+          const rawSourceFields = !hasEmittedInitialAttributes ? meiSourceRawFields : [];
           const meiDebugFields = debugMetadata
             ? buildMeiDebugFieldsFromStaff(targetStaff, measureNo, divisions)
             : [];
@@ -3640,7 +3746,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
                   },
                 ]
               : [];
-          const allFields = [...miscFields, ...meiDebugFields, ...overflowFields];
+          const allFields = [...rawSourceFields, ...miscFields, ...meiDebugFields, ...overflowFields];
           const miscellaneousXml =
             allFields.length > 0
               ? `<miscellaneous>${allFields
