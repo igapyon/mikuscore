@@ -7,10 +7,10 @@ const ENTRY_TS = "src/ts/main.ts";
 const ENTRY_JS = ENTRY_TS.replace(/\.ts$/, ".js");
 const TEMPLATE = "mikuscore-src.html";
 const DIST = "mikuscore.html";
-const SAMPLE1_XML_PATH = "src/samples/musicxml/sample1.musicxml";
-const SAMPLE2_XML_PATH = "src/samples/musicxml/sample2.musicxml";
-const SAMPLE1_TS_PATH = "src/ts/sampleXml.ts";
-const SAMPLE2_TS_PATH = "src/ts/sampleXml2.ts";
+const SAMPLE6_XML_PATH = "src/samples/musicxml/sample6.musicxml";
+const SAMPLE7_XML_PATH = "src/samples/musicxml/sample7.musicxml";
+const SAMPLE6_TS_PATH = "src/ts/sampleXml6.ts";
+const SAMPLE7_TS_PATH = "src/ts/sampleXml7.ts";
 const TOKEN_CSS_PATH = "src/css/md3/token-spec.css";
 const CORE_CSS_PATH = "src/css/md3/core-spec.css";
 const CSS_PATH = "src/css/app.css";
@@ -26,8 +26,8 @@ const readText = (relPath) => readFileSync(toAbs(relPath), "utf8");
 
 const syncBuiltInSamples = () => {
   const definitions = [
-    { sourceXml: SAMPLE1_XML_PATH, outTs: SAMPLE1_TS_PATH, exportName: "sampleXml" },
-    { sourceXml: SAMPLE2_XML_PATH, outTs: SAMPLE2_TS_PATH, exportName: "sampleXml2" },
+    { sourceXml: SAMPLE6_XML_PATH, outTs: SAMPLE6_TS_PATH, exportName: "sampleXml6" },
+    { sourceXml: SAMPLE7_XML_PATH, outTs: SAMPLE7_TS_PATH, exportName: "sampleXml7" },
   ];
 
   for (const def of definitions) {

@@ -2113,8 +2113,8 @@ describe("musescore-io", () => {
     expect(doc.querySelector("part > measure:nth-of-type(3) > direction > direction-type > octave-shift[type=\"stop\"]")).not.toBeNull();
   });
 
-  it("keeps sample2 measure 3-4 pitch spelling and accidentals on roundtrip", () => {
-    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample2.musicxml"), "utf-8");
+  it("keeps sample7 measure 3-4 pitch spelling and accidentals on roundtrip", () => {
+    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample7.musicxml"), "utf-8");
     const srcDoc = parseMusicXmlDocument(srcXml);
     expect(srcDoc).not.toBeNull();
     if (!srcDoc) return;
@@ -2164,8 +2164,8 @@ describe("musescore-io", () => {
     expect(outDoc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
   });
 
-  it("keeps sample2 measure 7 staff 4 natural accidental on roundtrip", () => {
-    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample2.musicxml"), "utf-8");
+  it("keeps sample7 measure 7 staff 4 natural accidental on roundtrip", () => {
+    const srcXml = readFileSync(resolve(process.cwd(), "src", "samples", "musicxml", "sample7.musicxml"), "utf-8");
     const srcDoc = parseMusicXmlDocument(srcXml);
     expect(srcDoc).not.toBeNull();
     if (!srcDoc) return;

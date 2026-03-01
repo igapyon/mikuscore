@@ -1,18 +1,18 @@
 {
   "cases": [
     {
-      "id": "sample1",
-      "sourcePath": "src/samples/musicxml/sample1.musicxml",
+      "id": "sample6",
+      "sourcePath": "src/samples/musicxml/sample6.musicxml",
       "firstMeasuresToCompare": 5
     },
     {
-      "id": "sample2",
-      "sourcePath": "src/samples/musicxml/sample2.musicxml",
+      "id": "sample7",
+      "sourcePath": "src/samples/musicxml/sample7.musicxml",
       "firstMeasuresToCompare": 5
     },
     {
-      "id": "sample1-m1-m2",
-      "sourcePath": "tests/fixtures/roundtrip_sample1_m1_m2.musicxml",
+      "id": "sample6-m1-m2",
+      "sourcePath": "tests/fixtures/roundtrip_sample6_m1_m2.musicxml",
       "firstMeasuresToCompare": 2
     }
   ]
