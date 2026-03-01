@@ -56,8 +56,8 @@ import {
   renderMeasureEditorPreview as renderMeasureEditorPreviewFlow,
   renderScorePreview as renderScorePreviewFlow,
 } from "./preview-flow";
-import { sampleXml } from "./sampleXml";
-import { sampleXml2 } from "./sampleXml2";
+import { sampleXml6 } from "./sampleXml6";
+import { sampleXml7 } from "./sampleXml7";
 import {
   buildPlaybackEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
@@ -128,8 +128,8 @@ const lilyPondInput = q<HTMLTextAreaElement>("#lilyPondInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
-const loadSampleBtn1 = q<HTMLButtonElement>("#loadSampleBtn1");
-const loadSample2Btn = q<HTMLButtonElement>("#loadSample2Btn");
+const loadSampleBtn6 = q<HTMLButtonElement>("#loadSampleBtn6");
+const loadSample7Btn = q<HTMLButtonElement>("#loadSample7Btn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
@@ -740,7 +740,7 @@ const applyInitialXmlInputValue = (): void => {
     xmlInput.value = draft.xml;
     return;
   }
-  xmlInput.value = sampleXml;
+  xmlInput.value = sampleXml6;
 };
 
 const getSelectedSourceType = (): "xml" | "musescore" | "vsqx" | "abc" | "mei" | "lilypond" => {
@@ -3412,11 +3412,11 @@ const loadBuiltInSample = (xml: string): void => {
   renderLocalDraftUi();
   void onLoadClick();
 };
-loadSampleBtn1.addEventListener("click", () => {
-  loadBuiltInSample(sampleXml);
+loadSampleBtn6.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml6);
 });
-loadSample2Btn.addEventListener("click", () => {
-  loadBuiltInSample(sampleXml2);
+loadSample7Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml7);
 });
 if (noteSelect) {
   noteSelect.addEventListener("change", () => {

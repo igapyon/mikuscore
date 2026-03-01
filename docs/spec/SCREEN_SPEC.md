@@ -72,8 +72,8 @@ Define the current screen specification for `mikuscore` based on the actual UI t
 ### Actions
 - `Load from file`
 - `Load` (source mode)
-- `Load sample 1`
-- `Load sample 2`
+- `Load sample 6`
+- `Load sample 7`
 
 ### Messages
 - `inputUiMessage` for inline status/error.
@@ -315,8 +315,8 @@ Define the current screen specification for `mikuscore` based on the actual UI t
 ### アクション
 - `Load from file`
 - `Load`（source モード）
-- `Load sample 1`
-- `Load sample 2`
+- `Load sample 6`
+- `Load sample 7`
 
 ### メッセージ
 - `inputUiMessage` に inline の状態/エラーを表示。

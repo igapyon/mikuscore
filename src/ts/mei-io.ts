@@ -3339,7 +3339,8 @@ const buildMeiSourceRawMiscFields = (source: string): Array<{ name: string; valu
     .replace(/\r/g, "\\r")
     .replace(/\n/g, "\\n");
   const chunkSize = 240;
-  const maxChunks = 512;
+  // Raise cap to keep very large MEI sources embeddable without premature truncation.
+  const maxChunks = 16384;
   const chunks: string[] = [];
   for (let i = 0; i < encoded.length && chunks.length < maxChunks; i += chunkSize) {
     chunks.push(encoded.slice(i, i + chunkSize));
