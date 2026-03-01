@@ -1312,29 +1312,37 @@ const serializeElementXml = (element: Element): string => {
 };
 
 const collectEffectiveSrcFieldsForSelectedMeasure = (): Array<{ name: string; value: string }> => {
-  if (!selectedMeasure) return [];
   const xml = core.debugSerializeCurrentXml() ?? "";
   if (!xml) return [];
   const sourceDoc = parseMusicXmlDocument(xml);
   if (!sourceDoc) return [];
-  const part = sourceDoc.querySelector(`score-partwise > part[id="${CSS.escape(selectedMeasure.partId)}"]`);
-  if (!part) return [];
 
   const latestByName = new Map<string, string>();
-  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-    const attrs = measure.querySelector(":scope > attributes");
-    if (attrs) {
-      const srcFields = attrs.querySelectorAll(
-        ':scope > miscellaneous > miscellaneous-field[name^="mks:src:mei:"]'
-      );
-      for (const field of Array.from(srcFields)) {
-        const name = (field.getAttribute("name") ?? "").trim();
-        if (!name) continue;
-        latestByName.set(name, field.textContent?.trim() ?? "");
+  const srcFields = sourceDoc.querySelectorAll(
+    'score-partwise > part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:src:"]'
+  );
+  for (const field of Array.from(srcFields)) {
+    const name = (field.getAttribute("name") ?? "").trim();
+    if (!name) continue;
+    // Keep the most recent value when the same name appears multiple times.
+    latestByName.set(name, field.textContent?.trim() ?? "");
+  }
+
+  if (latestByName.size === 0 && selectedMeasure) {
+    const part = sourceDoc.querySelector(`score-partwise > part[id="${CSS.escape(selectedMeasure.partId)}"]`);
+    if (part) {
+      for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+        const attrs = measure.querySelector(":scope > attributes");
+        if (!attrs) continue;
+        const partSrcFields = attrs.querySelectorAll(
+          ':scope > miscellaneous > miscellaneous-field[name^="mks:src:"]'
+        );
+        for (const field of Array.from(partSrcFields)) {
+          const name = (field.getAttribute("name") ?? "").trim();
+          if (!name) continue;
+          latestByName.set(name, field.textContent?.trim() ?? "");
+        }
       }
-    }
-    if ((measure.getAttribute("number") ?? "") === selectedMeasure.measureNumber) {
-      break;
     }
   }
   return Array.from(latestByName.entries()).map(([name, value]) => ({ name, value }));
