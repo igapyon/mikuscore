@@ -3026,7 +3026,8 @@ const resolveMeasureAdvanceDiv = (
   currentDivisions: number,
   currentBeats: number,
   currentBeatType: number,
-  nextMeasureIsImplicit = false
+  nextMeasureIsImplicit = false,
+  firstMeasureUnderfullAsPickup = false
 ): number => {
   const safeDivisions = Math.max(1, Math.round(currentDivisions));
   const safeBeats = Math.max(1, Math.round(currentBeats));
@@ -3037,12 +3038,82 @@ const resolveMeasureAdvanceDiv = (
   if (isImplicit) {
     return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
   }
+  let hasPreviousMeasure = false;
+  for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
+    const prevName = (prev.localName || prev.tagName || "").toLowerCase();
+    if (prevName === "measure") {
+      hasPreviousMeasure = true;
+      break;
+    }
+  }
+  const isFirstMeasureInPart = !hasPreviousMeasure;
+  // MuseScore may export pickup first bars without implicit="yes".
+  // Restrict this fallback to explicit caller opt-in to avoid changing ordinary underfull bars.
+  if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    return measureMaxDiv;
+  }
   // Some scores split one logical bar into [regular underfull] + [implicit pickup].
   // In that case, padding the regular bar to full capacity causes an extra silent beat.
   if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
     return measureMaxDiv;
   }
   return Math.max(capacityDiv, measureMaxDiv);
+};
+
+const measureCapacityDivFromContext = (divisions: number, beats: number, beatType: number): number => {
+  const safeDivisions = Math.max(1, Math.round(divisions));
+  const safeBeats = Math.max(1, Math.round(beats));
+  const safeBeatType = Math.max(1, Math.round(beatType));
+  return Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+};
+
+const estimateMeasureContentSpanDiv = (measure: Element): number => {
+  let cursorDiv = 0;
+  let measureMaxDiv = 0;
+  const lastStartByVoice = new Map<string, number>();
+  for (const child of Array.from(measure.children)) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      const dur = getFirstNumber(child, "duration");
+      if (!dur || dur <= 0) continue;
+      if (child.tagName === "backup") {
+        cursorDiv = Math.max(0, cursorDiv - dur);
+      } else {
+        cursorDiv += dur;
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+      }
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const durationDiv = getFirstNumber(child, "duration");
+    if (!durationDiv || durationDiv <= 0) continue;
+    const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
+    const isChord = Boolean(child.querySelector("chord"));
+    const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
+    if (!isChord) {
+      lastStartByVoice.set(voice, startDiv);
+      cursorDiv += durationDiv;
+    }
+    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+  }
+  return measureMaxDiv;
+};
+
+const shouldTreatFirstUnderfullAsPickup = (doc: Document): boolean => {
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  if (parts.length < 2) return false;
+  for (const part of parts) {
+    const firstMeasure = part.querySelector(":scope > measure");
+    if (!firstMeasure) return false;
+    const divisions = getFirstNumber(firstMeasure, "attributes > divisions") ?? 1;
+    const beats = getFirstNumber(firstMeasure, "attributes > time > beats") ?? 4;
+    const beatType = getFirstNumber(firstMeasure, "attributes > time > beat-type") ?? 4;
+    const capacityDiv = measureCapacityDivFromContext(divisions, beats, beatType);
+    const contentDiv = estimateMeasureContentSpanDiv(firstMeasure);
+    if (!(contentDiv > 0 && contentDiv < capacityDiv)) {
+      return false;
+    }
+  }
+  return true;
 };
 
 const isImplicitMeasure = (measure: Element | null | undefined): boolean => {
@@ -3056,6 +3127,7 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiControlEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return [];
 
@@ -3186,7 +3258,8 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
         currentDivisions,
         currentBeats,
         currentBeatType,
-        isImplicitMeasure(nextMeasure)
+        isImplicitMeasure(nextMeasure),
+        firstUnderfullAsPickup
       );
     }
   });
@@ -3199,6 +3272,7 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiTempoEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, bpm: 120 }];
 
@@ -3234,6 +3308,24 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
         } else {
           cursorDiv += dur;
           measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+        }
+        continue;
+      }
+
+      if (child.tagName === "sound") {
+        // MuseScore can emit hidden tempo as a standalone <sound tempo="..."/> at measure level.
+        const rawTempo = Number(child.getAttribute("tempo") ?? "");
+        if (Number.isFinite(rawTempo) && rawTempo > 0) {
+          const eventDiv = Math.max(0, timelineDiv + cursorDiv);
+          const eventTick = Math.max(
+            0,
+            Math.round((eventDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+          );
+          const normalizedTempo = clampTempo(rawTempo);
+          if (normalizedTempo !== currentTempo) {
+            events.push({ startTicks: eventTick, bpm: normalizedTempo });
+            currentTempo = normalizedTempo;
+          }
         }
         continue;
       }
@@ -3278,7 +3370,8 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
       currentDivisions,
       currentBeats,
       currentBeatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
   }
 
@@ -3299,6 +3392,7 @@ export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiTimeSignatureEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, beats: 4, beatType: 4 }];
 
@@ -3355,7 +3449,8 @@ export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
       currentDivisions,
       currentBeats,
       currentBeatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
     tickCursor += Math.max(
       1,
@@ -3383,6 +3478,7 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiKeySignatureEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, fifths: 0, mode: "major" }];
 
@@ -3449,7 +3545,8 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
       currentDivisions,
       beats,
       beatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
     tickCursor += Math.max(
       1,
@@ -4020,6 +4117,7 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
   const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   const metricAccentEnabled = options.metricAccentEnabled === true;
   const metricAccentProfile = normalizeMetricAccentProfile(options.metricAccentProfile);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return { tempo: 120, events: [] };
 
@@ -4434,7 +4532,8 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
         currentDivisions,
         currentBeats,
         currentBeatType,
-        isImplicitMeasure(nextMeasure)
+        isImplicitMeasure(nextMeasure),
+        firstUnderfullAsPickup
       );
     }
   });

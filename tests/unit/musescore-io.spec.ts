@@ -1805,7 +1805,7 @@ describe("musescore-io", () => {
     expect(n5?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
   });
 
-  it("auto-beams contiguous short chords when BeamMode is absent", () => {
+  it("does not infer beams when MuseScore BeamMode is absent", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="3.02">
   <Score>
@@ -1829,9 +1829,9 @@ describe("musescore-io", () => {
     const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
     const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
     const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
-    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
-    expect(n2?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
-    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
   });
 
   it("imports MuseScore Slur spanner into MusicXML slur start/stop", () => {
