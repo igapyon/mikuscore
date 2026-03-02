@@ -56,6 +56,7 @@ import {
   renderMeasureEditorPreview as renderMeasureEditorPreviewFlow,
   renderScorePreview as renderScorePreviewFlow,
 } from "./preview-flow";
+import { sampleXml4 } from "./sampleXml4";
 import { sampleXml6 } from "./sampleXml6";
 import { sampleXml7 } from "./sampleXml7";
 import {
@@ -128,6 +129,7 @@ const lilyPondInput = q<HTMLTextAreaElement>("#lilyPondInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
+const loadSample4Btn = q<HTMLButtonElement>("#loadSample4Btn");
 const loadSampleBtn6 = q<HTMLButtonElement>("#loadSampleBtn6");
 const loadSample7Btn = q<HTMLButtonElement>("#loadSample7Btn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
@@ -3422,6 +3424,9 @@ const loadBuiltInSample = (xml: string): void => {
 };
 loadSampleBtn6.addEventListener("click", () => {
   loadBuiltInSample(sampleXml6);
+});
+loadSample4Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml4);
 });
 loadSample7Btn.addEventListener("click", () => {
   loadBuiltInSample(sampleXml7);

@@ -815,6 +815,11 @@ const buildBeamXmlByVoiceEvents = (
   beatDiv: number
 ): Map<number, string> => {
   const beamXmlByIndex = new Map<number, string>();
+  const hasExplicitMuseBeamInfo = voiceEvents.some(
+    (ev) => (ev.kind === "chord" || ev.kind === "rest") && (ev.beamMode === "begin" || ev.beamMode === "mid")
+  );
+  // Prefer MuseScore-authored beaming; don't infer implicit beams when source has no explicit beam metadata.
+  if (!hasExplicitMuseBeamInfo) return beamXmlByIndex;
   const assignments = computeBeamAssignments(voiceEvents, beatDiv, (ev) => {
     const isTimed = ev.kind === "chord" || ev.kind === "rest";
     const info = isTimed ? divisionToTypeAndDots(divisions, ev.displayDurationDiv ?? ev.durationDiv) : null;
