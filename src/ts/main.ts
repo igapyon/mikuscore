@@ -56,6 +56,9 @@ import {
   renderMeasureEditorPreview as renderMeasureEditorPreviewFlow,
   renderScorePreview as renderScorePreviewFlow,
 } from "./preview-flow";
+import { sampleXml1 } from "./sampleXml1";
+import { sampleXml2 } from "./sampleXml2";
+import { sampleXml3 } from "./sampleXml3";
 import { sampleXml4 } from "./sampleXml4";
 import { sampleXml6 } from "./sampleXml6";
 import { sampleXml7 } from "./sampleXml7";
@@ -129,6 +132,9 @@ const lilyPondInput = q<HTMLTextAreaElement>("#lilyPondInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
+const loadSample1Btn = q<HTMLButtonElement>("#loadSample1Btn");
+const loadSample2Btn = q<HTMLButtonElement>("#loadSample2Btn");
+const loadSample3Btn = q<HTMLButtonElement>("#loadSample3Btn");
 const loadSample4Btn = q<HTMLButtonElement>("#loadSample4Btn");
 const loadSampleBtn6 = q<HTMLButtonElement>("#loadSampleBtn6");
 const loadSample7Btn = q<HTMLButtonElement>("#loadSample7Btn");
@@ -3424,6 +3430,15 @@ const loadBuiltInSample = (xml: string): void => {
 };
 loadSampleBtn6.addEventListener("click", () => {
   loadBuiltInSample(sampleXml6);
+});
+loadSample1Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml1);
+});
+loadSample2Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml2);
+});
+loadSample3Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml3);
 });
 loadSample4Btn.addEventListener("click", () => {
   loadBuiltInSample(sampleXml4);
