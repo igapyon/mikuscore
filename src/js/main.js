@@ -3577,6 +3577,9 @@ const getNoteArticulationAdjustments = (noteNode) => {
     }
     return { velocityDelta, durationRatio, hasTenuto };
 };
+const hasExplicitArticulation = (noteNode) => {
+    return noteNode.querySelector("notations > articulations > *") !== null;
+};
 const getTieFlags = (noteNode) => {
     var _a;
     const directTieNodes = Array.from(noteNode.children).filter((child) => child.tagName === "tie");
@@ -6876,6 +6879,7 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
     const includeGraceProcessing = applyMidiNuance || options.includeGraceInPlaybackLikeMode === true;
     const includeOrnamentExpansion = applyMidiNuance || options.includeOrnamentInPlaybackLikeMode === true;
     const includeTieProcessing = applyMidiNuance || options.includeTieInPlaybackLikeMode === true;
+    const includeSlurProcessing = applyMidiNuance || includeTieProcessing;
     const applyDefaultDetache = applyMidiNuance || options.applyDefaultDetacheInPlaybackLikeMode === true;
     const graceTimingMode = (_b = options.graceTimingMode) !== null && _b !== void 0 ? _b : DEFAULT_GRACE_TIMING_MODE;
     const metricAccentEnabled = options.metricAccentEnabled === true;
@@ -6908,7 +6912,7 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
     const tempo = clampTempo((_k = getFirstNumber(doc, "sound[tempo]")) !== null && _k !== void 0 ? _k : defaultTempo);
     const events = [];
     partNodes.forEach((part, partIndex) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19;
         const partId = (_a = part.getAttribute("id")) !== null && _a !== void 0 ? _a : "";
         const fallbackChannel = (partIndex % 16) + 1 === 10 ? 11 : (partIndex % 16) + 1;
         const channel = (_b = channelMap.get(partId)) !== null && _b !== void 0 ? _b : fallbackChannel;
@@ -6920,10 +6924,27 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
         let currentVelocity = 80;
         let timelineDiv = 0;
         const tieChainByKey = new Map();
+        const resolveFallbackTieChainKey = (voice, midiChannel, midiNumber) => {
+            const suffix = `|${midiChannel}|${midiNumber}`;
+            const exact = `${voice}${suffix}`;
+            if (tieChainByKey.has(exact))
+                return exact;
+            let candidate = null;
+            for (const key of tieChainByKey.keys()) {
+                if (!key.endsWith(suffix))
+                    continue;
+                if (candidate !== null)
+                    return null; // ambiguous
+                candidate = key;
+            }
+            return candidate;
+        };
         const activeWedgeByNumber = new Map();
         const pendingGraceByVoice = new Map();
         const activeSlurByVoice = new Map();
         const voiceTimeShiftTicks = new Map();
+        const lastEventByVoiceChannelPitch = new Map();
+        const lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch = new Map();
         const measures = Array.from(part.querySelectorAll(":scope > measure"));
         for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
             const measure = measures[measureIndex];
@@ -7071,9 +7092,15 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                         if (soundingMidi < 0 || soundingMidi > 127) {
                             continue;
                         }
+                        const parsedArticulation = getNoteArticulationAdjustments(child);
                         const articulation = applyMidiNuance
-                            ? getNoteArticulationAdjustments(child)
+                            ? parsedArticulation
                             : { velocityDelta: 0, durationRatio: 1, hasTenuto: false };
+                        const hasAnyExplicitArticulation = hasExplicitArticulation(child);
+                        const allowsRepeatedSlurMergeForCurrent = !hasAnyExplicitArticulation &&
+                            parsedArticulation.durationRatio >= 1 &&
+                            !parsedArticulation.hasTenuto &&
+                            parsedArticulation.velocityDelta === 0;
                         const metricAccentDelta = applyMidiNuance && metricAccentEnabled
                             ? getMetricAccentVelocityDelta(startDiv, currentDivisions, currentBeats, currentBeatType, metricAccentProfile)
                             : 0;
@@ -7083,10 +7110,18 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                         const baseDurTicks = Math.max(1, Math.round(((durationDiv !== null && durationDiv !== void 0 ? durationDiv : 1) / currentDivisions) * normalizedTicksPerQuarter));
                         const slurNumbers = applyMidiNuance
                             ? getSlurNumbers(child)
-                            : { starts: [], stops: [] };
+                            : includeSlurProcessing
+                                ? getSlurNumbers(child)
+                                : { starts: [], stops: [] };
                         const activeSlurSet = (_8 = activeSlurByVoice.get(voice)) !== null && _8 !== void 0 ? _8 : new Set();
-                        const noteUnderSlur = applyMidiNuance &&
+                        const noteUnderSlur = includeSlurProcessing &&
                             (activeSlurSet.size > 0 || slurNumbers.starts.length > 0 || slurNumbers.stops.length > 0);
+                        const hasForwardSlurConnection = includeSlurProcessing &&
+                            (slurNumbers.starts.length > 0 || activeSlurSet.size > slurNumbers.stops.length);
+                        const isInsideOngoingSlurOnly = includeSlurProcessing &&
+                            activeSlurSet.size > 0 &&
+                            slurNumbers.starts.length === 0 &&
+                            slurNumbers.stops.length === 0;
                         const tieFlags = includeTieProcessing ? getTieFlags(child) : { start: false, stop: false };
                         const shouldApplyDefaultDetache = applyDefaultDetache &&
                             !isGrace &&
@@ -7113,7 +7148,7 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                             pendingGraceByVoice.set(voice, pending);
                             continue;
                         }
-                        const legatoOverlapTicks = applyMidiNuance && !isChord && (noteUnderSlur || articulation.hasTenuto)
+                        const legatoOverlapTicks = applyMidiNuance && !isChord && (hasForwardSlurConnection || articulation.hasTenuto)
                             ? Math.max(1, Math.round(normalizedTicksPerQuarter / 32))
                             : 0;
                         const temporalAdjustments = applyMidiNuance && !isGrace
@@ -7190,29 +7225,64 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                         const primaryEvent = generatedEvents[0];
                         if (!primaryEvent)
                             continue;
+                        const voiceChannelPitchKey = `${voice}|${channel}|${soundingMidi}`;
+                        const priorSamePitchEvent = (_18 = lastEventByVoiceChannelPitch.get(voiceChannelPitchKey)) !== null && _18 !== void 0 ? _18 : null;
+                        const shouldMergeRepeatedSlurSamePitch = includeSlurProcessing &&
+                            !isChord &&
+                            !isGrace &&
+                            !tieFlags.start &&
+                            !tieFlags.stop &&
+                            isInsideOngoingSlurOnly &&
+                            generatedEvents.length === 1 &&
+                            priorSamePitchEvent !== null &&
+                            allowsRepeatedSlurMergeForCurrent &&
+                            Boolean(lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.get(voiceChannelPitchKey)) &&
+                            priorSamePitchEvent.startTicks < startTicks &&
+                            priorSamePitchEvent.startTicks + priorSamePitchEvent.durTicks >= startTicks;
                         for (const wedgeKind of activeWedgeByNumber.values()) {
                             currentVelocity = clampVelocity(currentVelocity + (wedgeKind === "crescendo" ? 4 : -4));
                         }
-                        if (includeTieProcessing) {
-                            const tieKey = `${voice}|${channel}|${soundingMidi}`;
+                        if (shouldMergeRepeatedSlurSamePitch && priorSamePitchEvent) {
+                            const priorEndTick = priorSamePitchEvent.startTicks + priorSamePitchEvent.durTicks;
+                            const currentEndTick = primaryEvent.startTicks + primaryEvent.durTicks;
+                            priorSamePitchEvent.durTicks = Math.max(1, Math.max(priorEndTick, currentEndTick) - priorSamePitchEvent.startTicks);
+                            priorSamePitchEvent.velocity = Math.max(priorSamePitchEvent.velocity, velocity);
+                            lastEventByVoiceChannelPitch.set(voiceChannelPitchKey, priorSamePitchEvent);
+                        }
+                        else if (includeTieProcessing) {
+                            const tieKey = voiceChannelPitchKey;
                             if (tieFlags.stop) {
-                                const chained = tieChainByKey.get(tieKey);
+                                const chainedKey = resolveFallbackTieChainKey(voice, channel, soundingMidi);
+                                const chained = chainedKey ? tieChainByKey.get(chainedKey) : null;
                                 if (chained) {
                                     chained.durTicks += primaryEvent.durTicks;
                                     chained.velocity = Math.max(chained.velocity, velocity);
+                                    lastEventByVoiceChannelPitch.set(chainedKey !== null && chainedKey !== void 0 ? chainedKey : tieKey, chained);
+                                    lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(chainedKey !== null && chainedKey !== void 0 ? chainedKey : tieKey, allowsRepeatedSlurMergeForCurrent);
                                 }
                                 else {
                                     events.push(primaryEvent);
+                                    lastEventByVoiceChannelPitch.set(tieKey, primaryEvent);
+                                    lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(tieKey, allowsRepeatedSlurMergeForCurrent);
                                 }
                                 if (!tieFlags.start) {
-                                    tieChainByKey.delete(tieKey);
+                                    if (chainedKey)
+                                        tieChainByKey.delete(chainedKey);
                                 }
                                 else {
-                                    tieChainByKey.set(tieKey, chained !== null && chained !== void 0 ? chained : primaryEvent);
+                                    const chainedOrPrimary = chained !== null && chained !== void 0 ? chained : primaryEvent;
+                                    tieChainByKey.set(chainedKey !== null && chainedKey !== void 0 ? chainedKey : tieKey, chainedOrPrimary);
+                                    lastEventByVoiceChannelPitch.set(chainedKey !== null && chainedKey !== void 0 ? chainedKey : tieKey, chainedOrPrimary);
+                                    lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(chainedKey !== null && chainedKey !== void 0 ? chainedKey : tieKey, allowsRepeatedSlurMergeForCurrent);
                                 }
                             }
                             else {
                                 events.push(...generatedEvents);
+                                for (const generated of generatedEvents) {
+                                    const generatedKey = `${voice}|${channel}|${generated.midiNumber}`;
+                                    lastEventByVoiceChannelPitch.set(generatedKey, generated);
+                                    lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(generatedKey, allowsRepeatedSlurMergeForCurrent);
+                                }
                                 if (tieFlags.start) {
                                     tieChainByKey.set(tieKey, primaryEvent);
                                 }
@@ -7223,8 +7293,13 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                         }
                         else {
                             events.push(...generatedEvents);
+                            for (const generated of generatedEvents) {
+                                const generatedKey = `${voice}|${channel}|${generated.midiNumber}`;
+                                lastEventByVoiceChannelPitch.set(generatedKey, generated);
+                                lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(generatedKey, allowsRepeatedSlurMergeForCurrent);
+                            }
                         }
-                        if (applyMidiNuance) {
+                        if (includeSlurProcessing || applyMidiNuance) {
                             const nextSlurSet = new Set(activeSlurSet);
                             for (const slurStart of slurNumbers.starts)
                                 nextSlurSet.add(slurStart);
@@ -7236,8 +7311,10 @@ const buildPlaybackEventsFromMusicXmlDoc = (doc, ticksPerQuarter, options = {}) 
                             else {
                                 activeSlurByVoice.delete(voice);
                             }
+                        }
+                        if (applyMidiNuance) {
                             if (!isChord && temporalAdjustments.postPauseTicks > 0) {
-                                const shiftedTicks = ((_18 = voiceTimeShiftTicks.get(voice)) !== null && _18 !== void 0 ? _18 : 0) + temporalAdjustments.postPauseTicks;
+                                const shiftedTicks = ((_19 = voiceTimeShiftTicks.get(voice)) !== null && _19 !== void 0 ? _19 : 0) + temporalAdjustments.postPauseTicks;
                                 voiceTimeShiftTicks.set(voice, shiftedTicks);
                             }
                         }
@@ -8362,11 +8439,11 @@ const createBasicWaveSynthEngine = (options) => {
         }
         return context;
     };
-    const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform, sustainHoldSeconds = 0) => {
+    const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform, sustainHoldSeconds = 0, legatoFromOverlap = false) => {
         if (!audioContext)
             return startAt;
-        const attack = 0.005;
-        const release = 0.03;
+        const attack = legatoFromOverlap ? 0.0015 : 0.005;
+        const release = legatoFromOverlap ? 0.03 : 0.01;
         const endAt = startAt + bodyDuration;
         const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
         const oscillator = audioContext.createOscillator();
@@ -8374,8 +8451,14 @@ const createBasicWaveSynthEngine = (options) => {
         oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
         const gainNode = audioContext.createGain();
         const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-        gainNode.gain.setValueAtTime(0.0001, startAt);
-        gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+        if (legatoFromOverlap) {
+            gainNode.gain.setValueAtTime(gainLevel * 0.75, startAt);
+            gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+        }
+        else {
+            gainNode.gain.setValueAtTime(0.0001, startAt);
+            gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+        }
         gainNode.gain.setValueAtTime(gainLevel, heldEndAt);
         gainNode.gain.linearRampToValueAtTime(0.0001, heldEndAt + release);
         oscillator.connect(gainNode);
@@ -8449,7 +8532,7 @@ const createBasicWaveSynthEngine = (options) => {
         }
     };
     const playSchedule = async (schedule, waveform, onEnded) => {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f, _g;
         if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
             throw new Error("Please convert first.");
         }
@@ -8508,12 +8591,57 @@ const createBasicWaveSynthEngine = (options) => {
         const isPedalHeldAt = (channel, tick) => {
             return pedalRanges.some((range) => range.channel === channel && tick >= range.startTick && tick < range.endTick);
         };
+        const laneStarts = new Map();
         for (const event of schedule.events) {
+            const laneKey = `${event.channel}|${(_c = event.trackId) !== null && _c !== void 0 ? _c : ""}`;
+            const starts = (_d = laneStarts.get(laneKey)) !== null && _d !== void 0 ? _d : [];
+            starts.push(event.start);
+            laneStarts.set(laneKey, starts);
+        }
+        for (const [laneKey, starts] of laneStarts.entries()) {
+            const uniqSorted = Array.from(new Set(starts)).sort((a, b) => a - b);
+            laneStarts.set(laneKey, uniqSorted);
+        }
+        const findNextStartTickOnLane = (laneKey, startTick) => {
+            var _a, _b;
+            const starts = laneStarts.get(laneKey);
+            if (!starts || starts.length === 0)
+                return null;
+            let lo = 0;
+            let hi = starts.length - 1;
+            let ans = -1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                if (((_a = starts[mid]) !== null && _a !== void 0 ? _a : 0) > startTick) {
+                    ans = (_b = starts[mid]) !== null && _b !== void 0 ? _b : -1;
+                    hi = mid - 1;
+                }
+                else {
+                    lo = mid + 1;
+                }
+            }
+            return ans >= 0 ? ans : null;
+        };
+        const lastNoteByLane = new Map();
+        for (const event of schedule.events) {
+            const laneKey = `${event.channel}|${(_e = event.trackId) !== null && _e !== void 0 ? _e : ""}`;
+            const prevInLane = lastNoteByLane.get(laneKey);
+            const legatoFromOverlap = ((_f = prevInLane === null || prevInLane === void 0 ? void 0 : prevInLane.startTick) !== null && _f !== void 0 ? _f : -1) < event.start && ((_g = prevInLane === null || prevInLane === void 0 ? void 0 : prevInLane.endTick) !== null && _g !== void 0 ? _g : -1) > event.start;
             const startAt = baseTime + tickToSeconds(event.start);
             const endAt = baseTime + tickToSeconds(event.start + event.ticks);
-            const bodyDuration = Math.max(0.04, endAt - startAt);
+            let bodyDuration = Math.max(0.04, endAt - startAt);
+            const nextStartTick = findNextStartTickOnLane(laneKey, event.start);
+            if (!legatoFromOverlap && nextStartTick !== null && nextStartTick > event.start) {
+                const hasForwardOverlapIntent = event.start + event.ticks > nextStartTick;
+                if (!hasForwardOverlapIntent) {
+                    const nextStartAt = baseTime + tickToSeconds(nextStartTick);
+                    const separatedEndAt = Math.max(startAt + 0.02, nextStartAt - 0.006);
+                    bodyDuration = Math.max(0.02, Math.min(bodyDuration, separatedEndAt - startAt));
+                }
+            }
             const sustainHoldSeconds = isPedalHeldAt(event.channel, event.start) ? 0.18 : 0;
-            latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds));
+            latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds, legatoFromOverlap));
+            lastNoteByLane.set(laneKey, { startTick: event.start, endTick: event.start + event.ticks });
         }
         const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
         synthStopTimer = window.setTimeout(() => {
@@ -8577,6 +8705,7 @@ const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) =>
             start: event.startTicks,
             ticks: event.durTicks,
             channel: event.channel,
+            trackId: event.trackId,
         })),
     };
 };
@@ -8690,6 +8819,8 @@ const startPlayback = async (options, params) => {
         graceTimingMode: options.getGraceTimingMode(),
         metricAccentEnabled: options.getMetricAccentEnabled(),
         metricAccentProfile: options.getMetricAccentProfile(),
+        includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+        applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
     });
     let effectiveParsedPlayback = parsedPlayback;
     let effectiveTempoEvents = useMidiLikePlayback
@@ -8785,6 +8916,8 @@ const startMeasurePlayback = async (options, params) => {
         graceTimingMode: options.getGraceTimingMode(),
         metricAccentEnabled: options.getMetricAccentEnabled(),
         metricAccentProfile: options.getMetricAccentProfile(),
+        includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+        applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
     });
     const events = parsedPlayback.events;
     if (events.length === 0) {

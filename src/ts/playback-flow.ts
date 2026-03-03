@@ -23,6 +23,7 @@ export type SynthSchedule = {
     start: number;
     ticks: number;
     channel: number;
+    trackId?: string;
   }>;
 };
 
@@ -101,11 +102,12 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     startAt: number,
     bodyDuration: number,
     waveform: OscillatorType,
-    sustainHoldSeconds = 0
+    sustainHoldSeconds = 0,
+    legatoFromOverlap = false
   ): number => {
     if (!audioContext) return startAt;
-    const attack = 0.005;
-    const release = 0.03;
+    const attack = legatoFromOverlap ? 0.0015 : 0.005;
+    const release = legatoFromOverlap ? 0.03 : 0.01;
     const endAt = startAt + bodyDuration;
     const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
     const oscillator = audioContext.createOscillator();
@@ -114,8 +116,13 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
     const gainNode = audioContext.createGain();
     const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    if (legatoFromOverlap) {
+      gainNode.gain.setValueAtTime(gainLevel * 0.75, startAt);
+      gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    } else {
+      gainNode.gain.setValueAtTime(0.0001, startAt);
+      gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    }
     gainNode.gain.setValueAtTime(gainLevel, heldEndAt);
     gainNode.gain.linearRampToValueAtTime(0.0001, heldEndAt + release);
 
@@ -248,16 +255,66 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     const isPedalHeldAt = (channel: number, tick: number): boolean => {
       return pedalRanges.some((range) => range.channel === channel && tick >= range.startTick && tick < range.endTick);
     };
+    const laneStarts = new Map<string, number[]>();
+    for (const event of schedule.events) {
+      const laneKey = `${event.channel}|${event.trackId ?? ""}`;
+      const starts = laneStarts.get(laneKey) ?? [];
+      starts.push(event.start);
+      laneStarts.set(laneKey, starts);
+    }
+    for (const [laneKey, starts] of laneStarts.entries()) {
+      const uniqSorted = Array.from(new Set(starts)).sort((a, b) => a - b);
+      laneStarts.set(laneKey, uniqSorted);
+    }
+    const findNextStartTickOnLane = (laneKey: string, startTick: number): number | null => {
+      const starts = laneStarts.get(laneKey);
+      if (!starts || starts.length === 0) return null;
+      let lo = 0;
+      let hi = starts.length - 1;
+      let ans = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if ((starts[mid] ?? 0) > startTick) {
+          ans = starts[mid] ?? -1;
+          hi = mid - 1;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return ans >= 0 ? ans : null;
+    };
+    const lastNoteByLane = new Map<string, { startTick: number; endTick: number }>();
 
     for (const event of schedule.events) {
+      const laneKey = `${event.channel}|${event.trackId ?? ""}`;
+      const prevInLane = lastNoteByLane.get(laneKey);
+      const legatoFromOverlap =
+        (prevInLane?.startTick ?? -1) < event.start && (prevInLane?.endTick ?? -1) > event.start;
       const startAt = baseTime + tickToSeconds(event.start);
       const endAt = baseTime + tickToSeconds(event.start + event.ticks);
-      const bodyDuration = Math.max(0.04, endAt - startAt);
+      let bodyDuration = Math.max(0.04, endAt - startAt);
+      const nextStartTick = findNextStartTickOnLane(laneKey, event.start);
+      if (!legatoFromOverlap && nextStartTick !== null && nextStartTick > event.start) {
+        const hasForwardOverlapIntent = event.start + event.ticks > nextStartTick;
+        if (!hasForwardOverlapIntent) {
+          const nextStartAt = baseTime + tickToSeconds(nextStartTick);
+          const separatedEndAt = Math.max(startAt + 0.02, nextStartAt - 0.006);
+          bodyDuration = Math.max(0.02, Math.min(bodyDuration, separatedEndAt - startAt));
+        }
+      }
       const sustainHoldSeconds = isPedalHeldAt(event.channel, event.start) ? 0.18 : 0;
       latestEndTime = Math.max(
         latestEndTime,
-        scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds)
+        scheduleBasicWaveNote(
+          event,
+          startAt,
+          bodyDuration,
+          normalizedWaveform,
+          sustainHoldSeconds,
+          legatoFromOverlap
+        )
       );
+      lastNoteByLane.set(laneKey, { startTick: event.start, endTick: event.start + event.ticks });
     }
 
     const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
@@ -274,7 +331,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
 const toSynthSchedule = (
   tempo: number,
-  events: Array<{ midiNumber: number; startTicks: number; durTicks: number; channel: number }>,
+  events: Array<{ midiNumber: number; startTicks: number; durTicks: number; channel: number; trackId?: string }>,
   tempoEvents: Array<{ startTicks: number; bpm: number }> = [],
   controlEvents: Array<{ channel: number; startTicks: number; controllerNumber: number; controllerValue: number }> = []
 ): SynthSchedule => {
@@ -333,6 +390,7 @@ const toSynthSchedule = (
         start: event.startTicks,
         ticks: event.durTicks,
         channel: event.channel,
+        trackId: event.trackId,
       })),
   };
 };
@@ -500,6 +558,8 @@ export const startPlayback = async (
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
     metricAccentProfile: options.getMetricAccentProfile(),
+    includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+    applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
   });
   let effectiveParsedPlayback = parsedPlayback;
   let effectiveTempoEvents = useMidiLikePlayback
@@ -637,6 +697,8 @@ export const startMeasurePlayback = async (
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
     metricAccentProfile: options.getMetricAccentProfile(),
+    includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+    applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
