@@ -1,5 +1,12 @@
 # MuseScore Export Parity Test Strategy
 
+## Positioning
+
+- This document is a parity verification strategy document (test/operation policy).
+- It is not the converter behavior specification.
+- Converter I/O behavior is defined in:
+  - `docs/spec/MUSESCORE_IO.md`
+
 ## 背景
 - mikuscore の内部正本は MusicXML とする。
 - 一方、配布元が MuseScore の曲データでは、作者の実質原本は MuseScore 形式（`.mscz/.mscx`）である可能性が高い。
@@ -117,60 +124,11 @@
 - 仕様変更時に、どの記譜要素へ影響したかを定量的に追跡できる。
 - MusicXML正本方針を維持したまま、MuseScore互換品質を継続改善できる。
 
-## MIDI -> MusicXML パリティ検証（劣化前提）
+## MIDI parity note
 
-### 位置づけ
-- MIDIは記譜情報が大きく失われるため、MuseScore/MusicXMLと同じ完全再現テストにはしない。
-- 目的は「復元できるはずの意味」を比較し、MIDI変換器の改善点を特定すること。
-
-### テストフロー
-1. 同一曲について以下を準備する。
-   - `source.mid`（MuseScoreからのエクスポート）
-   - `reference.musicxml`（MuseScore公式エクスポート）
-2. mikuscore変換で `source.mid -> candidate_from_midi.musicxml` を生成する。
-3. `candidate_from_midi.musicxml` と `reference.musicxml` を、MIDIで復元可能な項目に限定して比較する。
-
-### 比較対象（MIDIでカバー期待）
-- 音高列（概ねの音高・上下関係）
-- 発音タイミング（onset順序、拍位置）
-- 音価（量子化後の長さ傾向）
-- テンポ/拍子（取得可能範囲）
-- トラック/チャンネル由来の声部分離（可能な範囲）
-
-### 比較対象外または低優先
-- 連符番号表示（7/8/9表記）
-- スラー形状、タイ形状、アーティキュレーション詳細
-- オッターヴァ線、反復記号、レイアウト情報
-- 表示専用メタデータ
-
-### 合否・評価指標（例）
-- `M0`: 音高/拍の大崩れがない
-- `M1`: 小節単位の拍充足が安定している
-- `M2`: 量子化誤差が許容範囲内（しきい値管理）
-- 差分は「変換器改善で詰められる差分」か「MIDI仕様限界」かに分類する
-
-### 改善ループ
-- 差分レポートを以下カテゴリで蓄積する。
-  - 量子化ミス
-  - 声部分離ミス
-  - テンポ/拍子解釈ミス
-  - 仕様限界（対応不要）
-- 対応可能カテゴリを優先して修正し、同一fixtureで回帰確認する。
-
-### 運用メモ（2026-02-26, moonlight）
-- `safe (cand(midi)) practical diff = 307`
-- `musescore_parity (cand(parity)) practical diff = 172`
-- `playback practical diff = 183`（比較参考）
-- MIDI import の同tick同pitch再発音で、`note-off` を最古 `note-on` に対応づける FIFO ペアリングを採用。
-  - これにより、イベント順（`on->off` / `off->on`）依存の崩れを抑制できる。
-- 比較サンプリング方針:
-  - `m12-m16` は既知の局所乖離として、スポット診断サンプリングから除外する。
-  - 代わりに `m1-m4` を固定サンプル区間として確認する。
-  - `m1-m4` の最新ホットスポット（safe/parity共通傾向）: `m1=2, m2=2, m3=4, m4=4`
-- 発音・長さの評価方針:
-  - 発音タイミング（onset）は厳格一致。
-  - 長さ（duration）は比率許容（`1/2`〜`2`倍）を別軸で併記する。
-  - 最新実測: `onset-strict + durationRatio[1/2..2]` は `parity=167`。
+- MIDI parity policy is intentionally managed outside this document.
+- For MIDI import/export behavior and constraints, refer to:
+  - `docs/spec/MIDI_IO.md`
 
 ## 生成AIレビュー運用メモ
 - 生成AIに渡す入力は「正規化済みdiff」と「小節/声部インデックス付きの意味差分」を優先する。

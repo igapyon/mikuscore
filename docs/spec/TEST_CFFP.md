@@ -4,6 +4,11 @@
 
 `CFFP` (Cross-Format Focus Parity) defines focused, minimal, cross-format roundtrip tests.
 
+Scope note:
+
+- This file is the authoritative CFFP case catalog and per-format policy source.
+- `docs/spec/TEST_MATRIX.md` tracks required automated gates at matrix level.
+
 One topic at a time:
 - prepare a minimal `MusicXML` fixture for that topic
 - run `MusicXML -> format -> MusicXML` for all supported formats

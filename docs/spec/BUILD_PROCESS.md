@@ -9,6 +9,11 @@ This project adopts:
 
 The build process is designed to preserve offline and zero-runtime-dependency behavior.
 
+Scope note:
+
+- This file defines build/runtime artifact constraints.
+- Day-to-day quality gate operation is defined in `docs/spec/LOCAL_WORKFLOW.md`.
+
 ## Target Artifact
 
 - Development template: `mikuscore-src.html` (editable source template)
@@ -38,21 +43,11 @@ npm run build
 3. Inline local CSS and JS into HTML
 4. Output `mikuscore.html` as single-file artifact
 
-## Optional Commands
+## Related Commands
 
-```bash
-npm run typecheck
-npm run test:unit
-npm run test:property
-npm run test:all
-npm run clean
-```
+For verification and daily commands (`typecheck`, `test:*`, `check:all`, `clean`), see:
 
-- `typecheck`: strict TS check for development quality
-- `test:unit`: run unit tests with Vitest
-- `test:property`: run property-based invariant tests
-- `test:all`: run both unit and property tests
-- `clean`: remove generated JS and distribution HTML
+- `docs/spec/LOCAL_WORKFLOW.md`
 
 ## Toolchain Baseline
 

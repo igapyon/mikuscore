@@ -4,6 +4,12 @@
 
 This document defines high-level architecture boundaries for mikuscore MVP.
 
+Scope note:
+
+- This file defines boundaries and invariants at architecture level.
+- Detailed runtime build constraints are in `docs/spec/BUILD_PROCESS.md`.
+- Detailed UI behavior is in `docs/spec/UI_SPEC.md`.
+
 ## MusicXML Version Baseline
 
 - Baseline format: **MusicXML 4.0**

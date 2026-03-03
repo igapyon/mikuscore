@@ -4,6 +4,12 @@
 
 Executable test planning mapped from MVP requirements.
 
+Scope note:
+
+- This file defines required automated quality-gate tests.
+- Detailed CFFP case catalog and per-format preserve/degrade policy are maintained in:
+  - `docs/spec/TEST_CFFP.md`
+
 ## Required Automated Tests
 
 1. `RT-0 No-op save returns original text`
