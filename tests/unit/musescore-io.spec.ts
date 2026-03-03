@@ -1474,6 +1474,29 @@ describe("musescore-io", () => {
     expect(prevPos).toBeLessThan(nextPos);
   });
 
+  it("reuses slur start span for slur stop when start/stop note durations differ", () => {
+    const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>32</divisions><time><beats>3</beats><beat-type>8</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>32</duration><voice>1</voice><type>quarter</type><notations><slur type="start" number="1"/></notations></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice><type>16th</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>32nd</type><notations><slur type="stop" number="1"/></notations></note>
+      <note><rest/><duration>4</duration><voice>1</voice><type>32nd</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(musicXml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+    expect(mscx).toContain("<Spanner type=\"Slur\"><Slur/><next><location><fractions>1/4</fractions></location></next></Spanner>");
+    expect(mscx).toContain("<Spanner type=\"Slur\"><prev><location><fractions>-1/4</fractions></location></prev></Spanner>");
+    expect(mscx).not.toContain("<Spanner type=\"Slur\"><prev><location><fractions>-1/32</fractions></location></prev></Spanner>");
+  });
+
   it("exports MusicXML alto clef as MuseScore concertClefType C", () => {
     const musicXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
@@ -1656,6 +1679,25 @@ describe("musescore-io", () => {
     expect(mscx).toContain("<defaultClef>F</defaultClef>");
     expect(mscx).toContain("<Instrument><trackName>Viola</trackName><longName>Viola</longName><shortName>Vla.</shortName><clef>C3</clef></Instrument>");
     expect(mscx).toContain("<Instrument><trackName>Violoncello</trackName><longName>Violoncello</longName><shortName>Vc.</shortName><clef>F</clef></Instrument>");
+  });
+
+  it("exports sample2.mxl Violin1 m2 slur stop span consistent with its start span", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample2.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mscx = exportMusicXmlDomToMuseScore(doc);
+
+    const mfPos = mscx.indexOf("<subtype>mf</subtype>");
+    expect(mfPos).toBeGreaterThanOrEqual(0);
+    const measureEnd = mscx.indexOf("</Measure>", mfPos);
+    expect(measureEnd).toBeGreaterThan(mfPos);
+    const excerpt = mscx.slice(mfPos, measureEnd);
+
+    expect(excerpt).toContain("<Chord><durationType>quarter</durationType><Spanner type=\"Slur\"><Slur/><next><location><fractions>1/4</fractions></location></next></Spanner><Note><pitch>65</pitch></Note></Chord>");
+    expect(excerpt).toContain("<Chord><durationType>32nd</durationType><Spanner type=\"Slur\"><prev><location><fractions>-1/4</fractions></location></prev></Spanner><Note><pitch>67</pitch></Note></Chord>");
+    expect(excerpt).not.toContain("<Chord><durationType>32nd</durationType><Spanner type=\"Slur\"><prev><location><fractions>-1/32</fractions></location></prev></Spanner><Note><pitch>67</pitch></Note></Chord>");
   });
 
   it("keeps viola/cello clefs on sample2.mscz -> MusicXML -> MuseScore path", () => {

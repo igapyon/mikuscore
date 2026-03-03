@@ -403,14 +403,18 @@ export const createAbcDownloadPayload = (
 
 export const createMeiDownloadPayload = (
   xmlText: string,
-  convertMusicXmlToMei: (doc: Document) => string
+  convertMusicXmlToMei: (
+    doc: Document,
+    options?: { meiVersion?: string }
+  ) => string,
+  options: { meiVersion?: string } = {}
 ): DownloadFilePayload | null => {
   const musicXmlDoc = parseMusicXmlDocument(xmlText);
   if (!musicXmlDoc) return null;
 
   let meiText = "";
   try {
-    meiText = convertMusicXmlToMei(musicXmlDoc);
+    meiText = convertMusicXmlToMei(musicXmlDoc, options);
   } catch {
     return null;
   }

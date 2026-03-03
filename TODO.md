@@ -671,6 +671,9 @@
       - [x] import 側で中間 `scoreDef` の拍子・調号・clef 変更を反映（measure属性へ出力）する最小対応とunit追加。
     - [ ] 出力 `meiversion=\"4.0.1\"` 固定を見直し、v5互換方針と互換契約を明文化する。
       - [x] 出力の既定 `meiversion` を `5.1` に変更し、互換目的で明示上書き（`MeiExportOptions.meiVersion`）を追加。
+    - [x] MEI export profile 分離の試行（`strict` / `musescore`）を実施。
+      - [x] 結果: `strict` は実運用で不足が多く、2026-03-04 時点で廃止して `musescore` 一本化に戻した。
+      - [x] 記録: `strict` で抑制していた要素（helper tempo / measure-level control duplication）は、MuseScore互換のため常時有効に復帰。
     - [ ] `annot type=\"musicxml-misc-field\"` への意味情報退避を補助用途に限定し、コア意味は標準MEI要素で保持する。
 - [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
 - [ ] VSQX 形式の入出力対応を追加。
