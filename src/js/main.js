@@ -3368,7 +3368,7 @@ loadFromText(xmlInput.value);
   "src/ts/midi-io.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.convertMidiToMusicXml = exports.buildMidiBytesForPlayback = exports.collectMidiKeySignatureEventsFromMusicXmlDoc = exports.collectMidiTimeSignatureEventsFromMusicXmlDoc = exports.collectMidiTempoEventsFromMusicXmlDoc = exports.collectMidiControlEventsFromMusicXmlDoc = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
+exports.buildPlaybackEventsFromXml = exports.buildPlaybackEventsFromMusicXmlDoc = exports.convertMidiToMusicXml = exports.buildMidiBytesForPlayback = exports.collectMidiKeySignatureEventsFromMusicXmlDoc = exports.collectMidiTimeSignatureEventsFromMusicXmlDoc = exports.collectLeadingPickupTicksFromMusicXmlDoc = exports.collectMidiTempoEventsFromMusicXmlDoc = exports.collectMidiControlEventsFromMusicXmlDoc = exports.collectMidiProgramOverridesFromMusicXmlDoc = void 0;
 const beam_common_1 = require("./beam-common");
 const staffClefPolicy_1 = require("../../core/staffClefPolicy");
 const normalizeLeadingPickupTimeSignatureEvents = (events, ticksPerQuarter) => {
@@ -3418,6 +3418,56 @@ const clampVelocity = (velocity) => {
     if (!Number.isFinite(velocity))
         return 80;
     return Math.max(1, Math.min(127, Math.round(velocity)));
+};
+const buildMuseScoreStylePickupTimeSignaturePrelude = (events, ticksPerQuarter, pickupTicks) => {
+    const normalizedPickupTicks = Math.max(0, Math.round(pickupTicks));
+    if (normalizedPickupTicks <= 0)
+        return events;
+    if (!events.length)
+        return events;
+    const baseAtZero = events.find((event) => Math.max(0, Math.round(event.startTicks)) === 0);
+    if (!baseAtZero)
+        return events;
+    const baseBeatType = Math.max(1, Math.round(baseAtZero.beatType));
+    const baseBeats = Math.max(1, Math.round(baseAtZero.beats));
+    const fullMeasureTicks = Math.max(1, Math.round((Math.max(1, Math.round(ticksPerQuarter)) * 4 * baseBeats) / baseBeatType));
+    if (normalizedPickupTicks >= fullMeasureTicks)
+        return events;
+    const pickupBeatsFloat = (normalizedPickupTicks * baseBeatType) / (Math.max(1, ticksPerQuarter) * 4);
+    const pickupBeats = Math.round(pickupBeatsFloat);
+    if (!Number.isFinite(pickupBeatsFloat) || Math.abs(pickupBeatsFloat - pickupBeats) > 1e-6)
+        return events;
+    if (pickupBeats < 1 || pickupBeats >= baseBeats)
+        return events;
+    const alreadyPrelude = events.some((event) => Math.max(0, Math.round(event.startTicks)) === 0 &&
+        Math.max(1, Math.round(event.beats)) === pickupBeats &&
+        Math.max(1, Math.round(event.beatType)) === baseBeatType) &&
+        events.some((event) => Math.max(0, Math.round(event.startTicks)) === normalizedPickupTicks &&
+            Math.max(1, Math.round(event.beats)) === baseBeats &&
+            Math.max(1, Math.round(event.beatType)) === baseBeatType);
+    if (alreadyPrelude)
+        return events;
+    const remapped = [
+        { startTicks: 0, beats: pickupBeats, beatType: baseBeatType },
+        { startTicks: normalizedPickupTicks, beats: baseBeats, beatType: baseBeatType },
+    ];
+    for (const event of events) {
+        const tick = Math.max(0, Math.round(event.startTicks));
+        if (tick === 0)
+            continue;
+        if (tick === normalizedPickupTicks &&
+            Math.max(1, Math.round(event.beats)) === baseBeats &&
+            Math.max(1, Math.round(event.beatType)) === baseBeatType) {
+            continue;
+        }
+        remapped.push({
+            startTicks: tick,
+            beats: Math.max(1, Math.round(event.beats)),
+            beatType: Math.max(1, Math.round(event.beatType)),
+        });
+    }
+    remapped.sort((a, b) => a.startTicks - b.startTicks);
+    return remapped;
 };
 const mod12 = (value) => {
     const rounded = Math.round(value);
@@ -4050,6 +4100,14 @@ const parseMksMidiTextMetadata = (lines) => {
                 metadata.composer = safeDecodeURIComponent(line.slice("mks:composer:".length));
             continue;
         }
+        if (line.startsWith("mks:pickup-ticks:")) {
+            if (metadata.pickupTicks === undefined) {
+                const parsed = Number.parseInt(line.slice("mks:pickup-ticks:".length), 10);
+                if (Number.isFinite(parsed) && parsed > 0)
+                    metadata.pickupTicks = parsed;
+            }
+            continue;
+        }
         if (line.startsWith("mks:part-name-track:")) {
             const payload = line.slice("mks:part-name-track:".length);
             const sep = payload.indexOf(":");
@@ -4526,6 +4584,41 @@ const midiToPitchComponentsByKey = (midiNumber, keyFifths) => {
     ];
     const mapped = (_a = (useFlatSpelling ? flatTable : sharpTable)[semitone]) !== null && _a !== void 0 ? _a : { step: "C", alter: 0 };
     return { step: mapped.step, alter: mapped.alter, octave };
+};
+const pickClosestMidiInGroup = (group, targetMidi) => {
+    var _a, _b;
+    if (!group.length)
+        return null;
+    let best = (_b = (_a = group[0]) === null || _a === void 0 ? void 0 : _a.midi) !== null && _b !== void 0 ? _b : null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const note of group) {
+        const distance = Math.abs(note.midi - targetMidi);
+        if (distance < bestDistance) {
+            best = note.midi;
+            bestDistance = distance;
+        }
+    }
+    return best;
+};
+const chooseMidiPitchComponentsWithContext = (segment, keyFifths, prevGroup, nextGroup) => {
+    const semitone = ((Math.round(segment.midi) % 12) + 12) % 12;
+    const enharmonicSemitones = new Set([1, 3, 6, 8, 10]);
+    if (!enharmonicSemitones.has(semitone)) {
+        return midiToPitchComponentsByKey(segment.midi, keyFifths);
+    }
+    const prevMidi = prevGroup ? pickClosestMidiInGroup(prevGroup, segment.midi) : null;
+    const nextMidi = nextGroup ? pickClosestMidiInGroup(nextGroup, segment.midi) : null;
+    const touchesUpperSemitone = prevMidi === segment.midi + 1 || nextMidi === segment.midi + 1;
+    const touchesLowerSemitone = prevMidi === segment.midi - 1 || nextMidi === segment.midi - 1;
+    if (touchesUpperSemitone && !touchesLowerSemitone) {
+        // Prefer sharp spelling for lower chromatic neighbors (e.g. D-C#-D).
+        return midiToPitchComponentsByKey(segment.midi, Math.max(0, keyFifths));
+    }
+    if (touchesLowerSemitone && !touchesUpperSemitone) {
+        // Prefer flat spelling for upper chromatic neighbors (e.g. C-Db-C).
+        return midiToPitchComponentsByKey(segment.midi, Math.min(0, keyFifths));
+    }
+    return midiToPitchComponentsByKey(segment.midi, keyFifths);
 };
 const accidentalTextFromAlter = (alter) => {
     if (alter === -2)
@@ -5015,7 +5108,7 @@ const buildMidiDiagMiscXml = (warnings) => {
     return xml;
 };
 const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measureDiv, beatDiv, isDrum, divisions, keyFifths) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const voiceSegments = segments
         .filter((segment) => segment.voice === voice && segment.staff === sourceStaff)
         .slice()
@@ -5030,6 +5123,10 @@ const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measure
         groupsByStart.set(segment.startDiv, bucket);
     }
     const starts = Array.from(groupsByStart.keys()).sort((a, b) => a - b);
+    const groupIndexByStart = new Map();
+    for (let i = 0; i < starts.length; i += 1) {
+        groupIndexByStart.set(starts[i], i);
+    }
     const keyAlterMap = keySignatureAlterByStep(keyFifths);
     const accidentalByStepOctave = new Map();
     const preparedNoteChunks = [];
@@ -5046,6 +5143,16 @@ const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measure
             group,
         };
     });
+    const groupByStart = new Map(groups.map((group) => [group.startDiv, group.group]));
+    const pitchBySegment = new Map();
+    for (const segment of voiceSegments) {
+        const groupIndex = (_b = groupIndexByStart.get(segment.startDiv)) !== null && _b !== void 0 ? _b : -1;
+        const prevGroup = groupIndex > 0 ? ((_c = groupByStart.get(starts[groupIndex - 1])) !== null && _c !== void 0 ? _c : null) : null;
+        const nextGroup = groupIndex >= 0 && groupIndex < starts.length - 1
+            ? ((_d = groupByStart.get(starts[groupIndex + 1])) !== null && _d !== void 0 ? _d : null)
+            : null;
+        pitchBySegment.set(segment, chooseMidiPitchComponentsWithContext(segment, keyFifths, prevGroup, nextGroup));
+    }
     let cursorForTimeline = 0;
     for (const entry of groups) {
         const start = entry.startDiv;
@@ -5150,7 +5257,7 @@ const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measure
             const restDur = prepared.startDiv - cursor;
             xml += buildRestXml(restDur, voice, outputStaff, divisions);
         }
-        const beamXml = (_b = beamXmlByChunkIndex.get(chunkIndex)) !== null && _b !== void 0 ? _b : "";
+        const beamXml = (_e = beamXmlByChunkIndex.get(chunkIndex)) !== null && _e !== void 0 ? _e : "";
         for (let i = 0; i < prepared.group.length; i += 1) {
             const segment = prepared.group[i];
             if (isDrum) {
@@ -5164,11 +5271,11 @@ const buildMeasureVoiceXml = (segments, voice, sourceStaff, outputStaff, measure
                 xml += "</note>";
             }
             else {
-                const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
+                const pitch = (_f = pitchBySegment.get(segment)) !== null && _f !== void 0 ? _f : midiToPitchComponentsByKey(segment.midi, keyFifths);
                 const stepOctaveKey = `${pitch.step}${pitch.octave}`;
                 const defaultAlter = accidentalByStepOctave.has(stepOctaveKey)
-                    ? (_c = accidentalByStepOctave.get(stepOctaveKey)) !== null && _c !== void 0 ? _c : 0
-                    : (_d = keyAlterMap[pitch.step]) !== null && _d !== void 0 ? _d : 0;
+                    ? (_g = accidentalByStepOctave.get(stepOctaveKey)) !== null && _g !== void 0 ? _g : 0
+                    : (_h = keyAlterMap[pitch.step]) !== null && _h !== void 0 ? _h : 0;
                 const requiresAccidental = pitch.alter !== defaultAlter;
                 const accidentalText = requiresAccidental ? accidentalTextFromAlter(pitch.alter) : null;
                 xml += "<note>";
@@ -6271,6 +6378,61 @@ const collectMidiTempoEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
     return sortedTicks.map((tick) => { var _a; return ({ startTicks: tick, bpm: (_a = byTick.get(tick)) !== null && _a !== void 0 ? _a : 120 }); });
 };
 exports.collectMidiTempoEventsFromMusicXmlDoc = collectMidiTempoEventsFromMusicXmlDoc;
+const collectLeadingPickupTicksFromMusicXmlDoc = (doc, ticksPerQuarter) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+    const firstPart = doc.querySelector("score-partwise > part");
+    if (!firstPart)
+        return 0;
+    const firstMeasure = firstPart.querySelector(":scope > measure");
+    if (!firstMeasure)
+        return 0;
+    const secondMeasure = (_a = firstPart.querySelectorAll(":scope > measure")[1]) !== null && _a !== void 0 ? _a : null;
+    const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
+    let currentDivisions = (_b = getFirstNumber(firstMeasure, "attributes > divisions")) !== null && _b !== void 0 ? _b : 1;
+    let currentBeats = (_c = getFirstNumber(firstMeasure, "attributes > time > beats")) !== null && _c !== void 0 ? _c : 4;
+    let currentBeatType = (_d = getFirstNumber(firstMeasure, "attributes > time > beat-type")) !== null && _d !== void 0 ? _d : 4;
+    currentDivisions = Math.max(1, Math.round(currentDivisions));
+    currentBeats = Math.max(1, Math.round(currentBeats));
+    currentBeatType = Math.max(1, Math.round(currentBeatType));
+    let cursorDiv = 0;
+    let measureMaxDiv = 0;
+    const lastStartByVoice = new Map();
+    for (const child of Array.from(firstMeasure.children)) {
+        if (child.tagName === "backup" || child.tagName === "forward") {
+            const dur = getFirstNumber(child, "duration");
+            if (!dur || dur <= 0)
+                continue;
+            if (child.tagName === "backup") {
+                cursorDiv = Math.max(0, cursorDiv - dur);
+            }
+            else {
+                cursorDiv += dur;
+                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+            }
+            continue;
+        }
+        if (child.tagName !== "note")
+            continue;
+        const durationDiv = getFirstNumber(child, "duration");
+        if (!durationDiv || durationDiv <= 0)
+            continue;
+        const voice = (_g = (_f = (_e = child.querySelector("voice")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : "1";
+        const isChord = Boolean(child.querySelector("chord"));
+        const startDiv = isChord ? ((_h = lastStartByVoice.get(voice)) !== null && _h !== void 0 ? _h : cursorDiv) : cursorDiv;
+        if (!isChord) {
+            lastStartByVoice.set(voice, startDiv);
+            cursorDiv += durationDiv;
+        }
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+    }
+    const advanceDiv = resolveMeasureAdvanceDiv(firstMeasure, measureMaxDiv, currentDivisions, currentBeats, currentBeatType, isImplicitMeasure(secondMeasure), firstUnderfullAsPickup);
+    const fullMeasureDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / currentBeatType));
+    if (advanceDiv <= 0 || advanceDiv >= fullMeasureDiv)
+        return 0;
+    return Math.max(1, Math.round((advanceDiv / currentDivisions) * normalizedTicksPerQuarter));
+};
+exports.collectLeadingPickupTicksFromMusicXmlDoc = collectLeadingPickupTicksFromMusicXmlDoc;
 const collectMidiTimeSignatureEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
     var _a;
     const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
@@ -6435,7 +6597,7 @@ const collectMidiKeySignatureEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
 };
 exports.collectMidiKeySignatureEventsFromMusicXmlDoc = collectMidiKeySignatureEventsFromMusicXmlDoc;
 const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_piano_2", trackProgramOverrides = new Map(), controlEvents = [], tempoEvents = [], timeSignatureEvents = [], keySignatureEvents = [], options = {}) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
     const rawWriter = options.rawWriter === true;
     const midiWriter = rawWriter ? null : getMidiWriterRuntime();
     if (!rawWriter && !midiWriter) {
@@ -6460,6 +6622,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     const metaTitle = String((_d = (_c = options.metadata) === null || _c === void 0 ? void 0 : _c.title) !== null && _d !== void 0 ? _d : "").trim();
     const metaMovementTitle = String((_f = (_e = options.metadata) === null || _e === void 0 ? void 0 : _e.movementTitle) !== null && _f !== void 0 ? _f : "").trim();
     const metaComposer = String((_h = (_g = options.metadata) === null || _g === void 0 ? void 0 : _g.composer) !== null && _h !== void 0 ? _h : "").trim();
+    const metaPickupTicks = Math.max(0, Math.round((_k = (_j = options.metadata) === null || _j === void 0 ? void 0 : _j.pickupTicks) !== null && _k !== void 0 ? _k : 0));
     if (metaTitle)
         mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
     if (metaMovementTitle) {
@@ -6467,10 +6630,12 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     }
     if (metaComposer)
         mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
+    if (metaPickupTicks > 0)
+        mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
     for (let index = 0; index < sortedTrackIds.length; index += 1) {
         const trackId = sortedTrackIds[index];
-        const trackEvents = (_j = tracksById.get(trackId)) !== null && _j !== void 0 ? _j : [];
-        const trackName = (_m = (_l = (_k = trackEvents[0]) === null || _k === void 0 ? void 0 : _k.trackName) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "";
+        const trackEvents = (_l = tracksById.get(trackId)) !== null && _l !== void 0 ? _l : [];
+        const trackName = (_p = (_o = (_m = trackEvents[0]) === null || _m === void 0 ? void 0 : _m.trackName) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
         if (!trackName)
             continue;
         mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
@@ -6512,6 +6677,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     if (!dedupedTimeSignatureEvents.length || dedupedTimeSignatureEvents[0].startTicks !== 0) {
         dedupedTimeSignatureEvents.unshift({ startTicks: 0, beats: 4, beatType: 4 });
     }
+    const exportedTimeSignatureEvents = buildMuseScoreStylePickupTimeSignaturePrelude(dedupedTimeSignatureEvents, writerTicksPerQuarter, metaPickupTicks);
     const dedupedKeySignatureEvents = [];
     for (const event of keySignatureEvents
         .map((e) => ({
@@ -6532,7 +6698,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
         dedupedKeySignatureEvents.unshift({ startTicks: 0, fifths: 0, mode: "major" });
     }
     const exportDiagnostics = [];
-    const sourceDiagnostics = ((_o = options.diagnostics) !== null && _o !== void 0 ? _o : [])
+    const sourceDiagnostics = ((_q = options.diagnostics) !== null && _q !== void 0 ? _q : [])
         .map((entry) => String(entry || "").trim())
         .filter((entry) => entry.length > 0);
     exportDiagnostics.push(...sourceDiagnostics);
@@ -6561,7 +6727,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
         eventCount: sourceEvents.length,
         trackCount: tracksById.size,
         tempoEventCount: dedupedTempoEvents.length,
-        timeSignatureEventCount: dedupedTimeSignatureEvents.length,
+        timeSignatureEventCount: exportedTimeSignatureEvents.length,
         keySignatureEventCount: dedupedKeySignatureEvents.length,
         controlEventCount: controlEvents.length,
         channelCount,
@@ -6569,10 +6735,10 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     });
     const normalizedProgramPreset = instrumentByPreset[programPreset] !== undefined ? programPreset : "electric_piano_2";
     if (rawWriter) {
-        return buildRawMidiBytesForPlayback(sourceEvents, trackProgramOverrides, controlEvents, dedupedTempoEvents, dedupedTimeSignatureEvents, dedupedKeySignatureEvents, writerTicksPerQuarter, normalizedProgramPreset, {
+        return buildRawMidiBytesForPlayback(sourceEvents, trackProgramOverrides, controlEvents, dedupedTempoEvents, exportedTimeSignatureEvents, dedupedKeySignatureEvents, writerTicksPerQuarter, normalizedProgramPreset, {
             embedMksSysEx,
             sysexChunkTexts: sysexChunks,
-            retriggerPolicy: (_p = options.rawRetriggerPolicy) !== null && _p !== void 0 ? _p : "off_before_on",
+            retriggerPolicy: (_r = options.rawRetriggerPolicy) !== null && _r !== void 0 ? _r : "off_before_on",
             mksTextMetaLines,
         });
     }
@@ -6582,7 +6748,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     tempoTrack.addInstrumentName("Tempo Map");
     const metaTimeline = [];
     metaTimeline.push(...dedupedTempoEvents.map((e) => ({ kind: "tempo", ...e })));
-    metaTimeline.push(...dedupedTimeSignatureEvents.map((e) => ({ kind: "time", ...e })));
+    metaTimeline.push(...exportedTimeSignatureEvents.map((e) => ({ kind: "time", ...e })));
     metaTimeline.push(...dedupedKeySignatureEvents.map((e) => ({ kind: "key", ...e })));
     const kindPriority = { time: 0, key: 1, tempo: 2 };
     metaTimeline.sort((a, b) => a.startTicks === b.startTicks ? kindPriority[a.kind] - kindPriority[b.kind] : a.startTicks - b.startTicks);
@@ -6653,13 +6819,13 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     const groupedControlEvents = new Map();
     for (const controlEvent of controlEvents) {
         const key = `${controlEvent.trackId}::${normalizeMidiChannel(controlEvent.channel)}`;
-        const bucket = (_q = groupedControlEvents.get(key)) !== null && _q !== void 0 ? _q : [];
+        const bucket = (_s = groupedControlEvents.get(key)) !== null && _s !== void 0 ? _s : [];
         bucket.push(controlEvent);
         groupedControlEvents.set(key, bucket);
     }
     const sortedControlKeys = Array.from(groupedControlEvents.keys()).sort((a, b) => a.localeCompare(b));
     for (const controlKey of sortedControlKeys) {
-        const channelEvents = ((_r = groupedControlEvents.get(controlKey)) !== null && _r !== void 0 ? _r : [])
+        const channelEvents = ((_t = groupedControlEvents.get(controlKey)) !== null && _t !== void 0 ? _t : [])
             .slice()
             .sort((a, b) => a.startTicks === b.startTicks
             ? a.controllerNumber === b.controllerNumber
@@ -6690,7 +6856,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
 };
 exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
 const convertMidiToMusicXml = (midiBytes, options = {}) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const diagnostics = [];
     const warnings = [];
     const quantizeGridOption = normalizeMidiImportQuantizeGridOption(options.quantizeGrid);
@@ -6803,6 +6969,11 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     };
     const beats = Math.max(1, Math.round(firstTimeSignature.beats));
     const beatType = Math.max(1, Math.round(firstTimeSignature.beatType));
+    const measureTicks = Math.max(1, Math.round((header.ticksPerQuarter * 4 * beats) / beatType));
+    const metadataPickupTicks = Math.max(0, Math.min(measureTicks - 1, Math.round((_k = parsedMksTextMetadata.pickupTicks) !== null && _k !== void 0 ? _k : 0)));
+    const resolvedPickupTicks = normalizedTimeSignature.pickupTicks > 0
+        ? normalizedTimeSignature.pickupTicks
+        : metadataPickupTicks;
     const keyFifths = Math.max(-7, Math.min(7, Math.round(firstKeySignature.fifths)));
     const keyMode = firstKeySignature.mode === "minor" ? "minor" : "major";
     if (!keySignatureEvents.length && inferredKeySignature) {
@@ -6852,7 +7023,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         keyFifths,
         keyMode,
         tempoEvents,
-        pickupTicks: normalizedTimeSignature.pickupTicks,
+        pickupTicks: resolvedPickupTicks,
         partGroups,
         notesByTrackChannel,
         programByTrackChannel,
@@ -9919,6 +10090,7 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "el
         const movementTitle = (_j = (_h = (_g = playbackDoc.querySelector("score-partwise > movement-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
         const scoreComposer = (_q = (_m = (_l = (_k = playbackDoc
             .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : (_p = (_o = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
+        const pickupTicks = (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
         midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
             embedMksSysEx: true,
             ticksPerQuarter: exportTicksPerQuarter,
@@ -9929,6 +10101,7 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "el
                 title: scoreTitle,
                 movementTitle,
                 composer: scoreComposer,
+                pickupTicks,
             },
         });
     }

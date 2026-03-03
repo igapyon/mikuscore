@@ -6,6 +6,7 @@ import {
   collectMidiTempoEventsFromMusicXmlDoc,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
+  collectLeadingPickupTicksFromMusicXmlDoc,
   type GraceTimingMode,
   type MetricAccentProfile,
   type MidiProgramPreset,
@@ -340,6 +341,7 @@ export const createMidiDownloadPayload = (
         ?.textContent?.trim() ??
       playbackDoc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
       "";
+    const pickupTicks = collectLeadingPickupTicksFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
     midiBytes = buildMidiBytesForPlayback(
       parsedPlayback.events,
       parsedPlayback.tempo,
@@ -359,6 +361,7 @@ export const createMidiDownloadPayload = (
           title: scoreTitle,
           movementTitle,
           composer: scoreComposer,
+          pickupTicks,
         },
       }
     );
