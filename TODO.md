@@ -24,6 +24,10 @@
 - [ ] Verovio warning `slur ... could not be ended` may appear from input MusicXML; loading currently continues.
 - [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
 - [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
+- [ ] `MusicXML -> MuseScore(.mscz)` slur reconstruction is still unstable on `sample2`:
+  - `Violin 1, m2`: expected slur is missing.
+  - `Violin 1, m6`: an abnormally long slur appears.
+  - Current suspicion: same-chord `slur stop + slur start` handling and/or Spanner `next/prev` distance mapping still mismatches MuseScore expectations.
 
 ### Next Priorities
 #### P1: Editing stability
