@@ -2223,8 +2223,8 @@ const makeMuseChordXml = (
     fingeringText?: string;
     stringNumber?: number;
   }>,
-  slurStarts?: number[],
-  slurStops?: number[],
+  slurStartFractions?: string[],
+  slurStopFractions?: string[],
   articulationSubtypes?: string[],
   trillMarkOnly?: boolean,
   trillStarts?: number[],
@@ -2263,13 +2263,13 @@ const makeMuseChordXml = (
   if (trillMarkOnly && (trillStarts?.length ?? 0) === 0) {
     xml += "<Ornament><subtype>ornamentTrill</subtype></Ornament>";
   }
-  const slurSpanDiv = Math.max(1, Math.round(displayDurationDiv > 0 ? displayDurationDiv : durationDiv));
-  const slurSpanFraction = fractionFromDivisions(slurSpanDiv, divisions);
-  for (const _no of slurStops ?? []) {
-    xml += `<Spanner type="Slur"><prev><location><fractions>-${slurSpanFraction}</fractions></location></prev></Spanner>`;
+  for (const span of slurStopFractions ?? []) {
+    const normalized = String(span || "").trim() || fractionFromDivisions(Math.max(1, Math.round(displayDurationDiv > 0 ? displayDurationDiv : durationDiv)), divisions);
+    xml += `<Spanner type="Slur"><prev><location><fractions>-${normalized}</fractions></location></prev></Spanner>`;
   }
-  for (const _no of slurStarts ?? []) {
-    xml += `<Spanner type="Slur"><Slur/><next><location><fractions>${slurSpanFraction}</fractions></location></next></Spanner>`;
+  for (const span of slurStartFractions ?? []) {
+    const normalized = String(span || "").trim() || fractionFromDivisions(Math.max(1, Math.round(displayDurationDiv > 0 ? displayDurationDiv : durationDiv)), divisions);
+    xml += `<Spanner type="Slur"><Slur/><next><location><fractions>${normalized}</fractions></location></next></Spanner>`;
   }
   for (const subtype of articulationSubtypes ?? []) {
     xml += `<Articulation><subtype>${xmlEscape(subtype)}</subtype></Articulation>`;
@@ -3257,6 +3257,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
     const staffXmlByLane = Array.from({ length: laneCount }, (_unused, laneIndex) => {
       const staffNo = laneIndex + 1;
       let currentClef: ClefSign = initialClefByStaff.get(staffNo) ?? "G";
+      const activeSlurSpanFractionByVoice = new Map<number, Map<number, string>>();
       let staffXml = `<Staff id="${staffIds[laneIndex]}">`;
 
       for (let mi = 0; mi < measures.length; mi += 1) {
@@ -3378,6 +3379,8 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
           let cursorDiv = 0;
           let nextTupletRefNo = 1;
           const activeTupletRefByNumber = new Map<number, string>();
+          const activeSlurSpanFractionById = activeSlurSpanFractionByVoice.get(voiceNo) ?? new Map<number, string>();
+          activeSlurSpanFractionByVoice.set(voiceNo, activeSlurSpanFractionById);
           for (const event of events) {
             if (event.atDiv > cursorDiv) {
               const gap = Math.min(event.atDiv, renderCapacityDiv) - cursorDiv;
@@ -3433,15 +3436,28 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
             if (event.pitches === null) {
               voiceXml += makeMuseRestXml(event.durationDiv, tupletDisplayDurationDiv, divisions, tupletRefId);
             } else {
+              const defaultSlurSpanFraction = fractionFromDivisions(
+                Math.max(1, Math.round(tupletDisplayDurationDiv > 0 ? tupletDisplayDurationDiv : event.durationDiv)),
+                divisions
+              );
               const resolvedSlurStops = resolveSlurIds(event.slurStops, staffNo, voiceNo, false);
               const resolvedSlurStarts = resolveSlurIds(event.slurStarts, staffNo, voiceNo, true);
+              const slurStopFractions = resolvedSlurStops.map((slurId) => {
+                const span = activeSlurSpanFractionById.get(slurId) ?? defaultSlurSpanFraction;
+                activeSlurSpanFractionById.delete(slurId);
+                return span;
+              });
+              const slurStartFractions = resolvedSlurStarts.map((slurId) => {
+                activeSlurSpanFractionById.set(slurId, defaultSlurSpanFraction);
+                return defaultSlurSpanFraction;
+              });
               voiceXml += makeMuseChordXml(
                 event.durationDiv,
                 tupletDisplayDurationDiv,
                 divisions,
                 event.pitches,
-                resolvedSlurStarts,
-                resolvedSlurStops,
+                slurStartFractions,
+                slurStopFractions,
                 event.articulationSubtypes,
                 event.trillMarkOnly,
                 event.trillStarts,

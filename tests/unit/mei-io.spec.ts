@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -49,6 +50,7 @@ describe("MEI export", () => {
     expect(mei).toContain("<scoreDef");
     expect(mei).toContain("meter.count=\"4\"");
     expect(mei).toContain("<staffDef");
+    expect(mei).toContain("<label>Piano</label>");
     expect(mei).toContain("<measure n=\"1\">");
     expect(mei).toContain("<note ");
     expect(mei).toContain("<rest ");
@@ -82,7 +84,7 @@ describe("MEI export", () => {
     expect(mei).toContain('trans.semi="-3"');
   });
 
-  it("exports MEI with default meiversion=5.1", () => {
+  it("exports MEI with default meiversion=5.1+basic", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
@@ -92,7 +94,7 @@ describe("MEI export", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const mei = exportMusicXmlDomToMei(doc);
-    expect(mei).toContain('meiversion="5.1"');
+    expect(mei).toContain('meiversion="5.1+basic"');
   });
 
   it("exports MEI with custom meiversion when specified", () => {
@@ -106,6 +108,208 @@ describe("MEI export", () => {
     if (!doc) return;
     const mei = exportMusicXmlDomToMei(doc, { meiVersion: "4.0.1" });
     expect(mei).toContain('meiversion="4.0.1"');
+  });
+
+  it("exports tempo direction (words + sound tempo) as MEI tempo", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction placement="above">
+        <direction-type><words>Allegretto moderato</words></direction-type>
+        <sound tempo="116"/>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<tempo staff="1" tstamp="1" midi.bpm="116" place="above">Allegretto moderato</tempo>');
+    expect(mei).not.toContain("<dynam tstamp=\"1\" place=\"above\">Allegretto moderato</dynam>");
+  });
+
+  it("exports dynamics direction without offset at current measure cursor", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <direction placement="below">
+        <direction-type><dynamics><p/></dynamics></direction-type>
+      </direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<dynam staff="1" tstamp="2" place="below">p</dynam>');
+  });
+
+  it("exports standalone measure sound tempo as MuseScore helper tempo", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>8</divisions><time><beats>6</beats><beat-type>8</beat-type></time></attributes>
+      <direction placement="above">
+        <direction-type><words>Allegretto moderato</words></direction-type>
+        <sound tempo="116"/>
+      </direction>
+      <sound tempo="60"/>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain(
+      '<tempo staff="1" type="mscore-infer-from-text" tstamp="1" midi.bpm="60">♩ = 60</tempo>'
+    );
+  });
+
+
+  it("exports slur controls using startid/endid with generated xml:id notes", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<note[^>]*xml:id="mkN\d+"/);
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"[^>]*\/>/);
+  });
+
+  it("exports cross-measure slur as startid/endid control", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"\/>/);
+  });
+
+  it("exports sample2.mxl with MuseScore-friendly MEI tempo/slur controls", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample2.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<tempo staff="1" tstamp="1" midi.bpm="116" place="above">Allegretto moderato</tempo>');
+    expect(mei).toContain(
+      '<tempo staff="1" type="mscore-infer-from-text" tstamp="1" midi.bpm="60">♩ = 60</tempo>'
+    );
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"[^>]*\/>/);
+  });
+
+  it("exports sample1.mxl Violin2 measure1 staccato as MEI artic elements", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample1.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<measure n="1">[\s\S]*<staff n="2">[\s\S]*<artic artic="stacc"\/>/);
+  });
+
+  it("exports sample1.mxl measure9 dynamics with distinct/stable timing per staff", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample1.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const mei = exportMusicXmlDomToMei(doc);
+    const meiDoc = new DOMParser().parseFromString(mei, "application/xml");
+    const measure9 = Array.from(meiDoc.querySelectorAll("measure")).find(
+      (m) => (m.getAttribute("n") || "").trim() === "9"
+    );
+    expect(measure9).not.toBeUndefined();
+    if (!measure9) return;
+
+    const assertFpOrdering = (staffNo: string): void => {
+      const dyns = Array.from(measure9.querySelectorAll(`:scope > dynam[staff="${staffNo}"]`));
+      const f = dyns.find((d) => (d.textContent || "").trim() === "f");
+      const p = dyns.find((d) => (d.textContent || "").trim() === "p");
+      expect(f).toBeDefined();
+      expect(p).toBeDefined();
+      if (!f || !p) return;
+      const fTstamp = Number.parseFloat((f.getAttribute("tstamp") || "").trim());
+      const pTstamp = Number.parseFloat((p.getAttribute("tstamp") || "").trim());
+      expect(Number.isFinite(fTstamp)).toBe(true);
+      expect(Number.isFinite(pTstamp)).toBe(true);
+      if (!Number.isFinite(fTstamp) || !Number.isFinite(pTstamp)) return;
+      expect(pTstamp).toBeGreaterThan(fTstamp);
+    };
+
+    assertFpOrdering("1");
+    assertFpOrdering("2");
+    assertFpOrdering("4");
+  });
+
+  it("keeps custom meiversion profile suffix (5.1+basic)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note></measure></part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc, { meiVersion: "5.1+basic" });
+    expect(mei).toContain('meiversion="5.1+basic"');
   });
 
   it("exports full-measure rest as MEI mRest", () => {
@@ -3066,11 +3270,11 @@ describe("MEI export", () => {
     expect(srcDoc).not.toBeNull();
     if (!srcDoc) return;
     const mei = exportMusicXmlDomToMei(srcDoc);
-    expect(mei).toContain('artic="stacc"');
-    expect(mei).toContain('artic="acc"');
-    expect(mei).toContain('artic="spicc"');
-    expect(mei).toContain('artic="ten"');
-    expect(mei).toContain('artic="marc"');
+    expect(mei).toContain('<artic artic="stacc"/>');
+    expect(mei).toContain('<artic artic="acc"/>');
+    expect(mei).toContain('<artic artic="spicc"/>');
+    expect(mei).toContain('<artic artic="ten"/>');
+    expect(mei).toContain('<artic artic="marc"/>');
 
     const roundtripXml = convertMeiToMusicXml(mei);
     const outDoc = parseMusicXmlDocument(roundtripXml);
@@ -3083,7 +3287,7 @@ describe("MEI export", () => {
     expect(outDoc.querySelector("part > measure > note:nth-of-type(5) > notations > articulations > strong-accent")).not.toBeNull();
   });
 
-  it("roundtrips tie/slur from MusicXML note notation into MEI @tie/@slur and back", () => {
+  it("roundtrips tie/slur from MusicXML note notation into MEI controls and back", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
@@ -3111,11 +3315,11 @@ describe("MEI export", () => {
     const mei = exportMusicXmlDomToMei(srcDoc);
     expect(mei).toContain('tie="i"');
     expect(mei).toContain('tie="t"');
-    expect(mei).toContain('slur="i1"');
-    expect(mei).toContain('slur="t1"');
+    expect(mei).not.toContain('slur="i1"');
+    expect(mei).not.toContain('slur="t1"');
     expect(mei).toContain("<tie ");
-    expect(mei).toContain('tstamp="1"');
-    expect(mei).toContain('tstamp2="2"');
+    expect(mei).toContain('startid="#mkN1"');
+    expect(mei).toContain('endid="#mkN2"');
     expect(mei).toContain("<slur ");
 
     const roundtripXml = convertMeiToMusicXml(mei);

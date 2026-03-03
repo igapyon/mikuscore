@@ -236,19 +236,6 @@ const extractMeiTieFromMusicXmlNote = (note: Element): string => {
   return "";
 };
 
-const extractMeiSlurFromMusicXmlNote = (note: Element): string => {
-  const slurNodes = Array.from(note.querySelectorAll(":scope > notations > slur"));
-  if (slurNodes.length === 0) return "";
-  const tokens: string[] = [];
-  for (const slur of slurNodes) {
-    const type = (slur.getAttribute("type") || "").trim().toLowerCase();
-    const number = Math.max(1, parseIntSafe(slur.getAttribute("number"), 1));
-    if (type === "start") tokens.push(`i${number}`);
-    if (type === "stop") tokens.push(`t${number}`);
-  }
-  return tokens.join(" ");
-};
-
 const extractMeiArticulationTokensFromMusicXmlNote = (note: Element): string[] => {
   const arts = note.querySelector(":scope > notations > articulations");
   if (!arts) return [];
@@ -262,7 +249,17 @@ const extractMeiArticulationTokensFromMusicXmlNote = (note: Element): string[] =
   return Array.from(new Set(out));
 };
 
-const buildSimplePitchNote = (note: Element, sourceDivisions: number, includeGraceAttr = true): string => {
+const buildMeiArticulationChildren = (tokens: string[]): string => {
+  if (!tokens.length) return "";
+  return tokens.map((token) => `<artic artic="${esc(token)}"/>`).join("");
+};
+
+const buildSimplePitchNote = (
+  note: Element,
+  sourceDivisions: number,
+  includeGraceAttr = true,
+  xmlId?: string
+): string => {
   const typeText = note.querySelector(":scope > type")?.textContent?.trim() ?? "quarter";
   const dur = noteTypeToDur(typeText);
   const dots = note.querySelectorAll(":scope > dot").length;
@@ -278,6 +275,7 @@ const buildSimplePitchNote = (note: Element, sourceDivisions: number, includeGra
     `oct="${esc(octaveText)}"`,
     `dur="${esc(dur)}"`,
   ];
+  if (xmlId) attrs.push(`xml:id="${esc(xmlId)}"`);
   const durationTicks = parseIntSafe(note.querySelector(":scope > duration")?.textContent, NaN);
   if (Number.isFinite(durationTicks) && durationTicks > 0) {
     attrs.push(`mks-dur-480="${toMksDur480(durationTicks, sourceDivisions)}"`);
@@ -303,14 +301,19 @@ const buildSimplePitchNote = (note: Element, sourceDivisions: number, includeGra
   }
   const tieAttr = extractMeiTieFromMusicXmlNote(note);
   if (tieAttr) attrs.push(`tie="${esc(tieAttr)}"`);
-  const slurAttr = extractMeiSlurFromMusicXmlNote(note);
-  if (slurAttr) attrs.push(`slur="${esc(slurAttr)}"`);
-  if (arts.length) attrs.push(`artic="${esc(arts.join(" "))}"`);
+  const articulationXml = buildMeiArticulationChildren(arts);
   const lyric = extractMusicXmlLyric(note);
-  if (lyric) {
-    const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
-    const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
-    return `<note ${attrs.join(" ")}><verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse></note>`;
+  if (lyric || articulationXml) {
+    const parts: string[] = [];
+    if (lyric) {
+      const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
+      const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
+      parts.push(`<verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse>`);
+    }
+    if (articulationXml) {
+      parts.push(articulationXml);
+    }
+    return `<note ${attrs.join(" ")}>${parts.join("")}</note>`;
   }
   return `<note ${attrs.join(" ")}/>`;
 };
@@ -331,6 +334,11 @@ const buildSimpleRest = (note: Element, sourceDivisions: number): string => {
   return `<${isInvisible ? "space" : "rest"} ${attrs.join(" ")}/>`;
 };
 
+const withStaffAttr = (nodeXml: string, staffNo: number): string => {
+  if (/\bstaff="[^"]+"/.test(nodeXml)) return nodeXml;
+  return nodeXml.replace(/^<([A-Za-z][\w.-]*)(\s|>)/, `<$1 staff="${Math.max(1, Math.round(staffNo))}"$2`);
+};
+
 const gatherMeasureNumbers = (parts: Element[]): string[] => {
   const out: string[] = [];
   for (const part of parts) {
@@ -349,7 +357,13 @@ const voiceSort = (a: string, b: string): number => {
   return a.localeCompare(b);
 };
 
-const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTicks: number): string => {
+const buildLayerContent = (
+  notes: Element[],
+  sourceDivisions: number,
+  measureTicks: number,
+  noteIdBySource: Map<Element, string>,
+  allocateNoteId: () => string
+): string => {
   const pitchNotes = notes.filter((n) => !n.querySelector(":scope > rest"));
   const simpleRests = notes.filter((n) => n.querySelector(":scope > rest"));
   if (pitchNotes.length === 0 && simpleRests.length === 1 && notes.length === 1) {
@@ -374,6 +388,7 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
     const hasChordFlag = Boolean(note.querySelector(":scope > chord"));
     const isGracePitchNote = !isRest && !hasChordFlag && note.querySelector(":scope > grace") !== null;
     if (isGracePitchNote) {
+      if (!noteIdBySource.has(note)) noteIdBySource.set(note, allocateNoteId());
       const graceGroup: Element[] = [note];
       let hasSlash = (note.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
       for (let j = i + 1; j < notes.length; j += 1) {
@@ -382,17 +397,23 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
         const nextHasChordFlag = Boolean(next.querySelector(":scope > chord"));
         const nextIsGracePitch = !nextIsRest && !nextHasChordFlag && next.querySelector(":scope > grace") !== null;
         if (!nextIsGracePitch) break;
+        if (!noteIdBySource.has(next)) noteIdBySource.set(next, allocateNoteId());
         graceGroup.push(next);
         hasSlash = hasSlash || (next.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
         i = j;
       }
-      const members = graceGroup.map((g) => buildSimplePitchNote(g, sourceDivisions, false)).join("");
+      const members = graceGroup
+        .map((g) => buildSimplePitchNote(g, sourceDivisions, false, noteIdBySource.get(g)))
+        .join("");
       out.push(`<graceGrp slash="${hasSlash ? "yes" : "no"}">${members}</graceGrp>`);
       continue;
     }
     if (isRest || hasChordFlag) {
       if (isRest) out.push(buildSimpleRest(note, sourceDivisions));
-      else out.push(buildSimplePitchNote(note, sourceDivisions));
+      else {
+        if (!noteIdBySource.has(note)) noteIdBySource.set(note, allocateNoteId());
+        out.push(buildSimplePitchNote(note, sourceDivisions, true, noteIdBySource.get(note)));
+      }
       continue;
     }
 
@@ -404,7 +425,8 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
       i = j;
     }
     if (chordNotes.length === 1) {
-      out.push(buildSimplePitchNote(note, sourceDivisions));
+      if (!noteIdBySource.has(note)) noteIdBySource.set(note, allocateNoteId());
+      out.push(buildSimplePitchNote(note, sourceDivisions, true, noteIdBySource.get(note)));
       continue;
     }
 
@@ -420,6 +442,7 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
     }
     if (dots > 0) chordAttrs.push(`dots="${dots}"`);
     const members = chordNotes.map((n) => {
+      if (!noteIdBySource.has(n)) noteIdBySource.set(n, allocateNoteId());
       const step = n.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "C";
       const octaveText = n.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? "4";
       const alterText = n.querySelector(":scope > pitch > alter")?.textContent ?? null;
@@ -428,21 +451,27 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
       );
       const accid = explicitAccid ?? alterToAccid(alterText);
       const noteAttrs = [
+        `xml:id="${esc(noteIdBySource.get(n) ?? allocateNoteId())}"`,
         `pname="${esc(toPname(step))}"`,
         `oct="${esc(octaveText)}"`,
       ];
       if (accid) noteAttrs.push(`accid="${accid}"`);
       const tieAttr = extractMeiTieFromMusicXmlNote(n);
       if (tieAttr) noteAttrs.push(`tie="${esc(tieAttr)}"`);
-      const slurAttr = extractMeiSlurFromMusicXmlNote(n);
-      if (slurAttr) noteAttrs.push(`slur="${esc(slurAttr)}"`);
       const arts = extractMeiArticulationTokensFromMusicXmlNote(n);
-      if (arts.length) noteAttrs.push(`artic="${esc(arts.join(" "))}"`);
+      const articulationXml = buildMeiArticulationChildren(arts);
       const lyric = extractMusicXmlLyric(n);
-      if (lyric) {
-        const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
-        const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
-        return `<note ${noteAttrs.join(" ")}><verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse></note>`;
+      if (lyric || articulationXml) {
+        const parts: string[] = [];
+        if (lyric) {
+          const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
+          const wordposAttr = wordpos ? ` wordpos="${esc(wordpos)}"` : "";
+          parts.push(`<verse n="1"><syl${wordposAttr}>${esc(lyric.text)}</syl></verse>`);
+        }
+        if (articulationXml) {
+          parts.push(articulationXml);
+        }
+        return `<note ${noteAttrs.join(" ")}>${parts.join("")}</note>`;
       }
       return `<note ${noteAttrs.join(" ")}/>`;
     });
@@ -577,12 +606,57 @@ const collectMeiHarmsForStaff = (measure: Element, localStaff: number, sourceDiv
   return out;
 };
 
-const directionOffsetTicks = (direction: Element): number => {
+const collectDirectionOnsetTicksInMeasure = (measure: Element): Map<Element, number> => {
+  const out = new Map<Element, number>();
+  let cursor = 0;
+  for (const child of Array.from(measure.children)) {
+    if (!(child instanceof Element)) continue;
+    const kind = localNameOf(child);
+    if (kind === "backup") {
+      const dur = Math.max(0, parseIntSafe(child.querySelector(":scope > duration")?.textContent, 0));
+      cursor = Math.max(0, cursor - dur);
+      continue;
+    }
+    if (kind === "forward") {
+      const dur = Math.max(0, parseIntSafe(child.querySelector(":scope > duration")?.textContent, 0));
+      cursor += dur;
+      continue;
+    }
+    if (kind === "note") {
+      const isChord = child.querySelector(":scope > chord") !== null;
+      const isGrace = child.querySelector(":scope > grace") !== null;
+      if (!isChord && !isGrace) {
+        const dur = Math.max(0, parseIntSafe(child.querySelector(":scope > duration")?.textContent, 0));
+        cursor += dur;
+      }
+      continue;
+    }
+    if (kind === "direction") {
+      const offsetNode = child.querySelector(":scope > offset");
+      let onset = cursor;
+      if (offsetNode && String(offsetNode.textContent ?? "").trim() !== "") {
+        const rel = parseIntSafe(offsetNode.textContent, 0);
+        onset = Math.max(0, cursor + rel);
+      }
+      out.set(child, onset);
+    }
+  }
+  return out;
+};
+
+const directionOffsetTicks = (direction: Element, onsetTicksByDirection?: Map<Element, number>): number => {
+  const mapped = onsetTicksByDirection?.get(direction);
+  if (Number.isFinite(mapped)) return Math.max(0, Math.round(mapped as number));
   return Math.max(0, parseIntSafe(direction.querySelector(":scope > offset")?.textContent, 0));
 };
 
-const directionTstamp = (direction: Element, divisions: number, beatType: number): string => {
-  return offsetTicksToTstamp(directionOffsetTicks(direction), divisions, beatType);
+const directionTstamp = (
+  direction: Element,
+  divisions: number,
+  beatType: number,
+  onsetTicksByDirection?: Map<Element, number>
+): string => {
+  return offsetTicksToTstamp(directionOffsetTicks(direction, onsetTicksByDirection), divisions, beatType);
 };
 
 const directionStaffMatches = (direction: Element, localStaff: number): boolean => {
@@ -597,6 +671,7 @@ const collectMeiDirectionControlsForStaff = (
   beatType: number
 ): string[] => {
   const out: string[] = [];
+  const onsetTicksByDirection = collectDirectionOnsetTicksInMeasure(measure);
   const directions = Array.from(measure.querySelectorAll(":scope > direction")).filter((direction) =>
     directionStaffMatches(direction, localStaff)
   );
@@ -604,7 +679,7 @@ const collectMeiDirectionControlsForStaff = (
   for (const direction of directions) {
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
-    const tstamp = directionTstamp(direction, sourceDivisions, beatType);
+    const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const dynamicsNode = direction.querySelector(":scope > direction-type > dynamics");
     if (dynamicsNode) {
       const symbol = Array.from(dynamicsNode.children)
@@ -615,9 +690,31 @@ const collectMeiDirectionControlsForStaff = (
         continue;
       }
     }
+    const tempoRaw = (direction.querySelector(":scope > sound")?.getAttribute("tempo") || "").trim();
+    const tempo = Number.parseFloat(tempoRaw);
     const words = (direction.querySelector(":scope > direction-type > words")?.textContent || "").trim();
+    if (words && Number.isFinite(tempo) && tempo > 0) {
+      out.push(`<tempo tstamp="${esc(tstamp)}" midi.bpm="${esc(String(tempo))}"${placeAttr}>${esc(words)}</tempo>`);
+      continue;
+    }
     if (words) {
       out.push(`<dynam tstamp="${esc(tstamp)}"${placeAttr}>${esc(words)}</dynam>`);
+    }
+  }
+  if (localStaff === 1) {
+    const measureSounds = Array.from(measure.querySelectorAll(":scope > sound"));
+    for (const sound of measureSounds) {
+      const tempoRaw = (sound.getAttribute("tempo") || "").trim();
+      const tempo = Number.parseFloat(tempoRaw);
+      if (!Number.isFinite(tempo) || tempo <= 0) continue;
+      const offsetTicks = Math.max(0, parseIntSafe(sound.getAttribute("offset"), 0));
+      const tstamp = offsetTicksToTstamp(offsetTicks, sourceDivisions, beatType);
+      const bpm = Number.isInteger(tempo)
+        ? String(Math.round(tempo))
+        : tempo.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+      out.push(
+        `<tempo type="mscore-infer-from-text" tstamp="${esc(tstamp)}" midi.bpm="${esc(bpm)}">♩ = ${esc(bpm)}</tempo>`
+      );
     }
   }
 
@@ -628,7 +725,7 @@ const collectMeiDirectionControlsForStaff = (
     if (!wedge) continue;
     const type = (wedge.getAttribute("type") || "").trim().toLowerCase();
     const number = (wedge.getAttribute("number") || "1").trim() || "1";
-    const tstamp = directionTstamp(direction, sourceDivisions, beatType);
+    const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
     if (type === "crescendo" || type === "diminuendo") {
@@ -655,7 +752,7 @@ const collectMeiDirectionControlsForStaff = (
     if (!pedal) continue;
     const type = (pedal.getAttribute("type") || "").trim().toLowerCase();
     const number = (pedal.getAttribute("number") || "1").trim() || "1";
-    const tstamp = directionTstamp(direction, sourceDivisions, beatType);
+    const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
     if (type === "start" || type === "resume" || type === "change") {
@@ -686,7 +783,7 @@ const collectMeiDirectionControlsForStaff = (
     const size = parseIntSafe(octave.getAttribute("size"), 8);
     const dis = Math.max(1, Math.round(size));
     const disPlace: "above" | "below" = type === "down" ? "below" : "above";
-    const tstamp = directionTstamp(direction, sourceDivisions, beatType);
+    const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
     if (type === "up" || type === "down") {
@@ -712,7 +809,7 @@ const collectMeiDirectionControlsForStaff = (
   }
 
   for (const direction of directions) {
-    const tstamp = directionTstamp(direction, sourceDivisions, beatType);
+    const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
     const segno = direction.querySelector(":scope > direction-type > segno");
@@ -744,9 +841,10 @@ const collectMeiDirectionControlsForStaff = (
 const collectStaffTimelineForExport = (
   measure: Element,
   localStaff: number,
-  divisions: number
-): Array<{ note: Element; onset: number }> => {
-  const out: Array<{ note: Element; onset: number }> = [];
+  divisions: number,
+  noteIdBySource?: Map<Element, string>
+): Array<{ note: Element; onset: number; noteId?: string }> => {
+  const out: Array<{ note: Element; onset: number; noteId?: string }> = [];
   let cursor = 0;
   for (const child of Array.from(measure.children)) {
     const name = localNameOf(child);
@@ -766,7 +864,7 @@ const collectStaffTimelineForExport = (
     const isChordContinuation = note.querySelector(":scope > chord") !== null;
     const dur = parseIntSafe(note.querySelector(":scope > duration")?.textContent, 0);
     if (staffNo === localStaff) {
-      out.push({ note, onset: cursor });
+      out.push({ note, onset: cursor, noteId: noteIdBySource?.get(note) });
     }
     if (!isChordContinuation) {
       cursor += Math.max(0, dur);
@@ -828,13 +926,18 @@ const collectMeiTieSlurControlsForStaff = (
   measure: Element,
   localStaff: number,
   divisions: number,
-  beatType: number
+  beatType: number,
+  noteIdBySource?: Map<Element, string>,
+  carryState?: {
+    pendingSlurByNumber: Map<string, { tstamp: string; noteId?: string }>;
+    pendingTieByPitch: Map<string, { tstamp: string; noteId?: string }>;
+  }
 ): string[] => {
   const out: string[] = [];
-  const timeline = collectStaffTimelineForExport(measure, localStaff, divisions);
+  const timeline = collectStaffTimelineForExport(measure, localStaff, divisions, noteIdBySource);
 
-  const pendingSlurByNumber = new Map<string, { tstamp: string }>();
-  const pendingTieByPitch = new Map<string, { tstamp: string }>();
+  const pendingSlurByNumber = carryState?.pendingSlurByNumber ?? new Map<string, { tstamp: string; noteId?: string }>();
+  const pendingTieByPitch = carryState?.pendingTieByPitch ?? new Map<string, { tstamp: string; noteId?: string }>();
 
   for (const item of timeline) {
     const note = item.note;
@@ -845,13 +948,17 @@ const collectMeiTieSlurControlsForStaff = (
       const type = (slur.getAttribute("type") || "").trim().toLowerCase();
       const number = String(Math.max(1, parseIntSafe(slur.getAttribute("number"), 1)));
       if (type === "start") {
-        pendingSlurByNumber.set(number, { tstamp });
+        pendingSlurByNumber.set(number, { tstamp, noteId: item.noteId });
         continue;
       }
       if (type === "stop") {
         const pending = pendingSlurByNumber.get(number);
         if (pending) {
-          out.push(`<slur tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"/>`);
+          if (pending.noteId && item.noteId) {
+            out.push(`<slur startid="#${esc(pending.noteId)}" endid="#${esc(item.noteId)}"/>`);
+          } else {
+            out.push(`<slur tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"/>`);
+          }
           pendingSlurByNumber.delete(number);
         }
       }
@@ -868,12 +975,16 @@ const collectMeiTieSlurControlsForStaff = (
         if (hasStop) {
           const pending = pendingTieByPitch.get(pitchKey);
           if (pending) {
-            out.push(`<tie tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"/>`);
+            if (pending.noteId && item.noteId) {
+              out.push(`<tie startid="#${esc(pending.noteId)}" endid="#${esc(item.noteId)}"/>`);
+            } else {
+              out.push(`<tie tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"/>`);
+            }
             pendingTieByPitch.delete(pitchKey);
           }
         }
         if (hasStart) {
-          pendingTieByPitch.set(pitchKey, { tstamp });
+          pendingTieByPitch.set(pitchKey, { tstamp, noteId: item.noteId });
         }
       }
     }
@@ -931,12 +1042,18 @@ const collectMeiOrnamentAndBreathControlsForStaff = (
 
 const normalizeMeiVersion = (raw: string | undefined): string => {
   const v = String(raw ?? "").trim();
-  if (/^\d+\.\d+(\.\d+)?$/.test(v)) return v;
-  return "5.1";
+  if (/^\d+\.\d+(\.\d+)?(\+[A-Za-z0-9._-]+)?$/.test(v)) return v;
+  return "5.1+basic";
 };
 
 export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions = {}): string => {
   const meiVersion = normalizeMeiVersion(options.meiVersion);
+  let nextGeneratedNoteId = 1;
+  const allocateNoteId = (): string => {
+    const id = `mkN${nextGeneratedNoteId}`;
+    nextGeneratedNoteId += 1;
+    return id;
+  };
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (parts.length === 0) {
     throw new Error("MusicXML part is missing.");
@@ -973,7 +1090,10 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
       Number.isFinite(transpose?.chromatic) ? ` trans.semi="${Math.round(Number(transpose?.chromatic))}"` : "",
     ].join("");
     scoreDefLines.push(
-      `<staffDef n="${slot.globalStaff}" label="${esc(slot.label)}" lines="5" clef.shape="${esc(clef.shape)}" clef.line="${clef.line}"${transposeAttrs}/>`
+      `<staffDef n="${slot.globalStaff}" label="${esc(slot.label)}" lines="5" clef.shape="${esc(clef.shape)}" clef.line="${clef.line}"${transposeAttrs}>` +
+        `<label>${esc(slot.label)}</label>` +
+        `<clef shape="${esc(clef.shape)}" line="${clef.line}"/>` +
+      `</staffDef>`
     );
   }
   scoreDefLines.push("</staffGrp>");
@@ -982,6 +1102,13 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
   const measuresOut: string[] = [];
   const measureNumbers = gatherMeasureNumbers(parts);
   const currentDivisionsByPart = new Map<string, number>();
+  const tieSlurStateByStaffKey = new Map<
+    string,
+    {
+      pendingSlurByNumber: Map<string, { tstamp: string; noteId?: string }>;
+      pendingTieByPitch: Map<string, { tstamp: string; noteId?: string }>;
+    }
+  >();
   for (const part of parts) {
     const partId = (part.getAttribute("id") ?? "").trim();
     if (!partId) continue;
@@ -993,6 +1120,7 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
   }
   for (const number of measureNumbers) {
     const measureLines: string[] = [];
+    const measureControlNodes: string[] = [];
     measureLines.push(`<measure n="${esc(number)}">`);
 
     for (const slot of slots) {
@@ -1030,6 +1158,17 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
       if (voiceMap.size === 0) continue;
 
       measureLines.push(`<staff n="${slot.globalStaff}">`);
+      const noteIdBySource = new Map<Element, string>();
+      const tieSlurCarryState = (() => {
+        const key = `${slot.partId}:${slot.localStaff}`;
+        if (!tieSlurStateByStaffKey.has(key)) {
+          tieSlurStateByStaffKey.set(key, {
+            pendingSlurByNumber: new Map<string, { tstamp: string; noteId?: string }>(),
+            pendingTieByPitch: new Map<string, { tstamp: string; noteId?: string }>(),
+          });
+        }
+        return tieSlurStateByStaffKey.get(key)!;
+      })();
       const miscFields = extractMiscellaneousFieldsFromMeasure(measure);
       for (const field of miscFields) {
         measureLines.push(
@@ -1042,26 +1181,6 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
           `<annot type="musicxml-measure-meta" label="mks:measure-meta">${esc(measureMeta)}</annot>`
         );
       }
-      const controlNodes = collectMeiDirectionControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
-      for (const controlNode of controlNodes) {
-        measureLines.push(controlNode);
-      }
-      const glissSlideNodes = collectMeiGlissSlideControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
-      for (const node of glissSlideNodes) {
-        measureLines.push(node);
-      }
-      const tieSlurNodes = collectMeiTieSlurControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
-      for (const node of tieSlurNodes) {
-        measureLines.push(node);
-      }
-      const ornamentNodes = collectMeiOrnamentAndBreathControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
-      for (const node of ornamentNodes) {
-        measureLines.push(node);
-      }
-      const harmNodes = collectMeiHarmsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
-      for (const harmNode of harmNodes) {
-        measureLines.push(harmNode);
-      }
       for (const voice of Array.from(voiceMap.keys()).sort(voiceSort)) {
         const notes = voiceMap.get(voice) ?? [];
         const measureBeats = parseIntSafe(
@@ -1069,12 +1188,45 @@ export const exportMusicXmlDomToMei = (doc: Document, options: MeiExportOptions 
           meterCount
         );
         const measureTicks = Math.max(1, Math.round((measureBeats * 4 * sourceDivisions) / Math.max(1, beatType)));
-        const layer = buildLayerContent(notes, sourceDivisions, measureTicks);
+        const layer = buildLayerContent(notes, sourceDivisions, measureTicks, noteIdBySource, allocateNoteId);
         measureLines.push(`<layer n="${esc(voice)}">${layer}</layer>`);
+      }
+      const controlNodes = collectMeiDirectionControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
+      for (const controlNode of controlNodes) {
+        measureLines.push(controlNode);
+        measureControlNodes.push(withStaffAttr(controlNode, slot.globalStaff));
+      }
+      const glissSlideNodes = collectMeiGlissSlideControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
+      for (const node of glissSlideNodes) {
+        measureLines.push(node);
+        measureControlNodes.push(withStaffAttr(node, slot.globalStaff));
+      }
+      const tieSlurNodes = collectMeiTieSlurControlsForStaff(
+        measure,
+        slot.localStaff,
+        sourceDivisions,
+        beatType,
+        noteIdBySource,
+        tieSlurCarryState
+      );
+      for (const node of tieSlurNodes) {
+        measureLines.push(node);
+        measureControlNodes.push(withStaffAttr(node, slot.globalStaff));
+      }
+      const ornamentNodes = collectMeiOrnamentAndBreathControlsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
+      for (const node of ornamentNodes) {
+        measureLines.push(node);
+        measureControlNodes.push(withStaffAttr(node, slot.globalStaff));
+      }
+      const harmNodes = collectMeiHarmsForStaff(measure, slot.localStaff, sourceDivisions, beatType);
+      for (const harmNode of harmNodes) {
+        measureLines.push(harmNode);
+        measureControlNodes.push(withStaffAttr(harmNode, slot.globalStaff));
       }
       measureLines.push("</staff>");
     }
 
+    measureLines.push(...measureControlNodes);
     measureLines.push("</measure>");
     measuresOut.push(measureLines.join(""));
   }
