@@ -132,6 +132,17 @@ Therefore quick playback in MIDI-like mode MUST reflect the same nuance policy a
 
 ---
 
+## Scale limitation and recommended workflow
+
+- Quick playback is a lightweight in-app preview feature.
+- For large scores (long duration, many parts, dense events), playback MAY fail to run correctly or stably.
+- This limitation is expected in current architecture and SHOULD be treated as a product constraint.
+
+When reliable playback is required for large scores:
+
+- Export to MIDI (`.mid`) from mikuscore.
+- Play the exported MIDI in an external MIDI-capable player / DAW / notation app.
+
 ## Error and diagnostics policy
 
 - Save failure diagnostics are surfaced through playback status text.

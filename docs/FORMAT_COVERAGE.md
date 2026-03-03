@@ -1,0 +1,34 @@
+# Format Coverage
+
+## Coverage Policy
+
+- Priority order: MusicXML fidelity > conversion breadth.
+- "Supported" means available in product flows, not full notation parity.
+- Experimental formats may change behavior as compatibility work progresses.
+
+## Current Coverage
+
+| Format | Direction | Status | Notes |
+|---|---|---|---|
+| MusicXML 4.0 | import/export | Core baseline | Canonical internal target for compatibility work |
+| MuseScore (`.mscz`) | import/export | Supported | Focus on reliable conversion and parity tests |
+| MIDI (`.mid`) | import/export | Supported | Quantization/notation reconstruction has expected limits |
+| VSQX | import/export | Supported via vendored integration | Uses `utaformatix3-ts-plus` |
+| ABC | import/export | Experimental | Coverage and edge-case handling are evolving |
+| MEI | import/export | Experimental | Compatibility work tracked with reference samples |
+| LilyPond (`.ly`) | import/export | Experimental | Conversion coverage is limited |
+
+## Constraints
+
+- Some notation semantics are format-specific and cannot be preserved 1:1.
+- Enharmonic spelling, articulation detail, repeat semantics, and layout constructs can differ by source format.
+- When exact preservation is not possible, diagnostics and metadata should provide traceability.
+- Quick playback in mikuscore is a lightweight feature and may not work reliably on large scores (long duration, many parts, dense events).
+- For reliable playback of large scores, export MIDI and use an external MIDI-capable playback app.
+
+## Related Specs
+
+- `docs/spec/MIDI_IO.md`
+- `docs/spec/ABC_IO.md`
+- `docs/spec/DIAGNOSTICS.md`
+- `docs/spec/MISCELLANEOUS_FIELDS.md`
