@@ -301,6 +301,46 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(c4Events[0]?.durTicks).toBeGreaterThanOrEqual(256);
   });
 
+  it("merges tied notes even when continuation note omits voice (fallback by channel/pitch)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>2</voice><type>quarter</type>
+        <tie type="start"/><notations><tied type="start"/></notations>
+      </note>
+      <backup><duration>480</duration></backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <tie type="stop"/><notations><tied type="stop"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const c4Events = midiMode.events
+      .filter((e) => e.midiNumber === 60)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(c4Events.length).toBe(1);
+    expect(c4Events[0]?.startTicks).toBe(0);
+    expect(c4Events[0]?.durTicks).toBeGreaterThanOrEqual(256);
+  });
+
   it("keeps slurred notes longer than detached notes in MIDI mode", () => {
     const baseXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
@@ -338,6 +378,248 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(slurred.length).toBe(2);
     expect(slurred[0]?.durTicks ?? 0).toBeGreaterThan(plain[0]?.durTicks ?? 0);
     expect(slurred[1]?.durTicks ?? 0).toBeGreaterThan(plain[1]?.durTicks ?? 0);
+  });
+
+  it("does not retrigger repeated same-pitch note inside slur in MIDI mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const f5Events = midiMode.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(1);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[0]?.durTicks ?? 0).toBeGreaterThan(128);
+  });
+
+  it("does not retrigger repeated same-pitch note inside slur in playback-like mode with tie processing", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(1);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[0]?.durTicks ?? 0).toBeGreaterThan(120);
+  });
+
+  it("keeps retrigger when repeated same-pitch note is slur-start boundary", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const d4Midi = midiMode.events.filter((e) => e.midiNumber === 62).sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4Midi.length).toBe(2);
+    expect(d4Midi[0]?.startTicks).toBe(0);
+    expect(d4Midi[1]?.startTicks ?? 0).toBeGreaterThan(0);
+
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const d4Playback = playbackLike.events
+      .filter((e) => e.midiNumber === 62)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4Playback.length).toBe(2);
+    expect(d4Playback[1]?.startTicks ?? 0).toBeGreaterThan(0);
+  });
+
+  it("does not extend slur-stop note into following same pitch", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const d4 = midiMode.events.filter((e) => e.midiNumber === 62).sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4.length).toBe(3);
+    expect(d4[1]?.startTicks).toBe(128);
+    expect((d4[1]?.durTicks ?? 0) + (d4[1]?.startTicks ?? 0)).toBeLessThanOrEqual(d4[2]?.startTicks ?? 0);
+  });
+
+  it("keeps retrigger for repeated same-pitch slur when staccato is present in playback-like mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(2);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[1]?.startTicks ?? 0).toBeGreaterThan(0);
+  });
+
+  it("keeps retrigger for repeated same-pitch slur when tenuto is present in playback-like mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><articulations><tenuto/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(2);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[1]?.startTicks ?? 0).toBeGreaterThan(0);
   });
 
   it("keeps timeline stable for underfull + implicit + regular-underfull sequence", () => {
