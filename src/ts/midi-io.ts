@@ -379,6 +379,8 @@ type SmfParseSummary = {
   notes: SmfImportedNote[];
   channels: Set<number>;
   trackName: string | null;
+  standardTitleCandidates: string[];
+  standardComposerCandidates: string[];
   programByTrackChannel: Map<TrackChannelKey, number>;
   controllerEvents: Array<{ tick: number; channel: number; controllerNumber: number; controllerValue: number }>;
   timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
@@ -402,6 +404,28 @@ type MksSysExChunk = {
   chunkIndex: number;
   totalChunks: number;
   data: string;
+};
+
+const isGenericMidiTrackName = (value: string): boolean => {
+  const text = value.trim();
+  if (!text) return true;
+  return /^(track|trk)\s*\d+(\s*ch(?:annel)?\s*\d+)?$/i.test(text);
+};
+
+const parseStandardTitleFromMetaText = (value: string): string => {
+  const text = value.trim();
+  if (!text) return "";
+  const prefixed = text.match(/^(title|piece|movement)\s*[:=]\s*(.+)$/i);
+  if (prefixed && prefixed[2]) return prefixed[2].trim();
+  return "";
+};
+
+const parseStandardComposerFromMetaText = (value: string): string => {
+  const text = value.trim();
+  if (!text) return "";
+  const prefixed = text.match(/^(composer|comp)\s*[:=]\s*(.+)$/i);
+  if (prefixed && prefixed[2]) return prefixed[2].trim();
+  return "";
 };
 
 const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
@@ -1147,6 +1171,8 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   const notes: SmfImportedNote[] = [];
   const channels = new Set<number>();
   let trackName: string | null = null;
+  const standardTitleCandidates: string[] = [];
+  const standardComposerCandidates: string[] = [];
   const programByTrackChannel = new Map<TrackChannelKey, number>();
   const controllerEvents: Array<{
     tick: number;
@@ -1231,7 +1257,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
           const bpm = clampTempo(60000000 / microsPerQuarter);
           tempoEvents.push({ tick: absTick, bpm });
         }
-      } else if (metaType === 0x01 || metaType === 0x03) {
+      } else if (metaType === 0x01 || metaType === 0x02 || metaType === 0x03) {
         const payloadBytes = trackData.slice(payloadStart, payloadEnd);
         const text = decodeMetaTextBytes(payloadBytes).trim();
         if (metaType === 0x03 && text && !trackName) {
@@ -1239,6 +1265,17 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
         }
         if (text.startsWith("mks:")) {
           mksTextMetaLines.push(text);
+        } else if (text) {
+          if (metaType === 0x01) {
+            const parsedTitle = parseStandardTitleFromMetaText(text);
+            if (parsedTitle) standardTitleCandidates.push(parsedTitle);
+            const parsedComposer = parseStandardComposerFromMetaText(text);
+            if (parsedComposer) standardComposerCandidates.push(parsedComposer);
+          }
+          if (metaType === 0x02) {
+            const parsedComposer = parseStandardComposerFromMetaText(text);
+            if (parsedComposer) standardComposerCandidates.push(parsedComposer);
+          }
         }
       }
       cursor = payloadEnd;
@@ -1352,6 +1389,8 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     notes,
     channels,
     trackName,
+    standardTitleCandidates,
+    standardComposerCandidates,
     programByTrackChannel,
     controllerEvents,
     timeSignatureEvents,
@@ -2559,7 +2598,7 @@ const buildImportSkeletonMusicXml = (params: {
       name: (() => {
         const mksName = mksTextMetadata?.partNameByTrackIndex.get(group.trackIndex)?.trim() ?? "";
         const trackName = trackNameByIndex.get(group.trackIndex)?.trim() ?? "";
-        const preferred = mksName || trackName;
+        const preferred = !isGenericMidiTrackName(trackName) ? trackName : (mksName || trackName);
         if (preferred) {
           const channelCount = channelCountByTrackIndex.get(group.trackIndex) ?? 1;
           return channelCount > 1 ? `${preferred} Ch ${group.channel}` : preferred;
@@ -3796,6 +3835,7 @@ export const buildMidiBytesForPlayback = (
   keySignatureEvents: MidiKeySignatureEvent[] = [],
   options: {
     embedMksSysEx?: boolean;
+    emitMksTextMeta?: boolean;
     ticksPerQuarter?: number;
     diagnostics?: string[];
     normalizeForParity?: boolean;
@@ -3831,23 +3871,26 @@ export const buildMidiBytesForPlayback = (
 
   const midiTracks: unknown[] = [];
   const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
-  const mksTextMetaLines: string[] = ["mks:meta-version:1"];
+  const emitMksTextMeta = options.emitMksTextMeta !== false;
+  const mksTextMetaLines: string[] = emitMksTextMeta ? ["mks:meta-version:1"] : [];
   const metaTitle = String(options.metadata?.title ?? "").trim();
   const metaMovementTitle = String(options.metadata?.movementTitle ?? "").trim();
   const metaComposer = String(options.metadata?.composer ?? "").trim();
   const metaPickupTicks = Math.max(0, Math.round(options.metadata?.pickupTicks ?? 0));
-  if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
-  if (metaMovementTitle) {
-    mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
-  }
-  if (metaComposer) mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
-  if (metaPickupTicks > 0) mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
-  for (let index = 0; index < sortedTrackIds.length; index += 1) {
-    const trackId = sortedTrackIds[index];
-    const trackEvents = tracksById.get(trackId) ?? [];
-    const trackName = trackEvents[0]?.trackName?.trim() ?? "";
-    if (!trackName) continue;
-    mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+  if (emitMksTextMeta) {
+    if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
+    if (metaMovementTitle) {
+      mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
+    }
+    if (metaComposer) mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
+    if (metaPickupTicks > 0) mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
+    for (let index = 0; index < sortedTrackIds.length; index += 1) {
+      const trackId = sortedTrackIds[index];
+      const trackEvents = tracksById.get(trackId) ?? [];
+      const trackName = trackEvents[0]?.trackName?.trim() ?? "";
+      if (!trackName) continue;
+      mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+    }
   }
   const normalizedTempoEvents = (tempoEvents.length ? tempoEvents : [{ startTicks: 0, bpm: tempo }])
     .map((event) => ({
@@ -4149,6 +4192,9 @@ export const convertMidiToMusicXml = (
   const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
   const mksSysExPayloads: string[] = [];
   const mksTextMetaLines: string[] = [];
+  const standardTitleCandidates: string[] = [];
+  const standardComposerCandidates: string[] = [];
+  let singleTrackTitleCandidate = "";
   const trackNameByIndex = new Map<number, string>();
 
   for (let i = 0; i < header.trackCount; i += 1) {
@@ -4176,10 +4222,21 @@ export const convertMidiToMusicXml = (
     }
     const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
     const summary = parseTrackSummary(trackData, i);
+    if (
+      header.trackCount === 1 &&
+      i === 0 &&
+      !singleTrackTitleCandidate &&
+      summary.trackName &&
+      !isGenericMidiTrackName(summary.trackName)
+    ) {
+      singleTrackTitleCandidate = summary.trackName.trim();
+    }
     if (summary.trackName) {
       trackNameByIndex.set(i, summary.trackName);
     }
     collectedNotes.push(...summary.notes);
+    standardTitleCandidates.push(...summary.standardTitleCandidates);
+    standardComposerCandidates.push(...summary.standardComposerCandidates);
     controllerEvents.push(
       ...summary.controllerEvents.map((event) => ({ ...event, trackIndex: i }))
     );
@@ -4198,7 +4255,13 @@ export const convertMidiToMusicXml = (
     offset += 8 + trackLength;
   }
   const parsedMksTextMetadata = parseMksMidiTextMetadata(mksTextMetaLines);
+  const standardTitle =
+    standardTitleCandidates.find((entry) => String(entry || "").trim().length > 0)?.trim() ??
+    singleTrackTitleCandidate;
+  const standardComposer =
+    standardComposerCandidates.find((entry) => String(entry || "").trim().length > 0)?.trim() ?? "";
   const title =
+    standardTitle ||
     parsedMksTextMetadata.title?.trim() ||
     String(options.title ?? "").trim() ||
     "Imported MIDI";
@@ -4296,7 +4359,7 @@ export const convertMidiToMusicXml = (
   const xml = buildImportSkeletonMusicXml({
     title,
     movementTitle: parsedMksTextMetadata.movementTitle,
-    composer: parsedMksTextMetadata.composer,
+    composer: standardComposer || parsedMksTextMetadata.composer,
     quantizeGrid,
     divisionsOverride: quantized.divisions,
     ticksPerQuarter: header.ticksPerQuarter,

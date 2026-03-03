@@ -163,6 +163,62 @@ const collectTimeSignatureMetaFromMidi = (midi: Uint8Array): Array<{ tick: numbe
   return out.sort((a, b) => a.tick - b.tick);
 };
 
+const collectTextMetaFromMidi = (midi: Uint8Array): string[] => {
+  if (String.fromCharCode(...Array.from(midi.slice(0, 4))) !== "MThd") return [];
+  const headerLen = readU32Be(midi, 4);
+  const trackCount = readU16Be(midi, 10);
+  let offset = 8 + headerLen;
+  const out: string[] = [];
+
+  for (let t = 0; t < trackCount; t += 1) {
+    if (String.fromCharCode(...Array.from(midi.slice(offset, offset + 4))) !== "MTrk") break;
+    const trackLen = readU32Be(midi, offset + 4);
+    const track = midi.slice(offset + 8, offset + 8 + trackLen);
+    offset += 8 + trackLen;
+    let cursor = 0;
+    let runningStatus: number | null = null;
+    while (cursor < track.length) {
+      const delta = readVlqAt(track, cursor);
+      if (!delta) break;
+      cursor = delta.next;
+      const first = track[cursor];
+      if (first === undefined) break;
+      let status = first;
+      if (status < 0x80) {
+        if (runningStatus === null) break;
+        status = runningStatus;
+      } else {
+        cursor += 1;
+        if (status < 0xf0) runningStatus = status;
+        else runningStatus = null;
+      }
+      if (status === 0xff) {
+        const metaType = track[cursor];
+        cursor += 1;
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next;
+        if ((metaType === 0x01 || metaType === 0x03) && len.value > 0) {
+          const payload = track.slice(cursor, cursor + len.value);
+          out.push(String.fromCharCode(...Array.from(payload)));
+        }
+        cursor += len.value;
+        continue;
+      }
+      if (status === 0xf0 || status === 0xf7) {
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next + len.value;
+        continue;
+      }
+      const msg = status & 0xf0;
+      const dataLen = msg === 0xc0 || msg === 0xd0 ? 1 : 2;
+      cursor += dataLen;
+    }
+  }
+  return out;
+};
+
 describe("midi-io MIDI nuance regressions", () => {
   it("keeps full non-implicit measure length for playback timeline", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1731,6 +1787,35 @@ describe("midi-io MIDI import MVP", () => {
     expect(timeSigs[1]).toEqual({ tick: 240, beats: 6, beatType: 8 });
   });
 
+  it("does not emit mks text metadata when emitMksTextMeta is false", () => {
+    const midi = buildMidiBytesForPlayback(
+      [{ midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "P1" }],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 6, beatType: 8 }],
+      [{ startTicks: 0, fifths: -1, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Title",
+          composer: "Composer",
+          pickupTicks: 240,
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts.some((text) => text.startsWith("mks:"))).toBe(false);
+    const timeSigs = collectTimeSignatureMetaFromMidi(midi);
+    expect(timeSigs.length).toBeGreaterThanOrEqual(2);
+    expect(timeSigs[0]).toEqual({ tick: 0, beats: 1, beatType: 8 });
+    expect(timeSigs[1]).toEqual({ tick: 240, beats: 6, beatType: 8 });
+  });
+
   it("keeps stable triplet-eighth timing in MusicXML playback extraction", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
@@ -1859,6 +1944,60 @@ describe("midi-io MIDI import MVP", () => {
       "Roundtrip Composer"
     );
     expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Violin Solo");
+  });
+
+  it("prefers standard MIDI meta title/composer over mks text meta", () => {
+    const track0 = [
+      ...metaTextEvent(0, "title:Concert Overture", 0x01),
+      ...metaTextEvent(0, "composer:Standard Composer", 0x01),
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:title:Roundtrip%20Title"),
+      ...metaTextEvent(0, "mks:composer:Roundtrip%20Composer"),
+      ...vlq(0),
+      0xff,
+      0x51,
+      0x03,
+      0x07,
+      0xa1,
+      0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0),
+      0x90,
+      60,
+      100,
+      ...vlq(480),
+      0x80,
+      60,
+      0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("work > work-title")?.textContent?.trim()).toBe("Concert Overture");
+    expect(doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim()).toBe(
+      "Standard Composer"
+    );
+  });
+
+  it("prefers explicit track-name over mks part-name-track when naming parts", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Solo Violin", 0x03),
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(480), 0x80, 60, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Solo Violin");
   });
 
   it("uses alto clef when imported MIDI part-name includes Viola/Vla", () => {
