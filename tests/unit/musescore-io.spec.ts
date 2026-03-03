@@ -168,6 +168,59 @@ describe("musescore-io", () => {
     expect(doc.querySelector("miscellaneous-field[name=\"mks:src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
+  it("imports repeats from MuseScore BarLine subtype variants", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <BarLine><subtype>start-repeat</subtype></BarLine>
+          <Chord><durationType>whole</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Chord><durationType>whole</durationType><Note><pitch>62</pitch></Note></Chord>
+          <BarLine><subtype>end-repeat</subtype></BarLine>
+        </voice>
+      </Measure>
+      <Measure>
+        <voice>
+          <Chord><durationType>half</durationType><Note><pitch>64</pitch></Note></Chord>
+          <BarLine><subtype>end-start-repeat</subtype></BarLine>
+          <Chord><durationType>half</durationType><Note><pitch>65</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    expect(doc.querySelector("measure:nth-of-type(1) barline[location=\"left\"] repeat[direction=\"forward\"]")).not.toBeNull();
+    expect(doc.querySelector("measure:nth-of-type(2) barline[location=\"right\"] repeat[direction=\"backward\"]")).not.toBeNull();
+    expect(doc.querySelector("measure:nth-of-type(3) barline[location=\"middle\"] repeat[direction=\"backward\"]")).not.toBeNull();
+    expect(doc.querySelector("measure:nth-of-type(3) barline[location=\"middle\"] repeat[direction=\"forward\"]")).not.toBeNull();
+    expect(doc.querySelectorAll("measure:nth-of-type(3) barline[location=\"middle\"]").length).toBe(1);
+    expect(doc.querySelector("measure:nth-of-type(3) barline[location=\"left\"] repeat[direction=\"forward\"]")).toBeNull();
+  });
+
+  it("roundtrips sample4 mid-measure end-start-repeat barlines", () => {
+    const fixturePath = resolve(process.cwd(), "src", "samples", "musescore", "sample4.mscz");
+    const mscx = execSync(`unzip -p "${fixturePath}" "*.mscx"`, { encoding: "utf-8" });
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const roundtripMscx = exportMusicXmlDomToMuseScore(doc);
+    const count = (roundtripMscx.match(/<subtype>end-start-repeat<\/subtype>/g) ?? []).length;
+    expect(count).toBeGreaterThanOrEqual(3);
+  });
+
   it("imports MuseScore cut-time symbol as MusicXML time symbol", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="2.06">
@@ -481,6 +534,42 @@ describe("musescore-io", () => {
     const flatNote = doc.querySelector("part > measure > note:nth-of-type(3)");
     expect(flatNote?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("E");
     expect(flatNote?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("-1");
+  });
+
+  it("prefers MuseScore tpc spelling for enharmonic notes when Accidental subtype is absent", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Note><pitch>70</pitch><tpc>12</tpc></Note>
+          </Chord>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Note><pitch>70</pitch><tpc>24</tpc></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    expect(n1?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("B");
+    expect(n1?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("-1");
+    expect(n1?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("flat");
+    expect(n2?.querySelector(":scope > pitch > step")?.textContent?.trim()).toBe("A");
+    expect(n2?.querySelector(":scope > pitch > alter")?.textContent?.trim()).toBe("1");
+    expect(n2?.querySelector(":scope > accidental")?.textContent?.trim()).toBe("sharp");
   });
 
   it("prefers MuseScore accidental subtype for pitch spelling even in flat key context", () => {
@@ -1805,7 +1894,7 @@ describe("musescore-io", () => {
     expect(n5?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
   });
 
-  it("does not infer beams when MuseScore BeamMode is absent", () => {
+  it("does not infer beams when MuseScore BeamMode is absent and implicit-beam fill is disabled", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="3.02">
   <Score>
@@ -1822,7 +1911,11 @@ describe("musescore-io", () => {
     </Staff>
   </Score>
 </museScore>`;
-    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const xml = convertMuseScoreToMusicXml(mscx, {
+      sourceMetadata: false,
+      debugMetadata: false,
+      applyImplicitBeams: false,
+    });
     const doc = parseMusicXmlDocument(xml);
     expect(doc).not.toBeNull();
     if (!doc) return;
@@ -1832,6 +1925,47 @@ describe("musescore-io", () => {
     expect(n1?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
     expect(n2?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
     expect(n3?.querySelector(":scope > beam[number=\"1\"]")).toBeNull();
+  });
+
+  it("infers beams when MuseScore BeamMode is absent (default behavior)", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>6</sigN><sigD>8</sigD></TimeSig>
+          <Chord><durationType>eighth</durationType><Note><pitch>60</pitch></Note></Chord>
+          <Chord><durationType>eighth</durationType><Note><pitch>62</pitch></Note></Chord>
+          <Chord><durationType>eighth</durationType><Note><pitch>64</pitch></Note></Chord>
+          <Chord><durationType>eighth</durationType><Note><pitch>65</pitch></Note></Chord>
+          <Chord><durationType>eighth</durationType><Note><pitch>67</pitch></Note></Chord>
+          <Chord><durationType>eighth</durationType><Note><pitch>69</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, {
+      sourceMetadata: false,
+      debugMetadata: false,
+    });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const n1 = doc.querySelector("part > measure > note:nth-of-type(1)");
+    const n2 = doc.querySelector("part > measure > note:nth-of-type(2)");
+    const n3 = doc.querySelector("part > measure > note:nth-of-type(3)");
+    const n4 = doc.querySelector("part > measure > note:nth-of-type(4)");
+    const n5 = doc.querySelector("part > measure > note:nth-of-type(5)");
+    const n6 = doc.querySelector("part > measure > note:nth-of-type(6)");
+    expect(n1?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n2?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
+    expect(n3?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
+    expect(n4?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("begin");
+    expect(n5?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("continue");
+    expect(n6?.querySelector(":scope > beam[number=\"1\"]")?.textContent?.trim()).toBe("end");
   });
 
   it("imports MuseScore Slur spanner into MusicXML slur start/stop", () => {
@@ -2129,6 +2263,64 @@ describe("musescore-io", () => {
     expect(start).not.toBeNull();
     expect(stop).not.toBeNull();
     expect(start?.getAttribute("number")).toBe(stop?.getAttribute("number"));
+  });
+
+  it("imports MuseScore chord Ornament trill into MusicXML trill-mark", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Ornament><subtype>ornamentTrill</subtype></Ornament>
+            <Note><pitch>60</pitch></Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note > notations > ornaments > trill-mark")).not.toBeNull();
+  });
+
+  it("maps accidental near MuseScore chord Ornament trill to MusicXML accidental-mark", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="3.02">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <TimeSig><sigN>4</sigN><sigD>4</sigD></TimeSig>
+          <Chord>
+            <durationType>quarter</durationType>
+            <Ornament><subtype>ornamentTrill</subtype></Ornament>
+            <Note>
+              <Accidental><subtype>accidentalFlat</subtype></Accidental>
+              <pitch>59</pitch>
+            </Note>
+          </Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    expect(doc.querySelector("part > measure > note > notations > ornaments > trill-mark")).not.toBeNull();
+    expect(
+      doc.querySelector("part > measure > note > notations > ornaments > accidental-mark")?.textContent?.trim()
+    ).toBe("flat");
   });
 
   it("imports MuseScore Ottava spanner into MusicXML octave-shift direction", () => {
