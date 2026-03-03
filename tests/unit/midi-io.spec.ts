@@ -636,6 +636,48 @@ describe("midi-io MIDI import MVP", () => {
     expect(notes.some((note) => note.querySelector("type")?.textContent === "quarter")).toBe(true);
   });
 
+  it("does not infer staccato from repeated half-duty detached MIDI notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x80, 60, 0,
+      ...vlq(120), 0x90, 62, 96,
+      ...vlq(120), 0x80, 62, 0,
+      ...vlq(120), 0x90, 64, 96,
+      ...vlq(120), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    const pitchedNotes = notes.filter((note) => note.querySelector("pitch") !== null);
+    const rests = notes.filter((note) => note.querySelector("rest") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(3);
+    expect(rests.length).toBeGreaterThan(0);
+    expect(pitchedNotes[0]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[1]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[2]?.querySelector("notations > articulations > staccato")).toBeNull();
+  });
+
+  it("does not infer staccato from repeated quarter-duty detached MIDI notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(60), 0x80, 60, 0,
+      ...vlq(180), 0x90, 62, 96,
+      ...vlq(60), 0x80, 62, 0,
+      ...vlq(180), 0x90, 64, 96,
+      ...vlq(60), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/32" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    const pitchedNotes = notes.filter((note) => note.querySelector("pitch") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(3);
+    expect(pitchedNotes[0]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[1]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[2]?.querySelector("notations > articulations > staccato")).toBeNull();
+  });
+
   it("applies beam tags to grouped short notes and breaks beams across rests", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
@@ -1383,5 +1425,46 @@ describe("midi-io MIDI import MVP", () => {
       "Roundtrip Composer"
     );
     expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Violin Solo");
+  });
+
+  it("uses alto clef when imported MIDI part-name includes Viola/Vla", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(480), 0x80, 60, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
+  });
+
+  it("keeps single-staff C3 clef for Viola even with wide MIDI pitch range", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0), 0x90, 48, 100,
+      ...vlq(480), 0x80, 48, 0,
+      ...vlq(0), 0x90, 76, 100,
+      ...vlq(480), 0x80, 76, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part > measure > attributes > staves")).toBeNull();
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
   });
 });

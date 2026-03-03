@@ -1747,12 +1747,15 @@ const beamLevelFromNotationType = (type: DurationNotation["type"]): number => {
   }
 };
 
-const buildTieXml = (tieStart: boolean, tieStop: boolean): string => {
-  if (!tieStart && !tieStop) return "";
+const buildTieXml = (tieStart: boolean, tieStop: boolean, withStaccato = false): string => {
+  if (!tieStart && !tieStop && !withStaccato) return "";
   let xml = "";
   if (tieStop) xml += '<tie type="stop"/>';
   if (tieStart) xml += '<tie type="start"/>';
   xml += "<notations>";
+  if (withStaccato) {
+    xml += "<articulations><staccato/></articulations>";
+  }
   if (tieStop) xml += '<tied type="stop"/>';
   if (tieStart) xml += '<tied type="start"/>';
   xml += "</notations>";
@@ -1960,15 +1963,34 @@ const buildMeasureVoiceXml = (
     typeXml: string;
     tieStart: boolean;
     tieStop: boolean;
+    inferredStaccato: boolean;
     group: ImportedVoiceNoteSegment[];
   };
   const preparedNoteChunks: PreparedNoteChunk[] = [];
   const noteTimelineByChunkIndex = new Map<number, number>();
   const beamTimeline: Array<{ kind: "note" | "rest"; durDiv: number; levels: number; chunkIndex?: number }> = [];
 
-  let cursorForTimeline = 0;
-  for (const start of starts) {
+  type GroupAtStart = {
+    startDiv: number;
+    sourceDurDiv: number;
+    inferredStaccato: boolean;
+    group: ImportedVoiceNoteSegment[];
+  };
+  const groups: GroupAtStart[] = starts.map((start) => {
     const group = (groupsByStart.get(start) ?? []).slice().sort((a, b) => a.midi - b.midi);
+    const sourceDurDiv = Math.max(...group.map((segment) => segment.durDiv));
+    return {
+      startDiv: start,
+      sourceDurDiv,
+      inferredStaccato: false,
+      group,
+    };
+  });
+
+  let cursorForTimeline = 0;
+  for (const entry of groups) {
+    const start = entry.startDiv;
+    const group = entry.group;
     if (start > cursorForTimeline) {
       const restDur = start - cursorForTimeline;
       const restChunks = splitDurationNotations(restDur, divisions);
@@ -1984,7 +2006,7 @@ const buildMeasureVoiceXml = (
         beamTimeline.push({ kind: "rest", durDiv: restDur, levels: 0 });
       }
     }
-    const groupDur = Math.max(...group.map((segment) => segment.durDiv));
+    const groupDur = Math.max(1, Math.round(entry.sourceDurDiv));
     const notationChunks = splitDurationNotations(groupDur, divisions);
     const fallbackChunk = notationChunks.length
       ? null
@@ -2015,6 +2037,7 @@ const buildMeasureVoiceXml = (
         typeXml: buildTypeXmlFromNotation(chunk),
         tieStart,
         tieStop,
+        inferredStaccato: entry.inferredStaccato && notationChunks.length === 1 && chunkIndex === 0,
         group,
       });
       chunkStartDiv += chunk.durDiv;
@@ -2074,7 +2097,7 @@ const buildMeasureVoiceXml = (
         if (i > 0) xml += "<chord/>";
         xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
         xml += `<duration>${prepared.durDiv}</duration>${prepared.typeXml}<voice>${voice}</voice>${i === 0 ? beamXml : ""}<staff>${outputStaff}</staff><notehead>x</notehead>`;
-        xml += buildTieXml(prepared.tieStart, prepared.tieStop);
+        xml += buildTieXml(prepared.tieStart, prepared.tieStop, !isDrum && prepared.inferredStaccato && i === 0);
         xml += "</note>";
       } else {
         const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
@@ -2091,7 +2114,7 @@ const buildMeasureVoiceXml = (
           xml += `<accidental>${accidentalText}</accidental>`;
         }
         xml += `<duration>${prepared.durDiv}</duration>${prepared.typeXml}<voice>${voice}</voice>${i === 0 ? beamXml : ""}<staff>${outputStaff}</staff>`;
-        xml += buildTieXml(prepared.tieStart, prepared.tieStop);
+        xml += buildTieXml(prepared.tieStart, prepared.tieStop, prepared.inferredStaccato && i === 0);
         xml += "</note>";
         accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
       }
@@ -2107,6 +2130,7 @@ const buildMeasureVoiceXml = (
 
 const buildPartMusicXml = (params: {
   partId: string;
+  partName?: string;
   divisions: number;
   beats: number;
   beatType: number;
@@ -2125,6 +2149,7 @@ const buildPartMusicXml = (params: {
 }): string => {
   const {
     partId,
+    partName = "",
     divisions,
     beats,
     beatType,
@@ -2160,7 +2185,9 @@ const buildPartMusicXml = (params: {
   const warningMetadataXml = buildMidiDiagMiscXml(warnings);
   const melodicKeys = notes.map((note) => note.midi);
   const singleClefSign = chooseSingleClefByKeys(melodicKeys);
-  const initialGrandStaff = !isDrum && shouldUseGrandStaffByRange(melodicKeys);
+  const normalizedPartName = partName.trim().toLowerCase();
+  const prefersAltoClef = /(^|[^a-z])(viola|vla\.?)([^a-z]|$)/i.test(normalizedPartName);
+  const initialGrandStaff = !isDrum && !prefersAltoClef && shouldUseGrandStaffByRange(melodicKeys);
   const voiceSegmentsByMeasure = new Map<number, ImportedVoiceNoteSegment[]>();
   let splitSegments = splitClustersToMeasureSegments({
     clusters,
@@ -2248,8 +2275,9 @@ const buildPartMusicXml = (params: {
             }
           }
         } else {
-          const line = singleClefSign === "F" ? 4 : 2;
-          partXml += `<clef><sign>${singleClefSign}</sign><line>${line}</line></clef>`;
+          const clefSign = prefersAltoClef ? "C" : singleClefSign;
+          const line = clefSign === "F" ? 4 : clefSign === "C" ? 3 : 2;
+          partXml += `<clef><sign>${clefSign}</sign><line>${line}</line></clef>`;
         }
       }
       partXml += "</attributes>";
@@ -2462,6 +2490,7 @@ const buildImportSkeletonMusicXml = (params: {
     .map((part, partIndex) =>
       buildPartMusicXml({
         partId: part.partId,
+        partName: part.name,
         divisions,
         beats,
         beatType,

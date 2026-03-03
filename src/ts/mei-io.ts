@@ -249,6 +249,19 @@ const extractMeiSlurFromMusicXmlNote = (note: Element): string => {
   return tokens.join(" ");
 };
 
+const extractMeiArticulationTokensFromMusicXmlNote = (note: Element): string[] => {
+  const arts = note.querySelector(":scope > notations > articulations");
+  if (!arts) return [];
+  const out: string[] = [];
+  if (arts.querySelector(":scope > staccato")) out.push("stacc");
+  if (arts.querySelector(":scope > staccatissimo")) out.push("spicc");
+  if (arts.querySelector(":scope > accent")) out.push("acc");
+  if (arts.querySelector(":scope > tenuto")) out.push("ten");
+  if (arts.querySelector(":scope > strong-accent")) out.push("marc");
+  if (arts.querySelector(":scope > marcato")) out.push("marc");
+  return Array.from(new Set(out));
+};
+
 const buildSimplePitchNote = (note: Element, sourceDivisions: number, includeGraceAttr = true): string => {
   const typeText = note.querySelector(":scope > type")?.textContent?.trim() ?? "quarter";
   const dur = noteTypeToDur(typeText);
@@ -275,9 +288,7 @@ const buildSimplePitchNote = (note: Element, sourceDivisions: number, includeGra
   const normal = parseIntSafe(note.querySelector(":scope > time-modification > normal-notes")?.textContent, NaN);
   const hasTupletStart = note.querySelector(':scope > notations > tuplet[type="start"]') !== null;
   const hasTupletStop = note.querySelector(':scope > notations > tuplet[type="stop"]') !== null;
-  const arts: string[] = [];
-  if (note.querySelector(":scope > notations > articulations > staccato")) arts.push("stacc");
-  if (note.querySelector(":scope > notations > articulations > accent")) arts.push("acc");
+  const arts = extractMeiArticulationTokensFromMusicXmlNote(note);
   if (dots > 0) attrs.push(`dots="${dots}"`);
   if (accid) attrs.push(`accid="${accid}"`);
   if (Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0) {
@@ -425,6 +436,8 @@ const buildLayerContent = (notes: Element[], sourceDivisions: number, measureTic
       if (tieAttr) noteAttrs.push(`tie="${esc(tieAttr)}"`);
       const slurAttr = extractMeiSlurFromMusicXmlNote(n);
       if (slurAttr) noteAttrs.push(`slur="${esc(slurAttr)}"`);
+      const arts = extractMeiArticulationTokensFromMusicXmlNote(n);
+      if (arts.length) noteAttrs.push(`artic="${esc(arts.join(" "))}"`);
       const lyric = extractMusicXmlLyric(n);
       if (lyric) {
         const wordpos = lyricWordposFromSyllabic(lyric.syllabic);
@@ -1213,10 +1226,44 @@ const accidToMusicXmlAccidental = (accid: string): string | null => {
 };
 
 const readMeiSoundingAccid = (node: Element): { visualAccid: string; soundingAccid: string } => {
-  const visualAccid = (node.getAttribute("accid") || "").trim();
-  const gesturalAccid = (node.getAttribute("accid.ges") || node.getAttribute("accid-ges") || "").trim();
+  const childAccid = childElementsByName(node, "accid")[0] ?? null;
+  const visualAccid = (
+    node.getAttribute("accid")
+    || childAccid?.getAttribute("accid")
+    || ""
+  ).trim();
+  const gesturalAccid = (
+    node.getAttribute("accid.ges")
+    || node.getAttribute("accid-ges")
+    || childAccid?.getAttribute("accid.ges")
+    || childAccid?.getAttribute("accid-ges")
+    || ""
+  ).trim();
   const soundingAccid = visualAccid || gesturalAccid;
   return { visualAccid, soundingAccid };
+};
+
+const readMeiArticulationTokens = (node: Element): string[] => {
+  const tokens = new Set<string>();
+  const pushTokens = (raw: string): void => {
+    for (const token of raw.trim().toLowerCase().split(/\s+/).filter(Boolean)) {
+      tokens.add(token);
+    }
+  };
+  pushTokens(node.getAttribute("artic") || "");
+  for (const articNode of childElementsByName(node, "artic")) {
+    pushTokens(articNode.getAttribute("artic") || "");
+    pushTokens(articNode.textContent || "");
+  }
+  return Array.from(tokens);
+};
+
+const appendMusicXmlArticulationsFromMeiTokens = (tokens: string[], out: string[]): void => {
+  if (tokens.includes("stacc")) out.push("<staccato/>");
+  if (tokens.includes("spicc") || tokens.includes("stacciss")) out.push("<staccatissimo/>");
+  if (tokens.includes("acc")) out.push("<accent/>");
+  if (tokens.includes("ten") || tokens.includes("tenuto")) out.push("<tenuto/>");
+  if (tokens.includes("marc") || tokens.includes("marcato")) out.push("<strong-accent/>");
 };
 
 const accidToPitchAlterXml = (accid: string): string => {
@@ -1393,11 +1440,9 @@ const buildMusicXmlNoteFromMeiNote = (
     (meiNote.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
   const hasTupletStop =
     (meiNote.getAttribute("mks-tuplet-stop") ?? "").trim() === "1";
-  const articRaw = (meiNote.getAttribute("artic") || "").trim().toLowerCase();
-  const articTokens = articRaw.split(/\s+/).filter(Boolean);
+  const articTokens = readMeiArticulationTokens(meiNote);
   const arts: string[] = [];
-  if (articTokens.includes("stacc")) arts.push("<staccato/>");
-  if (articTokens.includes("acc")) arts.push("<accent/>");
+  appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
   const tieFlags = parseMeiTieFlags(meiNote.getAttribute("tie") || "");
   const tieXml = `${tieFlags.start ? '<tie type="start"/>' : ""}${tieFlags.stop ? '<tie type="stop"/>' : ""}`;
   const tiedXml = `${tieFlags.start ? '<tied type="start"/>' : ""}${tieFlags.stop ? '<tied type="stop"/>' : ""}`;
@@ -1593,11 +1638,9 @@ const parseLayerEvents = (
         const timeModificationXml = hasTimeModification
           ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
           : "";
-        const articRaw = (effectiveNode.getAttribute("artic") || "").trim().toLowerCase();
-        const articTokens = articRaw.split(/\s+/).filter(Boolean);
+        const articTokens = readMeiArticulationTokens(effectiveNode);
         const arts: string[] = [];
-        if (articTokens.includes("stacc")) arts.push("<staccato/>");
-        if (articTokens.includes("acc")) arts.push("<accent/>");
+        appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
         const tupletStart = (effectiveNode.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
         const tupletStop = (effectiveNode.getAttribute("mks-tuplet-stop") ?? "").trim() === "1";
         const tupletXml = `${tupletStart ? '<tuplet type="start"/>' : ""}${tupletStop ? '<tuplet type="stop"/>' : ""}`;
@@ -1693,7 +1736,7 @@ const parseLayerEvents = (
       Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
         ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
         : "";
-    const chordArticRaw = (effectiveNode.getAttribute("artic") || "").trim().toLowerCase();
+    const chordArticTokens = readMeiArticulationTokens(effectiveNode);
     const graceXml = isGrace ? `<grace${graceAttr === "acc" ? ' slash="yes"' : ""}/>` : "";
     const durationXml = isGrace ? "" : `<duration>${resolvedTicks}</duration>`;
     const noteXml = noteChildren
@@ -1725,11 +1768,10 @@ const parseLayerEvents = (
         const accidentalText = accidToMusicXmlAccidental(visualAccid);
         const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
         const chordXml = index > 0 ? "<chord/>" : "";
-        const mergedArticRaw = `${chordArticRaw} ${(note.getAttribute("artic") || "").trim().toLowerCase()}`.trim();
-        const articTokens = mergedArticRaw.split(/\s+/).filter(Boolean);
+        const noteTokens = readMeiArticulationTokens(note);
+        const articTokens = Array.from(new Set<string>([...chordArticTokens, ...noteTokens]));
         const arts: string[] = [];
-        if (articTokens.includes("stacc")) arts.push("<staccato/>");
-        if (articTokens.includes("acc")) arts.push("<accent/>");
+        appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
         const tieXml = `${tieFlags.start ? '<tie type="start"/>' : ""}${tieFlags.stop ? '<tie type="stop"/>' : ""}`;
         const tiedXml = `${tieFlags.start ? '<tied type="start"/>' : ""}${tieFlags.stop ? '<tied type="stop"/>' : ""}`;
         const slurXml = parseMeiSlurNotations(note.getAttribute("slur") || "")
@@ -2217,6 +2259,65 @@ const parseTransposeFromStaffDefElement = (
   return Object.keys(out).length ? out : null;
 };
 
+const parseTimeSymbolFromMeiElement = (
+  element: Element | null | undefined
+): "common" | "cut" | null => {
+  if (!element) return null;
+  const raw = (element.getAttribute("meter.sym") || "").trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === "common" || raw === "c") return "common";
+  if (raw === "cut" || raw === "c|") return "cut";
+  return null;
+};
+
+const parseTimeSymbolFromScoreDefForStaff = (
+  scoreDef: Element | null,
+  staffNo: string
+): "common" | "cut" | null => {
+  if (!scoreDef) return null;
+  const staffDefs = Array.from(scoreDef.querySelectorAll("*")).filter(
+    (node): node is Element => node instanceof Element && localNameOf(node) === "staffDef"
+  );
+  const matched =
+    staffDefs.find((staffDef) => (staffDef.getAttribute("n")?.trim() || "") === staffNo)
+    ?? staffDefs.find((staffDef) => !staffDef.getAttribute("n"));
+  const staffSymbol = parseTimeSymbolFromMeiElement(matched);
+  if (staffSymbol) return staffSymbol;
+  return parseTimeSymbolFromMeiElement(scoreDef);
+};
+
+const parseMeterFromScoreDefForStaff = (
+  scoreDef: Element | null,
+  staffNo: string,
+  fallbackBeats: number,
+  fallbackBeatType: number
+): { beats: number; beatType: number } => {
+  if (!scoreDef) {
+    return {
+      beats: Math.max(1, Math.round(fallbackBeats)),
+      beatType: Math.max(1, Math.round(fallbackBeatType)),
+    };
+  }
+  const staffDefs = Array.from(scoreDef.querySelectorAll("*")).filter(
+    (node): node is Element => node instanceof Element && localNameOf(node) === "staffDef"
+  );
+  const matched =
+    staffDefs.find((staffDef) => (staffDef.getAttribute("n")?.trim() || "") === staffNo)
+    ?? staffDefs.find((staffDef) => !staffDef.getAttribute("n"));
+  const beats = parseIntSafe(
+    matched?.getAttribute("meter.count") ?? scoreDef.getAttribute("meter.count"),
+    fallbackBeats
+  );
+  const beatType = parseIntSafe(
+    matched?.getAttribute("meter.unit") ?? scoreDef.getAttribute("meter.unit"),
+    fallbackBeatType
+  );
+  return {
+    beats: Math.max(1, Math.round(beats)),
+    beatType: Math.max(1, Math.round(beatType)),
+  };
+};
+
 const parseClefFromScoreDefForStaff = (
   scoreDef: Element | null,
   staffNo: string
@@ -2259,6 +2360,19 @@ const parseClefFromStaffDefElement = (
   );
   if (!childSign || !Number.isFinite(childLine)) return null;
   return { clefSign: childSign, clefLine: Math.max(1, Math.round(childLine)) };
+};
+
+const parseStaffLabelFromStaffDefElement = (
+  staffDef: Element | null | undefined
+): string => {
+  if (!staffDef) return "";
+  const attrLabel = (staffDef.getAttribute("label") || "").trim();
+  if (attrLabel) return attrLabel;
+  const labelChild = childElementsByName(staffDef, "label")[0];
+  const labelText = (labelChild?.textContent || "").trim();
+  if (labelText) return labelText;
+  const labelAbbrChild = childElementsByName(staffDef, "labelAbbr")[0];
+  return (labelAbbrChild?.textContent || "").trim();
 };
 
 const parseKeySigFromScoreDefForStaff = (
@@ -2310,6 +2424,15 @@ const buildTransposeXml = (transpose: { chromatic?: number; diatonic?: number } 
   const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
   if (chromatic === null && diatonic === null) return "";
   return `<transpose>${diatonic !== null ? `<diatonic>${diatonic}</diatonic>` : ""}${chromatic !== null ? `<chromatic>${chromatic}</chromatic>` : ""}</transpose>`;
+};
+
+const buildTimeXml = (
+  beats: number,
+  beatType: number,
+  symbol: "common" | "cut" | null
+): string => {
+  const symbolAttr = symbol ? ` symbol="${symbol}"` : "";
+  return `<time${symbolAttr}><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`;
 };
 
 const parseMeiHarmText = (
@@ -2643,6 +2766,60 @@ const buildMusicXmlDirectionFromMeiRepeatMark = (
   )}</voice><staff>${xmlEscape(staffNo)}</staff></direction>`;
 };
 
+const buildMusicXmlDirectionFromMeiTempo = (
+  tempo: Element,
+  divisions: number,
+  beatType: number,
+  voice: string,
+  staffNo: string,
+  events: ParsedMeiEvent[],
+  idToEventIndex: Map<string, number>,
+  idToEventTick: Map<string, number>,
+  allowInferFromTextFallback = false
+): string | null => {
+  const tempoType = (tempo.getAttribute("type") || "").trim().toLowerCase();
+  const isInferFromTextHelper = tempoType.includes("infer-from-text");
+  const rawText = (tempo.textContent || "").trim();
+  const bpmRaw = (tempo.getAttribute("midi.bpm") || tempo.getAttribute("bpm") || "").trim();
+  const bpm = Number.parseFloat(bpmRaw);
+  const hasBpm = Number.isFinite(bpm) && bpm > 0;
+  // MuseScore helper tempo should be ignored when visible tempo text exists.
+  if (isInferFromTextHelper && !allowInferFromTextFallback) return null;
+  // Even fallback helper without BPM has no useful import payload.
+  if (isInferFromTextHelper && !hasBpm) return null;
+  const effectiveText = isInferFromTextHelper ? "" : rawText;
+  if (!effectiveText && !hasBpm) return null;
+  const placement = (tempo.getAttribute("place") || tempo.getAttribute("placement") || "").trim().toLowerCase();
+  const placementAttr = placement === "above" || placement === "below" ? ` placement="${xmlEscape(placement)}"` : "";
+  const startIndex = resolveControlEventEndpointIndex(
+    (tempo.getAttribute("startid") || "").trim(),
+    tempo.getAttribute("tstamp"),
+    idToEventIndex,
+    events,
+    divisions,
+    beatType,
+    tempo.getAttribute("plist"),
+    idToEventTick
+  );
+  const startTick = Number.isInteger(startIndex) ? resolveEventStartTickByIndex(events, startIndex as number) : null;
+  const offsetXml = Number.isFinite(startTick) && (startTick as number) > 0
+    ? `<offset>${Math.round(startTick as number)}</offset>`
+    : "";
+  const directionTypes: string[] = [];
+  if (effectiveText) {
+    directionTypes.push(`<direction-type><words>${xmlEscape(effectiveText)}</words></direction-type>`);
+  }
+  if (hasBpm) {
+    directionTypes.push(
+      `<direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${Math.round(bpm as number)}</per-minute></metronome></direction-type>`
+    );
+  }
+  const soundXml = hasBpm ? `<sound tempo="${(bpm as number).toFixed(2).replace(/\.00$/, "")}"/>` : "";
+  return `<direction${placementAttr}>${directionTypes.join("")}${offsetXml}<voice>${xmlEscape(
+    voice
+  )}</voice><staff>${xmlEscape(staffNo)}</staff>${soundXml}</direction>`;
+};
+
 const buildMusicXmlHarmonyFromMeiHarm = (
   harm: Element,
   divisions: number,
@@ -2765,11 +2942,32 @@ const collectLayerDirectionXml = (
   const layerNo = (layer.getAttribute("n") || "1").trim() || "1";
   const primaryLayerNo = (childElementsByName(staff, "layer")[0]?.getAttribute("n") || "1").trim() || "1";
   const dyns = collectControlEventsForLayer("dynam", staff, layer, staffNo, layerNo, primaryLayerNo);
+  const tempos = collectControlEventsForLayer("tempo", staff, layer, staffNo, layerNo, primaryLayerNo);
   const hairpins = collectControlEventsForLayer("hairpin", staff, layer, staffNo, layerNo, primaryLayerNo);
   const pedals = collectControlEventsForLayer("pedal", staff, layer, staffNo, layerNo, primaryLayerNo);
   const octaves = collectControlEventsForLayer("octave", staff, layer, staffNo, layerNo, primaryLayerNo);
   const repeatMarks = collectControlEventsForLayer("repeatMark", staff, layer, staffNo, layerNo, primaryLayerNo);
+  const hasVisibleTempo = tempos.some((tempo) => {
+    const tempoType = (tempo.getAttribute("type") || "").trim().toLowerCase();
+    return !tempoType.includes("infer-from-text");
+  });
   const out: string[] = [];
+  for (const tempo of tempos) {
+    const tempoType = (tempo.getAttribute("type") || "").trim().toLowerCase();
+    const allowInferFromTextFallback = tempoType.includes("infer-from-text") && !hasVisibleTempo;
+    const xml = buildMusicXmlDirectionFromMeiTempo(
+      tempo,
+      divisions,
+      beatType,
+      voice,
+      staffNo,
+      events,
+      idToEventIndex,
+      idToEventTick,
+      allowInferFromTextFallback
+    );
+    if (xml) out.push(xml);
+  }
   for (const dynam of dyns) {
     const xml = buildMusicXmlDirectionFromMeiDynam(dynam, divisions, beatType, voice, staffNo);
     if (xml) out.push(xml);
@@ -2840,7 +3038,12 @@ const applyStaffSlurControlEvents = (
 ): ParsedMeiEvent[] => {
   if (layerEvents.length === 0) return layerEvents;
   const out = layerEvents.slice();
-  const slurs = [...childElementsByName(layer, "slur"), ...childElementsByName(staff, "slur")];
+  const measure = staff.parentElement && localNameOf(staff.parentElement) === "measure" ? staff.parentElement : null;
+  const slurs = [
+    ...childElementsByName(layer, "slur"),
+    ...childElementsByName(staff, "slur"),
+    ...(measure ? childElementsByName(measure, "slur") : []),
+  ];
   let slurNumber = 1;
   for (const slur of slurs) {
     const startIdRaw = (slur.getAttribute("startid") || "").trim();
@@ -2877,7 +3080,11 @@ const applyStaffSlurControlEvents = (
     }
     slurNumber += 1;
   }
-  const ties = [...childElementsByName(layer, "tie"), ...childElementsByName(staff, "tie")];
+  const ties = [
+    ...childElementsByName(layer, "tie"),
+    ...childElementsByName(staff, "tie"),
+    ...(measure ? childElementsByName(measure, "tie") : []),
+  ];
   for (const tie of ties) {
     const startIdRaw = (tie.getAttribute("startid") || "").trim();
     const endIdRaw = (tie.getAttribute("endid") || "").trim();
@@ -2912,7 +3119,11 @@ const applyStaffSlurControlEvents = (
       out[endIndex!] = { ...endEvent, xml: addTieNotationToEventXml(endEvent.xml, "stop") };
     }
   }
-  const trills = [...childElementsByName(layer, "trill"), ...childElementsByName(staff, "trill")];
+  const trills = [
+    ...childElementsByName(layer, "trill"),
+    ...childElementsByName(staff, "trill"),
+    ...(measure ? childElementsByName(measure, "trill") : []),
+  ];
   for (const trill of trills) {
     const startIndex = resolveControlEventEndpointIndex(
       (trill.getAttribute("startid") || "").trim(),
@@ -3540,7 +3751,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
     const parsedClef = parseClefFromStaffDefElement(staffDef);
     const prev = staffMeta.get(n);
     staffMeta.set(n, {
-      label: staffDef.getAttribute("label")?.trim() || prev?.label || `Staff ${n}`,
+      label: parseStaffLabelFromStaffDefElement(staffDef) || prev?.label || `Staff ${n}`,
       clefSign: parsedClef?.clefSign || prev?.clefSign || "G",
       clefLine: parsedClef?.clefLine || prev?.clefLine || 2,
     });
@@ -3577,8 +3788,10 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
     .map((staffNo, idx) => {
       const partId = `P${idx + 1}`;
       const clef = staffMeta.get(staffNo) || { label: `Staff ${staffNo}`, clefSign: "G", clefLine: 2 };
-      let currentBeats = Math.max(1, Math.round(meterCount));
-      let currentBeatType = Math.max(1, Math.round(meterUnit));
+      const initialMeter = parseMeterFromScoreDefForStaff(scoreDef, staffNo, meterCount, meterUnit);
+      let currentBeats = initialMeter.beats;
+      let currentBeatType = initialMeter.beatType;
+      let currentTimeSymbol = parseTimeSymbolFromScoreDefForStaff(scoreDef, staffNo);
       let currentFifths = fifths;
       let currentClefSign = clef.clefSign;
       let currentClefLine = clef.clefLine;
@@ -3599,16 +3812,18 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           const measureMeta = parseMeasureMetaFromMeiStaff(targetStaff);
           const measureNo = (measureMeta?.number ?? sourceMeasureNo).trim() || sourceMeasureNo;
           const implicitFromMeta = Boolean(measureMeta?.implicit);
-          const scoreDefBeats = parseIntSafe(effectiveScoreDef?.getAttribute("meter.count"), currentBeats);
-          const scoreDefBeatType = parseIntSafe(effectiveScoreDef?.getAttribute("meter.unit"), currentBeatType);
+          const scoreDefMeter = parseMeterFromScoreDefForStaff(effectiveScoreDef, staffNo, currentBeats, currentBeatType);
+          const scoreDefTimeSymbol = parseTimeSymbolFromScoreDefForStaff(effectiveScoreDef, staffNo);
           const scoreDefFifths = parseKeySigFromScoreDefForStaff(effectiveScoreDef, staffNo, currentFifths);
           const scoreDefClef = parseClefFromScoreDefForStaff(effectiveScoreDef, staffNo);
           const scoreDefTranspose = parseTransposeFromScoreDefForStaff(effectiveScoreDef, staffNo);
+          const staffDefTimeSymbol = parseTimeSymbolFromMeiElement(effectiveStaffDef);
           const staffDefFifths = parseMeiKeyFifthsFromElement(effectiveStaffDef);
           const staffDefClef = parseClefFromStaffDefElement(effectiveStaffDef);
           const staffDefTranspose = parseTransposeFromStaffDefElement(effectiveStaffDef);
-          const measureBeats = Math.max(1, Math.round(measureMeta?.beats ?? scoreDefBeats));
-          const measureBeatType = Math.max(1, Math.round(measureMeta?.beatType ?? scoreDefBeatType));
+          const measureBeats = Math.max(1, Math.round(measureMeta?.beats ?? scoreDefMeter.beats));
+          const measureBeatType = Math.max(1, Math.round(measureMeta?.beatType ?? scoreDefMeter.beatType));
+          const measureTimeSymbol = staffDefTimeSymbol ?? scoreDefTimeSymbol ?? currentTimeSymbol;
           const measureFifths = Number.isFinite(staffDefFifths)
             ? Math.round(staffDefFifths as number)
             : Number.isFinite(scoreDefFifths)
@@ -3622,7 +3837,8 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
             measureIndex === 0
             || measureMeta?.explicitTime === true
             || measureBeats !== currentBeats
-            || measureBeatType !== currentBeatType;
+            || measureBeatType !== currentBeatType
+            || measureTimeSymbol !== currentTimeSymbol;
           const shouldEmitKey = measureIndex === 0 || measureFifths !== currentFifths;
           const shouldEmitClef =
             measureIndex === 0
@@ -3761,7 +3977,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           if (!hasEmittedInitialAttributes) {
             attributesXml =
               `<attributes><divisions>${divisions}</divisions><key><fifths>${measureFifths}</fifths></key>` +
-              `<time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>` +
+              `${buildTimeXml(measureBeats, measureBeatType, measureTimeSymbol)}` +
               `${buildTransposeXml(measureTranspose)}` +
               `<clef><sign>${xmlEscape(measureClefSign)}</sign><line>${measureClefLine}</line></clef>` +
               `${miscellaneousXml}</attributes>`;
@@ -3770,7 +3986,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
               `<attributes>${
                 shouldEmitKey ? `<key><fifths>${measureFifths}</fifths></key>` : ""
               }${
-                shouldEmitTime ? `<time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>` : ""
+                shouldEmitTime ? `${buildTimeXml(measureBeats, measureBeatType, measureTimeSymbol)}` : ""
               }${
                 shouldEmitTranspose ? `${buildTransposeXml(measureTranspose)}` : ""
               }${
@@ -3797,6 +4013,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           }
           currentBeats = measureBeats;
           currentBeatType = measureBeatType;
+          currentTimeSymbol = measureTimeSymbol;
           currentFifths = measureFifths;
           currentClefSign = measureClefSign;
           currentClefLine = measureClefLine;
