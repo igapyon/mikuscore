@@ -2851,7 +2851,7 @@ const onDownloadMidi = () => {
         failExport("MIDI", "No notes to export (MIDI events are empty).");
         return;
     }
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value));
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
     if (!payload) {
         failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
         return;
@@ -2975,7 +2975,7 @@ const onDownloadAll = async () => {
             failExport("All", "Could not build MuseScore payload from current MusicXML.");
             return;
         }
-        const midiPayload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value));
+        const midiPayload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
         if (!midiPayload) {
             failExport("All", "Could not build MIDI payload from current MusicXML.");
             return;
@@ -3081,7 +3081,7 @@ const onDownloadMeasureMidi = () => {
         failExport("MIDI", "No notes to export (MIDI events are empty).");
         return;
     }
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value));
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
     if (!payload) {
         failExport("MIDI", "Could not build MIDI payload from current measure MusicXML.");
         return;
@@ -3580,6 +3580,30 @@ const METRIC_ACCENT_PROFILE_DELTAS = {
     subtle: { strong: 2, medium: 1 },
     balanced: { strong: 4, medium: 2 },
     strong: { strong: 6, medium: 3 },
+};
+const isGenericMidiTrackName = (value) => {
+    const text = value.trim();
+    if (!text)
+        return true;
+    return /^(track|trk)\s*\d+(\s*ch(?:annel)?\s*\d+)?$/i.test(text);
+};
+const parseStandardTitleFromMetaText = (value) => {
+    const text = value.trim();
+    if (!text)
+        return "";
+    const prefixed = text.match(/^(title|piece|movement)\s*[:=]\s*(.+)$/i);
+    if (prefixed && prefixed[2])
+        return prefixed[2].trim();
+    return "";
+};
+const parseStandardComposerFromMetaText = (value) => {
+    const text = value.trim();
+    if (!text)
+        return "";
+    const prefixed = text.match(/^(composer|comp)\s*[:=]\s*(.+)$/i);
+    if (prefixed && prefixed[2])
+        return prefixed[2].trim();
+    return "";
 };
 const normalizeMetricAccentProfile = (value) => {
     if (value === "balanced" || value === "strong")
@@ -4279,6 +4303,8 @@ const parseTrackSummary = (trackData, trackIndex) => {
     const notes = [];
     const channels = new Set();
     let trackName = null;
+    const standardTitleCandidates = [];
+    const standardComposerCandidates = [];
     const programByTrackChannel = new Map();
     const controllerEvents = [];
     const timeSignatureEvents = [];
@@ -4361,7 +4387,7 @@ const parseTrackSummary = (trackData, trackIndex) => {
                     tempoEvents.push({ tick: absTick, bpm });
                 }
             }
-            else if (metaType === 0x01 || metaType === 0x03) {
+            else if (metaType === 0x01 || metaType === 0x02 || metaType === 0x03) {
                 const payloadBytes = trackData.slice(payloadStart, payloadEnd);
                 const text = decodeMetaTextBytes(payloadBytes).trim();
                 if (metaType === 0x03 && text && !trackName) {
@@ -4369,6 +4395,21 @@ const parseTrackSummary = (trackData, trackIndex) => {
                 }
                 if (text.startsWith("mks:")) {
                     mksTextMetaLines.push(text);
+                }
+                else if (text) {
+                    if (metaType === 0x01) {
+                        const parsedTitle = parseStandardTitleFromMetaText(text);
+                        if (parsedTitle)
+                            standardTitleCandidates.push(parsedTitle);
+                        const parsedComposer = parseStandardComposerFromMetaText(text);
+                        if (parsedComposer)
+                            standardComposerCandidates.push(parsedComposer);
+                    }
+                    if (metaType === 0x02) {
+                        const parsedComposer = parseStandardComposerFromMetaText(text);
+                        if (parsedComposer)
+                            standardComposerCandidates.push(parsedComposer);
+                    }
                 }
             }
             cursor = payloadEnd;
@@ -4480,6 +4521,8 @@ const parseTrackSummary = (trackData, trackIndex) => {
         notes,
         channels,
         trackName,
+        standardTitleCandidates,
+        standardComposerCandidates,
         programByTrackChannel,
         controllerEvents,
         timeSignatureEvents,
@@ -5509,7 +5552,7 @@ const buildImportSkeletonMusicXml = (params) => {
                 var _a, _b, _c, _d, _e;
                 const mksName = (_b = (_a = mksTextMetadata === null || mksTextMetadata === void 0 ? void 0 : mksTextMetadata.partNameByTrackIndex.get(group.trackIndex)) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
                 const trackName = (_d = (_c = trackNameByIndex.get(group.trackIndex)) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : "";
-                const preferred = mksName || trackName;
+                const preferred = !isGenericMidiTrackName(trackName) ? trackName : (mksName || trackName);
                 if (preferred) {
                     const channelCount = (_e = channelCountByTrackIndex.get(group.trackIndex)) !== null && _e !== void 0 ? _e : 1;
                     return channelCount > 1 ? `${preferred} Ch ${group.channel}` : preferred;
@@ -6618,27 +6661,30 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     }
     const midiTracks = [];
     const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
-    const mksTextMetaLines = ["mks:meta-version:1"];
+    const emitMksTextMeta = options.emitMksTextMeta !== false;
+    const mksTextMetaLines = emitMksTextMeta ? ["mks:meta-version:1"] : [];
     const metaTitle = String((_d = (_c = options.metadata) === null || _c === void 0 ? void 0 : _c.title) !== null && _d !== void 0 ? _d : "").trim();
     const metaMovementTitle = String((_f = (_e = options.metadata) === null || _e === void 0 ? void 0 : _e.movementTitle) !== null && _f !== void 0 ? _f : "").trim();
     const metaComposer = String((_h = (_g = options.metadata) === null || _g === void 0 ? void 0 : _g.composer) !== null && _h !== void 0 ? _h : "").trim();
     const metaPickupTicks = Math.max(0, Math.round((_k = (_j = options.metadata) === null || _j === void 0 ? void 0 : _j.pickupTicks) !== null && _k !== void 0 ? _k : 0));
-    if (metaTitle)
-        mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
-    if (metaMovementTitle) {
-        mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
-    }
-    if (metaComposer)
-        mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
-    if (metaPickupTicks > 0)
-        mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
-    for (let index = 0; index < sortedTrackIds.length; index += 1) {
-        const trackId = sortedTrackIds[index];
-        const trackEvents = (_l = tracksById.get(trackId)) !== null && _l !== void 0 ? _l : [];
-        const trackName = (_p = (_o = (_m = trackEvents[0]) === null || _m === void 0 ? void 0 : _m.trackName) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
-        if (!trackName)
-            continue;
-        mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+    if (emitMksTextMeta) {
+        if (metaTitle)
+            mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
+        if (metaMovementTitle) {
+            mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
+        }
+        if (metaComposer)
+            mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
+        if (metaPickupTicks > 0)
+            mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
+        for (let index = 0; index < sortedTrackIds.length; index += 1) {
+            const trackId = sortedTrackIds[index];
+            const trackEvents = (_l = tracksById.get(trackId)) !== null && _l !== void 0 ? _l : [];
+            const trackName = (_p = (_o = (_m = trackEvents[0]) === null || _m === void 0 ? void 0 : _m.trackName) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
+            if (!trackName)
+                continue;
+            mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+        }
     }
     const normalizedTempoEvents = (tempoEvents.length ? tempoEvents : [{ startTicks: 0, bpm: tempo }])
         .map((event) => ({
@@ -6856,7 +6902,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
 };
 exports.buildMidiBytesForPlayback = buildMidiBytesForPlayback;
 const convertMidiToMusicXml = (midiBytes, options = {}) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
     const diagnostics = [];
     const warnings = [];
     const quantizeGridOption = normalizeMidiImportQuantizeGridOption(options.quantizeGrid);
@@ -6886,6 +6932,9 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     const tempoMetaEvents = [];
     const mksSysExPayloads = [];
     const mksTextMetaLines = [];
+    const standardTitleCandidates = [];
+    const standardComposerCandidates = [];
+    let singleTrackTitleCandidate = "";
     const trackNameByIndex = new Map();
     for (let i = 0; i < header.trackCount; i += 1) {
         if (offset + 8 > midiBytes.length) {
@@ -6912,10 +6961,19 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         }
         const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
         const summary = parseTrackSummary(trackData, i);
+        if (header.trackCount === 1 &&
+            i === 0 &&
+            !singleTrackTitleCandidate &&
+            summary.trackName &&
+            !isGenericMidiTrackName(summary.trackName)) {
+            singleTrackTitleCandidate = summary.trackName.trim();
+        }
         if (summary.trackName) {
             trackNameByIndex.set(i, summary.trackName);
         }
         collectedNotes.push(...summary.notes);
+        standardTitleCandidates.push(...summary.standardTitleCandidates);
+        standardComposerCandidates.push(...summary.standardComposerCandidates);
         controllerEvents.push(...summary.controllerEvents.map((event) => ({ ...event, trackIndex: i })));
         timeSignatureEvents.push(...summary.timeSignatureEvents);
         keySignatureEvents.push(...summary.keySignatureEvents);
@@ -6933,8 +6991,11 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
         offset += 8 + trackLength;
     }
     const parsedMksTextMetadata = parseMksMidiTextMetadata(mksTextMetaLines);
-    const title = ((_c = parsedMksTextMetadata.title) === null || _c === void 0 ? void 0 : _c.trim()) ||
-        String((_d = options.title) !== null && _d !== void 0 ? _d : "").trim() ||
+    const standardTitle = (_d = (_c = standardTitleCandidates.find((entry) => String(entry || "").trim().length > 0)) === null || _c === void 0 ? void 0 : _c.trim()) !== null && _d !== void 0 ? _d : singleTrackTitleCandidate;
+    const standardComposer = (_f = (_e = standardComposerCandidates.find((entry) => String(entry || "").trim().length > 0)) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+    const title = standardTitle ||
+        ((_g = parsedMksTextMetadata.title) === null || _g === void 0 ? void 0 : _g.trim()) ||
+        String((_h = options.title) !== null && _h !== void 0 ? _h : "").trim() ||
         "Imported MIDI";
     const quantizeGrid = quantizeGridOption === "auto"
         ? chooseBestImportQuantizeGrid(collectedNotes, header.ticksPerQuarter, tripletAwareQuantize)
@@ -6945,7 +7006,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     const notesByTrackChannel = new Map();
     for (const note of velocityScaledNotes) {
         const key = `${note.trackIndex}:${note.channel}`;
-        const bucket = (_e = notesByTrackChannel.get(key)) !== null && _e !== void 0 ? _e : [];
+        const bucket = (_j = notesByTrackChannel.get(key)) !== null && _j !== void 0 ? _j : [];
         bucket.push(note);
         notesByTrackChannel.set(key, bucket);
     }
@@ -6956,21 +7017,21 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
             message: "Normalized leading pickup time signature (e.g. 1/8 at tick 0 followed by full meter).",
         });
     }
-    const firstTimeSignature = (_f = normalizedTimeSignature.events[0]) !== null && _f !== void 0 ? _f : { tick: 0, beats: 4, beatType: 4 };
+    const firstTimeSignature = (_k = normalizedTimeSignature.events[0]) !== null && _k !== void 0 ? _k : { tick: 0, beats: 4, beatType: 4 };
     const inferredKeySignature = keySignatureEvents.length
         ? null
         : inferKeySignatureFromImportedNotes(velocityScaledNotes);
-    const firstKeySignature = (_g = keySignatureEvents
+    const firstKeySignature = (_l = keySignatureEvents
         .slice()
-        .sort((a, b) => a.tick - b.tick)[0]) !== null && _g !== void 0 ? _g : {
+        .sort((a, b) => a.tick - b.tick)[0]) !== null && _l !== void 0 ? _l : {
         tick: 0,
-        fifths: (_h = inferredKeySignature === null || inferredKeySignature === void 0 ? void 0 : inferredKeySignature.fifths) !== null && _h !== void 0 ? _h : 0,
-        mode: (_j = inferredKeySignature === null || inferredKeySignature === void 0 ? void 0 : inferredKeySignature.mode) !== null && _j !== void 0 ? _j : "major",
+        fifths: (_m = inferredKeySignature === null || inferredKeySignature === void 0 ? void 0 : inferredKeySignature.fifths) !== null && _m !== void 0 ? _m : 0,
+        mode: (_o = inferredKeySignature === null || inferredKeySignature === void 0 ? void 0 : inferredKeySignature.mode) !== null && _o !== void 0 ? _o : "major",
     };
     const beats = Math.max(1, Math.round(firstTimeSignature.beats));
     const beatType = Math.max(1, Math.round(firstTimeSignature.beatType));
     const measureTicks = Math.max(1, Math.round((header.ticksPerQuarter * 4 * beats) / beatType));
-    const metadataPickupTicks = Math.max(0, Math.min(measureTicks - 1, Math.round((_k = parsedMksTextMetadata.pickupTicks) !== null && _k !== void 0 ? _k : 0)));
+    const metadataPickupTicks = Math.max(0, Math.min(measureTicks - 1, Math.round((_p = parsedMksTextMetadata.pickupTicks) !== null && _p !== void 0 ? _p : 0)));
     const resolvedPickupTicks = normalizedTimeSignature.pickupTicks > 0
         ? normalizedTimeSignature.pickupTicks
         : metadataPickupTicks;
@@ -7014,7 +7075,7 @@ const convertMidiToMusicXml = (midiBytes, options = {}) => {
     const xml = buildImportSkeletonMusicXml({
         title,
         movementTitle: parsedMksTextMetadata.movementTitle,
-        composer: parsedMksTextMetadata.composer,
+        composer: standardComposer || parsedMksTextMetadata.composer,
         quantizeGrid,
         divisionsOverride: quantized.divisions,
         ticksPerQuarter: header.ticksPerQuarter,
@@ -10058,7 +10119,7 @@ const createVsqxDownloadPayload = (vsqxText) => {
     };
 };
 exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
-const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle", exportProfile = "safe") => {
+const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle", exportProfile = "safe", keepRoundtripMetadata = true) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!playbackDoc)
@@ -10093,6 +10154,7 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "el
         const pickupTicks = (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
         midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
             embedMksSysEx: true,
+            emitMksTextMeta: keepRoundtripMetadata,
             ticksPerQuarter: exportTicksPerQuarter,
             normalizeForParity: runtime.normalizeForParity,
             rawWriter: runtime.rawWriter,

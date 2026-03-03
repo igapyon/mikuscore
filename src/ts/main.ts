@@ -3039,7 +3039,8 @@ const onDownloadMidi = (): void => {
     normalizeGraceTimingMode(graceTimingModeSelect.value),
     metricAccentEnabledInput.checked,
     normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-    normalizeMidiExportProfile(midiExportProfileSelect.value)
+    normalizeMidiExportProfile(midiExportProfileSelect.value),
+    keepMksMetaMetadataInMusicXml.checked
   );
   if (!payload) {
     failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
@@ -3172,7 +3173,8 @@ const onDownloadAll = async (): Promise<void> => {
       normalizeGraceTimingMode(graceTimingModeSelect.value),
       metricAccentEnabledInput.checked,
       normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-      normalizeMidiExportProfile(midiExportProfileSelect.value)
+      normalizeMidiExportProfile(midiExportProfileSelect.value),
+      keepMksMetaMetadataInMusicXml.checked
     );
     if (!midiPayload) {
       failExport("All", "Could not build MIDI payload from current MusicXML.");
@@ -3285,7 +3287,8 @@ const onDownloadMeasureMidi = (): void => {
     normalizeGraceTimingMode(graceTimingModeSelect.value),
     metricAccentEnabledInput.checked,
     normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-    normalizeMidiExportProfile(midiExportProfileSelect.value)
+    normalizeMidiExportProfile(midiExportProfileSelect.value),
+    keepMksMetaMetadataInMusicXml.checked
   );
   if (!payload) {
     failExport("MIDI", "Could not build MIDI payload from current measure MusicXML.");

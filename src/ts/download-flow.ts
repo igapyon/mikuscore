@@ -301,7 +301,8 @@ export const createMidiDownloadPayload = (
   graceTimingMode: GraceTimingMode = "before_beat",
   metricAccentEnabled = false,
   metricAccentProfile: MetricAccentProfile = "subtle",
-  exportProfile: MidiExportProfile = "safe"
+  exportProfile: MidiExportProfile = "safe",
+  keepRoundtripMetadata = true
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
@@ -353,6 +354,7 @@ export const createMidiDownloadPayload = (
       midiKeySignatureEvents,
       {
         embedMksSysEx: true,
+        emitMksTextMeta: keepRoundtripMetadata,
         ticksPerQuarter: exportTicksPerQuarter,
         normalizeForParity: runtime.normalizeForParity,
         rawWriter: runtime.rawWriter,
