@@ -2906,7 +2906,8 @@ const buildRawMidiBytesForPlayback = (
     embedMksSysEx: boolean;
     sysexChunkTexts: string[];
     retriggerPolicy: RawMidiRetriggerPolicy;
-    mksTextMetaLines: string[];
+    textMetaLines: string[];
+    metaTrackName: string;
   }
 ): Uint8Array => {
   const tracksById = new Map<string, PlaybackEvent[]>();
@@ -2920,6 +2921,11 @@ const buildRawMidiBytesForPlayback = (
   const trackChunks: number[][] = [];
 
   const tempoEvents: RawTrackEvent[] = [];
+  {
+    const trackNameBytes = buildTextMetaEventData(0, options.metaTrackName, 0x03);
+    const body = trackNameBytes.slice(numberToVariableLength(0).length);
+    tempoEvents.push({ tick: 0, order: -1, bytes: body });
+  }
   type MetaTimelineEntry =
     | ({ kind: "tempo" } & MidiTempoEvent)
     | ({ kind: "time" } & MidiTimeSignatureEvent)
@@ -2969,7 +2975,7 @@ const buildRawMidiBytesForPlayback = (
       tempoEvents.push({ tick: 0, order: 3, bytes: body });
     }
   }
-  for (const line of options.mksTextMetaLines) {
+  for (const line of options.textMetaLines) {
     const textBytes = buildTextMetaEventData(0, line, 0x01);
     const body = textBytes.slice(numberToVariableLength(0).length);
     tempoEvents.push({ tick: 0, order: 4, bytes: body });
@@ -2985,6 +2991,12 @@ const buildRawMidiBytesForPlayback = (
       .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
     if (!trackEvents.length) continue;
     const noteEvents: RawTrackEvent[] = [];
+    const rawTrackName = trackEvents[0]?.trackName?.trim() || trackId || "Track";
+    {
+      const trackNameBytes = buildTextMetaEventData(0, rawTrackName, 0x03);
+      const body = trackNameBytes.slice(numberToVariableLength(0).length);
+      noteEvents.push({ tick: 0, order: -1, bytes: body });
+    }
 
     const channels = Array.from(
       new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
@@ -3047,6 +3059,12 @@ const buildRawMidiBytesForPlayback = (
       );
     if (!channelEvents.length) continue;
     const ccEvents: RawTrackEvent[] = [];
+    {
+      const baseName = channelEvents[0]?.trackName?.trim() || "Track";
+      const trackNameBytes = buildTextMetaEventData(0, `${baseName} Pedal`, 0x03);
+      const body = trackNameBytes.slice(numberToVariableLength(0).length);
+      ccEvents.push({ tick: 0, order: -1, bytes: body });
+    }
     for (const controlEvent of channelEvents) {
       const channel = normalizeMidiChannel(controlEvent.channel);
       const controllerNumber = Math.max(0, Math.min(127, Math.round(controlEvent.controllerNumber)));
@@ -3876,6 +3894,8 @@ export const buildMidiBytesForPlayback = (
   const metaTitle = String(options.metadata?.title ?? "").trim();
   const metaMovementTitle = String(options.metadata?.movementTitle ?? "").trim();
   const metaComposer = String(options.metadata?.composer ?? "").trim();
+  const metaTrackTitle = (metaTitle || metaMovementTitle || "Untitled").replace(/\s+/g, " ").trim() || "Untitled";
+  const standardTextMetaLines: string[] = [`title:${metaTrackTitle}`];
   const metaPickupTicks = Math.max(0, Math.round(options.metadata?.pickupTicks ?? 0));
   if (emitMksTextMeta) {
     if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
@@ -4012,14 +4032,15 @@ export const buildMidiBytesForPlayback = (
         embedMksSysEx,
         sysexChunkTexts: sysexChunks,
         retriggerPolicy: options.rawRetriggerPolicy ?? "off_before_on",
-        mksTextMetaLines,
+        textMetaLines: [...standardTextMetaLines, ...mksTextMetaLines],
+        metaTrackName: metaTrackTitle,
       }
     );
   }
   const midiWriterRuntime = midiWriter as MidiWriterRuntime;
   const tempoTrack = new midiWriterRuntime.Track();
-  tempoTrack.addTrackName("Tempo Map");
-  tempoTrack.addInstrumentName("Tempo Map");
+  tempoTrack.addTrackName(metaTrackTitle);
+  tempoTrack.addInstrumentName(metaTrackTitle);
   const metaTimeline: Array<
     | ({ kind: "tempo" } & MidiTempoEvent)
     | ({ kind: "time" } & MidiTimeSignatureEvent)
@@ -4054,7 +4075,7 @@ export const buildMidiBytesForPlayback = (
       tempoTrack.addEvent({ data: buildMksSysexEventData(0, chunk) });
     }
   }
-  for (const line of mksTextMetaLines) {
+  for (const line of [...standardTextMetaLines, ...mksTextMetaLines]) {
     tempoTrack.addEvent({ data: buildTextMetaEventData(0, line, 0x01) });
   }
   midiTracks.push(tempoTrack);

@@ -1816,6 +1816,57 @@ describe("midi-io MIDI import MVP", () => {
     expect(timeSigs[1]).toEqual({ tick: 240, beats: 6, beatType: 8 });
   });
 
+  it("always emits standard title text meta even when mks text metadata is disabled", () => {
+    const midi = buildMidiBytesForPlayback(
+      [{ midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "P1" }],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 4, beatType: 4 }],
+      [{ startTicks: 0, fifths: 0, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Sample Title",
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts).toContain("title:Sample Title");
+    expect(texts.some((text) => text.startsWith("mks:"))).toBe(false);
+  });
+
+  it("emits raw-writer track-name meta (FF03) for note tracks", () => {
+    const midi = buildMidiBytesForPlayback(
+      [
+        { midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "Violin 1" },
+        { midiNumber: 67, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P2", trackName: "Violin 2" },
+      ],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 4, beatType: 4 }],
+      [{ startTicks: 0, fifths: 0, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Sample Title",
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts).toContain("Violin 1");
+    expect(texts).toContain("Violin 2");
+  });
+
   it("keeps stable triplet-eighth timing in MusicXML playback extraction", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
