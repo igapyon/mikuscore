@@ -143,7 +143,7 @@ const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
 const zipEntrySelectBlock = q<HTMLDivElement>("#zipEntrySelectBlock");
 const zipEntrySelect = q<HTMLSelectElement>("#zipEntrySelect");
-const fileLoadOverlay = q<HTMLDivElement>("#fileLoadOverlay");
+const fileLoadOverlay = q<HTMLElement>("#fileLoadOverlay");
 const loadBtn = q<HTMLButtonElement>("#loadBtn");
 const noteSelect = qo<HTMLSelectElement>("#noteSelect");
 const statusText = qo<HTMLParagraphElement>("#statusText");
@@ -197,8 +197,8 @@ const diagArea = qo<HTMLDivElement>("#diagArea");
 const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
 const scoreHeaderMetaText = q<HTMLParagraphElement>("#scoreHeaderMetaText");
-const inputUiMessage = q<HTMLDivElement>("#inputUiMessage");
-const uiMessage = q<HTMLDivElement>("#uiMessage");
+const inputUiMessage = q<HTMLElement>("#inputUiMessage");
+const uiMessage = q<HTMLElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
 const measureEmptyState = q<HTMLDivElement>("#measureEmptyState");
 const measureSelectGuideBtn = q<HTMLButtonElement>("#measureSelectGuideBtn");
@@ -291,6 +291,33 @@ const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
 const DEFAULT_VSQX_LYRIC = "ら";
+
+fileNameText.classList.add("md-hidden");
+
+type LhtLoadingOverlayElement = HTMLElement & {
+  setActive?: (active: boolean) => void;
+  waitForNextPaint?: () => Promise<void>;
+};
+
+type LhtErrorAlertElement = HTMLElement & {
+  show?: (message?: string) => void;
+  hide?: () => void;
+  clear?: () => void;
+};
+
+const isLhtLoadingOverlayElement = (element: Element): element is LhtLoadingOverlayElement => {
+  return (
+    element.tagName.toLowerCase() === "lht-loading-overlay"
+    && typeof (element as LhtLoadingOverlayElement).setActive === "function"
+  );
+};
+
+const isLhtErrorAlertElement = (element: Element): element is LhtErrorAlertElement => {
+  return (
+    element.tagName.toLowerCase() === "lht-error-alert"
+    && typeof (element as LhtErrorAlertElement).show === "function"
+  );
+};
 
 type LocalDraft = {
   xml: string;
@@ -802,11 +829,19 @@ const setFileLoadInProgress = (inProgress: boolean): void => {
   loadBtn.disabled = inProgress;
   zipEntrySelect.disabled = inProgress;
   fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
-  fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
-  fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+  if (isLhtLoadingOverlayElement(fileLoadOverlay)) {
+    fileLoadOverlay.setActive?.(inProgress);
+  } else {
+    fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+    fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+  }
 };
 
 const waitForNextPaint = async (): Promise<void> => {
+  if (isLhtLoadingOverlayElement(fileLoadOverlay) && typeof fileLoadOverlay.waitForNextPaint === "function") {
+    await fileLoadOverlay.waitForNextPaint();
+    return;
+  }
   await new Promise<void>((resolve) => {
     requestAnimationFrame(() => resolve());
   });
@@ -1517,6 +1552,10 @@ const renderDiagnostics = (): void => {
 const renderUiMessage = (): void => {
   const messageTargets = [inputUiMessage, uiMessage];
   for (const target of messageTargets) {
+    if (isLhtErrorAlertElement(target)) {
+      target.clear?.();
+      continue;
+    }
     target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
     target.textContent = "";
   }
@@ -1524,6 +1563,10 @@ const renderUiMessage = (): void => {
   const showMessage = (kind: "error" | "warning", text: string): void => {
     const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
     for (const target of messageTargets) {
+      if (isLhtErrorAlertElement(target)) {
+        target.show?.(text);
+        continue;
+      }
       target.textContent = text;
       target.classList.add(className);
       target.classList.remove("md-hidden");
@@ -1557,6 +1600,10 @@ const renderUiMessage = (): void => {
   }
 
   for (const target of messageTargets) {
+    if (isLhtErrorAlertElement(target)) {
+      target.hide?.();
+      continue;
+    }
     target.classList.add("md-hidden");
   }
 };
@@ -3362,12 +3409,19 @@ sourceTypeLilyPond.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => {
+fileSelectBtn.closest("lht-file-select")?.addEventListener("lht-file-select:before-open", () => {
   // Clear selection so choosing the same file again still fires `change`.
   resetZipEntrySelectionUi();
   fileInput.value = "";
-  fileInput.click();
 });
+
+if (!fileSelectBtn.closest("lht-file-select")) {
+  fileSelectBtn.addEventListener("click", () => {
+    resetZipEntrySelectionUi();
+    fileInput.value = "";
+    fileInput.click();
+  });
+}
 fileInput.addEventListener("change", async () => {
   const f = fileInput.files?.[0];
   fileNameText.textContent = f ? f.name : "No file selected";

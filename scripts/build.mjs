@@ -181,19 +181,13 @@ const bundle = (tsModules) => {
 
 const inlineTemplate = (jsBundle) => {
   const template = readText(TEMPLATE);
-  const tokenCss = readText(TOKEN_CSS_PATH);
-  const coreCss = readText(CORE_CSS_PATH);
   const css = readText(CSS_PATH);
   const verovioJs = readText(VEROVIO_JS_PATH);
   const midiWriterJs = readText(MIDI_WRITER_JS_PATH);
   const uf3pMikuscoreIifeJs = readText(UF3P_MIKUSCORE_IIFE_JS_PATH);
+  const hasTokenCssLink = template.includes(`href="${TOKEN_CSS_PATH}"`);
+  const hasCoreCssLink = template.includes("href=\"src/css/md3/core-spec.css\"");
 
-  if (!template.includes("href=\"src/css/md3/token-spec.css\"")) {
-    throw new Error("Template must include src/css/md3/token-spec.css link tag.");
-  }
-  if (!template.includes("href=\"src/css/md3/core-spec.css\"")) {
-    throw new Error("Template must include src/css/md3/core-spec.css link tag.");
-  }
   if (!template.includes("href=\"src/css/app.css\"")) {
     throw new Error("Template must include src/css/app.css link tag.");
   }
@@ -210,15 +204,19 @@ const inlineTemplate = (jsBundle) => {
     throw new Error("Template must include src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js script tag.");
   }
 
-  const withTokenCss = template.replace(
-    /<link[^>]*href="src\/css\/md3\/token-spec\.css"[^>]*>/,
-    `<style>\n${tokenCss}\n</style>`
-  );
+  const withTokenCss = hasTokenCssLink
+    ? template.replace(
+        /<link[^>]*href="src\/css\/md3\/token-spec\.css"[^>]*>/,
+        `<style>\n${readText(TOKEN_CSS_PATH)}\n</style>`
+      )
+    : template;
 
-  const withCoreCss = withTokenCss.replace(
-    /<link[^>]*href="src\/css\/md3\/core-spec\.css"[^>]*>/,
-    `<style>\n${coreCss}\n</style>`
-  );
+  const withCoreCss = hasCoreCssLink
+    ? withTokenCss.replace(
+        /<link[^>]*href="src\/css\/md3\/core-spec\.css"[^>]*>/,
+        `<style>\n${readText(CORE_CSS_PATH)}\n</style>`
+      )
+    : withTokenCss;
 
   const withCss = withCoreCss.replace(
     /<link[^>]*href="src\/css\/app\.css"[^>]*>/,

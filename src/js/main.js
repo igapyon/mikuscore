@@ -2,7 +2,7 @@
 const modules = {
   "src/ts/main.js": function (require, module, exports) {
 "use strict";
-var _a;
+var _a, _b;
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
@@ -225,6 +225,15 @@ const DEFAULT_GRACE_TIMING_MODE = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE = "subtle";
 const DEFAULT_VSQX_LYRIC = "ら";
+fileNameText.classList.add("md-hidden");
+const isLhtLoadingOverlayElement = (element) => {
+    return (element.tagName.toLowerCase() === "lht-loading-overlay"
+        && typeof element.setActive === "function");
+};
+const isLhtErrorAlertElement = (element) => {
+    return (element.tagName.toLowerCase() === "lht-error-alert"
+        && typeof element.show === "function");
+};
 const normalizeMidiProgram = (value) => {
     switch (value) {
         case "acoustic_grand_piano":
@@ -685,15 +694,25 @@ const resetZipEntrySelectionUi = () => {
     selectedZipEntryVirtualFile = null;
 };
 const setFileLoadInProgress = (inProgress) => {
+    var _a;
     isFileLoadInProgress = inProgress;
     fileSelectBtn.disabled = inProgress;
     loadBtn.disabled = inProgress;
     zipEntrySelect.disabled = inProgress;
     fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
-    fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
-    fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+    if (isLhtLoadingOverlayElement(fileLoadOverlay)) {
+        (_a = fileLoadOverlay.setActive) === null || _a === void 0 ? void 0 : _a.call(fileLoadOverlay, inProgress);
+    }
+    else {
+        fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+        fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+    }
 };
 const waitForNextPaint = async () => {
+    if (isLhtLoadingOverlayElement(fileLoadOverlay) && typeof fileLoadOverlay.waitForNextPaint === "function") {
+        await fileLoadOverlay.waitForNextPaint();
+        return;
+    }
     await new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
     });
@@ -1372,14 +1391,24 @@ const renderDiagnostics = () => {
     }
 };
 const renderUiMessage = () => {
+    var _a, _b;
     const messageTargets = [inputUiMessage, uiMessage];
     for (const target of messageTargets) {
+        if (isLhtErrorAlertElement(target)) {
+            (_a = target.clear) === null || _a === void 0 ? void 0 : _a.call(target);
+            continue;
+        }
         target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
         target.textContent = "";
     }
     const showMessage = (kind, text) => {
+        var _a;
         const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
         for (const target of messageTargets) {
+            if (isLhtErrorAlertElement(target)) {
+                (_a = target.show) === null || _a === void 0 ? void 0 : _a.call(target, text);
+                continue;
+            }
             target.textContent = text;
             target.classList.add(className);
             target.classList.remove("md-hidden");
@@ -1409,6 +1438,10 @@ const renderUiMessage = () => {
         return;
     }
     for (const target of messageTargets) {
+        if (isLhtErrorAlertElement(target)) {
+            (_b = target.hide) === null || _b === void 0 ? void 0 : _b.call(target);
+            continue;
+        }
         target.classList.add("md-hidden");
     }
 };
@@ -3150,12 +3183,18 @@ sourceTypeLilyPond.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => {
+(_b = fileSelectBtn.closest("lht-file-select")) === null || _b === void 0 ? void 0 : _b.addEventListener("lht-file-select:before-open", () => {
     // Clear selection so choosing the same file again still fires `change`.
     resetZipEntrySelectionUi();
     fileInput.value = "";
-    fileInput.click();
 });
+if (!fileSelectBtn.closest("lht-file-select")) {
+    fileSelectBtn.addEventListener("click", () => {
+        resetZipEntrySelectionUi();
+        fileInput.value = "";
+        fileInput.click();
+    });
+}
 fileInput.addEventListener("change", async () => {
     var _a;
     const f = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
@@ -8669,6 +8708,13 @@ const createBasicWaveSynthEngine = (options) => {
     let audioContext = null;
     let activeSynthNodes = [];
     let synthStopTimer = null;
+    const hasActiveUserGesture = () => {
+        const nav = navigator;
+        const ua = nav.userActivation;
+        if (!ua)
+            return true;
+        return ua.isActive === true || ua.hasBeenActive === true;
+    };
     const ensureAudioContext = () => {
         if (audioContext)
             return audioContext;
@@ -8684,6 +8730,10 @@ const createBasicWaveSynthEngine = (options) => {
     const ensureAudioContextRunning = async () => {
         const context = ensureAudioContext();
         if (context.state !== "running") {
+            // Avoid autoplay-policy warnings by not calling resume() outside user activation.
+            if (!hasActiveUserGesture()) {
+                throw new Error("AudioContext resume requires an active user gesture.");
+            }
             await context.resume();
         }
         if (context.state !== "running") {

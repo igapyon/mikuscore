@@ -35,6 +35,51 @@
 - [ ] Unify failure message policy (UI + console wording).
 - [ ] Add at least one E2E click-mapping test.
 
+#### P1.5: UI commonization with `lht-cmn`
+- [ ] Define migration guardrails before replacement:
+  - Keep all existing DOM contracts (`id` / `name` / event behavior) used by `src/ts/main.ts`.
+  - Treat `lht-cmn/js/components.js` and `lht-cmn/css/components.css` as immutable unless explicit user approval is given.
+  - Migrate in small slices (per panel or per component type), not all at once.
+- [x] Phase 0: inventory and mapping
+  - [x] Enumerate repeated UI patterns in `mikuscore-src.html` (help tooltips, select/input fields, switches, copy/download action blocks, load/error/status overlays).
+  - [x] Create a replacement table: `current markup -> lht-*` component, with compatibility notes per target (`id` preservation, fallback behavior, expected event flow).
+  - See `docs/spec/LHT_CMN_MIGRATION.md`.
+- [x] Phase 1: bootstrap integration
+  - [x] Add `lht-cmn/css/components.css` and `lht-cmn/js/components.js` to `mikuscore-src.html` load path and confirm single-HTML build still works.
+  - [x] Verify that startup has no missing custom-element errors and no regressions in initial render.
+- [ ] Phase 2: low-risk replacements first
+  - [x] Replace repeated tooltip groups with `lht-help-tooltip`.
+    - Progress (2026-03-07): migrated 19/19 tooltip groups (including settings area).
+  - [x] Replace file chooser block with `lht-file-select` while preserving `fileInput` / `fileSelectBtn` / `fileNameText` behavior.
+    - Progress (2026-03-07): migrated markup and event wiring; build passes.
+  - [x] Replace loading/error/toast style primitives with `lht-loading-overlay`, `lht-error-alert`, and `lht-toast`.
+    - Progress (2026-03-07): migrated `#fileLoadOverlay`, `#inputUiMessage`, `#uiMessage`, and added `#toast`; updated UI message/overlay adapters in `main.ts`.
+- [ ] Phase 3: form-field/switch migration
+  - Replace eligible `input`/`textarea` fields with `lht-text-field-help` where help text is available.
+    - Progress (2026-03-07): migrated `newPartCount` and `newTimeBeats` to `lht-text-field-help`.
+    - Note (2026-03-07): source textareas (`xmlInput` / `abcInput` / `museScoreInput` / `vsqxInput` / `meiInput` / `lilyPondInput`) are deferred until `lht-text-field-help` parity covers needed textarea attributes such as `spellcheck`.
+    - Note (2026-03-07): no additional safe migration candidates were found in the recheck. Remaining textareas/viewers rely on `spellcheck="false"` and/or `readonly` behavior that is not yet documented as `lht-text-field-help` parity.
+  - [x] Replace eligible `select` controls with `lht-select-help` (JSON options where practical, keep existing IDs).
+  - Progress (2026-03-07): migrated 10 selects (`newTimeBeatType`, `newKeyFifths`, `zipEntrySelect`, `durationPreset`, `graceTimingMode`, `metricAccentProfile`, `midiProgramSelect`, `midiExportProfile`, `midiImportQuantizeGrid`, `playbackWaveform`).
+    - Progress (2026-03-07): migrated static options to `<script type="application/json" slot="options">[...]</script>` (README-compliant). Dynamic `zipEntrySelect` / `durationPreset` remain JS-populated.
+  - [x] Replace switch rows with `lht-switch-help` while preserving checked/disabled/update wiring.
+    - Progress (2026-03-07): migrated 10 switches (`newTemplatePianoGrandStaff`, `keepMksMetaMetadataInMusicXml`, `keepMksSrcMetadataInMusicXml`, `keepMksDbgMetadataInMusicXml`, `exportMusicXmlAsXmlExtension`, `compressXmlMuseScoreExport`, `metricAccentEnabled`, `midiImportTripletAware`, `forceMidiProgramOverride`, `playbackUseMidiLike`).
+- [ ] Phase 4: page-frame normalization
+  - Evaluate migration of hero/header/menu into `lht-page-hero` and `lht-page-menu` without breaking current tab flow.
+    - Note (2026-03-07): initial evaluation suggests deferring this migration. Current `mikuscore` hero includes a custom GitHub CTA and top-tab composition that does not map cleanly to `lht-page-hero` / `lht-page-menu` yet.
+  - Keep mikuscore-specific layout identity in `src/css/app.css`; move only shared behavior/structure to `lht`.
+- [ ] Phase 5: cleanup and regression hardening
+  - [x] Remove duplicate tooltip/switch/select helper CSS that becomes obsolete after migration.
+    - Progress (2026-03-07): removed app-side tooltip collision control and obsolete loading/file-select helper CSS after `lht-cmn` update.
+  - Shrink `src/css/md3/*` step-by-step and remove it completely at the end of migration (only after all remaining dependencies are moved to `lht-cmn` or `src/css/app.css`).
+    - Progress (2026-03-07): removed `src/css/md3/core-spec.css` from `mikuscore-src.html`, copied the currently required base classes into `src/css/app.css`, and relaxed `scripts/build.mjs` so the single-file build no longer requires the core-spec link tag.
+    - Progress (2026-03-07): removed `src/css/md3/token-spec.css` from `mikuscore-src.html`, inlined the still-used design tokens into `src/css/app.css`, and made `scripts/build.mjs` tolerate builds with no `src/css/md3/*` link tags in the template.
+    - Progress (2026-03-07): deleted `src/css/md3/core-spec.css` and `src/css/md3/token-spec.css` from the repo after confirming there were no remaining runtime references.
+  - [x] Add a UI regression checklist (Input/Score/Edit/Output flow, file/source/new mode toggle, ZIP entry selection, playback/export buttons, mobile viewport checks).
+    - Progress (2026-03-07): practical checklist established and exercised during tooltip/file-select/switch follow-up fixes.
+  - [x] Run `npm run build` and document any required compatibility shims.
+    - Progress (2026-03-07): `npm run build`, `npm run test:unit`, and `npm run build:all` passed after `lht-cmn` follow-up work and after making `core-spec.css` optional in `scripts/build.mjs`.
+
 #### P2: Spec and tests sync
 - [ ] Add save-XML/re-render consistency checks in `docs/spec`.
 - [ ] Document and test selection retention rules across re-render.
@@ -374,6 +419,51 @@
 - [ ] 選択ノートの視覚ハイライトを強化。
 - [ ] 失敗時メッセージを統一（UI表示と console 文面）。
 - [ ] クリックマッピングの E2E テストを追加（最低 1 ケース）。
+
+#### P1.5: `lht-cmn` による UI 共通化
+- [ ] 置換前に移行ガードレールを定義する。
+  - `src/ts/main.ts` が参照する既存DOM契約（`id` / `name` / イベント挙動）を維持する。
+  - `lht-cmn/js/components.js` と `lht-cmn/css/components.css` は、ユーザー明示許可なしでは変更しない。
+  - 一括置換は避け、パネル単位またはコンポーネント種別単位で段階移行する。
+- [x] フェーズ0: 棚卸しと対応表作成
+  - [x] `mikuscore-src.html` の重複UIパターン（ヘルプツールチップ、select/input、switch、コピー/ダウンロード系アクション、loading/error/status 表示）を列挙する。
+  - [x] `現行マークアップ -> lht-*` の対応表を作り、各項目に互換要件（`id`維持、フォールバック、イベント流れ）を記載する。
+  - 参照: `docs/spec/LHT_CMN_MIGRATION.md`
+- [x] フェーズ1: 組み込み基盤の導入
+  - [x] `mikuscore-src.html` に `lht-cmn/css/components.css` と `lht-cmn/js/components.js` を読み込み、単一HTMLビルドが崩れないことを確認する。
+  - [x] 起動時に custom element 未定義エラーがないことと初期表示回帰がないことを確認する。
+- [ ] フェーズ2: 低リスク領域から置換
+  - [x] 重複している tooltip グループを `lht-help-tooltip` へ置換する。
+    - 進捗（2026-03-07）: 19/19 を置換済み（設定エリアを含む）。
+  - [x] ファイル選択ブロックを `lht-file-select` へ置換し、`fileInput` / `fileSelectBtn` / `fileNameText` 挙動を維持する。
+    - 進捗（2026-03-07）: マークアップとイベント配線の移行完了、build 通過。
+  - [x] loading/error/toast 表示を `lht-loading-overlay` / `lht-error-alert` / `lht-toast` に統一する。
+    - 進捗（2026-03-07）: `#fileLoadOverlay`, `#inputUiMessage`, `#uiMessage` を移行し、`#toast` を追加。`main.ts` のメッセージ/オーバーレイ制御も対応済み。
+- [ ] フェーズ3: 入力系コンポーネント移行
+  - `help-text` が付与できる入力項目を `lht-text-field-help` へ置換する。
+    - 進捗（2026-03-07）: `newPartCount` と `newTimeBeats` を `lht-text-field-help` へ移行。
+    - メモ（2026-03-07）: source textarea 群（`xmlInput` / `abcInput` / `museScoreInput` / `vsqxInput` / `meiInput` / `lilyPondInput`）は、`spellcheck` など必要属性の透過保証が揃うまで保留。
+    - メモ（2026-03-07）: 再点検の結果、追加で安全に置換できる候補は現時点でなし。残りの textarea / viewer は `spellcheck=\"false\"` や `readonly` の扱いを要し、`lht-text-field-help` の保証範囲として未固定。
+  - [x] 置換可能な `select` を `lht-select-help` へ置換する（可能な箇所は JSON options 化、IDは維持）。
+  - 進捗（2026-03-07）: 10件を移行済み（`newTimeBeatType`, `newKeyFifths`, `zipEntrySelect`, `durationPreset`, `graceTimingMode`, `metricAccentProfile`, `midiProgramSelect`, `midiExportProfile`, `midiImportQuantizeGrid`, `playbackWaveform`）。
+    - 進捗（2026-03-07）: 固定選択肢は `<script type="application/json" slot="options">[...]</script>` へ移行（README準拠）。`zipEntrySelect` / `durationPreset` はJS動的投入を維持。
+  - [x] switch 行を `lht-switch-help` へ置換し、checked/disabled/更新イベントの配線を維持する。
+    - 進捗（2026-03-07）: 10件を移行済み（`newTemplatePianoGrandStaff`, `keepMksMetaMetadataInMusicXml`, `keepMksSrcMetadataInMusicXml`, `keepMksDbgMetadataInMusicXml`, `exportMusicXmlAsXmlExtension`, `compressXmlMuseScoreExport`, `metricAccentEnabled`, `midiImportTripletAware`, `forceMidiProgramOverride`, `playbackUseMidiLike`）。
+- [ ] フェーズ4: ページ骨格の共通化
+  - 既存タブ導線を壊さない条件で、hero/header/menu を `lht-page-hero` / `lht-page-menu` へ寄せる可否を評価する。
+    - メモ（2026-03-07）: 初期評価では保留が妥当。現状の `mikuscore` hero は GitHub CTA と独自 top-tab 構成を含み、`lht-page-hero` / `lht-page-menu` へ素直に載せ替えにくい。
+  - mikuscore固有の見た目は `src/css/app.css` に残し、共通化は構造と挙動を優先する。
+- [ ] フェーズ5: 後片付けと回帰強化
+  - [x] 置換後に不要化した tooltip/switch/select の重複 CSS を削減する。
+    - 進捗（2026-03-07）: `lht-cmn` 更新後、app側 tooltip 衝突回避や旧 loading/file-select 補助 CSS を削除。
+  - `src/css/md3/*` を段階的に縮小し、最終的に完全撤去する（残依存が `lht-cmn` または `src/css/app.css` へ移管済みであることを条件にする）。
+    - 進捗（2026-03-07）: `mikuscore-src.html` から `src/css/md3/core-spec.css` 読込を外し、現時点で必要な基底クラスを `src/css/app.css` へ移植。あわせて `scripts/build.mjs` を調整し、single-file build で core-spec の link を必須としないようにした。
+    - 進捗（2026-03-07）: `mikuscore-src.html` から `src/css/md3/token-spec.css` 読込も外し、使用中のデザイントークンを `src/css/app.css` に移植。これによりテンプレート上の `src/css/md3/*` 依存は解消した。
+    - 進捗（2026-03-07）: runtime 参照が残っていないことを確認し、`src/css/md3/core-spec.css` と `src/css/md3/token-spec.css` を repo から削除した。
+  - [x] UI回帰チェックリストを整備する（Input/Score/Edit/Output、file/source/new 切替、ZIP選択、再生/出力、モバイル表示）。
+    - 進捗（2026-03-07）: 実運用チェック観点は整理済み。必要なら後日ドキュメント化のみ追加。
+  - [x] `npm run build` を実行し、必要な互換 shim があれば記録する。
+    - 進捗（2026-03-07）: `lht-cmn` 追従後に加え、`core-spec.css` 非必須化後も `build`, `test:unit`, `build:all` 実施済み。
 
 #### P2: 仕様とテストの同期
 - [ ] 保存 XML と再レンダリング結果の整合チェック手順を `docs/spec` に追記。
