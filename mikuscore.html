@@ -4,63 +4,60 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>mikuscore</title>
+  <link rel="stylesheet" href="lht-cmn/css/components.css" />
   <style>
-/* local-html-tools MD3 Token Spec v1.0.0 (2026-02-08) */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+
 :root {
   --md-danger: #b3261e;
-  --md-state-layer: rgba(98, 0, 238, 0.12);
   --md-sys-color-background: #f6f4f8;
-  --md-sys-color-focus-ring: rgba(98, 0, 238, 0.35);
   --md-sys-color-on-primary: #ffffff;
   --md-sys-color-on-secondary: #00332c;
   --md-sys-color-on-surface: #1c1b1f;
   --md-sys-color-on-surface-variant: #49454f;
-  --md-sys-color-on-tertiary: #FFFFFF;
-  --md-sys-color-on-tertiary-container: #3d2e5a;
   --md-sys-color-outline: #c8c5d0;
   --md-sys-color-primary: #6200ee;
   --md-sys-color-secondary: #03dac6;
-  --md-sys-color-shadow: rgba(0, 0, 0, 0.2);
-  --md-sys-color-state-layer: rgba(98, 0, 238, 0.08);
   --md-sys-color-surface: #ffffff;
   --md-sys-color-surface-variant: #f4f1f7;
-  --md-sys-color-tertiary: #7D5260;
-  --md-sys-color-tertiary-container: #f3e8fd;
-  --md-typography-body-medium: 1rem;
-  --md-typography-body-small: 0.875rem;
-  --md-typography-headline-large: 1.85rem;
-  --md-typography-title-medium: 1.1rem;
-  --md-typography-title-small: 1.05rem;
-  --status-later: #ff9800;
-  --status-ok: #4caf50;
-  --status-todo: #00bcd4;
 }
 
-</style>
-  <style>
-/* local-html-tools MD3 Core Spec v1.0.2 (2026-02-08) */
 .md-page {
-  background: var(--md-sys-color-background); color: var(--md-sys-color-on-surface); padding: 24px; min-height: 100vh;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-surface);
+}
+
+.md-hidden {
+  display: none !important;
 }
 
 .md-shell {
-  max-width: 980px; margin: 0 auto;
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
 }
 
 .md-card {
   background: var(--md-sys-color-surface);
   border-radius: 18px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 30px rgba(0, 0, 0, 0.06);
   border: 1px solid #e9e3f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 30px rgba(0, 0, 0, 0.06);
   padding: 28px;
 }
 
 .md-headline {
-  font-size: 1.8rem; font-weight: 700; margin-bottom: 0.75rem;
-}
-
-.md-subtitle {
-  color: var(--md-sys-color-on-surface-variant); font-size: 0.95rem;
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
 }
 
 .md-section {
@@ -68,25 +65,9 @@
 }
 
 .md-section-title {
-  font-size: 1.1rem; font-weight: 700; margin-bottom: 0.75rem;
-}
-
-.md-title-info-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1rem;
-}
-
-.md-title-info-row .md-section-title {
-  margin: 0;
-}
-
-.md-title-info-row .md-info-chip {
-  margin-left: 0;
-}
-
-.md-grid {
-  display: grid; gap: 16px;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .md-label {
@@ -94,25 +75,15 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
+  margin-bottom: 0.35rem;
   font-weight: 600;
   color: var(--md-sys-color-on-surface);
-  margin-bottom: 0.35rem;
 }
 
-.md-required {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.15rem 0.4rem;
-  border-radius: 999px;
-  font-size: 0.54rem;
-  font-weight: 600;
-  background: #ECEAF1;
-  color: #49454F;
-}
-
-.md-input, .md-textarea {
+.md-textarea {
+  display: block;
   width: 100%;
+  min-height: 6.5rem;
   border-radius: 12px;
   border: 1px solid var(--md-sys-color-outline);
   background: var(--md-sys-color-surface);
@@ -120,31 +91,39 @@
   font-size: 0.95rem;
   color: var(--md-sys-color-on-surface);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
 }
 
-.md-textarea {
-  min-height: 6.5rem;
-}
-
-.md-input:focus, .md-textarea:focus {
+.md-textarea:focus {
   outline: none;
   border-color: var(--md-sys-color-primary);
   box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
 }
 
-.md-field-block {
-  margin-bottom: 1rem;
-}
-
 .md-button {
-  border-radius: 999px;
-  padding: 0.6rem 1.2rem;
-  font-weight: 600;
-  font-size: 0.95rem;
   border: none;
+  border-radius: 999px;
   background: transparent;
   cursor: pointer;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.md-button:hover {
+  box-shadow: 0 4px 10px rgba(98, 0, 238, 0.35);
+}
+
+.md-button:active {
+  opacity: 0.7;
+}
+
+.md-button:disabled {
+  background: #e6e1ee;
+  color: #9a94a7;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .md-button--primary {
@@ -157,390 +136,6 @@
   background: #4f00c9;
 }
 
-.md-icon-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f0edf5;
-  color: #3f3b46;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-.md-tooltip-group {
-  position: relative; display: inline-flex; align-items: center;
-}
-
-.md-tooltip-content {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 0.5rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 150ms ease;
-  z-index: 50;
-  width: 20rem;
-  max-width: 90vw;
-}
-
-.md-tooltip-group:hover .md-tooltip-content {
-  opacity: 1;
-}
-
-.md-tooltip {
-  background: #2b2831;
-  color: #f7f4fb;
-  border-radius: 12px;
-  padding: 0.75rem 1rem;
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.35;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.md-info-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 9999px;
-  background: transparent;
-  color: #4a4458;
-  margin-left: 0.2rem;
-}
-
-.md-info-icon {
-  width: 18px; height: 18px;
-}
-
-.md-code-block {
-  position: relative; margin-top: 0.5rem;
-}
-
-.md-code {
-  display: block;
-  padding: 0.75rem;
-  padding-right: 2.5rem;
-  border-radius: 12px;
-  overflow-x: auto;
-  white-space: pre;
-  background: var(--md-sys-color-surface-variant);
-  border: 1px solid #e5e0ec;
-  color: #1f1b2d;
-  min-height: 2.5rem;
-}
-
-.md-copy-button {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
-  background: #f7f2fa;
-  border: none;
-  cursor: pointer;
-}
-
-.md-snackbar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: #2b2831;
-  color: #f7f4fb;
-  padding: 0.6rem 1rem;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  font-size: 0.85rem;
-}
-
-.md-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  background: rgba(98, 0, 238, 0.12);
-  color: var(--md-sys-color-primary);
-  margin-left: 6px;
-}
-
-.md-section-wrap {
-  display: grid; gap: 1.75rem;
-}
-
-.md-section-card {
-  padding: 1.25rem 1.25rem 1.5rem;
-  border-radius: 24px;
-  background: var(--md-sys-color-surface);
-  border: 1px solid #ece7f3;
-  box-shadow: 0 2px 10px rgba(41, 35, 58, 0.06);
-}
-
-.md-section-subtitle {
-  font-size: var(--md-typography-body-small);
-  color: #6a6675;
-  margin-bottom: 1rem;
-}
-
-.md-section-title--spaced {
-  margin-top: 1rem;
-}
-
-.md-grid-3 {
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-}
-
-.md-card-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
-}
-
-.md-card-title {
-  font-size: var(--md-typography-title-small); font-weight: 600; color: #2f2a35;
-}
-
-.md-card-arrow {
-  color: #8f8a98; font-size: 1.2rem;
-}
-
-.md-card-desc {
-  margin-top: 0.5rem;
-  font-size: var(--md-typography-body-small);
-  color: #5f5a6b;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.md-info-chip:focus-visible {
-  box-shadow: 0 0 0 3px var(--md-sys-color-focus-ring);
-}
-
-.md-tooltip--wide {
-  width: min(32rem, 90vw);
-}
-
-.md-tooltip--rich {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.md-menu-button {
-  position: absolute; top: 16px; right: 16px;
-}
-
-.md-menu-panel {
-  position: absolute;
-  top: 56px;
-  right: 16px;
-  background: var(--md-sys-color-surface);
-  border: 1px solid #e6e1ee;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  padding: 4px 0;
-  min-width: 160px;
-  z-index: 20;
-}
-
-.md-menu-link {
-  display: block; padding: 8px 16px; color: var(--md-sys-color-on-surface);
-}
-
-.md-menu-link:hover {
-  background: #f2edf8;
-}
-
-.md-headline__icon {
-  margin-right: 0.5rem;
-}
-
-.md-section-title--lg {
-  font-size: 1.1rem;
-}
-
-.md-input, .md-select, .md-textarea {
-  display: block;
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--md-sys-color-outline);
-  background: var(--md-sys-color-surface);
-  padding: 0.75rem;
-  font-size: 0.95rem;
-  color: var(--md-sys-color-on-surface);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-  box-sizing: border-box;
-}
-
-.md-input:focus, .md-select:focus, .md-textarea:focus {
-  outline: none;
-  border-color: var(--md-sys-color-primary);
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
-}
-
-.md-icon-btn:hover {
-  background: #e6e1ee;
-}
-
-.md-icon-btn--small {
-  width: 32px; height: 32px; border-radius: 16px;
-}
-
-.md-icon-btn--surface {
-  background: #f7f2fa;
-}
-
-.md-snackbar.md-visible {
-  opacity: 1; pointer-events: auto;
-}
-
-.md-hidden {
-  display: none;
-}
-
-    .md-sr-only {
-      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0;
-    }
-    .md-preview .md-sr-only { display: none !important; }
-
-.md-stack-sm > * + * {
-  margin-top: 0.75rem;
-}
-
-.md-radio-row { display: flex; align-items: flex-start; gap: 0.5rem; }
-.md-radio {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
-  color: #3f3b46;
-}
-
-.md-radio input {
-  accent-color: var(--md-sys-color-primary);
-}
-
-.md-switch-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.95rem;
-  color: var(--md-sys-color-on-surface);
-}
-
-.md-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  background: #f0ebf7;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  transition: background 150ms ease, box-shadow 150ms ease;
-  box-shadow: inset 0 0 0 1px #cfc7dc;
-}
-
-.md-switch::after {
-  content: "";
-  width: 20px;
-  height: 20px;
-  border-radius: 9999px;
-  background: #ffffff;
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-  transition: transform 150ms ease, background 150ms ease;
-}
-
-.md-switch-input {
-  position: absolute; opacity: 0; pointer-events: none;
-}
-
-.md-switch-input:checked + .md-switch {
-  background: rgba(98, 0, 238, 0.5);
-  box-shadow: inset 0 0 0 1px rgba(98, 0, 238, 0.9);
-}
-
-.md-switch-input:checked + .md-switch::after {
-  transform: translateX(20px);
-  background: #ffffff;
-}
-
-.md-tab-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  border-bottom: 1px solid #e6e1ee;
-  margin-bottom: 1rem;
-}
-
-.md-tab-button {
-  border: 1px solid #e6e1ee;
-  border-bottom: none;
-  background: #f3f1f7;
-  padding: 0.4rem 0.9rem;
-  margin-bottom: -1px;
-  border-top-left-radius: 12px;
-  border-top-right-radius: 12px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #3f3b46;
-}
-
-.md-tab-button[aria-selected="true"] {
-  background: #ffffff;
-  border-color: #c8c5d0;
-  color: #1c1b1f;
-}
-
-.md-tab-panel {
-  border: 1px solid #e6e1ee;
-  border-top: none;
-  padding: 1rem;
-  background: #ffffff;
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
-  margin-bottom: 1rem;
-}
-
-.md-label--row {
-  margin-bottom: 0.5rem;
-}
-
-.md-input, .md-select {
-  display: block;
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--md-sys-color-outline);
-  background: var(--md-sys-color-surface);
-  padding: 0.75rem;
-  font-size: 0.95rem;
-  color: var(--md-sys-color-on-surface);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-  box-sizing: border-box;
-}
-
-.md-input:focus, .md-select:focus {
-  outline: none;
-  border-color: var(--md-sys-color-primary);
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
-}
-
-.md-form-grid {
-  display: grid; gap: 0.75rem;
-}
-
 .md-button--tonal {
   background: #f0edf5;
   color: #3f3b46;
@@ -551,298 +146,22 @@
   background: #e6e1ee;
 }
 
-.md-chip-row {
-  display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem;
-}
-
-.md-tooltip--narrow {
-  width: 18rem;
-}
-
-.md-surface-card {
-  max-width: 48rem; margin: 0 auto; padding: 24px; position: relative;
-}
-
-.md-choice {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.25rem 0;
-}
-
-.md-input {
-  width: 100%;
-  padding: 0.65rem 0.75rem;
-  border-radius: 12px;
-  border: 1px solid var(--md-sys-color-outline);
-  background: var(--md-sys-color-surface);
-  font-size: 1rem;
-  color: var(--md-sys-color-on-surface);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-
-.md-input:focus {
-  outline: none;
-  border-color: var(--md-sys-color-primary);
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
-}
-
-.md-button:hover {
-  box-shadow: 0 4px 10px rgba(98, 0, 238, 0.35);
-}
-
-.md-button:active {
-  opacity: 0.7;
-}
-
 .md-button--surface {
-  background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface); border: 1px solid var(--md-sys-color-outline);
-}
-
-.md-button--secondary {
-  background: var(--md-sys-color-secondary); color: var(--md-sys-color-on-secondary); margin-bottom: 10px;
-}
-
-.md-button-row {
-  display: flex; gap: 15px; height: clamp(120px, 20vh, 220px); margin-bottom: 10px;
-}
-
-.md-button--hero {
-  font-size: clamp(1.2rem, 4vw, 1.6rem);
-}
-
-.md-field {
-  position: relative; min-width: 200px;
-}
-
-.md-field__label {
-  position: absolute;
-  top: -9px;
-  left: 12px;
-  padding: 0 6px;
-  background: var(--md-sys-color-surface);
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--md-sys-color-on-surface-variant);
-  letter-spacing: 0.02em;
-}
-
-.md-field .md-select {
-  appearance: none;
-  border-radius: 12px;
-  border: 1px solid var(--md-sys-color-outline);
-  background: var(--md-sys-color-surface);
-  padding: 0.8rem 2.2rem 0.8rem 0.9rem;
-  font-size: 0.9rem;
+  background: var(--md-sys-color-surface-variant);
   color: var(--md-sys-color-on-surface);
-  min-width: 200px;
-  line-height: 1.2;
-  background-image: linear-gradient(45deg, transparent 50%, #6c6775 50%), linear-gradient(135deg, #6c6775 50%, transparent 50%);
-  background-position: calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
-  background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
+  border: 1px solid var(--md-sys-color-outline);
 }
 
-.md-field .md-select:focus {
-  outline: none; border-color: var(--md-sys-color-primary); box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
-}
-
-.md-stack-md > * + * {
-  margin-top: 0.75rem;
-}
-
-.md-grid-2 {
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-}
-
-.md-form-row {
-  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-}
-
-.md-form-row--nowrap {
-  flex-wrap: nowrap;
-}
-
-.md-label--muted {
+.md-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
   color: #3f3b46;
 }
 
-.md-label--block {
-  margin-bottom: 0.5rem;
-}
-
-.md-snackbar-host {
-  position: fixed;
-  right: 1.25rem;
-  bottom: 1.25rem;
-  padding: 0.5rem 1rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 200ms ease;
-}
-
-.md-snackbar-host.md-visible {
-  opacity: 1; pointer-events: auto;
-}
-
-.md-button:disabled {
-  background: #e6e1ee;
-  color: #9a94a7;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.md-textarea:focus {
-  outline: none;
-  border-color: var(--md-sys-color-primary);
-  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
-}
-
-.md-input-block {
-  margin-bottom: 1rem;
-}
-
-.md-section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.md-output-wrap {
-  position: relative;
-}
-
-.md-output {
-  background: var(--md-sys-color-surface-variant);
-}
-
-.md-stack-lg > * + * {
-  margin-top: 1.5rem;
-}
-
-.md-form-row--start {
-  align-items: flex-start;
-}
-
-.md-input:disabled, .md-select:disabled {
-  background: #f3f0f7;
-}
-
-.md-choice-card {
-  border: 1px solid #e2dcec;
-  border-radius: 16px;
-  padding: 1rem;
-  background: #ffffff;
-}
-
-.md-choice-card--muted {
-  background: #f7f3fb;
-}
-
-.md-choice-row {
-  display: flex; align-items: center; gap: 0.75rem;
-}
-
-.md-choice-row input {
-  margin: 0;
-}
-
-.md-choice-sub {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #6a6675;
-}
-
-.md-choice-sub small {
-  font-size: 0.75rem; color: #7b7784;
-}
-
-.md-chip--primary {
-  background: #e2d9f7;
-  color: #4a1e9e;
-}
-
-.md-chip--warn {
-  background: #f7ece1;
-  color: #8a4b0f;
-}
-
-.md-field-stack {
-  display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem;
-}
-
-.md-label--full {
-  width: 100%;
-}
-
-.md-switch-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; color: var(--md-sys-color-on-surface); font-size: 0.95rem;
-}
-
-.md-input-wrap {
-  position: relative;
-  flex: 1 1 16rem;
-  min-width: 12rem;
-}
-
-.md-input-wrap .md-input {
-  padding-right: 3rem;
-}
-
-.md-input-action {
-  position: absolute;
-  top: 50%;
-  right: -0.5rem;
-  transform: translateY(-50%);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
-}
-
-.md-field-stack .md-input, .md-field-stack .md-select {
-  flex: 0 0 auto;
-}
-
-.md-field--dropdown {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23635b75' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  background-size: 1rem 1rem;
-  padding-right: 2.25rem;
-}
-
-.md-select--inline {
-  flex: 1 1 18rem; min-width: 14rem;
-}
-
-.md-input.md-disabled, .md-select.md-disabled {
-  background: #f3f0f7;
-}
-
-.md-choice-inline {
-  display: flex; flex-wrap: wrap; gap: 1.25rem; row-gap: 0.5rem;
-}
-
-.md-choice-text {
-  font-size: 0.9rem; color: #4a4458;
-}
-
-</style>
-  <style>
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
-}
-
-.md-hidden {
-  display: none !important;
-}
-
-.md-shell {
-  width: 100%;
-  max-width: none;
+.md-radio input {
+  accent-color: var(--md-sys-color-primary);
 }
 
 .ms-app {
@@ -866,6 +185,23 @@ body {
   align-items: center;
   gap: 0.6rem;
   margin: 0;
+}
+
+/* Keep uninitialized tooltip hosts from expanding the hero/section layout. */
+lht-help-tooltip:not([data-initialized="true"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  overflow: hidden;
+  flex: 0 0 1.35rem;
+  color: transparent;
+  white-space: nowrap;
+}
+
+lht-help-tooltip:not([data-initialized="true"]) * {
+  display: none !important;
 }
 
 .ms-hero-link {
@@ -1175,86 +511,40 @@ body {
   margin-bottom: 0.45rem;
 }
 
-.ms-file-name {
-  display: inline-block;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 0.9rem;
-}
-
-.ms-file-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.ms-loading-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(17, 13, 27, 0.45);
-  backdrop-filter: blur(2px);
-}
-
-.ms-loading-dialog {
-  min-width: 13rem;
-  border-radius: 16px;
-  border: 1px solid #ded4ef;
-  background: #ffffff;
-  box-shadow: 0 18px 36px rgba(24, 18, 36, 0.24);
-  padding: 1rem 1.2rem;
-  display: grid;
-  justify-items: center;
-  gap: 0.65rem;
-}
-
-.ms-loading-spinner {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  border: 3px solid #d8caee;
-  border-top-color: #6200ee;
-  animation: ms-loading-spin 0.95s linear infinite;
-}
-
-.ms-loading-text {
-  margin: 0;
-  color: #383247;
-  font-size: 0.92rem;
-  font-weight: 600;
-}
-
-@keyframes ms-loading-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.ms-file-select-button {
-  background: #6200ee;
-  color: #ffffff;
-  border: 1px solid #4f00c6;
-  box-shadow: 0 2px 6px rgba(98, 0, 238, 0.35);
-}
-
-.ms-file-select-button:hover {
-  background: #5400d6;
-}
-
 .ms-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 0.55rem;
   margin-top: 0.8rem;
 }
 
 .ms-actions .md-button {
   width: auto;
+  min-height: 54px;
+  padding: 0.85rem 1.55rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ms-actions .ms-sample-button {
+  min-height: 46px;
+  padding: 0.65rem 1.35rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.ms-actions lht-file-select .lht-file-select {
+  align-items: flex-start;
+}
+
+.ms-actions lht-file-select .lht-file-select__file-name {
+  min-height: 1.35rem;
+  line-height: 1.35rem;
 }
 
 #zipEntrySelectBlock {
@@ -1521,6 +811,11 @@ body {
   min-width: 180px;
 }
 
+.ms-settings-card .ms-field lht-select-help {
+  flex: 0 1 300px;
+  min-width: 180px;
+}
+
 .ms-check-field {
   margin-top: 0.45rem;
   display: flex;
@@ -1554,6 +849,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+}
+
+.ms-switch-field .md-switch-label > span:not(.md-switch):empty {
+  display: none;
 }
 
 /* Keep duration selector on its own row for compact editing flow */
@@ -1839,6 +1138,10 @@ body {
     flex: 1 1 100%;
   }
 
+  .ms-settings-card .ms-field lht-select-help {
+    flex: 1 1 100%;
+  }
+
   .ms-app {
     margin: 8px auto;
   }
@@ -1875,11 +1178,6 @@ body {
 
   .ms-radio-group {
     gap: 0.65rem;
-  }
-
-  .ms-file-name {
-    display: block;
-    overflow-wrap: anywhere;
   }
 
   .ms-debug-wrap,
@@ -1921,25 +1219,16 @@ body {
             </svg>
           </span>
           <span>mikuscore</span>
-          <span class="md-tooltip-group">
-            <span class="md-info-chip" aria-label="About mikuscore">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-              </svg>
-            </span>
-            <span class="md-tooltip-content md-tooltip md-tooltip--rich md-tooltip--wide">
-              mikuscore is a browser-based local score editor focused on preserving existing MusicXML structure while editing.
-              It supports loading MusicXML/ABC/MIDI, score preview, note editing, playback, and export/download as MusicXML/ABC/MEI/MIDI in one screen.
-              MEI support is currently experimental.
-              mikuscore intentionally keeps the feature set small to make score editing practical and fast, especially on smartphones.
-              It is smartphone-centered, but it can also be used on PCs.
-              Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
-              After loading, click notes in the score to select targets, then adjust pitch and duration.
-              Use tools like MuseScore for large-scale or complex work, and use mikuscore for quick input or focused partial tasks.
-            </span>
-          </span>
+          <lht-help-tooltip label="About mikuscore" wide>
+            mikuscore is a browser-based local score editor focused on preserving existing MusicXML structure while editing.
+            It supports loading MusicXML/ABC/MIDI, score preview, note editing, playback, and export/download as MusicXML/ABC/MEI/MIDI in one screen.
+            MEI support is currently experimental.
+            mikuscore intentionally keeps the feature set small to make score editing practical and fast, especially on smartphones.
+            It is smartphone-centered, but it can also be used on PCs.
+            Workflow: 1) Choose input and load 2) Select from score preview 3) Edit notes 4) Verify by playback and export/download.
+            After loading, click notes in the score to select targets, then adjust pitch and duration.
+            Use tools like MuseScore for large-scale or complex work, and use mikuscore for quick input or focused partial tasks.
+          </lht-help-tooltip>
           <a
             href="https://github.com/igapyon/mikuscore"
             class="ms-hero-link"
@@ -1978,20 +1267,13 @@ body {
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="input">
           <h2 class="md-section-title">
             <span class="ms-step-no">1</span>Input
-            <span class="md-tooltip-group">
-              <span class="md-info-chip" aria-label="Input help">
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                </svg>
-              </span>
-              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+            <lht-help-tooltip label="Input help">
+              <span class="ms-section-help-tooltip">
                 To use mikuscore, first load your score here (from file/source) or create a new score.
                 Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), VSQX (`.vsqx`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
                 You can move to Score/Edit/Output after completing this step.
               </span>
-            </span>
+            </lht-help-tooltip>
           </h2>
 
           <div class="ms-radio-group-wrap">
@@ -2015,55 +1297,71 @@ body {
 
           <div id="newInputBlock" class="ms-block md-hidden">
             <div class="ms-stack-sm">
-              <label class="md-switch-label ms-switch-field" for="newTemplatePianoGrandStaff">
-                <input id="newTemplatePianoGrandStaff" type="checkbox" class="md-switch-input" />
-                <span class="md-switch" aria-hidden="true"></span>
-                <span>Use Piano Grand Staff template (treble + bass, single part)</span>
-              </label>
-              <label class="ms-field">Track count (parts)
-                <input id="newPartCount" type="number" min="1" max="16" step="1" value="1" class="md-input" />
-              </label>
+              <lht-switch-help
+                class="ms-switch-field"
+                switch-id="newTemplatePianoGrandStaff"
+                label="Use Piano Grand Staff template (treble + bass, single part)">
+              </lht-switch-help>
+              <lht-text-field-help
+                field-id="newPartCount"
+                label="Track count (parts)"
+                type="number"
+                min="1"
+                max="16"
+                step="1"
+                value="1"
+                help-text="Choose how many parts to create for the new score. Use 1 for a simple single-part score."
+              ></lht-text-field-help>
               <label class="ms-field">Time signature
                 <div class="ms-form-row">
-                  <input id="newTimeBeats" type="number" min="1" max="16" step="1" value="4" class="md-input" style="max-width: 8rem;" />
+                  <lht-text-field-help
+                    field-id="newTimeBeats"
+                    label="Time beats"
+                    type="number"
+                    min="1"
+                    max="16"
+                    step="1"
+                    value="4"
+                    help-text="Set the numerator of the time signature. For example, use 4 for 4/4 or 3 for 3/4."
+                    style="max-width: 8rem;"
+                  ></lht-text-field-help>
                   <span>/</span>
-                  <select id="newTimeBeatType" class="md-select" style="max-width: 8rem;">
-                    <option value="2">2</option>
-                    <option value="4" selected>4</option>
-                    <option value="8">8</option>
-                    <option value="16">16</option>
-                  </select>
+                  <lht-select-help field-id="newTimeBeatType" field-class="md-select" label="Time beat type" style="max-width: 8rem;">
+                    <script type="application/json" slot="options">[
+                      {"value":"2","label":"2"},
+                      {"value":"4","label":"4","selected":true},
+                      {"value":"8","label":"8"},
+                      {"value":"16","label":"16"}
+                    ]</script>
+                  </lht-select-help>
                 </div>
               </label>
               <label class="ms-field">Key signature
-                <select id="newKeyFifths" class="md-select">
-                  <option value="1">♯1 (G)</option>
-                  <option value="2">♯2 (D)</option>
-                  <option value="3">♯3 (A)</option>
-                  <option value="4">♯4 (E)</option>
-                  <option value="5">♯5 (B)</option>
-                  <option value="6">♯6 (F#)</option>
-                  <option value="7">♯7 (C#)</option>
-                  <option value="0" selected>None (C)</option>
-                  <option value="-1">♭1 (F)</option>
-                  <option value="-2">♭2 (Bb)</option>
-                  <option value="-3">♭3 (Eb)</option>
-                  <option value="-4">♭4 (Ab)</option>
-                  <option value="-5">♭5 (Db)</option>
-                  <option value="-6">♭6 (Gb)</option>
-                  <option value="-7">♭7 (Cb)</option>
-                </select>
+                <lht-select-help field-id="newKeyFifths" field-class="md-select" label="Key signature">
+                  <script type="application/json" slot="options">[
+                    {"value":"1","label":"♯1 (G)"},
+                    {"value":"2","label":"♯2 (D)"},
+                    {"value":"3","label":"♯3 (A)"},
+                    {"value":"4","label":"♯4 (E)"},
+                    {"value":"5","label":"♯5 (B)"},
+                    {"value":"6","label":"♯6 (F#)"},
+                    {"value":"7","label":"♯7 (C#)"},
+                    {"value":"0","label":"None (C)","selected":true},
+                    {"value":"-1","label":"♭1 (F)"},
+                    {"value":"-2","label":"♭2 (Bb)"},
+                    {"value":"-3","label":"♭3 (Eb)"},
+                    {"value":"-4","label":"♭4 (Ab)"},
+                    {"value":"-5","label":"♭5 (Db)"},
+                    {"value":"-6","label":"♭6 (Gb)"},
+                    {"value":"-7","label":"♭7 (Cb)"}
+                  ]</script>
+                </lht-select-help>
               </label>
             </div>
             <div id="newPartClefList" class="ms-stack-sm" aria-live="polite"></div>
           </div>
 
-          <div id="fileInputBlock" class="ms-block">
-            <div class="ms-file-meta">
-              <span id="fileNameText" class="ms-file-name md-hidden">No file selected</span>
-            </div>
-            <input id="fileInput" type="file" accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,.zip,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,application/vnd.recordare.musicxml-container,application/mxl+xml,audio/midi,audio/x-midi,audio/mid,text/vnd.abc,application/abc,text/x-abc,application/mei+xml,text/x-vsqx,application/vsqx,text/x-lilypond,text/x-ly,application/vnd.musescore.mscx,application/vnd.musescore.mscz,application/zip,application/x-zip-compressed,text/plain,text/xml,application/xml" hidden />
-          </div>
+          <div id="fileInputBlock" class="ms-block"></div>
 
           <div id="sourceXmlInputBlock" class="ms-block md-hidden">
             <label for="xmlInput" class="md-label">MusicXML</label>
@@ -2096,14 +1394,15 @@ body {
           </div>
 
           <div class="ms-actions">
-            <button id="fileSelectBtn" type="button" class="md-button md-button--primary ms-icon-button ms-file-select-button">
-              <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 7h7l2 2h7v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path>
-                <path d="M12 10v6"></path>
-                <path d="M9 13l3 3 3-3"></path>
-              </svg>
-              <span>Load from file</span>
-            </button>
+            <lht-file-select
+              input-id="fileInput"
+              button-id="fileSelectBtn"
+              file-name-id="fileNameText"
+              button-label="Load from file"
+              placeholder="No file selected"
+              show-file-name
+              accept=".musicxml,.xml,.mxl,.abc,.mid,.midi,.vsqx,.mei,.ly,.mscx,.mscz,.zip,application/vnd.recordare.musicxml+xml,application/vnd.recordare.musicxml,application/vnd.recordare.musicxml-container,application/mxl+xml,audio/midi,audio/x-midi,audio/mid,text/vnd.abc,application/abc,text/x-abc,application/mei+xml,text/x-vsqx,application/vsqx,text/x-lilypond,text/x-ly,application/vnd.musescore.mscx,application/vnd.musescore.mscz,application/zip,application/x-zip-compressed,text/plain,text/xml,application/xml">
+            </lht-file-select>
             <button id="loadBtn" type="button" class="md-button md-button--primary ms-icon-button md-hidden">
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 7.5h6.2l2 2H21v7.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
@@ -2112,17 +1411,17 @@ body {
               </svg>
               <span>Load</span>
             </button>
-            <button id="loadSample1Btn" type="button" class="md-button md-button--tonal">Load sample 1</button>
-            <button id="loadSample2Btn" type="button" class="md-button md-button--tonal">Load sample 2</button>
-            <button id="loadSample3Btn" type="button" class="md-button md-button--tonal">Load sample 3</button>
-            <button id="loadSample4Btn" type="button" class="md-button md-button--tonal">Load sample 4</button>
-            <button id="loadSampleBtn6" type="button" class="md-button md-button--tonal">Load sample 6</button>
-            <button id="loadSample7Btn" type="button" class="md-button md-button--tonal">Load sample 7</button>
+            <button id="loadSample1Btn" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 1</button>
+            <button id="loadSample2Btn" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 2</button>
+            <button id="loadSample3Btn" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 3</button>
+            <button id="loadSample4Btn" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 4</button>
+            <button id="loadSampleBtn6" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 6</button>
+            <button id="loadSample7Btn" type="button" class="md-button md-button--tonal ms-sample-button">Load sample 7</button>
           </div>
           <div id="zipEntrySelectBlock" class="ms-block md-hidden">
-            <select id="zipEntrySelect" class="md-select"></select>
+            <lht-select-help field-id="zipEntrySelect" field-class="md-select" label="ZIP root entry"></lht-select-help>
           </div>
-          <div id="inputUiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
+          <lht-error-alert id="inputUiMessage" class="ms-ui-message ms-ui-message--inline"></lht-error-alert>
           <div id="localDraftNotice" class="ms-local-draft md-hidden" role="status" aria-live="polite">
             <div id="localDraftText" class="ms-local-draft-text"></div>
           </div>
@@ -2131,19 +1430,12 @@ body {
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="score" hidden>
           <h2 class="md-section-title">
             <span class="ms-step-no">2</span>Score
-            <span class="md-tooltip-group">
-              <span class="md-info-chip" aria-label="Score preview help">
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                </svg>
-              </span>
-              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+            <lht-help-tooltip label="Score preview help">
+              <span class="ms-section-help-tooltip">
                 This screen is for checking the loaded score, trying quick playback, and selecting the measure to edit.
                 Select a note in the target measure here, then go to Edit to apply actual note changes in that selected measure.
               </span>
-            </span>
+            </lht-help-tooltip>
           </h2>
           <div class="ms-actions ms-preview-actions">
             <button id="playBtn" type="button" class="md-button md-button--tonal ms-icon-button">
@@ -2185,22 +1477,15 @@ body {
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="edit" hidden>
           <h2 class="md-section-title">
             <span class="ms-step-no">3</span>Edit
-            <span class="md-tooltip-group">
-              <span class="md-info-chip" aria-label="Edit help">
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                </svg>
-              </span>
-              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+            <lht-help-tooltip label="Edit help">
+              <span class="ms-section-help-tooltip">
                 In Edit, start by converting a rest to a note, then adjust notes in the selected measure:
                 split notes, change pitch, add accidentals, and change duration. You can also try quick playback.
                 Press Apply to reflect your edits back to Score, or Discard to cancel current measure edits.
                 Use the arrow buttons to move between measures.
                 Editing is intentionally limited to avoid breaking MusicXML structure, so use a dedicated notation app for fine-grained editing.
               </span>
-            </span>
+            </lht-help-tooltip>
             <span id="measurePartNameText" class="ms-edit-part-name md-hidden">Track: -</span>
             <span class="ms-edit-nav" role="group" aria-label="Measure navigation">
               <button id="measureNavLeftBtn" type="button" class="md-button md-button--surface ms-nav-arrow-btn" aria-label="Previous measure in this track">←</button>
@@ -2223,7 +1508,7 @@ body {
           <div id="measureEditorWrap" class="ms-measure-editor md-hidden">
             <div id="measureEditorArea" class="ms-debug-score"></div>
           </div>
-          <div id="uiMessage" class="ms-ui-message ms-ui-message--inline md-hidden" role="status" aria-live="polite"></div>
+          <lht-error-alert id="uiMessage" class="ms-ui-message ms-ui-message--inline"></lht-error-alert>
           <div class="ms-actions">
             <button id="measureApplyBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
               <svg aria-hidden="true" viewBox="0 0 24 24" class="ms-btn-icon" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -2351,9 +1636,7 @@ body {
               <input id="pitchOctave" type="hidden" value="4" />
               <label class="ms-field">
                 <span class="ms-field-label">Duration</span>
-                <select id="durationPreset" class="md-select" aria-label="Duration preset">
-                  <option value="">(Select duration)</option>
-                </select>
+                <lht-select-help field-id="durationPreset" field-class="md-select" label="Duration preset"></lht-select-help>
               </label>
             </div>
           </div>
@@ -2382,21 +1665,14 @@ body {
         <section class="md-section ms-flow-step ms-tab-panel" data-tab-panel="save" hidden>
           <h2 class="md-section-title">
             <span class="ms-step-no">4</span>Output
-            <span class="md-tooltip-group">
-              <span class="md-info-chip" aria-label="Output help">
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                  <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                  <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                  <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                </svg>
-              </span>
-              <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+            <lht-help-tooltip label="Output help">
+              <span class="ms-section-help-tooltip">
                 Output is where you take your work out of mikuscore.
                 The main flow is exporting your edited result as MusicXML.
                 In addition, mikuscore also supports ABC/MEI/LilyPond/MuseScore export and lightweight MIDI output for quick checks.
                 MIDI export is handy for simple confirmation, while complex production/export work is best done in dedicated software.
               </span>
-            </span>
+            </lht-help-tooltip>
           </h2>
           <div class="ms-actions">
             <button id="downloadBtn" type="button" class="md-button md-button--primary ms-icon-button" disabled>
@@ -2518,141 +1794,67 @@ body {
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Keep roundtrip metadata (`mks:meta:*`)</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MusicXML roundtrip metadata help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MusicXML roundtrip metadata help">
+                        <span class="ms-section-help-tooltip">
                           Controls `mks:meta:*` fields in MusicXML output/export.
                           Turn this OFF if you want to omit roundtrip restoration metadata.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksMetaMetadataInMusicXml">
-                      <input
-                        id="keepMksMetaMetadataInMusicXml"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Keep mks meta metadata"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="keepMksMetaMetadataInMusicXml" checked>
+                    </lht-switch-help>
                   </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Keep source metadata (`mks:src:*`)</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MusicXML source metadata help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MusicXML source metadata help">
+                        <span class="ms-section-help-tooltip">
                           Controls `mks:src:*` fields in MusicXML output/export.
                           Also affects generation of source metadata during import.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksSrcMetadataInMusicXml">
-                      <input
-                        id="keepMksSrcMetadataInMusicXml"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Keep mks source metadata"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="keepMksSrcMetadataInMusicXml" checked>
+                    </lht-switch-help>
                   </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Keep debug metadata (`mks:dbg:*`)</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MusicXML debug metadata help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MusicXML debug metadata help">
+                        <span class="ms-section-help-tooltip">
                           Controls `mks:dbg:*` fields in MusicXML output/export.
                           Also affects generation of debug metadata during import.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="keepMksDbgMetadataInMusicXml">
-                      <input
-                        id="keepMksDbgMetadataInMusicXml"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Keep mks debug metadata"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="keepMksDbgMetadataInMusicXml" checked>
+                    </lht-switch-help>
                   </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Export MusicXML text as `.xml` extension</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MusicXML extension export help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MusicXML extension export help">
+                        <span class="ms-section-help-tooltip">
                           Default is OFF (`.musicxml`). When enabled, plain MusicXML export uses `.xml`.
                           While this is ON, `Compress MusicXML / MuseScore export` is forced OFF.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="exportMusicXmlAsXmlExtension">
-                      <input
-                        id="exportMusicXmlAsXmlExtension"
-                        type="checkbox"
-                        class="md-switch-input"
-                        aria-label="Export MusicXML text as xml extension"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="exportMusicXmlAsXmlExtension">
+                    </lht-switch-help>
                   </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Compress MusicXML / MuseScore export</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Compression export help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Compression export help">
+                        <span class="ms-section-help-tooltip">
                           When enabled, MusicXML export uses `.mxl` and MuseScore export uses `.mscz` (ZIP container).
                           When disabled, plain `.musicxml` / `.mscx` text files are exported.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="compressXmlMuseScoreExport">
-                      <input
-                        id="compressXmlMuseScoreExport"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Compress MusicXML and MuseScore export"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="compressXmlMuseScoreExport" checked>
+                    </lht-switch-help>
                   </div>
                 </div>
               </div>
@@ -2667,76 +1869,51 @@ body {
                   <label class="ms-field" for="graceTimingMode">
                     <span class="ms-field-label">
                       <span>Grace Timing Mode</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Grace timing mode help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Grace timing mode help">
+                        <span class="ms-section-help-tooltip">
                           Applies to MIDI-like playback and MIDI export.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <select id="graceTimingMode" class="md-select">
-                      <option value="before_beat" selected>Before beat (appoggiatura-like)</option>
-                      <option value="on_beat">On beat (principal delayed)</option>
-                      <option value="classical_equal">Classical equal split</option>
-                    </select>
+                    <lht-select-help field-id="graceTimingMode" field-class="md-select" label="Grace Timing Mode">
+                      <script type="application/json" slot="options">[
+                        {"value":"before_beat","label":"Before beat (appoggiatura-like)","selected":true},
+                        {"value":"on_beat","label":"On beat (principal delayed)"},
+                        {"value":"classical_equal","label":"Classical equal split"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Use metric beat accents</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Metric beat accents help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Metric beat accents help">
+                        <span class="ms-section-help-tooltip">
                           Adds subtle beat emphasis in MIDI-like playback and MIDI export.
                           4/4: strong-weak-medium-weak, 6/8: strong-weak-weak-medium-weak-weak,
                           3-beat: strong-weak-weak, 5-beat: strong-weak-medium-weak-weak,
                           others: strong-weak-weak-...
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="metricAccentEnabled">
-                      <input
-                        id="metricAccentEnabled"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Use metric beat accents"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="metricAccentEnabled" checked>
+                    </lht-switch-help>
                   </div>
                   <label class="ms-field" for="metricAccentProfile">
                     <span class="ms-field-label">
                       <span>Accent amount</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Accent amount help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Accent amount help">
+                        <span class="ms-section-help-tooltip">
                           Controls the velocity gap of metric accents when enabled.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <select id="metricAccentProfile" class="md-select">
-                      <option value="subtle" selected>Subtle</option>
-                      <option value="balanced">Balanced</option>
-                      <option value="strong">Strong</option>
-                    </select>
+                    <lht-select-help field-id="metricAccentProfile" field-class="md-select" label="Accent amount">
+                      <script type="application/json" slot="options">[
+                        {"value":"subtle","label":"Subtle","selected":true},
+                        {"value":"balanced","label":"Balanced"},
+                        {"value":"strong","label":"Strong"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                 </div>
                 <div class="ms-settings-block">
@@ -2744,132 +1921,88 @@ body {
                   <label class="ms-field" for="midiProgramSelect">
                     <span class="ms-field-label">
                       <span>MIDI Export Instrument</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MIDI export instrument help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MIDI export instrument help">
+                        <span class="ms-section-help-tooltip">
                           Used when MusicXML does not specify an instrument for the part.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <select id="midiProgramSelect" class="md-select">
-                      <option value="acoustic_grand_piano">Acoustic Grand Piano</option>
-                      <option value="acoustic_guitar_nylon">Acoustic Guitar (nylon)</option>
-                      <option value="acoustic_bass">Acoustic Bass</option>
-                      <option value="clavinet">Clavinet</option>
-                      <option value="drawbar_organ">Drawbar Organ</option>
-                      <option value="electric_piano_1">Electric Piano 1</option>
-                      <option value="electric_piano_2" selected>Electric Piano 2</option>
-                      <option value="harpsichord">Harpsichord</option>
-                      <option value="honky_tonk_piano">Honky-tonk Piano</option>
-                      <option value="string_ensemble_1">String Ensemble 1</option>
-                      <option value="synth_brass_1">Synth Brass 1</option>
-                      <option value="violin">Violin</option>
-                    </select>
+                    <lht-select-help field-id="midiProgramSelect" field-class="md-select" label="MIDI Export Instrument">
+                      <script type="application/json" slot="options">[
+                        {"value":"acoustic_grand_piano","label":"Acoustic Grand Piano"},
+                        {"value":"acoustic_guitar_nylon","label":"Acoustic Guitar (nylon)"},
+                        {"value":"acoustic_bass","label":"Acoustic Bass"},
+                        {"value":"clavinet","label":"Clavinet"},
+                        {"value":"drawbar_organ","label":"Drawbar Organ"},
+                        {"value":"electric_piano_1","label":"Electric Piano 1"},
+                        {"value":"electric_piano_2","label":"Electric Piano 2","selected":true},
+                        {"value":"harpsichord","label":"Harpsichord"},
+                        {"value":"honky_tonk_piano","label":"Honky-tonk Piano"},
+                        {"value":"string_ensemble_1","label":"String Ensemble 1"},
+                        {"value":"synth_brass_1","label":"Synth Brass 1"},
+                        {"value":"violin","label":"Violin"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                   <label class="ms-field" for="midiExportProfile">
                     <span class="ms-field-label">
                       <span>MIDI Export Profile</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MIDI export profile help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MIDI export profile help">
+                        <span class="ms-section-help-tooltip">
                           Safe keeps current semantic-preserving behavior.
                           MuseScore parity uses higher PPQ and parity-focused normalization to better match MuseScore-style MIDI.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <select id="midiExportProfile" class="md-select">
-                      <option value="safe" selected>safe (semantic-first)</option>
-                      <option value="musescore_parity">musescore_parity (closer rendering)</option>
-                    </select>
+                    <lht-select-help field-id="midiExportProfile" field-class="md-select" label="MIDI Export Profile">
+                      <script type="application/json" slot="options">[
+                        {"value":"safe","label":"safe (semantic-first)","selected":true},
+                        {"value":"musescore_parity","label":"musescore_parity (closer rendering)"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                   <label class="ms-field" for="midiImportQuantizeGrid">
                     <span class="ms-field-label">
                       <span>MIDI Import Quantize Grid</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MIDI import quantize grid help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MIDI import quantize grid help">
+                        <span class="ms-section-help-tooltip">
                           Controls timing quantization used when importing MIDI to MusicXML.
                           Finer grids keep short ornamental notes more visible.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <select id="midiImportQuantizeGrid" class="md-select">
-                      <option value="1/8">1/8</option>
-                      <option value="1/16">1/16</option>
-                      <option value="1/32" selected>1/32</option>
-                      <option value="1/64">1/64</option>
-                    </select>
+                    <lht-select-help field-id="midiImportQuantizeGrid" field-class="md-select" label="MIDI Import Quantize Grid">
+                      <script type="application/json" slot="options">[
+                        {"value":"1/8","label":"1/8"},
+                        {"value":"1/16","label":"1/16"},
+                        {"value":"1/32","label":"1/32","selected":true},
+                        {"value":"1/64","label":"1/64"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Triplet-aware MIDI import</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Triplet-aware MIDI import help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Triplet-aware MIDI import help">
+                        <span class="ms-section-help-tooltip">
                           Detects triplet-like timing and adjusts quantization to preserve tuplet feel.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="midiImportTripletAware">
-                      <input
-                        id="midiImportTripletAware"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Triplet-aware MIDI import"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="midiImportTripletAware" checked>
+                    </lht-switch-help>
                   </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Always override instrument</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="Always override instrument help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="Always override instrument help">
+                        <span class="ms-section-help-tooltip">
                           Always override MusicXML instrument with selected export instrument.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="forceMidiProgramOverride">
-                      <input
-                        id="forceMidiProgramOverride"
-                        type="checkbox"
-                        class="md-switch-input"
-                        aria-label="Always override instrument"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="forceMidiProgramOverride">
+                    </lht-switch-help>
                   </div>
                 </div>
                 <div class="ms-settings-block">
@@ -2877,37 +2010,24 @@ body {
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Use MIDI-like playback</span>
-                      <span class="md-tooltip-group">
-                        <span class="md-info-chip" aria-label="MIDI-like playback help">
-                          <svg aria-hidden="true" viewBox="0 0 24 24" class="md-info-icon" fill="none">
-                            <circle cx="12" cy="12" r="9" fill="#cbbcf0"></circle>
-                            <rect x="11" y="10" width="2" height="7" rx="1" fill="#ffffff"></rect>
-                            <circle cx="12" cy="7.5" r="1" fill="#ffffff"></circle>
-                          </svg>
-                        </span>
-                        <span class="md-tooltip-content md-tooltip md-tooltip--rich ms-section-help-tooltip">
+                      <lht-help-tooltip label="MIDI-like playback help">
+                        <span class="ms-section-help-tooltip">
                           Uses MIDI-style timing and expression (articulation, grace placement, and related nuance) in quick playback.
                         </span>
-                      </span>
+                      </lht-help-tooltip>
                     </span>
-                    <label class="md-switch-label ms-switch-field ms-switch-field--control" for="playbackUseMidiLike">
-                      <input
-                        id="playbackUseMidiLike"
-                        type="checkbox"
-                        class="md-switch-input"
-                        checked
-                        aria-label="Use MIDI-like playback"
-                      />
-                      <span class="md-switch" aria-hidden="true"></span>
-                    </label>
+                    <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="playbackUseMidiLike" checked>
+                    </lht-switch-help>
                   </div>
                   <label class="ms-field" for="playbackWaveform">
                     <span class="ms-field-label">Quick Playback Tone</span>
-                    <select id="playbackWaveform" class="md-select">
-                      <option value="sine">Sine</option>
-                      <option value="triangle" selected>Triangle</option>
-                      <option value="square">Square</option>
-                    </select>
+                    <lht-select-help field-id="playbackWaveform" field-class="md-select" label="Quick Playback Tone">
+                      <script type="application/json" slot="options">[
+                        {"value":"sine","label":"Sine"},
+                        {"value":"triangle","label":"Triangle","selected":true},
+                        {"value":"square","label":"Square"}
+                      ]</script>
+                    </lht-select-help>
                   </label>
                 </div>
               </div>
@@ -2918,12 +2038,8 @@ body {
 
     </section>
   </main>
-  <div id="fileLoadOverlay" class="ms-loading-overlay md-hidden" role="status" aria-live="polite" aria-hidden="true">
-    <div class="ms-loading-dialog">
-      <div class="ms-loading-spinner" aria-hidden="true"></div>
-      <p class="ms-loading-text">Loading file...</p>
-    </div>
-  </div>
+  <lht-loading-overlay id="fileLoadOverlay" text="Loading file..." aria-hidden="true"></lht-loading-overlay>
+  <lht-toast id="toast"></lht-toast>
 
   <script>
 (function (global, factory) {
@@ -8916,12 +8032,13 @@ ${vsqxText}`;
 })();
 
 </script>
+  <script src="lht-cmn/js/components.js"></script>
   <script>
 (function () {
 const modules = {
   "src/ts/main.js": function (require, module, exports) {
 "use strict";
-var _a;
+var _a, _b;
 Object.defineProperty(exports, "__esModule", { value: true });
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
@@ -9144,6 +8261,15 @@ const DEFAULT_GRACE_TIMING_MODE = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE = "subtle";
 const DEFAULT_VSQX_LYRIC = "ら";
+fileNameText.classList.add("md-hidden");
+const isLhtLoadingOverlayElement = (element) => {
+    return (element.tagName.toLowerCase() === "lht-loading-overlay"
+        && typeof element.setActive === "function");
+};
+const isLhtErrorAlertElement = (element) => {
+    return (element.tagName.toLowerCase() === "lht-error-alert"
+        && typeof element.show === "function");
+};
 const normalizeMidiProgram = (value) => {
     switch (value) {
         case "acoustic_grand_piano":
@@ -9604,15 +8730,25 @@ const resetZipEntrySelectionUi = () => {
     selectedZipEntryVirtualFile = null;
 };
 const setFileLoadInProgress = (inProgress) => {
+    var _a;
     isFileLoadInProgress = inProgress;
     fileSelectBtn.disabled = inProgress;
     loadBtn.disabled = inProgress;
     zipEntrySelect.disabled = inProgress;
     fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
-    fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
-    fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+    if (isLhtLoadingOverlayElement(fileLoadOverlay)) {
+        (_a = fileLoadOverlay.setActive) === null || _a === void 0 ? void 0 : _a.call(fileLoadOverlay, inProgress);
+    }
+    else {
+        fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+        fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+    }
 };
 const waitForNextPaint = async () => {
+    if (isLhtLoadingOverlayElement(fileLoadOverlay) && typeof fileLoadOverlay.waitForNextPaint === "function") {
+        await fileLoadOverlay.waitForNextPaint();
+        return;
+    }
     await new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
     });
@@ -10291,14 +9427,24 @@ const renderDiagnostics = () => {
     }
 };
 const renderUiMessage = () => {
+    var _a, _b;
     const messageTargets = [inputUiMessage, uiMessage];
     for (const target of messageTargets) {
+        if (isLhtErrorAlertElement(target)) {
+            (_a = target.clear) === null || _a === void 0 ? void 0 : _a.call(target);
+            continue;
+        }
         target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
         target.textContent = "";
     }
     const showMessage = (kind, text) => {
+        var _a;
         const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
         for (const target of messageTargets) {
+            if (isLhtErrorAlertElement(target)) {
+                (_a = target.show) === null || _a === void 0 ? void 0 : _a.call(target, text);
+                continue;
+            }
             target.textContent = text;
             target.classList.add(className);
             target.classList.remove("md-hidden");
@@ -10328,6 +9474,10 @@ const renderUiMessage = () => {
         return;
     }
     for (const target of messageTargets) {
+        if (isLhtErrorAlertElement(target)) {
+            (_b = target.hide) === null || _b === void 0 ? void 0 : _b.call(target);
+            continue;
+        }
         target.classList.add("md-hidden");
     }
 };
@@ -12069,12 +11219,18 @@ sourceTypeLilyPond.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => {
+(_b = fileSelectBtn.closest("lht-file-select")) === null || _b === void 0 ? void 0 : _b.addEventListener("lht-file-select:before-open", () => {
     // Clear selection so choosing the same file again still fires `change`.
     resetZipEntrySelectionUi();
     fileInput.value = "";
-    fileInput.click();
 });
+if (!fileSelectBtn.closest("lht-file-select")) {
+    fileSelectBtn.addEventListener("click", () => {
+        resetZipEntrySelectionUi();
+        fileInput.value = "";
+        fileInput.click();
+    });
+}
 fileInput.addEventListener("change", async () => {
     var _a;
     const f = (_a = fileInput.files) === null || _a === void 0 ? void 0 : _a[0];
@@ -17588,6 +16744,13 @@ const createBasicWaveSynthEngine = (options) => {
     let audioContext = null;
     let activeSynthNodes = [];
     let synthStopTimer = null;
+    const hasActiveUserGesture = () => {
+        const nav = navigator;
+        const ua = nav.userActivation;
+        if (!ua)
+            return true;
+        return ua.isActive === true || ua.hasBeenActive === true;
+    };
     const ensureAudioContext = () => {
         if (audioContext)
             return audioContext;
@@ -17603,6 +16766,10 @@ const createBasicWaveSynthEngine = (options) => {
     const ensureAudioContextRunning = async () => {
         const context = ensureAudioContext();
         if (context.state !== "running") {
+            // Avoid autoplay-policy warnings by not calling resume() outside user activation.
+            if (!hasActiveUserGesture()) {
+                throw new Error("AudioContext resume requires an active user gesture.");
+            }
             await context.resume();
         }
         if (context.state !== "running") {

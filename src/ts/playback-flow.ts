@@ -73,6 +73,15 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
   let synthStopTimer: number | null = null;
 
+  const hasActiveUserGesture = (): boolean => {
+    const nav = navigator as Navigator & {
+      userActivation?: { isActive?: boolean; hasBeenActive?: boolean };
+    };
+    const ua = nav.userActivation;
+    if (!ua) return true;
+    return ua.isActive === true || ua.hasBeenActive === true;
+  };
+
   const ensureAudioContext = (): AudioContext => {
     if (audioContext) return audioContext;
     const ctor =
@@ -89,6 +98,10 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   const ensureAudioContextRunning = async (): Promise<AudioContext> => {
     const context = ensureAudioContext();
     if (context.state !== "running") {
+      // Avoid autoplay-policy warnings by not calling resume() outside user activation.
+      if (!hasActiveUserGesture()) {
+        throw new Error("AudioContext resume requires an active user gesture.");
+      }
       await context.resume();
     }
     if (context.state !== "running") {
