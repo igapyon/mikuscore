@@ -78,6 +78,7 @@ const fileSelectBtn = q("#fileSelectBtn");
 const fileInput = q("#fileInput");
 const fileNameText = q("#fileNameText");
 const zipEntrySelectBlock = q("#zipEntrySelectBlock");
+const zipEntrySelectHelp = document.querySelector("lht-select-help[field-id='zipEntrySelect']");
 const zipEntrySelect = q("#zipEntrySelect");
 const fileLoadOverlay = q("#fileLoadOverlay");
 const loadBtn = q("#loadBtn");
@@ -234,6 +235,28 @@ const isLhtErrorAlertElement = (element) => {
     return (element.tagName.toLowerCase() === "lht-error-alert"
         && typeof element.show === "function");
 };
+const isLhtSelectHelpElement = (element) => {
+    return !!element
+        && element.tagName.toLowerCase() === "lht-select-help"
+        && typeof element.setOptions === "function";
+};
+const syncSelectHelpValue = (fieldId, value) => {
+    var _a;
+    const normalized = value == null ? "" : String(value);
+    const host = document.querySelector(`lht-select-help[field-id='${fieldId}']`);
+    const field = document.getElementById(fieldId);
+    if (field) {
+        field.value = normalized;
+    }
+    if (!isLhtSelectHelpElement(host))
+        return;
+    host.setAttribute("value", normalized);
+    (_a = host.setValue) === null || _a === void 0 ? void 0 : _a.call(host, normalized);
+    requestAnimationFrame(() => {
+        var _a;
+        (_a = host.setValue) === null || _a === void 0 ? void 0 : _a.call(host, normalized);
+    });
+};
 const normalizeMidiProgram = (value) => {
     switch (value) {
         case "acoustic_grand_piano":
@@ -254,7 +277,7 @@ const normalizeMidiProgram = (value) => {
     }
 };
 const normalizeWaveformSetting = (value) => {
-    if (value === "triangle" || value === "square")
+    if (value === "sine" || value === "triangle" || value === "square")
         return value;
     return DEFAULT_PLAYBACK_WAVEFORM;
 };
@@ -369,15 +392,20 @@ const syncGeneralExportSettings = () => {
 const applyInitialPlaybackSettings = () => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
     const stored = readPlaybackSettings();
-    midiProgramSelect.value = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_PROGRAM;
-    playbackWaveform.value = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : DEFAULT_PLAYBACK_WAVEFORM;
-    playbackUseMidiLike.checked = (_c = stored === null || stored === void 0 ? void 0 : stored.useMidiLikePlayback) !== null && _c !== void 0 ? _c : DEFAULT_PLAYBACK_USE_MIDI_LIKE;
-    graceTimingModeSelect.value = (_d = stored === null || stored === void 0 ? void 0 : stored.graceTimingMode) !== null && _d !== void 0 ? _d : DEFAULT_GRACE_TIMING_MODE;
-    metricAccentEnabledInput.checked = (_e = stored === null || stored === void 0 ? void 0 : stored.metricAccentEnabled) !== null && _e !== void 0 ? _e : DEFAULT_METRIC_ACCENT_ENABLED;
-    metricAccentProfileSelect.value = (_f = stored === null || stored === void 0 ? void 0 : stored.metricAccentProfile) !== null && _f !== void 0 ? _f : DEFAULT_METRIC_ACCENT_PROFILE;
-    midiExportProfileSelect.value = (_g = stored === null || stored === void 0 ? void 0 : stored.midiExportProfile) !== null && _g !== void 0 ? _g : DEFAULT_MIDI_EXPORT_PROFILE;
-    midiImportQuantizeGridSelect.value =
-        (_h = stored === null || stored === void 0 ? void 0 : stored.midiImportQuantizeGrid) !== null && _h !== void 0 ? _h : DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+    const midiProgram = (_a = stored === null || stored === void 0 ? void 0 : stored.midiProgram) !== null && _a !== void 0 ? _a : DEFAULT_MIDI_PROGRAM;
+    const waveform = (_b = stored === null || stored === void 0 ? void 0 : stored.waveform) !== null && _b !== void 0 ? _b : DEFAULT_PLAYBACK_WAVEFORM;
+    const graceTimingMode = (_c = stored === null || stored === void 0 ? void 0 : stored.graceTimingMode) !== null && _c !== void 0 ? _c : DEFAULT_GRACE_TIMING_MODE;
+    const metricAccentProfile = (_d = stored === null || stored === void 0 ? void 0 : stored.metricAccentProfile) !== null && _d !== void 0 ? _d : DEFAULT_METRIC_ACCENT_PROFILE;
+    const midiExportProfile = (_e = stored === null || stored === void 0 ? void 0 : stored.midiExportProfile) !== null && _e !== void 0 ? _e : DEFAULT_MIDI_EXPORT_PROFILE;
+    const midiImportQuantizeGrid = (_f = stored === null || stored === void 0 ? void 0 : stored.midiImportQuantizeGrid) !== null && _f !== void 0 ? _f : DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+    midiProgramSelect.value = midiProgram;
+    playbackWaveform.value = waveform;
+    playbackUseMidiLike.checked = (_g = stored === null || stored === void 0 ? void 0 : stored.useMidiLikePlayback) !== null && _g !== void 0 ? _g : DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+    graceTimingModeSelect.value = graceTimingMode;
+    metricAccentEnabledInput.checked = (_h = stored === null || stored === void 0 ? void 0 : stored.metricAccentEnabled) !== null && _h !== void 0 ? _h : DEFAULT_METRIC_ACCENT_ENABLED;
+    metricAccentProfileSelect.value = metricAccentProfile;
+    midiExportProfileSelect.value = midiExportProfile;
+    midiImportQuantizeGridSelect.value = midiImportQuantizeGrid;
     midiImportTripletAware.checked =
         (_j = stored === null || stored === void 0 ? void 0 : stored.midiImportTripletAware) !== null && _j !== void 0 ? _j : DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
     forceMidiProgramOverride.checked =
@@ -393,6 +421,12 @@ const applyInitialPlaybackSettings = () => {
     compressXmlMuseScoreExport.checked =
         (_q = stored === null || stored === void 0 ? void 0 : stored.compressXmlMuseScoreExport) !== null && _q !== void 0 ? _q : DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
     syncGeneralExportSettings();
+    syncSelectHelpValue("midiProgramSelect", midiProgram);
+    syncSelectHelpValue("playbackWaveform", waveform);
+    syncSelectHelpValue("graceTimingMode", graceTimingMode);
+    syncSelectHelpValue("metricAccentProfile", metricAccentProfile);
+    syncSelectHelpValue("midiExportProfile", midiExportProfile);
+    syncSelectHelpValue("midiImportQuantizeGrid", midiImportQuantizeGrid);
     generalSettingsAccordion.open = (_r = stored === null || stored === void 0 ? void 0 : stored.generalSettingsExpanded) !== null && _r !== void 0 ? _r : false;
     settingsAccordion.open = (_s = stored === null || stored === void 0 ? void 0 : stored.settingsExpanded) !== null && _s !== void 0 ? _s : false;
 };
@@ -413,6 +447,12 @@ const onResetPlaybackSettings = () => {
     exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
     compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
     syncGeneralExportSettings();
+    syncSelectHelpValue("midiProgramSelect", DEFAULT_MIDI_PROGRAM);
+    syncSelectHelpValue("playbackWaveform", DEFAULT_PLAYBACK_WAVEFORM);
+    syncSelectHelpValue("graceTimingMode", DEFAULT_GRACE_TIMING_MODE);
+    syncSelectHelpValue("metricAccentProfile", DEFAULT_METRIC_ACCENT_PROFILE);
+    syncSelectHelpValue("midiExportProfile", DEFAULT_MIDI_EXPORT_PROFILE);
+    syncSelectHelpValue("midiImportQuantizeGrid", DEFAULT_MIDI_IMPORT_QUANTIZE_GRID);
     writePlaybackSettings();
     renderControlState();
 };
@@ -689,7 +729,14 @@ const renderInputMode = () => {
     }
 };
 const resetZipEntrySelectionUi = () => {
-    zipEntrySelect.innerHTML = "";
+    var _a, _b;
+    if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+        (_a = zipEntrySelectHelp.setOptions) === null || _a === void 0 ? void 0 : _a.call(zipEntrySelectHelp, [], { preserveValue: false });
+        (_b = zipEntrySelectHelp.setValue) === null || _b === void 0 ? void 0 : _b.call(zipEntrySelectHelp, "");
+    }
+    else {
+        zipEntrySelect.innerHTML = "";
+    }
     zipEntrySelectBlock.classList.add("md-hidden");
     selectedZipEntryVirtualFile = null;
 };
@@ -727,6 +774,7 @@ const loadZipEntryAsVirtualFile = async (archive, entryPath) => {
     return new File([copiedBuffer], entryPath, { type: "application/octet-stream" });
 };
 const prepareZipEntrySelection = async (archive) => {
+    var _a, _b, _c;
     resetZipEntrySelectionUi();
     let entryPaths = [];
     try {
@@ -746,10 +794,17 @@ const prepareZipEntrySelection = async (archive) => {
     }
     zipEntrySelectBlock.classList.remove("md-hidden");
     if (entryPaths.length === 1) {
-        const onlyOption = document.createElement("option");
-        onlyOption.value = entryPaths[0];
-        onlyOption.textContent = entryPaths[0];
-        zipEntrySelect.appendChild(onlyOption);
+        if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+            (_a = zipEntrySelectHelp.setOptions) === null || _a === void 0 ? void 0 : _a.call(zipEntrySelectHelp, [
+                { value: entryPaths[0], label: entryPaths[0], selected: true }
+            ], { preserveValue: false });
+        }
+        else {
+            const onlyOption = document.createElement("option");
+            onlyOption.value = entryPaths[0];
+            onlyOption.textContent = entryPaths[0];
+            zipEntrySelect.appendChild(onlyOption);
+        }
         try {
             selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPaths[0]);
             return { ok: true, autoLoad: true };
@@ -761,17 +816,26 @@ const prepareZipEntrySelection = async (archive) => {
             };
         }
     }
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Select a ZIP root entry";
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    zipEntrySelect.appendChild(placeholder);
-    for (const path of entryPaths) {
-        const option = document.createElement("option");
-        option.value = path;
-        option.textContent = path;
-        zipEntrySelect.appendChild(option);
+    if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+        (_b = zipEntrySelectHelp.setOptions) === null || _b === void 0 ? void 0 : _b.call(zipEntrySelectHelp, [
+            { value: "", label: "Select a ZIP root entry", selected: true, disabled: true },
+            ...entryPaths.map((path) => ({ value: path, label: path }))
+        ], { preserveValue: false });
+        (_c = zipEntrySelectHelp.setValue) === null || _c === void 0 ? void 0 : _c.call(zipEntrySelectHelp, "");
+    }
+    else {
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Select a ZIP root entry";
+        placeholder.disabled = true;
+        placeholder.selected = true;
+        zipEntrySelect.appendChild(placeholder);
+        for (const path of entryPaths) {
+            const option = document.createElement("option");
+            option.value = path;
+            option.textContent = path;
+            zipEntrySelect.appendChild(option);
+        }
     }
     selectedZipEntryVirtualFile = null;
     return { ok: true, autoLoad: false };
@@ -8744,8 +8808,9 @@ const createBasicWaveSynthEngine = (options) => {
     const scheduleBasicWaveNote = (event, startAt, bodyDuration, waveform, sustainHoldSeconds = 0, legatoFromOverlap = false) => {
         if (!audioContext)
             return startAt;
-        const attack = legatoFromOverlap ? 0.0015 : 0.005;
-        const release = legatoFromOverlap ? 0.03 : 0.01;
+        const isSine = waveform === "sine";
+        const attack = legatoFromOverlap && !isSine ? 0.0015 : 0.005;
+        const release = legatoFromOverlap || isSine ? 0.03 : 0.01;
         const endAt = startAt + bodyDuration;
         const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
         const oscillator = audioContext.createOscillator();
@@ -8753,7 +8818,7 @@ const createBasicWaveSynthEngine = (options) => {
         oscillator.frequency.setValueAtTime(midiToHz(event.midiNumber), startAt);
         const gainNode = audioContext.createGain();
         const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-        if (legatoFromOverlap) {
+        if (legatoFromOverlap && !isSine) {
             gainNode.gain.setValueAtTime(gainLevel * 0.75, startAt);
             gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
         }
@@ -8933,7 +8998,10 @@ const createBasicWaveSynthEngine = (options) => {
             const endAt = baseTime + tickToSeconds(event.start + event.ticks);
             let bodyDuration = Math.max(0.04, endAt - startAt);
             const nextStartTick = findNextStartTickOnLane(laneKey, event.start);
-            if (!legatoFromOverlap && nextStartTick !== null && nextStartTick > event.start) {
+            if (normalizedWaveform !== "sine"
+                && !legatoFromOverlap
+                && nextStartTick !== null
+                && nextStartTick > event.start) {
                 const hasForwardOverlapIntent = event.start + event.ticks > nextStartTick;
                 if (!hasForwardOverlapIntent) {
                     const nextStartAt = baseTime + tickToSeconds(nextStartTick);

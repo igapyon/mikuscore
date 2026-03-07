@@ -195,6 +195,6 @@ describe("playback-flow midi-like scheduling", () => {
     );
 
     expect(oscillators).toHaveLength(1);
-    expect(oscillators[0].stop).toHaveBeenCalledWith(expect.closeTo(0.49, 6));
+    expect(oscillators[0].stop).toHaveBeenCalledWith(expect.closeTo(0.51, 6));
   });
 });

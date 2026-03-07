@@ -119,8 +119,9 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     legatoFromOverlap = false
   ): number => {
     if (!audioContext) return startAt;
-    const attack = legatoFromOverlap ? 0.0015 : 0.005;
-    const release = legatoFromOverlap ? 0.03 : 0.01;
+    const isSine = waveform === "sine";
+    const attack = legatoFromOverlap && !isSine ? 0.0015 : 0.005;
+    const release = legatoFromOverlap || isSine ? 0.03 : 0.01;
     const endAt = startAt + bodyDuration;
     const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
     const oscillator = audioContext.createOscillator();
@@ -129,7 +130,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
     const gainNode = audioContext.createGain();
     const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-    if (legatoFromOverlap) {
+    if (legatoFromOverlap && !isSine) {
       gainNode.gain.setValueAtTime(gainLevel * 0.75, startAt);
       gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
     } else {
@@ -307,7 +308,12 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       const endAt = baseTime + tickToSeconds(event.start + event.ticks);
       let bodyDuration = Math.max(0.04, endAt - startAt);
       const nextStartTick = findNextStartTickOnLane(laneKey, event.start);
-      if (!legatoFromOverlap && nextStartTick !== null && nextStartTick > event.start) {
+      if (
+        normalizedWaveform !== "sine"
+        && !legatoFromOverlap
+        && nextStartTick !== null
+        && nextStartTick > event.start
+      ) {
         const hasForwardOverlapIntent = event.start + event.ticks > nextStartTick;
         if (!hasForwardOverlapIntent) {
           const nextStartAt = baseTime + tickToSeconds(nextStartTick);

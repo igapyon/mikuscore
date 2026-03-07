@@ -142,7 +142,7 @@
                   </lht-select-help>
                 </div>
               </label>
-              <label class="ms-field">Key signature
+              <div class="ms-field">Key signature
                 <lht-select-help field-id="newKeyFifths" field-class="md-select" label="Key signature">
                   <script type="application/json" slot="options">[
                     {"value":"1","label":"♯1 (G)"},
@@ -162,7 +162,7 @@
                     {"value":"-7","label":"♭7 (Cb)"}
                   ]</script>
                 </lht-select-help>
-              </label>
+              </div>
             </div>
             <div id="newPartClefList" class="ms-stack-sm" aria-live="polite"></div>
           </div>
@@ -440,10 +440,10 @@
                 </div>
               </label>
               <input id="pitchOctave" type="hidden" value="4" />
-              <label class="ms-field">
+              <div class="ms-field">
                 <span class="ms-field-label">Duration</span>
                 <lht-select-help field-id="durationPreset" field-class="md-select" label="Duration preset"></lht-select-help>
-              </label>
+              </div>
             </div>
           </div>
           <div id="editSubTabXmlPanel" class="ms-edit-subtab-panel md-hidden" role="tabpanel">
@@ -672,7 +672,7 @@
               <div class="ms-settings-body">
                 <div class="ms-settings-block">
                   <h4 class="ms-settings-subtitle">MIDI &amp; Playback Shared Settings</h4>
-                  <label class="ms-field" for="graceTimingMode">
+                  <div class="ms-field">
                     <span class="ms-field-label">
                       <span>Grace Timing Mode</span>
                       <lht-help-tooltip label="Grace timing mode help">
@@ -688,7 +688,7 @@
                         {"value":"classical_equal","label":"Classical equal split"}
                       ]</script>
                     </lht-select-help>
-                  </label>
+                  </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Use metric beat accents</span>
@@ -704,7 +704,7 @@
                     <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="metricAccentEnabled" checked>
                     </lht-switch-help>
                   </div>
-                  <label class="ms-field" for="metricAccentProfile">
+                  <div class="ms-field">
                     <span class="ms-field-label">
                       <span>Accent amount</span>
                       <lht-help-tooltip label="Accent amount help">
@@ -720,11 +720,11 @@
                         {"value":"strong","label":"Strong"}
                       ]</script>
                     </lht-select-help>
-                  </label>
+                  </div>
                 </div>
                 <div class="ms-settings-block">
                   <h4 class="ms-settings-subtitle">MIDI Settings</h4>
-                  <label class="ms-field" for="midiProgramSelect">
+                  <div class="ms-field">
                     <span class="ms-field-label">
                       <span>MIDI Export Instrument</span>
                       <lht-help-tooltip label="MIDI export instrument help">
@@ -749,8 +749,8 @@
                         {"value":"violin","label":"Violin"}
                       ]</script>
                     </lht-select-help>
-                  </label>
-                  <label class="ms-field" for="midiExportProfile">
+                  </div>
+                  <div class="ms-field">
                     <span class="ms-field-label">
                       <span>MIDI Export Profile</span>
                       <lht-help-tooltip label="MIDI export profile help">
@@ -766,8 +766,8 @@
                         {"value":"musescore_parity","label":"musescore_parity (closer rendering)"}
                       ]</script>
                     </lht-select-help>
-                  </label>
-                  <label class="ms-field" for="midiImportQuantizeGrid">
+                  </div>
+                  <div class="ms-field">
                     <span class="ms-field-label">
                       <span>MIDI Import Quantize Grid</span>
                       <lht-help-tooltip label="MIDI import quantize grid help">
@@ -785,7 +785,7 @@
                         {"value":"1/64","label":"1/64"}
                       ]</script>
                     </lht-select-help>
-                  </label>
+                  </div>
                   <div class="ms-field ms-field--switch">
                     <span class="ms-field-label">
                       <span>Triplet-aware MIDI import</span>
@@ -825,7 +825,7 @@
                     <lht-switch-help class="ms-switch-field ms-switch-field--control" switch-id="playbackUseMidiLike" checked>
                     </lht-switch-help>
                   </div>
-                  <label class="ms-field" for="playbackWaveform">
+                  <div class="ms-field">
                     <span class="ms-field-label">Quick Playback Tone</span>
                     <lht-select-help field-id="playbackWaveform" field-class="md-select" label="Quick Playback Tone">
                       <script type="application/json" slot="options">[
@@ -834,7 +834,7 @@
                         {"value":"square","label":"Square"}
                       ]</script>
                     </lht-select-help>
-                  </label>
+                  </div>
                 </div>
               </div>
             </details>
