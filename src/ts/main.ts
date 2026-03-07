@@ -142,6 +142,7 @@ const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
 const zipEntrySelectBlock = q<HTMLDivElement>("#zipEntrySelectBlock");
+const zipEntrySelectHelp = document.querySelector<HTMLElement>("lht-select-help[field-id='zipEntrySelect']");
 const zipEntrySelect = q<HTMLSelectElement>("#zipEntrySelect");
 const fileLoadOverlay = q<HTMLElement>("#fileLoadOverlay");
 const loadBtn = q<HTMLButtonElement>("#loadBtn");
@@ -305,6 +306,14 @@ type LhtErrorAlertElement = HTMLElement & {
   clear?: () => void;
 };
 
+type LhtSelectHelpElement = HTMLElement & {
+  setOptions?: (
+    options: Array<{ value: string; label: string; selected?: boolean; disabled?: boolean }>,
+    config?: { preserveValue?: boolean }
+  ) => void;
+  setValue?: (value: string) => void;
+};
+
 const isLhtLoadingOverlayElement = (element: Element): element is LhtLoadingOverlayElement => {
   return (
     element.tagName.toLowerCase() === "lht-loading-overlay"
@@ -317,6 +326,27 @@ const isLhtErrorAlertElement = (element: Element): element is LhtErrorAlertEleme
     element.tagName.toLowerCase() === "lht-error-alert"
     && typeof (element as LhtErrorAlertElement).show === "function"
   );
+};
+
+const isLhtSelectHelpElement = (element: Element | null): element is LhtSelectHelpElement => {
+  return !!element
+    && element.tagName.toLowerCase() === "lht-select-help"
+    && typeof (element as LhtSelectHelpElement).setOptions === "function";
+};
+
+const syncSelectHelpValue = (fieldId: string, value: string): void => {
+  const normalized = value == null ? "" : String(value);
+  const host = document.querySelector(`lht-select-help[field-id='${fieldId}']`);
+  const field = document.getElementById(fieldId) as HTMLSelectElement | null;
+  if (field) {
+    field.value = normalized;
+  }
+  if (!isLhtSelectHelpElement(host)) return;
+  host.setAttribute("value", normalized);
+  host.setValue?.(normalized);
+  requestAnimationFrame(() => {
+    host.setValue?.(normalized);
+  });
 };
 
 type LocalDraft = {
@@ -365,7 +395,7 @@ const normalizeMidiProgram = (value: string): PlaybackSettings["midiProgram"] =>
 };
 
 const normalizeWaveformSetting = (value: string): PlaybackSettings["waveform"] => {
-  if (value === "triangle" || value === "square") return value;
+  if (value === "sine" || value === "triangle" || value === "square") return value;
   return DEFAULT_PLAYBACK_WAVEFORM;
 };
 
@@ -488,15 +518,22 @@ const syncGeneralExportSettings = (): void => {
 
 const applyInitialPlaybackSettings = (): void => {
   const stored = readPlaybackSettings();
-  midiProgramSelect.value = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
-  playbackWaveform.value = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
-  playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
-  graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
-  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
-  metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
-  midiExportProfileSelect.value = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
-  midiImportQuantizeGridSelect.value =
+  const midiProgram = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
+  const waveform = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
+  const graceTimingMode = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
+  const metricAccentProfile = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
+  const midiExportProfile = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
+  const midiImportQuantizeGrid =
     stored?.midiImportQuantizeGrid ?? DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+
+  midiProgramSelect.value = midiProgram;
+  playbackWaveform.value = waveform;
+  playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = graceTimingMode;
+  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = metricAccentProfile;
+  midiExportProfileSelect.value = midiExportProfile;
+  midiImportQuantizeGridSelect.value = midiImportQuantizeGrid;
   midiImportTripletAware.checked =
     stored?.midiImportTripletAware ?? DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
   forceMidiProgramOverride.checked =
@@ -512,6 +549,12 @@ const applyInitialPlaybackSettings = (): void => {
   compressXmlMuseScoreExport.checked =
     stored?.compressXmlMuseScoreExport ?? DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
   syncGeneralExportSettings();
+  syncSelectHelpValue("midiProgramSelect", midiProgram);
+  syncSelectHelpValue("playbackWaveform", waveform);
+  syncSelectHelpValue("graceTimingMode", graceTimingMode);
+  syncSelectHelpValue("metricAccentProfile", metricAccentProfile);
+  syncSelectHelpValue("midiExportProfile", midiExportProfile);
+  syncSelectHelpValue("midiImportQuantizeGrid", midiImportQuantizeGrid);
   generalSettingsAccordion.open = stored?.generalSettingsExpanded ?? false;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
 };
@@ -533,6 +576,12 @@ const onResetPlaybackSettings = (): void => {
   exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
   compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
   syncGeneralExportSettings();
+  syncSelectHelpValue("midiProgramSelect", DEFAULT_MIDI_PROGRAM);
+  syncSelectHelpValue("playbackWaveform", DEFAULT_PLAYBACK_WAVEFORM);
+  syncSelectHelpValue("graceTimingMode", DEFAULT_GRACE_TIMING_MODE);
+  syncSelectHelpValue("metricAccentProfile", DEFAULT_METRIC_ACCENT_PROFILE);
+  syncSelectHelpValue("midiExportProfile", DEFAULT_MIDI_EXPORT_PROFILE);
+  syncSelectHelpValue("midiImportQuantizeGrid", DEFAULT_MIDI_IMPORT_QUANTIZE_GRID);
   writePlaybackSettings();
   renderControlState();
 };
@@ -818,7 +867,12 @@ const renderInputMode = (): void => {
 };
 
 const resetZipEntrySelectionUi = (): void => {
-  zipEntrySelect.innerHTML = "";
+  if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+    zipEntrySelectHelp.setOptions?.([], { preserveValue: false });
+    zipEntrySelectHelp.setValue?.("");
+  } else {
+    zipEntrySelect.innerHTML = "";
+  }
   zipEntrySelectBlock.classList.add("md-hidden");
   selectedZipEntryVirtualFile = null;
 };
@@ -880,10 +934,16 @@ const prepareZipEntrySelection = async (
   }
   zipEntrySelectBlock.classList.remove("md-hidden");
   if (entryPaths.length === 1) {
-    const onlyOption = document.createElement("option");
-    onlyOption.value = entryPaths[0];
-    onlyOption.textContent = entryPaths[0];
-    zipEntrySelect.appendChild(onlyOption);
+    if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+      zipEntrySelectHelp.setOptions?.([
+        { value: entryPaths[0], label: entryPaths[0], selected: true }
+      ], { preserveValue: false });
+    } else {
+      const onlyOption = document.createElement("option");
+      onlyOption.value = entryPaths[0];
+      onlyOption.textContent = entryPaths[0];
+      zipEntrySelect.appendChild(onlyOption);
+    }
     try {
       selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPaths[0]);
       return { ok: true, autoLoad: true };
@@ -894,17 +954,25 @@ const prepareZipEntrySelection = async (
       };
     }
   }
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "Select a ZIP root entry";
-  placeholder.disabled = true;
-  placeholder.selected = true;
-  zipEntrySelect.appendChild(placeholder);
-  for (const path of entryPaths) {
-    const option = document.createElement("option");
-    option.value = path;
-    option.textContent = path;
-    zipEntrySelect.appendChild(option);
+  if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+    zipEntrySelectHelp.setOptions?.([
+      { value: "", label: "Select a ZIP root entry", selected: true, disabled: true },
+      ...entryPaths.map((path) => ({ value: path, label: path }))
+    ], { preserveValue: false });
+    zipEntrySelectHelp.setValue?.("");
+  } else {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a ZIP root entry";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    zipEntrySelect.appendChild(placeholder);
+    for (const path of entryPaths) {
+      const option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      zipEntrySelect.appendChild(option);
+    }
   }
   selectedZipEntryVirtualFile = null;
   return { ok: true, autoLoad: false };
