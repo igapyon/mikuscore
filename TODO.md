@@ -125,6 +125,12 @@
   - optionally drop/merge ultra-short or duplicate-nearby notes for stability-first playback.
   - allow omitting ornaments/grace in lightweight mode with explicit UI toggle and policy.
   - define quality vs stability presets and default behavior for large scores.
+  - Note (2026-03-08): current quick-playback stabilization keeps small same-onset groups intact, prefers outer voices plus non-octave-duplicate notes, and only reduces dense onsets / total event budget after a large-event threshold. Revisit thresholds and UI exposure after more real-score validation.
+  - Note (2026-03-08): if dense-score playback still fails after schedule compaction, the next suspect is browser-side Web Audio node saturation rather than JS scheduling cost; WASM is unlikely to solve that part directly.
+- [ ] Investigation: profile load-time hotspots before considering WASM for import/load acceleration:
+  - Note (2026-03-08): current measurements suggest `normalizeImportedMusicXmlText(...)` and render-side DOM clone / serialize preparation are larger load costs than representative small MIDI->MusicXML conversion.
+  - Separate "pure compute" candidates (possible WASM target) from DOM/render pipeline costs (likely better solved by reducing clone/serialize work or changing render/update strategy).
+  - Re-measure with larger local MIDI / MuseScore fixtures before making any WASM decision for load paths.
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
 - [ ] Reconfirm in-session `xml:id` strategy and operation rules.
 - [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).

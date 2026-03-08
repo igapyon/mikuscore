@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBasicWaveSynthEngine, type SynthSchedule } from "../../src/ts/playback-flow";
+import {
+  compactSynthScheduleForPlayback,
+  createBasicWaveSynthEngine,
+  type SynthSchedule,
+} from "../../src/ts/playback-flow";
 
 type MutableWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
@@ -196,5 +200,133 @@ describe("playback-flow midi-like scheduling", () => {
 
     expect(oscillators).toHaveLength(1);
     expect(oscillators[0].stop).toHaveBeenCalledWith(expect.closeTo(0.51, 6));
+  });
+
+  it("compacts dense schedules by capping notes per onset and overall event budget", () => {
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: Array.from({ length: 120 }, (_, onset) =>
+        Array.from({ length: 60 }, (_, pitch) => ({
+          midiNumber: 30 + (pitch % 60),
+          start: onset * 10,
+          ticks: pitch < 10 ? 1 : 64 + (pitch % 3),
+          channel: 1,
+          trackId: `t${pitch}`,
+        }))
+      ).flat(),
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+
+    expect(compacted.summary.applied).toBe(true);
+    expect(compacted.summary.originalEventCount).toBe(7200);
+    expect(compacted.summary.finalEventCount).toBeLessThanOrEqual(4096);
+    expect(compacted.summary.droppedUltraShortCount).toBe(1200);
+    expect(compacted.summary.droppedDenseOnsetCount).toBe(240);
+    expect(compacted.summary.droppedBudgetCount).toBeGreaterThan(0);
+    const countsByOnset = new Map<number, number>();
+    for (const event of compacted.schedule.events) {
+      countsByOnset.set(event.start, (countsByOnset.get(event.start) ?? 0) + 1);
+      expect(event.ticks).toBeGreaterThanOrEqual(2);
+    }
+    expect(Math.max(...countsByOnset.values())).toBeLessThanOrEqual(48);
+  });
+
+  it("uses compacted schedules before creating oscillators for dense playback", async () => {
+    const { context, oscillators } = createInspectableAudioContext();
+    mutableWindow.AudioContext = vi.fn(function MockAudioContext() {
+      return context as unknown as AudioContext;
+    }) as unknown as typeof AudioContext;
+    mutableWindow.webkitAudioContext = undefined;
+    const engine = createBasicWaveSynthEngine({ ticksPerQuarter: 128 });
+
+    const denseSchedule: SynthSchedule = {
+      tempo: 120,
+      events: Array.from({ length: 60 }, (_, onset) =>
+        Array.from({ length: 50 }, (_, pitch) => ({
+          midiNumber: 40 + (pitch % 40),
+          start: onset * 8,
+          ticks: 48,
+          channel: 1,
+          trackId: `part-${pitch}`,
+        }))
+      ).flat(),
+    };
+
+    await engine.playSchedule(denseSchedule, "sine");
+
+    expect(oscillators.length).toBe(2880);
+  });
+
+  it("keeps small same-onset chords intact even when dense playback compaction applies", () => {
+    const denseEvents = Array.from({ length: 90 }, (_, onset) =>
+      Array.from({ length: 48 }, (_, pitch) => ({
+        midiNumber: 20 + pitch,
+        start: onset * 12,
+        ticks: 48,
+        channel: 1,
+        trackId: `dense-${onset}-${pitch}`,
+      }))
+    ).flat();
+    const smallChordStarts = [9999, 10011, 10023];
+    const smallChordEvents = smallChordStarts.map((start, index) => ({
+      midiNumber: 72 + index,
+      start,
+      ticks: 48,
+      channel: 1,
+      trackId: `small-${index}`,
+    }));
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: [...denseEvents, ...smallChordEvents],
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+
+    expect(compacted.summary.applied).toBe(true);
+    for (const start of smallChordStarts) {
+      const keptAtStart = compacted.schedule.events.filter((event) => event.start === start);
+      expect(keptAtStart).toHaveLength(1);
+    }
+  });
+
+  it("prefers keeping outer voices and non-octave duplicates inside a dense onset", () => {
+    const wideOctaveCluster = Array.from({ length: 10 }, (_, octave) => ({
+      midiNumber: 24 + octave * 12,
+      start: 0,
+      ticks: 48,
+      channel: 1,
+      trackId: `oct-${octave}`,
+    }));
+    const uniqueUpper = Array.from({ length: 40 }, (_, i) => ({
+      midiNumber: 61 + i,
+      start: 0,
+      ticks: 48,
+      channel: 1,
+      trackId: `uniq-${i}`,
+    }));
+    const filler = Array.from({ length: 2100 }, (_, i) => ({
+      midiNumber: 30 + (i % 24),
+      start: 100 + i * 2,
+      ticks: 48,
+      channel: 1,
+      trackId: `fill-${i}`,
+    }));
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: [...wideOctaveCluster, ...uniqueUpper, ...filler],
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+    const keptAtZero = compacted.schedule.events.filter((event) => event.start === 0);
+    const keptMidis = keptAtZero.map((event) => event.midiNumber);
+
+    expect(keptAtZero).toHaveLength(48);
+    expect(keptMidis).toContain(24);
+    expect(keptMidis).toContain(132);
+    expect(keptMidis).toContain(61);
+    expect(keptMidis).toContain(100);
+    expect(keptMidis).not.toContain(36);
+    expect(keptMidis).not.toContain(48);
   });
 });
