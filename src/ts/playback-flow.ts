@@ -834,6 +834,23 @@ const findPlaybackLocationAtTick = (
   return ranges[ranges.length - 1]?.location ?? null;
 };
 
+const trimMeasureTimelineFromTick = (
+  ranges: Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }>,
+  startTick: number
+): Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }> => {
+  if (!ranges.length || !Number.isFinite(startTick) || startTick <= 0) {
+    return ranges;
+  }
+  const safeStartTick = Math.max(0, Math.round(startTick));
+  return ranges
+    .filter((range) => range.endTick > safeStartTick)
+    .map((range) => ({
+      startTick: Math.max(0, range.startTick - safeStartTick),
+      endTick: Math.max(0, range.endTick - safeStartTick),
+      location: range.location,
+    }));
+};
+
 const resolveMeasureStartTickInPart = (
   doc: Document,
   startFromMeasure: PlaybackStartLocation,
@@ -952,9 +969,11 @@ export const startPlayback = async (
     params.startFromMeasure?.partId ??
     playbackDoc.querySelector("score-partwise > part")?.getAttribute("id")?.trim() ??
     "";
+  let playbackStartTick = 0;
   if (params.startFromMeasure) {
     const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
     if (startTick !== null && startTick > 0) {
+      playbackStartTick = startTick;
       const trimmed = trimPlaybackFromTick(
         effectiveParsedPlayback,
         effectiveTempoEvents,
@@ -981,8 +1000,14 @@ export const startPlayback = async (
 
   const waveform = options.getPlaybackWaveform();
   const measureTimeline = playbackAnchorPartId
-    ? buildMeasureTimelineForPart(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
+    ? trimMeasureTimelineFromTick(
+      buildMeasureTimelineForPart(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter),
+      playbackStartTick
+    )
     : [];
+  if (params.startFromMeasure) {
+    options.setActivePlaybackLocation(params.startFromMeasure);
+  }
 
   let midiBytes: Uint8Array;
   try {

@@ -9493,6 +9493,19 @@ const findPlaybackLocationAtTick = (ranges, tick) => {
     }
     return (_b = (_a = ranges[ranges.length - 1]) === null || _a === void 0 ? void 0 : _a.location) !== null && _b !== void 0 ? _b : null;
 };
+const trimMeasureTimelineFromTick = (ranges, startTick) => {
+    if (!ranges.length || !Number.isFinite(startTick) || startTick <= 0) {
+        return ranges;
+    }
+    const safeStartTick = Math.max(0, Math.round(startTick));
+    return ranges
+        .filter((range) => range.endTick > safeStartTick)
+        .map((range) => ({
+        startTick: Math.max(0, range.startTick - safeStartTick),
+        endTick: Math.max(0, range.endTick - safeStartTick),
+        location: range.location,
+    }));
+};
 const resolveMeasureStartTickInPart = (doc, startFromMeasure, fallbackDivisions) => {
     const ranges = (0, exports.buildMeasureTimelineForPart)(doc, startFromMeasure.partId, fallbackDivisions);
     const hit = ranges.find((range) => { var _a; return range.location.measureNumber === String((_a = startFromMeasure.measureNumber) !== null && _a !== void 0 ? _a : "").trim(); });
@@ -9587,9 +9600,11 @@ const startPlayback = async (options, params) => {
         ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
         : [];
     const playbackAnchorPartId = (_e = (_b = (_a = params.startFromMeasure) === null || _a === void 0 ? void 0 : _a.partId) !== null && _b !== void 0 ? _b : (_d = (_c = playbackDoc.querySelector("score-partwise > part")) === null || _c === void 0 ? void 0 : _c.getAttribute("id")) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
+    let playbackStartTick = 0;
     if (params.startFromMeasure) {
         const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
         if (startTick !== null && startTick > 0) {
+            playbackStartTick = startTick;
             const trimmed = trimPlaybackFromTick(effectiveParsedPlayback, effectiveTempoEvents, effectiveControlEvents, startTick);
             effectiveParsedPlayback = trimmed.parsedPlayback;
             effectiveTempoEvents = trimmed.tempoEvents;
@@ -9610,8 +9625,11 @@ const startPlayback = async (options, params) => {
         : [];
     const waveform = options.getPlaybackWaveform();
     const measureTimeline = playbackAnchorPartId
-        ? (0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
+        ? trimMeasureTimelineFromTick((0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter), playbackStartTick)
         : [];
+    if (params.startFromMeasure) {
+        options.setActivePlaybackLocation(params.startFromMeasure);
+    }
     let midiBytes;
     try {
         const scoreTitle = (_l = (_h = (_g = (_f = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : (_k = (_j = playbackDoc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
