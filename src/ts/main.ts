@@ -248,6 +248,7 @@ let measureNumbersByPart = new Map<string, string[]>();
 let scoreTitleText = "";
 let scoreComposerText = "";
 let selectedMeasure: NoteLocation | null = null;
+let activePlaybackLocation: NoteLocation | null = null;
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
@@ -1555,23 +1556,38 @@ const highlightSelectedDraftNoteInEditor = (): void => {
 
 const highlightSelectedMeasureInMainPreview = (): void => {
   debugScoreArea
-    .querySelectorAll(".ms-measure-selected")
-    .forEach((el) => el.classList.remove("ms-measure-selected"));
+    .querySelectorAll(".ms-measure-selected, .ms-measure-playing")
+    .forEach((el) => {
+      el.classList.remove("ms-measure-selected");
+      el.classList.remove("ms-measure-playing");
+    });
 
-  if (!selectedMeasure || currentSvgIdToNodeId.size === 0) return;
+  if (currentSvgIdToNodeId.size === 0) return;
 
   for (const [svgId, nodeId] of currentSvgIdToNodeId.entries()) {
     const location = nodeIdToLocation.get(nodeId);
     if (!location) continue;
-    if (location.partId !== selectedMeasure.partId || location.measureNumber !== selectedMeasure.measureNumber) {
-      continue;
-    }
     const target = document.getElementById(svgId);
     if (!target || !debugScoreArea.contains(target)) continue;
-    target.classList.add("ms-measure-selected");
     const group = target.closest("g");
-    if (group && debugScoreArea.contains(group)) {
-      group.classList.add("ms-measure-selected");
+    const applyClass = (className: "ms-measure-selected" | "ms-measure-playing"): void => {
+      target.classList.add(className);
+      if (group && debugScoreArea.contains(group)) {
+        group.classList.add(className);
+      }
+    };
+    if (
+      selectedMeasure
+      && location.partId === selectedMeasure.partId
+      && location.measureNumber === selectedMeasure.measureNumber
+    ) {
+      applyClass("ms-measure-selected");
+    }
+    if (
+      activePlaybackLocation
+      && location.measureNumber === activePlaybackLocation.measureNumber
+    ) {
+      applyClass("ms-measure-playing");
     }
   }
 };
@@ -2304,6 +2320,10 @@ const playbackFlowOptions: PlaybackFlowOptions = {
     if (playbackText) {
       playbackText.textContent = text;
     }
+  },
+  setActivePlaybackLocation: (location) => {
+    activePlaybackLocation = location;
+    highlightSelectedMeasureInMainPreview();
   },
   renderControlState,
   renderAll,

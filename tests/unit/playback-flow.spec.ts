@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildMeasureTimelineForPart,
   compactSynthScheduleForPlayback,
   createBasicWaveSynthEngine,
   type SynthSchedule,
 } from "../../src/ts/playback-flow";
+import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
 type MutableWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
@@ -202,6 +204,27 @@ describe("playback-flow midi-like scheduling", () => {
     expect(oscillators[0].stop).toHaveBeenCalledWith(expect.closeTo(0.51, 6));
   });
 
+  it("reports playback tick progress when scheduling starts", async () => {
+    const { context } = createInspectableAudioContext();
+    mutableWindow.AudioContext = vi.fn(function MockAudioContext() {
+      return context as unknown as AudioContext;
+    }) as unknown as typeof AudioContext;
+    mutableWindow.webkitAudioContext = undefined;
+    const engine = createBasicWaveSynthEngine({ ticksPerQuarter: 128 });
+    const onTickUpdate = vi.fn();
+
+    await engine.playSchedule(
+      {
+        tempo: 120,
+        events: [{ midiNumber: 69, start: 0, ticks: 64, channel: 1 }],
+      },
+      "sine",
+      onTickUpdate
+    );
+
+    expect(onTickUpdate).toHaveBeenCalledWith(0);
+  });
+
   it("compacts dense schedules by capping notes per onset and overall event budget", () => {
     const schedule: SynthSchedule = {
       tempo: 120,
@@ -328,5 +351,50 @@ describe("playback-flow midi-like scheduling", () => {
     expect(keptMidis).toContain(100);
     expect(keptMidis).not.toContain(36);
     expect(keptMidis).not.toContain(48);
+  });
+
+  it("builds measure timeline with pickup-aware first bar lengths", () => {
+    const xml = `
+      <score-partwise version="4.0">
+        <part-list>
+          <score-part id="P1"><part-name>P1</part-name></score-part>
+          <score-part id="P2"><part-name>P2</part-name></score-part>
+        </part-list>
+        <part id="P1">
+          <measure number="0">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type></note>
+          </measure>
+          <measure number="1">
+            <note><pitch><step>D</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+        <part id="P2">
+          <measure number="0">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type></note>
+          </measure>
+          <measure number="1">
+            <note><pitch><step>F</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+      </score-partwise>
+    `;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const timeline = buildMeasureTimelineForPart(doc, "P1", 480);
+
+    expect(timeline).toHaveLength(2);
+    expect(timeline[0]?.startTick).toBe(0);
+    expect(timeline[0]?.endTick).toBe(480);
+    expect(timeline[1]?.startTick).toBe(480);
   });
 });

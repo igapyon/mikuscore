@@ -182,6 +182,7 @@ let measureNumbersByPart = new Map();
 let scoreTitleText = "";
 let scoreComposerText = "";
 let selectedMeasure = null;
+let activePlaybackLocation = null;
 let draftCore = null;
 let draftNoteNodeIds = [];
 let draftSvgIdToNodeId = new Map();
@@ -1397,24 +1398,35 @@ const highlightSelectedDraftNoteInEditor = () => {
 };
 const highlightSelectedMeasureInMainPreview = () => {
     debugScoreArea
-        .querySelectorAll(".ms-measure-selected")
-        .forEach((el) => el.classList.remove("ms-measure-selected"));
-    if (!selectedMeasure || currentSvgIdToNodeId.size === 0)
+        .querySelectorAll(".ms-measure-selected, .ms-measure-playing")
+        .forEach((el) => {
+        el.classList.remove("ms-measure-selected");
+        el.classList.remove("ms-measure-playing");
+    });
+    if (currentSvgIdToNodeId.size === 0)
         return;
     for (const [svgId, nodeId] of currentSvgIdToNodeId.entries()) {
         const location = nodeIdToLocation.get(nodeId);
         if (!location)
             continue;
-        if (location.partId !== selectedMeasure.partId || location.measureNumber !== selectedMeasure.measureNumber) {
-            continue;
-        }
         const target = document.getElementById(svgId);
         if (!target || !debugScoreArea.contains(target))
             continue;
-        target.classList.add("ms-measure-selected");
         const group = target.closest("g");
-        if (group && debugScoreArea.contains(group)) {
-            group.classList.add("ms-measure-selected");
+        const applyClass = (className) => {
+            target.classList.add(className);
+            if (group && debugScoreArea.contains(group)) {
+                group.classList.add(className);
+            }
+        };
+        if (selectedMeasure
+            && location.partId === selectedMeasure.partId
+            && location.measureNumber === selectedMeasure.measureNumber) {
+            applyClass("ms-measure-selected");
+        }
+        if (activePlaybackLocation
+            && location.measureNumber === activePlaybackLocation.measureNumber) {
+            applyClass("ms-measure-playing");
         }
     }
 };
@@ -2122,6 +2134,10 @@ const playbackFlowOptions = {
         if (playbackText) {
             playbackText.textContent = text;
         }
+    },
+    setActivePlaybackLocation: (location) => {
+        activePlaybackLocation = location;
+        highlightSelectedMeasureInMainPreview();
     },
     renderControlState,
     renderAll,
@@ -8736,7 +8752,7 @@ exports.replaceMeasureInMainDocument = replaceMeasureInMainDocument;
   "src/ts/playback-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = exports.createBasicWaveSynthEngine = exports.compactSynthScheduleForPlayback = exports.PLAYBACK_TICKS_PER_QUARTER = void 0;
+exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = exports.buildMeasureTimelineForPart = exports.createBasicWaveSynthEngine = exports.compactSynthScheduleForPlayback = exports.PLAYBACK_TICKS_PER_QUARTER = void 0;
 const midi_io_1 = require("./midi-io");
 const musicxml_io_1 = require("./musicxml-io");
 exports.PLAYBACK_TICKS_PER_QUARTER = 480;
@@ -8924,6 +8940,7 @@ const createBasicWaveSynthEngine = (options) => {
     let audioContext = null;
     let activeSynthNodes = [];
     let synthStopTimer = null;
+    let playbackProgressTimer = null;
     const hasActiveUserGesture = () => {
         const nav = navigator;
         const ua = nav.userActivation;
@@ -9001,6 +9018,10 @@ const createBasicWaveSynthEngine = (options) => {
             window.clearTimeout(synthStopTimer);
             synthStopTimer = null;
         }
+        if (playbackProgressTimer !== null) {
+            window.clearInterval(playbackProgressTimer);
+            playbackProgressTimer = null;
+        }
         for (const node of activeSynthNodes) {
             try {
                 node.oscillator.stop();
@@ -9050,7 +9071,7 @@ const createBasicWaveSynthEngine = (options) => {
             return false;
         }
     };
-    const playSchedule = async (schedule, waveform, onEnded) => {
+    const playSchedule = async (schedule, waveform, onTickUpdate, onEnded) => {
         var _a, _b, _c, _d, _e, _f, _g;
         if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
             throw new Error("Please convert first.");
@@ -9101,6 +9122,27 @@ const createBasicWaveSynthEngine = (options) => {
                     break;
             }
             return seconds;
+        };
+        const secondsToTick = (elapsedSeconds) => {
+            var _a, _b;
+            if (!(elapsedSeconds > 0))
+                return 0;
+            let remainingSeconds = elapsedSeconds;
+            let resolvedTick = 0;
+            for (let i = 0; i < mergedTempoEvents.length; i += 1) {
+                const current = mergedTempoEvents[i];
+                const nextStart = (_b = (_a = mergedTempoEvents[i + 1]) === null || _a === void 0 ? void 0 : _a.startTick) !== null && _b !== void 0 ? _b : Number.POSITIVE_INFINITY;
+                const currentStart = current.startTick;
+                const spanTicks = Number.isFinite(nextStart) ? Math.max(0, nextStart - currentStart) : Number.POSITIVE_INFINITY;
+                const secPerTick = 60 / (current.bpm * ticksPerQuarter);
+                const spanSeconds = Number.isFinite(spanTicks) ? spanTicks * secPerTick : Number.POSITIVE_INFINITY;
+                if (remainingSeconds <= spanSeconds) {
+                    return Math.max(resolvedTick, currentStart + Math.round(remainingSeconds / secPerTick));
+                }
+                remainingSeconds -= spanSeconds;
+                resolvedTick = Number.isFinite(spanTicks) ? nextStart : resolvedTick;
+            }
+            return Math.max(0, resolvedTick);
         };
         const baseTime = runningContext.currentTime + 0.04;
         let latestEndTime = baseTime;
@@ -9167,9 +9209,20 @@ const createBasicWaveSynthEngine = (options) => {
             latestEndTime = Math.max(latestEndTime, scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds, legatoFromOverlap));
             lastNoteByLane.set(laneKey, { startTick: event.start, endTick: event.start + event.ticks });
         }
+        if (typeof onTickUpdate === "function") {
+            onTickUpdate(0);
+            playbackProgressTimer = window.setInterval(() => {
+                const elapsed = Math.max(0, runningContext.currentTime - baseTime);
+                onTickUpdate(secondsToTick(elapsed));
+            }, 90);
+        }
         const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
         synthStopTimer = window.setTimeout(() => {
             activeSynthNodes = [];
+            if (playbackProgressTimer !== null) {
+                window.clearInterval(playbackProgressTimer);
+                playbackProgressTimer = null;
+            }
             if (typeof onEnded === "function") {
                 onEnded();
             }
@@ -9237,35 +9290,162 @@ const parsePositiveInt = (text) => {
     const value = Number.parseInt(String(text !== null && text !== void 0 ? text : "").trim(), 10);
     return Number.isFinite(value) && value > 0 ? value : null;
 };
-const resolveMeasureStartTickInPart = (doc, startFromMeasure, fallbackDivisions) => {
-    var _a, _b, _c, _d, _e;
-    const part = Array.from(doc.querySelectorAll("score-partwise > part")).find((p) => { var _a; return ((_a = p.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim() === String(startFromMeasure.partId || "").trim(); });
-    if (!part)
+const getFirstNumber = (el, selector) => {
+    var _a, _b;
+    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
+    if (!text)
         return null;
+    const n = Number(text);
+    return Number.isFinite(n) ? n : null;
+};
+const measureCapacityDivFromContext = (divisions, beats, beatType) => {
+    const safeDivisions = Math.max(1, Math.round(divisions));
+    const safeBeats = Math.max(1, Math.round(beats));
+    const safeBeatType = Math.max(1, Math.round(beatType));
+    return Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+};
+const estimateMeasureContentSpanDiv = (measure) => {
+    var _a, _b, _c, _d;
+    let cursorDiv = 0;
+    let measureMaxDiv = 0;
+    const lastStartByVoice = new Map();
+    for (const child of Array.from(measure.children)) {
+        if (child.tagName === "backup" || child.tagName === "forward") {
+            const dur = getFirstNumber(child, "duration");
+            if (!dur || dur <= 0)
+                continue;
+            if (child.tagName === "backup") {
+                cursorDiv = Math.max(0, cursorDiv - dur);
+            }
+            else {
+                cursorDiv += dur;
+                measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+            }
+            continue;
+        }
+        if (child.tagName !== "note")
+            continue;
+        const durationDiv = getFirstNumber(child, "duration");
+        if (!durationDiv || durationDiv <= 0)
+            continue;
+        const voice = (_c = (_b = (_a = child.querySelector("voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "1";
+        const isChord = Boolean(child.querySelector("chord"));
+        const startDiv = isChord ? ((_d = lastStartByVoice.get(voice)) !== null && _d !== void 0 ? _d : cursorDiv) : cursorDiv;
+        if (!isChord) {
+            lastStartByVoice.set(voice, startDiv);
+            cursorDiv += durationDiv;
+        }
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+    }
+    return measureMaxDiv;
+};
+const shouldTreatFirstUnderfullAsPickup = (doc) => {
+    var _a, _b, _c;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (parts.length < 2)
+        return false;
+    for (const part of parts) {
+        const firstMeasure = part.querySelector(":scope > measure");
+        if (!firstMeasure)
+            return false;
+        const divisions = (_a = getFirstNumber(firstMeasure, "attributes > divisions")) !== null && _a !== void 0 ? _a : 1;
+        const beats = (_b = getFirstNumber(firstMeasure, "attributes > time > beats")) !== null && _b !== void 0 ? _b : 4;
+        const beatType = (_c = getFirstNumber(firstMeasure, "attributes > time > beat-type")) !== null && _c !== void 0 ? _c : 4;
+        const capacityDiv = measureCapacityDivFromContext(divisions, beats, beatType);
+        const contentDiv = estimateMeasureContentSpanDiv(firstMeasure);
+        if (!(contentDiv > 0 && contentDiv < capacityDiv)) {
+            return false;
+        }
+    }
+    return true;
+};
+const isImplicitMeasure = (measure) => {
+    if (!measure)
+        return false;
+    const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+    return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+};
+const resolveMeasureAdvanceDiv = (measure, measureMaxDiv, currentDivisions, currentBeats, currentBeatType, nextMeasureIsImplicit = false, firstMeasureUnderfullAsPickup = false) => {
+    const safeDivisions = Math.max(1, Math.round(currentDivisions));
+    const safeBeats = Math.max(1, Math.round(currentBeats));
+    const safeBeatType = Math.max(1, Math.round(currentBeatType));
+    const capacityDiv = Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+    const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+    const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+    if (isImplicit) {
+        return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
+    }
+    let hasPreviousMeasure = false;
+    for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
+        const prevName = (prev.localName || prev.tagName || "").toLowerCase();
+        if (prevName === "measure") {
+            hasPreviousMeasure = true;
+            break;
+        }
+    }
+    const isFirstMeasureInPart = !hasPreviousMeasure;
+    if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+        return measureMaxDiv;
+    }
+    if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+        return measureMaxDiv;
+    }
+    return Math.max(capacityDiv, measureMaxDiv);
+};
+const buildMeasureTimelineForPart = (doc, partId, fallbackDivisions) => {
+    var _a, _b;
+    const part = Array.from(doc.querySelectorAll("score-partwise > part")).find((p) => { var _a; return ((_a = p.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim() === String(partId || "").trim(); });
+    if (!part)
+        return [];
+    const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
     let divisions = Math.max(1, Math.round(fallbackDivisions));
     let beats = 4;
     let beatType = 4;
     let tick = 0;
+    const ranges = [];
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    for (const measure of measures) {
-        const attrs = measure.querySelector(":scope > attributes");
-        const nextDivisions = parsePositiveInt((_a = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > divisions")) === null || _a === void 0 ? void 0 : _a.textContent);
-        if (nextDivisions)
+    for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+        const measure = measures[measureIndex];
+        const nextMeasure = (_a = measures[measureIndex + 1]) !== null && _a !== void 0 ? _a : null;
+        const nextDivisions = getFirstNumber(measure, "attributes > divisions");
+        if (nextDivisions && nextDivisions > 0)
             divisions = nextDivisions;
-        const nextBeats = parsePositiveInt((_b = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > time > beats")) === null || _b === void 0 ? void 0 : _b.textContent);
-        if (nextBeats)
+        const nextBeats = getFirstNumber(measure, "attributes > time > beats");
+        const nextBeatType = getFirstNumber(measure, "attributes > time > beat-type");
+        if (nextBeats && nextBeats > 0 && nextBeatType && nextBeatType > 0) {
             beats = nextBeats;
-        const nextBeatType = parsePositiveInt((_c = attrs === null || attrs === void 0 ? void 0 : attrs.querySelector(":scope > time > beat-type")) === null || _c === void 0 ? void 0 : _c.textContent);
-        if (nextBeatType)
             beatType = nextBeatType;
-        const measureNo = ((_d = measure.getAttribute("number")) !== null && _d !== void 0 ? _d : "").trim();
-        if (measureNo === String((_e = startFromMeasure.measureNumber) !== null && _e !== void 0 ? _e : "").trim()) {
-            return tick;
         }
-        const measureTicks = Math.max(1, Math.round((divisions * beats * 4) / Math.max(1, beatType)));
+        const measureNumber = ((_b = measure.getAttribute("number")) !== null && _b !== void 0 ? _b : "").trim();
+        const measureContentDiv = estimateMeasureContentSpanDiv(measure);
+        const advanceDiv = resolveMeasureAdvanceDiv(measure, measureContentDiv, divisions, beats, beatType, isImplicitMeasure(nextMeasure), firstUnderfullAsPickup);
+        const measureTicks = Math.max(1, Math.round((advanceDiv / Math.max(1, divisions)) * fallbackDivisions));
+        ranges.push({
+            startTick: tick,
+            endTick: tick + measureTicks,
+            location: { partId, measureNumber },
+        });
         tick += measureTicks;
     }
-    return null;
+    return ranges;
+};
+exports.buildMeasureTimelineForPart = buildMeasureTimelineForPart;
+const findPlaybackLocationAtTick = (ranges, tick) => {
+    var _a, _b;
+    if (!ranges.length)
+        return null;
+    const safeTick = Math.max(0, Math.round(tick));
+    for (const range of ranges) {
+        if (safeTick >= range.startTick && safeTick < range.endTick) {
+            return range.location;
+        }
+    }
+    return (_b = (_a = ranges[ranges.length - 1]) === null || _a === void 0 ? void 0 : _a.location) !== null && _b !== void 0 ? _b : null;
+};
+const resolveMeasureStartTickInPart = (doc, startFromMeasure, fallbackDivisions) => {
+    const ranges = (0, exports.buildMeasureTimelineForPart)(doc, startFromMeasure.partId, fallbackDivisions);
+    const hit = ranges.find((range) => { var _a; return range.location.measureNumber === String((_a = startFromMeasure.measureNumber) !== null && _a !== void 0 ? _a : "").trim(); });
+    return hit ? hit.startTick : null;
 };
 const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startTick) => {
     if (!Number.isFinite(startTick) || startTick <= 0) {
@@ -9304,14 +9484,16 @@ const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startT
 const stopPlayback = (options) => {
     options.engine.stop();
     options.setIsPlaying(false);
+    options.setActivePlaybackLocation(null);
     options.setPlaybackText("Playback: stopped");
     options.renderControlState();
 };
 exports.stopPlayback = stopPlayback;
 const startPlayback = async (options, params) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
     if (!params.isLoaded || options.getIsPlaying())
         return;
+    options.setActivePlaybackLocation(null);
     const saveResult = params.core.save();
     options.onFullSaveResult(saveResult);
     if (!saveResult.ok) {
@@ -9353,6 +9535,7 @@ const startPlayback = async (options, params) => {
     let effectiveControlEvents = useMidiLikePlayback
         ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
         : [];
+    const playbackAnchorPartId = (_e = (_b = (_a = params.startFromMeasure) === null || _a === void 0 ? void 0 : _a.partId) !== null && _b !== void 0 ? _b : (_d = (_c = playbackDoc.querySelector("score-partwise > part")) === null || _c === void 0 ? void 0 : _c.getAttribute("id")) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
     if (params.startFromMeasure) {
         const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
         if (startTick !== null && startTick > 0) {
@@ -9375,12 +9558,15 @@ const startPlayback = async (options, params) => {
         ? (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
         : [];
     const waveform = options.getPlaybackWaveform();
+    const measureTimeline = playbackAnchorPartId
+        ? (0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
+        : [];
     let midiBytes;
     try {
-        const scoreTitle = (_f = (_c = (_b = (_a = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = playbackDoc.querySelector("score-partwise > movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
-        const movementTitle = (_j = (_h = (_g = playbackDoc.querySelector("score-partwise > movement-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
-        const scoreComposer = (_q = (_m = (_l = (_k = playbackDoc
-            .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : (_p = (_o = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
+        const scoreTitle = (_l = (_h = (_g = (_f = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : (_k = (_j = playbackDoc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+        const movementTitle = (_p = (_o = (_m = playbackDoc.querySelector("score-partwise > movement-title")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
+        const scoreComposer = (_v = (_s = (_r = (_q = playbackDoc
+            .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : (_u = (_t = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _t === void 0 ? void 0 : _t.textContent) === null || _u === void 0 ? void 0 : _u.trim()) !== null && _v !== void 0 ? _v : "";
         midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, effectiveParsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), effectiveControlEvents, effectiveTempoEvents, timeSignatureEvents, keySignatureEvents, {
             metadata: {
                 title: scoreTitle,
@@ -9395,8 +9581,11 @@ const startPlayback = async (options, params) => {
         return;
     }
     try {
-        await options.engine.playSchedule(toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents), waveform, () => {
+        await options.engine.playSchedule(toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents), waveform, (currentTick) => {
+            options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
+        }, () => {
             options.setIsPlaying(false);
+            options.setActivePlaybackLocation(null);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
         });
@@ -9416,8 +9605,10 @@ const startPlayback = async (options, params) => {
 };
 exports.startPlayback = startPlayback;
 const startMeasurePlayback = async (options, params) => {
+    var _a, _b, _c;
     if (!params.draftCore || options.getIsPlaying())
         return;
+    options.setActivePlaybackLocation(null);
     const saveResult = params.draftCore.save();
     if (!saveResult.ok) {
         options.onMeasureSaveDiagnostics(saveResult.diagnostics);
@@ -9456,9 +9647,16 @@ const startMeasurePlayback = async (options, params) => {
         ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
         : [];
     const waveform = options.getPlaybackWaveform();
+    const playbackAnchorPartId = (_c = (_b = (_a = playbackDoc.querySelector("score-partwise > part")) === null || _a === void 0 ? void 0 : _a.getAttribute("id")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    const measureTimeline = playbackAnchorPartId
+        ? (0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
+        : [];
     try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, () => {
+        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, (currentTick) => {
+            options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
+        }, () => {
             options.setIsPlaying(false);
+            options.setActivePlaybackLocation(null);
             options.setPlaybackText("Playback: stopped");
             options.renderControlState();
         });
