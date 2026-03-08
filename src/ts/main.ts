@@ -196,6 +196,7 @@ const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
 const diagArea = qo<HTMLDivElement>("#diagArea");
 const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
+const debugScoreWrap = q<HTMLDivElement>("#debugScoreWrap");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
 const scoreHeaderMetaText = q<HTMLParagraphElement>("#scoreHeaderMetaText");
 const inputUiMessage = q<HTMLElement>("#inputUiMessage");
@@ -249,6 +250,7 @@ let scoreTitleText = "";
 let scoreComposerText = "";
 let selectedMeasure: NoteLocation | null = null;
 let activePlaybackLocation: NoteLocation | null = null;
+let lastPlaybackAutoScrollKey = "";
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
@@ -1592,6 +1594,56 @@ const highlightSelectedMeasureInMainPreview = (): void => {
   }
 };
 
+const scrollActivePlaybackMeasureIntoView = (): void => {
+  if (!activePlaybackLocation) {
+    lastPlaybackAutoScrollKey = "";
+    return;
+  }
+  const playingNodes = Array.from(debugScoreArea.querySelectorAll<HTMLElement>(".ms-measure-playing"));
+  if (playingNodes.length === 0) return;
+
+  let minLeft = Number.POSITIVE_INFINITY;
+  let maxRight = Number.NEGATIVE_INFINITY;
+  const wrapRect = debugScoreWrap.getBoundingClientRect();
+  for (const node of playingNodes) {
+    const rect = node.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) continue;
+    const left = rect.left - wrapRect.left + debugScoreWrap.scrollLeft;
+    const right = rect.right - wrapRect.left + debugScoreWrap.scrollLeft;
+    minLeft = Math.min(minLeft, left);
+    maxRight = Math.max(maxRight, right);
+  }
+  if (!Number.isFinite(minLeft) || !Number.isFinite(maxRight) || maxRight <= minLeft) return;
+
+  const viewLeft = debugScoreWrap.scrollLeft;
+  const viewWidth = debugScoreWrap.clientWidth;
+  const viewRight = viewLeft + viewWidth;
+  const leftTargetRatio = 0.2;
+  const rightThresholdRatio = 0.7;
+  const desiredLeft = Math.max(
+    0,
+    Math.min(
+      debugScoreWrap.scrollWidth - debugScoreWrap.clientWidth,
+      minLeft - debugScoreWrap.clientWidth * leftTargetRatio
+    )
+  );
+  const measureKey = `${activePlaybackLocation.partId}:${activePlaybackLocation.measureNumber}:${Math.round(desiredLeft)}`;
+  const isOffscreen = minLeft < viewLeft || maxRight > viewRight;
+  const isTooFarRight = maxRight > viewLeft + viewWidth * rightThresholdRatio;
+  if (!isOffscreen && !isTooFarRight) return;
+  if (lastPlaybackAutoScrollKey === measureKey) return;
+
+  if (Math.abs(debugScoreWrap.scrollLeft - desiredLeft) < 2) {
+    lastPlaybackAutoScrollKey = measureKey;
+    return;
+  }
+  debugScoreWrap.scrollTo({
+    left: desiredLeft,
+    behavior: "smooth",
+  });
+  lastPlaybackAutoScrollKey = measureKey;
+};
+
 const renderDiagnostics = (): void => {
   if (!diagArea) return;
   diagArea.innerHTML = "";
@@ -2323,7 +2375,11 @@ const playbackFlowOptions: PlaybackFlowOptions = {
   },
   setActivePlaybackLocation: (location) => {
     activePlaybackLocation = location;
+    if (!location) {
+      lastPlaybackAutoScrollKey = "";
+    }
     highlightSelectedMeasureInMainPreview();
+    scrollActivePlaybackMeasureIntoView();
   },
   renderControlState,
   renderAll,
