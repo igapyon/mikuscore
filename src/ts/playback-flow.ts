@@ -38,6 +38,11 @@ export type BasicWaveSynthEngine = {
 };
 
 export const PLAYBACK_TICKS_PER_QUARTER = 480;
+const DENSE_PLAYBACK_EVENT_THRESHOLD = 2048;
+const DENSE_PLAYBACK_MAX_EVENTS = 4096;
+const DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET = 48;
+const DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR = 64;
+const DENSE_PLAYBACK_PROTECTED_ONSET_SIZE = 8;
 
 const summarizeDiagnostics = (diagnostics: Diagnostic[]): string => {
   if (!diagnostics.length) return "unknown reason";
@@ -63,6 +68,174 @@ const midiToHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12);
 const normalizeWaveform = (value: string): OscillatorType => {
   if (value === "square" || value === "triangle") return value;
   return "sine";
+};
+
+type LightweightPlaybackSummary = {
+  applied: boolean;
+  originalEventCount: number;
+  finalEventCount: number;
+  droppedUltraShortCount: number;
+  droppedDenseOnsetCount: number;
+  droppedBudgetCount: number;
+};
+
+const compareScheduleEventsForRetention = (
+  a: SynthSchedule["events"][number],
+  b: SynthSchedule["events"][number]
+): number => {
+  if (b.ticks !== a.ticks) return b.ticks - a.ticks;
+  if (a.channel === 10 && b.channel !== 10) return -1;
+  if (b.channel === 10 && a.channel !== 10) return 1;
+  if (a.start !== b.start) return a.start - b.start;
+  if (a.midiNumber !== b.midiNumber) return b.midiNumber - a.midiNumber;
+  return (a.trackId ?? "").localeCompare(b.trackId ?? "");
+};
+
+const prioritizeOnsetGroupForRetention = (
+  group: SynthSchedule["events"]
+): SynthSchedule["events"] => {
+  const sortedByMidi = group.slice().sort((a, b) =>
+    a.midiNumber === b.midiNumber ? compareScheduleEventsForRetention(a, b) : a.midiNumber - b.midiNumber
+  );
+  const lowestMidi = sortedByMidi[0]?.midiNumber ?? 0;
+  const highestMidi = sortedByMidi[sortedByMidi.length - 1]?.midiNumber ?? 0;
+  const byPitchClass = new Map<number, SynthSchedule["events"]>();
+  for (const event of sortedByMidi) {
+    const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+    const bucket = byPitchClass.get(pitchClass) ?? [];
+    bucket.push(event);
+    byPitchClass.set(pitchClass, bucket);
+  }
+
+  const anchors: SynthSchedule["events"] = [];
+  const uniquePitchClasses: SynthSchedule["events"] = [];
+  const octaveOuter: SynthSchedule["events"] = [];
+  const octaveInner: SynthSchedule["events"] = [];
+
+  for (const event of sortedByMidi) {
+    if (event.midiNumber === lowestMidi || event.midiNumber === highestMidi) {
+      anchors.push(event);
+      continue;
+    }
+    const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+    const bucket = byPitchClass.get(pitchClass) ?? [];
+    if (bucket.length <= 1) {
+      uniquePitchClasses.push(event);
+      continue;
+    }
+    const bucketLowest = bucket[0]?.midiNumber ?? event.midiNumber;
+    const bucketHighest = bucket[bucket.length - 1]?.midiNumber ?? event.midiNumber;
+    if (event.midiNumber === bucketLowest || event.midiNumber === bucketHighest) {
+      octaveOuter.push(event);
+    } else {
+      octaveInner.push(event);
+    }
+  }
+
+  const sortBucket = (bucket: SynthSchedule["events"]): SynthSchedule["events"] =>
+    bucket.slice().sort(compareScheduleEventsForRetention);
+
+  return [
+    ...sortBucket(anchors),
+    ...sortBucket(uniquePitchClasses),
+    ...sortBucket(octaveOuter),
+    ...sortBucket(octaveInner),
+  ];
+};
+
+export const compactSynthScheduleForPlayback = (
+  schedule: SynthSchedule,
+  ticksPerQuarter: number
+): { schedule: SynthSchedule; summary: LightweightPlaybackSummary } => {
+  const originalEventCount = Array.isArray(schedule.events) ? schedule.events.length : 0;
+  if (originalEventCount <= DENSE_PLAYBACK_EVENT_THRESHOLD) {
+    return {
+      schedule,
+      summary: {
+        applied: false,
+        originalEventCount,
+        finalEventCount: originalEventCount,
+        droppedUltraShortCount: 0,
+        droppedDenseOnsetCount: 0,
+        droppedBudgetCount: 0,
+      },
+    };
+  }
+
+  const minDenseEventTicks = Math.max(1, Math.round(ticksPerQuarter / DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR));
+  const keptAfterShortFilter: SynthSchedule["events"] = [];
+  let droppedUltraShortCount = 0;
+  for (const event of schedule.events) {
+    if ((event.ticks ?? 0) < minDenseEventTicks) {
+      droppedUltraShortCount += 1;
+      continue;
+    }
+    keptAfterShortFilter.push(event);
+  }
+
+  const byOnset = new Map<number, SynthSchedule["events"]>();
+  for (const event of keptAfterShortFilter) {
+    const group = byOnset.get(event.start) ?? [];
+    group.push(event);
+    byOnset.set(event.start, group);
+  }
+
+  const orderedOnsets = Array.from(byOnset.keys()).sort((a, b) => a - b);
+  const onsetGroups = orderedOnsets.map((start) => {
+    const retained = prioritizeOnsetGroupForRetention(byOnset.get(start) ?? []);
+    return retained.slice(0, DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET);
+  });
+  const denseLimitedEvents: SynthSchedule["events"] = [];
+  for (const group of onsetGroups) {
+    denseLimitedEvents.push(...group);
+  }
+  const droppedDenseOnsetCount = keptAfterShortFilter.length - denseLimitedEvents.length;
+
+  let finalEvents = denseLimitedEvents;
+  let droppedBudgetCount = 0;
+  if (denseLimitedEvents.length > DENSE_PLAYBACK_MAX_EVENTS) {
+    const protectedGroups = onsetGroups.filter((group) => group.length <= DENSE_PLAYBACK_PROTECTED_ONSET_SIZE);
+    const reducibleGroups = onsetGroups
+      .filter((group) => group.length > DENSE_PLAYBACK_PROTECTED_ONSET_SIZE)
+      .map((group) => group.slice());
+    const retained: SynthSchedule["events"] = [];
+    for (const group of protectedGroups) {
+      retained.push(...group);
+    }
+    if (retained.length < DENSE_PLAYBACK_MAX_EVENTS) {
+      const rounds = reducibleGroups.reduce((max, group) => Math.max(max, group.length), 0);
+      for (let round = 0; round < rounds && retained.length < DENSE_PLAYBACK_MAX_EVENTS; round += 1) {
+        for (const group of reducibleGroups) {
+          const event = group[round];
+          if (!event) continue;
+          retained.push(event);
+          if (retained.length >= DENSE_PLAYBACK_MAX_EVENTS) break;
+        }
+      }
+    }
+    if (retained.length > DENSE_PLAYBACK_MAX_EVENTS) {
+      retained.length = DENSE_PLAYBACK_MAX_EVENTS;
+    }
+    finalEvents = retained.sort((a, b) =>
+      a.start === b.start ? a.midiNumber - b.midiNumber : a.start - b.start
+    );
+    droppedBudgetCount = denseLimitedEvents.length - finalEvents.length;
+  }
+
+  return {
+    schedule: {
+      ...schedule,
+      events: finalEvents,
+    },
+    summary: {
+      applied: true,
+      originalEventCount,
+      finalEventCount: finalEvents.length,
+      droppedUltraShortCount,
+      droppedDenseOnsetCount,
+      droppedBudgetCount,
+    },
+  };
 };
 
 export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }): BasicWaveSynthEngine => {
@@ -219,11 +392,13 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
     const runningContext = await ensureAudioContextRunning();
     stop();
+    const compacted = compactSynthScheduleForPlayback(schedule, ticksPerQuarter);
+    const effectiveSchedule = compacted.schedule;
 
     const normalizedWaveform = normalizeWaveform(waveform);
-    const normalizedTempoEvents = (schedule.tempoEvents?.length
-      ? schedule.tempoEvents
-      : [{ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) }]
+    const normalizedTempoEvents = (effectiveSchedule.tempoEvents?.length
+      ? effectiveSchedule.tempoEvents
+      : [{ startTick: 0, bpm: Math.max(1, Number(effectiveSchedule.tempo) || 120) }]
     )
       .map((event) => ({
         startTick: Math.max(0, Math.round(event.startTick)),
@@ -240,7 +415,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       }
     }
     if (!mergedTempoEvents.length || mergedTempoEvents[0].startTick !== 0) {
-      mergedTempoEvents.unshift({ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) });
+      mergedTempoEvents.unshift({ startTick: 0, bpm: Math.max(1, Number(effectiveSchedule.tempo) || 120) });
     }
     const tickToSeconds = (targetTick: number): number => {
       let seconds = 0;
@@ -261,7 +436,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     };
     const baseTime = runningContext.currentTime + 0.04;
     let latestEndTime = baseTime;
-    const pedalRanges = (schedule.pedalRanges ?? []).map((range) => ({
+    const pedalRanges = (effectiveSchedule.pedalRanges ?? []).map((range) => ({
       channel: Math.max(1, Math.min(16, Math.round(range.channel || 1))),
       startTick: Math.max(0, Math.round(range.startTick)),
       endTick: Math.max(0, Math.round(range.endTick)),
@@ -270,7 +445,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       return pedalRanges.some((range) => range.channel === channel && tick >= range.startTick && tick < range.endTick);
     };
     const laneStarts = new Map<string, number[]>();
-    for (const event of schedule.events) {
+    for (const event of effectiveSchedule.events) {
       const laneKey = `${event.channel}|${event.trackId ?? ""}`;
       const starts = laneStarts.get(laneKey) ?? [];
       starts.push(event.start);
@@ -299,7 +474,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     };
     const lastNoteByLane = new Map<string, { startTick: number; endTick: number }>();
 
-    for (const event of schedule.events) {
+    for (const event of effectiveSchedule.events) {
       const laneKey = `${event.channel}|${event.trackId ?? ""}`;
       const prevInLane = lastNoteByLane.get(laneKey);
       const legatoFromOverlap =
