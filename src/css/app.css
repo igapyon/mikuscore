@@ -1067,13 +1067,13 @@ lht-help-tooltip:not([data-initialized="true"]) * {
 }
 
 .ms-debug-score .ms-measure-playing {
-  fill: #8b3dff !important;
-  stroke: #5f1fc7 !important;
+  fill: #e83e8c !important;
+  stroke: #b01f63 !important;
 }
 
 .ms-debug-score .ms-measure-playing * {
-  fill: #8b3dff !important;
-  stroke: #5f1fc7 !important;
+  fill: #e83e8c !important;
+  stroke: #b01f63 !important;
 }
 
 .ms-dev {

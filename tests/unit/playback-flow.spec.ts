@@ -4,6 +4,7 @@ import {
   buildMeasureTimelineForPart,
   compactSynthScheduleForPlayback,
   createBasicWaveSynthEngine,
+  startPlayback,
   type SynthSchedule,
 } from "../../src/ts/playback-flow";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
@@ -396,5 +397,68 @@ describe("playback-flow midi-like scheduling", () => {
     expect(timeline[0]?.startTick).toBe(0);
     expect(timeline[0]?.endTick).toBe(480);
     expect(timeline[1]?.startTick).toBe(480);
+  });
+
+  it("maps playback location to the selected measure when playback starts mid-score", async () => {
+    const xml = `
+      <score-partwise version="4.0">
+        <part-list>
+          <score-part id="P1"><part-name>P1</part-name></score-part>
+        </part-list>
+        <part id="P1">
+          <measure number="1">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+          <measure number="2">
+            <note><pitch><step>D</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+      </score-partwise>
+    `;
+    const setActivePlaybackLocation = vi.fn();
+    const engine = {
+      stop: vi.fn(),
+      playSchedule: vi.fn(async (_schedule, _waveform, onTickUpdate) => {
+        onTickUpdate?.(0);
+      }),
+    } as unknown as ReturnType<typeof createBasicWaveSynthEngine>;
+    const options = {
+      engine,
+      ticksPerQuarter: 480,
+      editableVoice: "1",
+      getPlaybackWaveform: () => "sine" as OscillatorType,
+      getUseMidiLikePlayback: () => false,
+      getGraceTimingMode: () => "steal-current" as const,
+      getMetricAccentEnabled: () => false,
+      getMetricAccentProfile: () => "classic" as const,
+      debugLog: false,
+      getIsPlaying: () => false,
+      setIsPlaying: vi.fn(),
+      setPlaybackText: vi.fn(),
+      setActivePlaybackLocation,
+      renderControlState: vi.fn(),
+      renderAll: vi.fn(),
+      logDiagnostics: vi.fn(),
+      dumpOverfullContext: vi.fn(),
+      onFullSaveResult: vi.fn(),
+      onMeasureSaveDiagnostics: vi.fn(),
+    };
+    const core = {
+      save: () => ({ ok: true, xml, diagnostics: [], warnings: [], dirtyChanged: false, changedNodeIds: [], affectedMeasureNumbers: [] }),
+      debugSerializeCurrentXml: () => xml,
+    };
+
+    await startPlayback(options, {
+      isLoaded: true,
+      core,
+      startFromMeasure: { partId: "P1", measureNumber: "2" },
+    });
+
+    expect(setActivePlaybackLocation).toHaveBeenCalledWith({ partId: "P1", measureNumber: "2" });
+    expect(setActivePlaybackLocation.mock.calls.at(-1)?.[0]).toEqual({ partId: "P1", measureNumber: "2" });
   });
 });
