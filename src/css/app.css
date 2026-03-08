@@ -1066,6 +1066,16 @@ lht-help-tooltip:not([data-initialized="true"]) * {
   stroke: #ff0000 !important;
 }
 
+.ms-debug-score .ms-measure-playing {
+  fill: #8b3dff !important;
+  stroke: #5f1fc7 !important;
+}
+
+.ms-debug-score .ms-measure-playing * {
+  fill: #8b3dff !important;
+  stroke: #5f1fc7 !important;
+}
+
 .ms-dev {
   margin-top: 1.1rem;
   border: 1px solid #e6e1ee;
