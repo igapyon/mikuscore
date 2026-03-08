@@ -8,6 +8,8 @@
 lht-help-tooltip {
   display: inline-flex;
   align-items: center;
+  position: relative;
+  overflow: visible;
 }
 
 /*
@@ -38,6 +40,36 @@ lht-preview-output:not([data-initialized="true"]) {
 }
 
 /* Tooltip defaults are centralized in lht to avoid per-page overflow regressions. */
+lht-help-tooltip .md-tooltip-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+lht-help-tooltip .md-tooltip {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 0.5rem);
+  transform: translateX(-50%);
+  z-index: 240;
+  min-width: min(16rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(111, 106, 121, 0.18);
+  background: rgba(36, 31, 43, 0.96);
+  color: #f7f4fb;
+  box-shadow: 0 12px 24px rgba(25, 18, 36, 0.22);
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  line-height: 1.45;
+  white-space: normal;
+}
+
 lht-help-tooltip .md-tooltip-content {
   display: none;
   max-width: min(24rem, calc(100vw - 2rem));

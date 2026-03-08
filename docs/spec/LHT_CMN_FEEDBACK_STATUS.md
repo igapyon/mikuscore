@@ -18,7 +18,8 @@ Status labels used in this file:
 |---|---|---|
 | `lht-*` must be self-contained from the app's point of view | Reflected | README now states `lht-*` is self-contained and app code should not manage `md-*` registration. See [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):22 and [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):89 |
 | Apply the self-contained rule across all components | Reflected | Policy is documented, and `help-tooltip`, `command-block`, `file-select`, `switch-help`, `text-field-help` now have fallbacks. The chosen implementation path is fallback-oriented rather than internal `md-*` registration. See [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):23, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):217, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):322, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):1030, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):1132, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):1239 |
-| `lht-help-tooltip`: built-in viewport collision handling | Reflected | `placement="auto|left|right|top|bottom"` and runtime positioning logic were added. See [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):16 and [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):183 |
+| `lht-help-tooltip`: built-in viewport collision handling | Partially reflected | `placement="auto|left|right|top|bottom"` and runtime positioning logic were added, but a later integration regression showed that the component still lacked some self-owned base positioning CSS (`md-tooltip-group` / `md-tooltip` anchoring), so hover behavior could break even when app-side usage was correct. See [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):16, [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):183, and [components.css](/Users/igapyon/Documents/git/mikuscore/lht-cmn/css/components.css):42 |
+| `lht-help-tooltip` should bundle the minimum base CSS needed for correct hover/positioning | Partially reflected | `lht-cmn` owns the tooltip behavior conceptually, but this was not fully true in practice until the `mikuscore` integration restored missing base CSS. This should be treated as part of the component contract and covered by regression tests. See [components.css](/Users/igapyon/Documents/git/mikuscore/lht-cmn/css/components.css):42 and [LHT_CMN_FEEDBACK.md](/Users/igapyon/Documents/git/mikuscore/docs/spec/LHT_CMN_FEEDBACK.md) |
 | Prevent pre-upgrade content flash centrally | Reflected | `components.css` now hides uninitialized `lht-*` until `data-initialized="true"`. See [components.css](/Users/igapyon/Documents/git/mikuscore/lht-cmn/css/components.css):13 and [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):101 |
 | `lht-file-select`: explicit event ownership | Reflected | `auto-open`, `lht-file-select:before-open`, and `lht-file-select:change` are implemented and documented. See [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):1022, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):1075, and [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):256 |
 | `lht-error-alert`: support `warning` and `info` | Reflected | `variant` support and ARIA behavior are implemented and documented. See [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):727, [components.js](/Users/igapyon/Documents/git/mikuscore/lht-cmn/js/components.js):792, [components.css](/Users/igapyon/Documents/git/mikuscore/lht-cmn/css/components.css):382, and [README.md](/Users/igapyon/Documents/git/mikuscore/lht-cmn/README.md):296 |
@@ -39,7 +40,6 @@ Status labels used in this file:
 - Reflected:
   - self-contained contract in README
   - cross-component fallback-oriented self-contained direction
-  - tooltip collision handling
   - pre-upgrade flash prevention
   - file-select event ownership API
   - error-alert variants
@@ -48,6 +48,8 @@ Status labels used in this file:
   - fallback/parity documentation
   - preservation of important select/text-field/switch implementation details
 - Partially reflected:
+  - tooltip collision handling, because base positioning CSS completeness was still missing in real integration
+  - tooltip self-owned base CSS contract and its regression coverage
   - regression coverage as an explicit two-mode matrix
 - Intentionally not adopted for now:
   - internal `md-*` registration as the primary solution
