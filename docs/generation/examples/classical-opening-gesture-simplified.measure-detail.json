@@ -1,0 +1,146 @@
+{
+  "view_type": "measure_detail_view",
+  "score": {
+    "title": "Classical Opening Gesture Sample",
+    "movement_title": "Simplified Local Excerpt",
+    "format": "musicxml_projection",
+    "note": "Experimental simplified classical-style opening sample for AI JSON readability testing. This is a reduced local projection and does not claim to be a faithful transcription of any full score."
+  },
+  "part": {
+    "part_id": "P-vln1",
+    "name": "Violin 1"
+  },
+  "window": {
+    "center_measure_number": "1",
+    "previous_measure_number": null,
+    "next_measure_number": "2"
+  },
+  "measure": {
+    "measure_id": "K551-I-Pvln1-M1",
+    "measure_number": "1",
+    "divisions": 8,
+    "time": {
+      "beats": 4,
+      "beat_type": 4
+    },
+    "attributes_context": {
+      "key_fifths": 0,
+      "mode": "major",
+      "clefs": [
+        {
+          "staff": "1",
+          "sign": "G",
+          "line": 2
+        }
+      ],
+      "tempo_text": "Allegro vivace",
+      "dynamic_hint": "p"
+    }
+  },
+  "voices": [
+    {
+      "voice_id": "1",
+      "events": [
+        {
+          "node_id": "k551-m1-vln1-n1",
+          "kind": "note",
+          "offset": 0,
+          "duration": 12,
+          "pitch": {
+            "step": "G",
+            "alter": 0,
+            "octave": 4
+          },
+          "notations": {
+            "tie_start": false,
+            "tie_stop": false,
+            "slur_start": false,
+            "slur_stop": false,
+            "articulations": []
+          },
+          "editability": {
+            "editable": true,
+            "blocked_reasons": []
+          }
+        },
+        {
+          "node_id": "k551-m1-vln1-n2",
+          "kind": "note",
+          "offset": 12,
+          "duration": 4,
+          "pitch": {
+            "step": "C",
+            "alter": 0,
+            "octave": 5
+          },
+          "notations": {
+            "tie_start": false,
+            "tie_stop": false,
+            "slur_start": false,
+            "slur_stop": false,
+            "articulations": []
+          },
+          "editability": {
+            "editable": true,
+            "blocked_reasons": []
+          }
+        }
+      ]
+    }
+  ],
+  "next_context": {
+    "measure_id": "K551-I-Pvln1-M2",
+    "measure_number": "2",
+    "summary": "Opening continuation for local context only.",
+    "voices": [
+      {
+        "voice_id": "1",
+        "events": [
+          {
+            "node_id": "k551-m2-vln1-n1",
+            "kind": "note",
+            "offset": 0,
+            "duration": 12,
+            "pitch": {
+              "step": "G",
+              "alter": 0,
+              "octave": 4
+            }
+          },
+          {
+            "node_id": "k551-m2-vln1-n2",
+            "kind": "note",
+            "offset": 12,
+            "duration": 4,
+            "pitch": {
+              "step": "C",
+              "alter": 0,
+              "octave": 5
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "target": {
+    "target_node_id": "k551-m1-vln1-n1",
+    "target_voice_id": "1"
+  },
+  "rules": {
+    "allow_patch_ops": [
+      "change_to_pitch",
+      "change_duration",
+      "split_note",
+      "delete_note"
+    ],
+    "allowed_edit_fields": [
+      "pitch",
+      "duration"
+    ],
+    "forbid_cross_voice_edit": true,
+    "forbid_backup_forward_boundary_cross": true,
+    "forbid_chord_target": true,
+    "forbid_grace_target": true,
+    "forbid_cue_target": true
+  }
+}

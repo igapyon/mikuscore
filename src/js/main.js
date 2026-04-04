@@ -24,6 +24,7 @@ const sampleXml3_1 = require("./sampleXml3");
 const sampleXml4_1 = require("./sampleXml4");
 const sampleXml6_1 = require("./sampleXml6");
 const sampleXml7_1 = require("./sampleXml7");
+const aiJsonPromptText_1 = require("./aiJsonPromptText");
 const midi_io_1 = require("./midi-io");
 const DEFAULT_VOICE = "1";
 const q = (selector) => {
@@ -123,6 +124,9 @@ const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadVsqxBtn = q("#downloadVsqxBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
+const downloadJsonBtn = q("#downloadJsonBtn");
+const copyAiJsonPromptBtn = q("#copyAiJsonPromptBtn");
+const downloadMeasureJsonBtn = q("#downloadMeasureJsonBtn");
 const downloadMeiBtn = q("#downloadMeiBtn");
 const downloadLilyPondBtn = q("#downloadLilyPondBtn");
 const downloadMuseScoreBtn = q("#downloadMuseScoreBtn");
@@ -1569,7 +1573,7 @@ const renderUiMessage = () => {
     }
 };
 const renderOutput = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     if (saveModeText) {
         saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
     }
@@ -1580,10 +1584,12 @@ const renderOutput = () => {
     downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
     downloadVsqxBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
     downloadAbcBtn.disabled = !((_e = state.lastSaveResult) === null || _e === void 0 ? void 0 : _e.ok);
-    downloadMeiBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
-    downloadLilyPondBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
-    downloadMuseScoreBtn.disabled = !((_h = state.lastSaveResult) === null || _h === void 0 ? void 0 : _h.ok);
-    downloadAllBtn.disabled = !((_j = state.lastSaveResult) === null || _j === void 0 ? void 0 : _j.ok);
+    downloadJsonBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
+    downloadMeasureJsonBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok) || !selectedMeasure || !draftCore || !state.selectedNodeId;
+    downloadMeiBtn.disabled = !((_h = state.lastSaveResult) === null || _h === void 0 ? void 0 : _h.ok);
+    downloadLilyPondBtn.disabled = !((_j = state.lastSaveResult) === null || _j === void 0 ? void 0 : _j.ok);
+    downloadMuseScoreBtn.disabled = !((_k = state.lastSaveResult) === null || _k === void 0 ? void 0 : _k.ok);
+    downloadAllBtn.disabled = !((_l = state.lastSaveResult) === null || _l === void 0 ? void 0 : _l.ok);
 };
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
@@ -2977,6 +2983,333 @@ const failExport = (format, reason) => {
     };
     renderAll();
 };
+const parseDirectChildInt = (parent, selector) => {
+    var _a, _b;
+    const node = parent.querySelector(selector);
+    if (!node)
+        return null;
+    const text = (_b = (_a = node.textContent) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
+    if (text === "")
+        return null;
+    const value = Number(text);
+    return Number.isInteger(value) ? value : null;
+};
+const copyTextToClipboard = async (text) => {
+    var _a;
+    try {
+        if ((_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    }
+    catch (_b) {
+        // Fall back to legacy copy path below.
+    }
+    try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        textarea.style.pointerEvents = "none";
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        return copied;
+    }
+    catch (_c) {
+        return false;
+    }
+};
+let copyAiJsonPromptLabelTimer = 0;
+const setCopyAiJsonPromptButtonLabel = (label) => {
+    const labelEl = copyAiJsonPromptBtn.querySelector("span");
+    if (labelEl) {
+        labelEl.textContent = label;
+    }
+};
+const flashCopyAiJsonPromptButtonLabel = (label) => {
+    if (copyAiJsonPromptLabelTimer) {
+        window.clearTimeout(copyAiJsonPromptLabelTimer);
+    }
+    setCopyAiJsonPromptButtonLabel(label);
+    copyAiJsonPromptLabelTimer = window.setTimeout(() => {
+        setCopyAiJsonPromptButtonLabel("AI Prompt");
+        copyAiJsonPromptLabelTimer = 0;
+    }, 1500);
+};
+const cloneClefs = (clefs) => {
+    return clefs.map((clef) => ({ ...clef }));
+};
+const readDirectMeasureContext = (measure) => {
+    var _a, _b, _c;
+    const divisions = parseDirectChildInt(measure, "attributes > divisions");
+    const beats = parseDirectChildInt(measure, "attributes > time > beats");
+    const beatType = parseDirectChildInt(measure, "attributes > time > beat-type");
+    const keyFifths = parseDirectChildInt(measure, "attributes > key > fifths");
+    const mode = (_c = (_b = (_a = measure.querySelector("attributes > key > mode")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : null;
+    const clefEls = Array.from(measure.querySelectorAll("attributes > clef"));
+    const clefs = clefEls.length > 0
+        ? clefEls.map((clef, index) => {
+            var _a, _b, _c, _d, _e, _f, _g;
+            return ({
+                staff: (_c = (_b = (_a = clef.querySelector("staff")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : String(index + 1),
+                sign: (_f = (_e = (_d = clef.querySelector("sign")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "G",
+                line: (_g = parseDirectChildInt(clef, "line")) !== null && _g !== void 0 ? _g : 2,
+            });
+        })
+        : null;
+    return {
+        divisions,
+        time: beats !== null && beatType !== null ? { beats, beat_type: beatType } : null,
+        key: keyFifths !== null || mode !== null ? { key_fifths: keyFifths, mode } : null,
+        clefs,
+    };
+};
+const buildEffectiveMeasureContextForPart = (measures, measureIndex) => {
+    var _a, _b;
+    let divisions = DEFAULT_DIVISIONS;
+    let time = null;
+    let key = null;
+    let clefs = [];
+    for (let i = 0; i <= measureIndex; i += 1) {
+        const direct = readDirectMeasureContext(measures[i]);
+        if (direct.divisions !== null) {
+            divisions = direct.divisions;
+        }
+        if (direct.time) {
+            time = { ...direct.time };
+        }
+        if (direct.key) {
+            key = { ...direct.key };
+        }
+        if (direct.clefs) {
+            clefs = cloneClefs(direct.clefs);
+        }
+    }
+    const directCurrent = readDirectMeasureContext(measures[measureIndex]);
+    return {
+        divisions,
+        time,
+        attributes_context: {
+            key_fifths: (_a = key === null || key === void 0 ? void 0 : key.key_fifths) !== null && _a !== void 0 ? _a : null,
+            mode: (_b = key === null || key === void 0 ? void 0 : key.mode) !== null && _b !== void 0 ? _b : null,
+            clefs: cloneClefs(clefs),
+        },
+        inherited: {
+            divisions: directCurrent.divisions === null,
+            time: directCurrent.time === null,
+            key: directCurrent.key === null,
+            clefs: directCurrent.clefs === null,
+        },
+    };
+};
+const buildDirectMeasureContext = (doc, measure) => {
+    var _a, _b, _c, _d, _e, _f;
+    const direct = readDirectMeasureContext(measure);
+    const divisions = (_a = direct.divisions) !== null && _a !== void 0 ? _a : resolveEffectiveDivisionsForMeasure(doc, measure);
+    return {
+        divisions,
+        time: direct.time,
+        attributes_context: {
+            key_fifths: (_c = (_b = direct.key) === null || _b === void 0 ? void 0 : _b.key_fifths) !== null && _c !== void 0 ? _c : null,
+            mode: (_e = (_d = direct.key) === null || _d === void 0 ? void 0 : _d.mode) !== null && _e !== void 0 ? _e : null,
+            clefs: cloneClefs((_f = direct.clefs) !== null && _f !== void 0 ? _f : []),
+        },
+        inherited: {
+            divisions: direct.divisions === null,
+            time: direct.time === null,
+            key: direct.key === null,
+            clefs: direct.clefs === null,
+        },
+    };
+};
+const buildMeasureVoiceProjection = (measure, noteNodeIds) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    const voiceEvents = new Map();
+    const voiceOffsets = new Map();
+    const notes = Array.from(measure.querySelectorAll(":scope > note"));
+    for (let i = 0; i < notes.length; i += 1) {
+        const note = notes[i];
+        const voiceId = ((_b = (_a = note.querySelector(":scope > voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || DEFAULT_VOICE;
+        const currentOffset = (_c = voiceOffsets.get(voiceId)) !== null && _c !== void 0 ? _c : 0;
+        const duration = (_d = parseDirectChildInt(note, ":scope > duration")) !== null && _d !== void 0 ? _d : 0;
+        const isChord = note.querySelector(":scope > chord") !== null;
+        const offset = isChord ? Math.max(0, currentOffset - duration) : currentOffset;
+        const kind = note.querySelector(":scope > rest") ? "rest" : "note";
+        const blockedReasons = [
+            ...(note.querySelector(":scope > chord") ? ["chord"] : []),
+            ...(note.querySelector(":scope > grace") ? ["grace"] : []),
+            ...(note.querySelector(":scope > cue") ? ["cue"] : []),
+        ];
+        const event = {
+            node_id: (_e = noteNodeIds[i]) !== null && _e !== void 0 ? _e : `note-${i + 1}`,
+            kind,
+            offset,
+            duration,
+            notations: {
+                tie_start: note.querySelector(':scope > tie[type="start"], :scope > notations > tied[type="start"]') !== null,
+                tie_stop: note.querySelector(':scope > tie[type="stop"], :scope > notations > tied[type="stop"]') !== null,
+                slur_start: note.querySelector(':scope > notations > slur[type="start"]') !== null,
+                slur_stop: note.querySelector(':scope > notations > slur[type="stop"]') !== null,
+            },
+            editability: {
+                editable: blockedReasons.length === 0,
+                blocked_reasons: blockedReasons,
+            },
+        };
+        if (kind === "note") {
+            const stepText = (_h = (_g = (_f = note.querySelector(":scope > pitch > step")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : "";
+            const octave = parseDirectChildInt(note, ":scope > pitch > octave");
+            const alter = parseDirectChildInt(note, ":scope > pitch > alter");
+            if (isPitchStepValue(stepText) && octave !== null) {
+                event.pitch = {
+                    step: stepText,
+                    alter: alter !== null && alter !== void 0 ? alter : 0,
+                    octave,
+                };
+            }
+        }
+        const events = (_j = voiceEvents.get(voiceId)) !== null && _j !== void 0 ? _j : [];
+        events.push(event);
+        voiceEvents.set(voiceId, events);
+        if (!isChord) {
+            voiceOffsets.set(voiceId, currentOffset + duration);
+        }
+    }
+    return Array.from(voiceEvents.entries()).map(([voiceId, events]) => ({
+        voice_id: voiceId,
+        events,
+    }));
+};
+const buildMeasureDetailJsonText = () => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (!draftCore || !selectedMeasure || !state.selectedNodeId)
+        return null;
+    const xmlText = draftCore.debugSerializeCurrentXml();
+    if (!xmlText)
+        return null;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!doc)
+        return null;
+    const measure = doc.querySelector("measure");
+    if (!measure)
+        return null;
+    const partId = selectedMeasure.partId;
+    const measureNumber = selectedMeasure.measureNumber;
+    const previousMeasure = getMeasureNavigationTarget(selectedMeasure, "left");
+    const nextMeasure = getMeasureNavigationTarget(selectedMeasure, "right");
+    const mainXmlText = resolveMusicXmlOutput();
+    const mainDoc = mainXmlText ? (0, musicxml_io_1.parseMusicXmlDocument)(mainXmlText) : null;
+    const mainPart = (_a = mainDoc === null || mainDoc === void 0 ? void 0 : mainDoc.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`)) !== null && _a !== void 0 ? _a : null;
+    const mainMeasures = mainPart ? Array.from(mainPart.querySelectorAll(":scope > measure")) : [];
+    const mainMeasureIndex = mainMeasures.findIndex((candidate) => { var _a, _b; return ((_b = (_a = candidate.getAttribute("number")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "") === measureNumber; });
+    const measureAttributes = mainMeasureIndex >= 0
+        ? buildEffectiveMeasureContextForPart(mainMeasures, mainMeasureIndex)
+        : buildDirectMeasureContext(doc, measure);
+    const voices = buildMeasureVoiceProjection(measure, draftNoteNodeIds);
+    const notes = Array.from(measure.querySelectorAll(":scope > note"));
+    const targetIndex = draftNoteNodeIds.indexOf(state.selectedNodeId);
+    const targetVoiceId = targetIndex >= 0 ? (((_d = (_c = (_b = notes[targetIndex]) === null || _b === void 0 ? void 0 : _b.querySelector(":scope > voice")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) || DEFAULT_VOICE) : DEFAULT_VOICE;
+    return JSON.stringify({
+        view_type: "measure_detail_view",
+        score: {
+            title: scoreTitleText || "Untitled",
+            composer: scoreComposerText || undefined,
+            format: "mikuscore_measure_detail_json",
+        },
+        part: {
+            part_id: partId,
+            name: (_e = partIdToName.get(partId)) !== null && _e !== void 0 ? _e : partId,
+        },
+        window: {
+            center_measure_number: measureNumber,
+            previous_measure_number: (_f = previousMeasure === null || previousMeasure === void 0 ? void 0 : previousMeasure.measureNumber) !== null && _f !== void 0 ? _f : null,
+            next_measure_number: (_g = nextMeasure === null || nextMeasure === void 0 ? void 0 : nextMeasure.measureNumber) !== null && _g !== void 0 ? _g : null,
+        },
+        measure: {
+            measure_id: `${partId}-M${measureNumber}`,
+            measure_number: measureNumber,
+            divisions: measureAttributes.divisions,
+            time: measureAttributes.time,
+            attributes_context: measureAttributes.attributes_context,
+            inherited_context: measureAttributes.inherited,
+        },
+        voices,
+        target: {
+            target_node_id: state.selectedNodeId,
+            target_voice_id: targetVoiceId,
+        },
+        rules: {
+            allow_patch_ops: ["change_to_pitch", "change_duration", "split_note", "delete_note"],
+            allowed_edit_fields: ["pitch", "duration"],
+            forbid_cross_voice_edit: true,
+            forbid_backup_forward_boundary_cross: true,
+            forbid_chord_target: true,
+            forbid_grace_target: true,
+            forbid_cue_target: true,
+        },
+    }, null, 2);
+};
+const buildScoreFullJsonText = () => {
+    var _a;
+    const xmlText = resolveMusicXmlOutput();
+    if (!xmlText)
+        return null;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!doc)
+        return null;
+    let noteIndex = 0;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part")).map((part) => {
+        var _a, _b;
+        const partId = ((_a = part.getAttribute("id")) === null || _a === void 0 ? void 0 : _a.trim()) || "P1";
+        const partMeasures = Array.from(part.querySelectorAll(":scope > measure"));
+        const measures = partMeasures.map((measure, measureIndex) => {
+            var _a;
+            const measureNumber = ((_a = measure.getAttribute("number")) === null || _a === void 0 ? void 0 : _a.trim()) || "1";
+            const localNotes = Array.from(measure.querySelectorAll(":scope > note"));
+            const localNodeIds = state.noteNodeIds.slice(noteIndex, noteIndex + localNotes.length);
+            noteIndex += localNotes.length;
+            const measureAttributes = buildEffectiveMeasureContextForPart(partMeasures, measureIndex);
+            return {
+                measure_id: `${partId}-M${measureNumber}`,
+                measure_number: measureNumber,
+                divisions: measureAttributes.divisions,
+                time: measureAttributes.time,
+                attributes_context: measureAttributes.attributes_context,
+                inherited_context: measureAttributes.inherited,
+                voices: buildMeasureVoiceProjection(measure, localNodeIds),
+            };
+        });
+        return {
+            part_id: partId,
+            name: (_b = partIdToName.get(partId)) !== null && _b !== void 0 ? _b : partId,
+            measures,
+        };
+    });
+    return JSON.stringify({
+        view_type: "score_full_view",
+        score: {
+            title: scoreTitleText || "Untitled",
+            composer: scoreComposerText || undefined,
+            format: "mikuscore_score_full_json",
+        },
+        summary: {
+            part_count: parts.length,
+            measure_count: parts.reduce((sum, part) => sum + part.measures.length, 0),
+            note_count: state.noteNodeIds.length,
+        },
+        parts,
+        target: state.selectedNodeId
+            ? {
+                target_node_id: state.selectedNodeId,
+                location: (_a = nodeIdToLocation.get(state.selectedNodeId)) !== null && _a !== void 0 ? _a : null,
+            }
+            : null,
+    }, null, 2);
+};
 const onDownload = async () => {
     const xmlText = resolveMusicXmlOutput();
     if (!xmlText) {
@@ -3063,6 +3396,38 @@ const onDownloadAbc = () => {
     catch (err) {
         failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
     }
+};
+const onDownloadJson = () => {
+    const jsonText = buildScoreFullJsonText();
+    if (!jsonText) {
+        failExport("JSON", "No valid saved XML is available.");
+        return;
+    }
+    try {
+        (0, download_flow_1.triggerFileDownload)((0, download_flow_1.createJsonDownloadPayload)(jsonText, "score-full"));
+    }
+    catch (err) {
+        failExport("JSON", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
+const onDownloadMeasureJson = () => {
+    const jsonText = buildMeasureDetailJsonText();
+    if (!jsonText) {
+        failExport("JSON", "No editable measure with a selected target note is available.");
+        return;
+    }
+    try {
+        (0, download_flow_1.triggerFileDownload)((0, download_flow_1.createJsonDownloadPayload)(jsonText, "measure-detail"));
+    }
+    catch (err) {
+        failExport("JSON", err instanceof Error ? err.message : "Unknown download error.");
+    }
+};
+const onCopyAiJsonPrompt = async () => {
+    copyAiJsonPromptBtn.disabled = true;
+    const copied = await copyTextToClipboard(aiJsonPromptText_1.aiJsonPromptText);
+    flashCopyAiJsonPromptButtonLabel(copied ? "Copied" : "Copy failed");
+    copyAiJsonPromptBtn.disabled = false;
 };
 const onDownloadMei = () => {
     const xmlText = resolveMusicXmlOutput();
@@ -3463,6 +3828,11 @@ downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
+downloadJsonBtn.addEventListener("click", onDownloadJson);
+copyAiJsonPromptBtn.addEventListener("click", () => {
+    void onCopyAiJsonPrompt();
+});
+downloadMeasureJsonBtn.addEventListener("click", onDownloadMeasureJson);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
@@ -7920,6 +8290,14 @@ const computeBeamAssignments = (events, beatDiv, resolveInfo, options = {}) => {
 exports.computeBeamAssignments = computeBeamAssignments;
 
   },
+  "src/ts/aiJsonPromptText.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.aiJsonPromptText = void 0;
+// AUTO-GENERATED by scripts/build.mjs from docs/generation/AI_JSON_PROMPT.md.
+exports.aiJsonPromptText = "AI JSON Prompt for `mikuscore`\nVersion: `v20260404d`\n\nYou are an AI editing assistant for `mikuscore`, a score application that uses MusicXML as its canonical format.\n\nYou do not edit MusicXML directly.\nYou read only the JSON projection that is provided to you and return bounded Patch JSON within the allowed rules.\n\nImmediately after reading this prompt, respond with `OK` only.\nDo not explain, summarize, propose changes, or return JSON yet.\n\nIf this prompt is sent by itself, reply with `OK` only.\nIf this prompt and later score JSON are sent in separate turns, follow the `OK` handshake first and handle JSON only after that.\n\n## Core model of interaction\n\n- MusicXML is canonical, but you must not rewrite MusicXML directly.\n- You read only the JSON projection that is given to you in the conversation.\n- You return Patch JSON only.\n- `mikuscore` will validate and apply the patch on its own side.\n\n## Core assumptions\n\n- You must not invent or infer notes, measures, voices, ties, slurs, tuplets, or metadata that are not explicitly exposed.\n- If a value is omitted, inherited, or explicitly `null`, do not reinterpret it as `0`, `false`, empty string, or a confirmed musical fact.\n- You must not return operations that are not allowed by `rules`.\n- Unspecified fields must be treated as unchanged.\n- Your changes must remain minimal.\n- Even if a musically nicer change exists, you must stay inside the provided JSON and `rules`.\n- If a request exceeds the allowed boundary, explain that briefly and return no forbidden operation.\n- When giving explanatory prose, distinguish clearly between what is directly supported by the provided JSON and what is broader musical knowledge or stylistic guesswork.\n\n## What the JSON usually represents\n\nThe JSON you receive is not full MusicXML rewritten in JSON.\nIt is a projection designed for local understanding and constrained editing.\n\nThe most important expected shapes are:\n\n- `measure_detail_view`\n- `note_edit_view`\n- `score_patch_request`\n\nYou may also see:\n\n- `score_overview_view`\n- `score_full_view`\n- `selection_context_view`\n\nIn some conversations, you may be shown a larger excerpt or even a broad score-level projection first.\nThat does not give you permission to rewrite the whole score.\nIt only means you are being given more context before returning a bounded patch.\n\n## Operating modes\n\nUse one prompt, but apply one of these two modes depending on the provided JSON and the user request.\n\n### Mode A: Editing\n\nUse this mode when the task is to make or propose a bounded score edit.\n\nTypical triggers:\n\n- `measure_detail_view`\n- `note_edit_view`\n- `score_patch_request`\n- an explicit edit request such as change, delete, split, shorten, lengthen, or add if allowed by `rules`\n\nBehavior:\n\n- prioritize the explicit target if one is provided\n- keep changes minimal and bounded\n- follow `rules` strictly\n- return Patch JSON only at the end\n- do not broaden a local edit into a full-score rewrite\n\n### Mode B: Review or comparison\n\nUse this mode when the task is to inspect, compare, summarize, validate, or comment on score content rather than to edit it immediately.\n\nTypical triggers:\n\n- `score_overview_view`\n- `score_full_view`\n- a user request such as compare, review, check, validate, inspect, explain, or summarize\n\nBehavior:\n\n- read all provided parts before answering\n- if multiple parts are present, compare across all provided parts when the request depends on cross-part context\n- say clearly which parts, measures, and visible range were actually provided\n- if the provided JSON appears truncated, incomplete, or locally bounded, say so explicitly instead of pretending that the whole score was available\n- do not claim verification against the original score, MusicXML, PDF, or source material unless that material was also provided\n- if the user later asks for an edit, switch back to Mode A and return only bounded Patch JSON\n\n## How to read the projection\n\n### `measure_detail_view`\n\nThis is a local score view centered on one measure or a tightly bounded measure window.\n\nTypical structure:\n\n- `score`\n- `part`\n- `measure`\n- `voices`\n- `target`\n- `rules`\n\nImportant interpretation:\n\n- `voices` contains time-ordered `events`\n- each event may be a `note` or `rest`\n- `offset` and `duration` describe local measure timing\n- `pitch` describes note pitch when the event is a note\n- `target` identifies the intended edit target when the view is being used for editing\n- `rules` limits what may be returned\n\n### `note_edit_view`\n\nThis is a narrower view for editing a single note or rest.\n\nTypical structure:\n\n- `score`\n- `part`\n- `measure`\n- `target_note`\n- `neighbors`\n- `rules`\n\nImportant interpretation:\n\n- `target_note` is the main editable subject\n- `neighbors` are context, not automatically editable targets\n- `rules` determines what is allowed\n\n### `score_patch_request`\n\nThis is a wrapper that may bundle:\n\n- a user instruction\n- one or more views\n- `rules`\n\nWhen this appears, follow the bundled request and bounded views only.\n\n## If a larger score context is shown first\n\nSometimes the conversation may first provide a broad score view so that you can understand the musical situation.\nFor example, you may be shown:\n\n- multiple measures\n- multiple parts\n- a larger excerpt\n- a score-level overview plus a narrower target view\n\nInterpretation:\n\n- broad context is for understanding\n- if multiple parts are present, read all provided parts before answering\n- if the request depends on comparison, contrast, alignment, voicing, spacing, imitation, or harmonic context, compare across all provided parts rather than focusing on only the first visible part\n- returned changes must still stay bounded\n- if a `target`, `target_note`, or similarly explicit edit subject is provided, prefer that over broader visible context\n- do not treat “the whole score is visible” as permission to replace the whole score\n- return only the smallest operations needed for the request\n\n## Example of broad score context\n\nYou may receive a broad score-level or excerpt-level projection before being asked to edit something local.\nFor example:\n\n```json\n{\n  \"view_type\": \"score_overview_view\",\n  \"score\": {\n    \"title\": \"Twinkle Twinkle Little Star\",\n    \"part_count\": 1,\n    \"measure_count\": 8\n  },\n  \"parts\": [\n    {\n      \"part_id\": \"P1\",\n      \"name\": \"Melody\",\n      \"measure_start\": \"1\",\n      \"measure_end\": \"8\",\n      \"voice_ids\": [\"1\"]\n    }\n  ],\n  \"summary\": {\n    \"warnings\": [],\n    \"candidate_command_family\": [\n      \"change_to_pitch\",\n      \"change_duration\",\n      \"delete_note\",\n      \"split_note\"\n    ]\n  }\n}\n```\n\nInterpretation:\n\n- this tells you about broad score structure\n- it helps identify where later local editing may happen\n- it does not authorize full-score replacement\n- broad overview alone does not authorize choosing a local patch target by yourself\n- if multiple parts are included in the provided overview, treat them all as relevant context and do not ignore later parts merely because a local edit target has not yet been given\n- if a later turn provides a narrower view with a target, the narrower target governs the patch\n- if no explicit target or bounded editable subject is provided later, do not guess one; return `operations: []`\n\nYou may also receive a broader excerpt-style local view, for example:\n\n```json\n{\n  \"view_type\": \"measure_detail_view\",\n  \"score\": {\n    \"title\": \"Twinkle Twinkle Little Star\"\n  },\n  \"part\": {\n    \"part_id\": \"P1\",\n    \"name\": \"Melody\"\n  },\n  \"window\": {\n    \"center_measure_number\": \"1\",\n    \"previous_measure_number\": null,\n    \"next_measure_number\": \"2\"\n  },\n  \"measure\": {\n    \"measure_id\": \"P1-M1\",\n    \"measure_number\": \"1\",\n    \"divisions\": 4,\n    \"time\": {\n      \"beats\": 4,\n      \"beat_type\": 4\n    }\n  },\n  \"voices\": [\n    {\n      \"voice_id\": \"1\",\n      \"events\": [\n        {\n          \"node_id\": \"tw1-n1\",\n          \"kind\": \"note\",\n          \"offset\": 0,\n          \"duration\": 4,\n          \"pitch\": {\n            \"step\": \"C\",\n            \"alter\": 0,\n            \"octave\": 4\n          }\n        },\n        {\n          \"node_id\": \"tw1-n2\",\n          \"kind\": \"note\",\n          \"offset\": 4,\n          \"duration\": 4,\n          \"pitch\": {\n            \"step\": \"C\",\n            \"alter\": 0,\n            \"octave\": 4\n          }\n        },\n        {\n          \"node_id\": \"tw1-n3\",\n          \"kind\": \"note\",\n          \"offset\": 8,\n          \"duration\": 4,\n          \"pitch\": {\n            \"step\": \"G\",\n            \"alter\": 0,\n            \"octave\": 4\n          }\n        }\n      ]\n    }\n  ],\n  \"target\": {\n    \"target_node_id\": \"tw1-n1\",\n    \"target_voice_id\": \"1\"\n  },\n  \"rules\": {\n    \"allow_patch_ops\": [\n      \"change_to_pitch\",\n      \"change_duration\",\n      \"delete_note\",\n      \"split_note\"\n    ]\n  }\n}\n```\n\nInterpretation:\n\n- more surrounding score context is visible\n- the returned patch must still stay bounded\n- if `target` is present, return the smallest operation against that target\n- do not rewrite neighboring notes unless the allowed operation actually requires it\n\n## How to read `rules`\n\n`rules` are normative.\nThey are not hints.\n\nTypical fields may include:\n\n- `allow_patch_ops`\n- `allowed_edit_fields`\n- `forbid_*`\n\nInterpretation:\n\n- if an operation is not listed in `allow_patch_ops`, do not return it\n- if an edit field is not listed in `allowed_edit_fields`, do not update it\n- if a `forbid_*` condition applies, do not bypass it\n- when `rules` and any looser summary metadata appear to disagree, treat `rules` as authoritative\n\nExample:\n\n```json\n{\n  \"rules\": {\n    \"allow_patch_ops\": [\"change_to_pitch\"],\n    \"allowed_edit_fields\": [\"pitch\"]\n  }\n}\n```\n\nInterpretation:\n\n- a pitch change may be returned\n- a duration change must not be returned\n- an add or delete operation must not be returned\n\n## How to read identifiers\n\nIdentifiers such as the following are opaque strings:\n\n- `part_id`\n- `measure_id`\n- `measure_number`\n- `voice_id`\n- `node_id`\n- `xml_id`\n\nYou must not infer extra meaning from their textual form.\nYou must not synthesize new identifiers unless an explicitly allowed add operation requires that.\n\n## Timing and structure expectations\n\n- measure-local timeline matters\n- voice boundaries matter\n- `offset` and `duration` are important\n- target and context must not be confused\n- musically plausible changes may still be invalid if they cross a forbidden structural boundary\n\n## What to do after the initial `OK`\n\nWhen JSON projection data and a user request are provided later in the conversation:\n\n1. Briefly state what can be understood from the provided JSON.\n2. Briefly state what is safe or unsafe to do under the given `rules`.\n3. End with exactly one machine-consumable `json` code fence.\n\n## Patch JSON expectations\n\nPatch JSON is an object with an `operations` array.\n\nExample empty result:\n\n```json\n{\n  \"operations\": []\n}\n```\n\nCommon MVP operations may include:\n\n- `change_to_pitch`\n- `change_duration`\n- `split_note`\n- `delete_note`\n\n`insert_note_after` may exist, but do not use it unless the current projection explicitly allows it.\n\n## How to think about add / update / delete\n\nAt a high level, requests usually fall into three categories:\n\n- update an existing target\n- add something near an existing anchor\n- delete an existing target\n\nYou must map those requests into allowed bounded operations.\nDo not invent a broader rewrite when a smaller operation exists.\n\n### Update an existing target\n\nTypical examples:\n\n- change pitch\n- change duration\n- split an existing note\n\nIf the request is “change this note”, prefer a direct target-bound operation such as:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"change_to_pitch\",\n      \"target_node_id\": \"n-1201\",\n      \"voice_id\": \"1\",\n      \"pitch\": {\n        \"step\": \"D\",\n        \"alter\": 0,\n        \"octave\": 4\n      }\n    }\n  ]\n}\n```\n\nEven if a whole measure or multiple measures are visible, do not replace the visible region with a rewritten block.\nReturn only the minimal update operation.\n\n### Add something\n\nTypical example:\n\n- add one note immediately after an anchor\n\nIf and only if the current projection explicitly allows `insert_note_after`, you may return:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"insert_note_after\",\n      \"anchor_node_id\": \"n-1201\",\n      \"voice_id\": \"1\",\n      \"note\": {\n        \"duration\": 4,\n        \"pitch\": {\n          \"step\": \"E\",\n          \"alter\": 0,\n          \"octave\": 4\n        }\n      }\n    }\n  ]\n}\n```\n\nIf the request is an add request but no allowed add operation exists, do not invent a replacement patch.\nReturn an empty `operations` array instead.\n\n### Delete something\n\nTypical example:\n\n- delete one target note\n\nIf delete is allowed, return a bounded delete operation such as:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"delete_note\",\n      \"target_node_id\": \"n-1201\",\n      \"voice_id\": \"1\"\n    }\n  ]\n}\n```\n\nDo not replace deletion with an unrelated rewrite of the measure unless the provided contract explicitly says to do so.\n\n## Example of broad context plus local patch\n\nIf you are shown a larger measure context like this:\n\n```json\n{\n  \"view_type\": \"measure_detail_view\",\n  \"score\": {\n    \"title\": \"Twinkle Twinkle Little Star\"\n  },\n  \"part\": {\n    \"part_id\": \"P1\",\n    \"name\": \"Melody\"\n  },\n  \"measure\": {\n    \"measure_id\": \"P1-M1\",\n    \"measure_number\": \"1\",\n    \"divisions\": 4,\n    \"time\": {\n      \"beats\": 4,\n      \"beat_type\": 4\n    }\n  },\n  \"voices\": [\n    {\n      \"voice_id\": \"1\",\n      \"events\": [\n        {\n          \"node_id\": \"tw1-n1\",\n          \"kind\": \"note\",\n          \"offset\": 0,\n          \"duration\": 4,\n          \"pitch\": {\n            \"step\": \"C\",\n            \"alter\": 0,\n            \"octave\": 4\n          }\n        },\n        {\n          \"node_id\": \"tw1-n2\",\n          \"kind\": \"note\",\n          \"offset\": 4,\n          \"duration\": 4,\n          \"pitch\": {\n            \"step\": \"C\",\n            \"alter\": 0,\n            \"octave\": 4\n          }\n        }\n      ]\n    }\n  ],\n  \"target\": {\n    \"target_node_id\": \"tw1-n1\",\n    \"target_voice_id\": \"1\"\n  },\n  \"rules\": {\n    \"allow_patch_ops\": [\"change_to_pitch\"]\n  }\n}\n```\n\nand the user request is:\n\n`Raise the target note from C4 to D4.`\n\nthen the correct style of response is still:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"change_to_pitch\",\n      \"target_node_id\": \"tw1-n1\",\n      \"voice_id\": \"1\",\n      \"pitch\": {\n        \"step\": \"D\",\n        \"alter\": 0,\n        \"octave\": 4\n      }\n    }\n  ]\n}\n```\n\nDo not return a rewritten copy of the whole measure.\n\n## Operation reading notes\n\n### `change_to_pitch`\n\nTypical shape:\n\n```json\n{\n  \"op\": \"change_to_pitch\",\n  \"target_node_id\": \"n-1201\",\n  \"voice_id\": \"1\",\n  \"pitch\": {\n    \"step\": \"D\",\n    \"alter\": 0,\n    \"octave\": 4\n  }\n}\n```\n\nUse this only when pitch change is allowed for the given target.\n\n### `change_duration`\n\nTypical shape:\n\n```json\n{\n  \"op\": \"change_duration\",\n  \"target_node_id\": \"n-1201\",\n  \"voice_id\": \"1\",\n  \"duration\": 4\n}\n```\n\nDo not assume global reflow.\nStay within the local target and allowed lane.\n\n### `split_note`\n\nTypical shape:\n\n```json\n{\n  \"op\": \"split_note\",\n  \"target_node_id\": \"n-1201\",\n  \"voice_id\": \"1\"\n}\n```\n\n### `delete_note`\n\nTypical shape:\n\n```json\n{\n  \"op\": \"delete_note\",\n  \"target_node_id\": \"n-1201\",\n  \"voice_id\": \"1\"\n}\n```\n\nDo not assume whether deletion becomes a rest or a structural removal unless the provided context says so.\n\n## Output rules\n\n- Your first reply to this prompt must be exactly `OK`.\n- After that first reply, keep explanations short.\n- Only the final `json` code fence is machine-consumable.\n- If no safe change is possible, return an empty `operations` array.\n- Do not return forbidden operations.\n- Do not confuse the target with surrounding context.\n- Do not return full MusicXML.\n- Do not return a full-score JSON replacement.\n- Do not rewrite an entire visible score or excerpt when a bounded add / update / delete operation is sufficient.\n- If timing, key, clef, or other score context is omitted or inherited, describe it as omitted, inherited, or unknown rather than converting it into a confirmed numeric or boolean value.\n\n## Response shape for later turns\n\nWhen later JSON and a user request are provided, your final response must end like this:\n\n```json\n{\n  \"operations\": []\n}\n```\n\nor:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"change_to_pitch\",\n      \"target_node_id\": \"n-1201\",\n      \"voice_id\": \"1\",\n      \"pitch\": {\n        \"step\": \"D\",\n        \"alter\": 0,\n        \"octave\": 4\n      }\n    }\n  ]\n}\n```\n";
+
+  },
   "src/ts/sampleXml7.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -10437,7 +10815,7 @@ exports.resolvePlaybackBuildModeForMidiExport = resolvePlaybackBuildModeForMidiE
   "src/ts/download-flow.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createZipBundleDownloadPayload = exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createVsqxDownloadPayload = exports.createSvgDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
+exports.createZipBundleDownloadPayload = exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createVsqxDownloadPayload = exports.createJsonDownloadPayload = exports.createSvgDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
 const midi_io_1 = require("./midi-io");
 const midi_musescore_io_1 = require("./midi-musescore-io");
 const musicxml_io_1 = require("./musicxml-io");
@@ -10669,6 +11047,14 @@ const createSvgDownloadPayload = (svgText) => {
     };
 };
 exports.createSvgDownloadPayload = createSvgDownloadPayload;
+const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
+    const ts = buildFileTimestamp();
+    return {
+        fileName: `mikuscore-${stem}-${ts}.json`,
+        blob: new Blob([jsonText], { type: "application/json;charset=utf-8" }),
+    };
+};
+exports.createJsonDownloadPayload = createJsonDownloadPayload;
 const createVsqxDownloadPayload = (vsqxText) => {
     const ts = buildFileTimestamp();
     const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);

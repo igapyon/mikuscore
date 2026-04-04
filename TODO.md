@@ -131,6 +131,21 @@
   - Note (2026-03-08): current measurements suggest `normalizeImportedMusicXmlText(...)` and render-side DOM clone / serialize preparation are larger load costs than representative small MIDI->MusicXML conversion.
   - Separate "pure compute" candidates (possible WASM target) from DOM/render pipeline costs (likely better solved by reducing clone/serialize work or changing render/update strategy).
   - Re-measure with larger local MIDI / MuseScore fixtures before making any WASM decision for load paths.
+- [ ] Investigation: define an AI-facing score representation before finalizing AI patch/spec work.
+  - First question: what score representation is easiest for a generative model to understand reliably?
+  - Compare candidate shapes: full MusicXML, notation-layout-like JSON, measure-local timeline/event JSON, and target-note-centered edit JSON.
+  - Prefer representations that preserve edit safety and local musical semantics without exposing the whole score.
+  - For now, focus the practical design and experiments on `measure_detail_view` first.
+  - Clarify whether `selection_context_view` should remain separate from `note_edit_view`, or be merged.
+  - Defer broader work on `note_edit_view`, `score_overview_view`, and `score_patch_request` until the `measure_detail_view` shape is stable enough.
+  - Define the smallest practical projection for MVP AI editing before expanding patch operations.
+  - Working criteria for "AI-friendly JSON": high locality, time-ordered readability, clear part/measure/voice boundaries, clean separation between editable target and read-only context, low incentive for guesswork, easy co-location of `rules`, and natural mapping into bounded patch operations.
+  - Validate candidate JSON shapes by actually handing representative patterns to a generative model, not only by desk review.
+  - Prepare a small benchmark set: simple monophonic measure, rest-containing measure, multi-voice measure, tie case, slur case, blocked target case (`chord` / `grace` / `cue`), and duration-risk case.
+  - Record failure modes: field misread, unsafe inference, forbidden op return, target/context confusion, oversized patch.
+  - Latest experiment note: another generative model could read tonal and melodic structure from the projection, but also started to over-read missing context.
+  - Add explicit checks that omitted or inherited values are not misread as `0`, `false`, empty, or otherwise confirmed facts.
+  - Add explicit checks that explanatory prose separates direct JSON evidence from broader musical knowledge or stylistic guesswork.
 - [ ] Decide whether to reintroduce `insert_note_after` in UI.
 - [ ] Reconfirm in-session `xml:id` strategy and operation rules.
 - [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
@@ -516,6 +531,18 @@
   - 安定再生優先として、極短音や近接重複音の間引き/マージを任意適用できるようにする。
   - 軽量モードでは装飾音（trill/grace 等）を省略可能にし、UIトグルと方針を明示する。
   - 大規模譜面向けに「音質優先/安定優先」プリセットと既定値を定義する。
+- [ ] 検討事項: AI 向け patch/spec を固める前に、譜面を AI にどう表現するかを先に定義する。
+  - 最初の論点は「生成AIにとって、どの譜面表現が最も安定して理解しやすいか」。
+  - 候補として、full MusicXML、記譜見た目寄り JSON、小節ローカル timeline/event JSON、対象 note 中心 edit JSON を比較する。
+  - 全譜面を見せずに、局所的な音楽意味と編集安全性を両立できる表現を優先する。
+  - 当面の実設計と実験は `measure_detail_view` を最優先で進める。
+  - `selection_context_view` を `note_edit_view` と分離維持するか、統合するかを整理する。
+  - `note_edit_view`、`score_overview_view`、`score_patch_request` の詰めは、`measure_detail_view` の形が十分安定してから後続で扱う。
+  - MVP の AI 編集で使う最小 projection を先に確定し、その後で patch operation を拡張する。
+  - 「生成AIに理解しやすい JSON」の条件として、局所性の高さ、時系列の読みやすさ、part/measure/voice 境界の明確さ、編集対象と文脈の分離、推測を誘発しにくいこと、`rules` を同居しやすいこと、bounded patch operation に自然接続できることを基準にする。
+  - 机上レビューだけで確定せず、代表パターンを実際に生成AIへ渡して読解・返却挙動を検証する。
+  - 最初の検証セットとして、単旋律小節、rest 含み小節、複数 voice 小節、tie ケース、slur ケース、編集禁止対象（`chord` / `grace` / `cue`）、duration 変更危険ケースを用意する。
+  - 誤読観点として、field の読み違い、危険な推測、禁止 op の返却、編集対象と文脈の混同、変更範囲の過大化を記録する。
 - [ ] `insert_note_after` の UI 再導入可否を仕様確定。
 - [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
 - [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。

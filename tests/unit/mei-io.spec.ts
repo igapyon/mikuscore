@@ -3671,11 +3671,11 @@ describe("MEI export", () => {
   });
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei",
+    "tests/local-data/mei-official/beam-grace/source-listing-132-snippet.mei",
     "imports official MEI fixture (CMN Listing 132 excerpt) with grace pitch/timing semantics",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beam-grace/source-listing-132-snippet.mei"),
       "utf8"
     );
 
@@ -3722,11 +3722,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei",
+    "tests/local-data/mei-official/beam-secondary/source-listing-142-snippet.mei",
     "imports official MEI fixture (CMN Listing 142 excerpt) with breaksec secondary-beam split semantics",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beam-secondary/source-listing-142-snippet.mei"),
       "utf8"
     );
 
@@ -3761,11 +3761,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "tests/local-data/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
     "imports Bach Brandenburg fixture and preserves first-measure key signature from keysig",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
+      resolve(process.cwd(), "tests", "local-data", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3785,11 +3785,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "tests/local-data/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
     "imports Bach Brandenburg fixture and keeps viola clef as C3 on part 6",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
+      resolve(process.cwd(), "tests", "local-data", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3807,11 +3807,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei",
+    "tests/local-data/mei-official/beamspan-min/source-listing-147-inspired.mei",
     "imports beamSpan minimal fixture and keeps beam continuity on listed notes",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beamspan-min/source-listing-147-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3831,11 +3831,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei",
+    "tests/local-data/mei-official/tie-crossbar-min/source-listing-148-inspired.mei",
     "imports tie-crossbar minimal fixture and keeps tie start/stop across measures",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/tie-crossbar-min/source-listing-148-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3853,11 +3853,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei",
+    "tests/local-data/mei-official/slur-min/source-listing-152-inspired.mei",
     "imports slur minimal fixture and maps i/m/t slur markers",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/slur-min/source-listing-152-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3876,11 +3876,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei",
+    "tests/local-data/mei-official/hairpin-min/source-hairpin-inspired.mei",
     "imports hairpin minimal fixture and maps startid/endid to wedge start/stop",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/hairpin-min/source-hairpin-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3940,11 +3940,11 @@ describe("MEI export", () => {
   });
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei",
+    "tests/local-data/mei-official/dynam-min/source-dynam-inspired.mei",
     "imports dynam minimal fixture and maps MEI dynam text to MusicXML dynamics mark",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/dynam-min/source-dynam-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3958,11 +3958,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei",
+    "tests/local-data/mei-official/tuplet-min/source-tuplet-inspired.mei",
     "imports tuplet minimal fixture and keeps 3:2 time-modification on notes",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/tuplet-min/source-tuplet-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3979,11 +3979,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei",
+    "tests/local-data/mei-official/fermata-min/source-fermata-inspired.mei",
     "imports fermata minimal fixture and maps to MusicXML fermata notation",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/fermata-min/source-fermata-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3996,11 +3996,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei",
+    "tests/local-data/mei-official/gliss-min/source-gliss-inspired.mei",
     "imports gliss minimal fixture and maps to MusicXML glissando start/stop",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/gliss-min/source-gliss-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);

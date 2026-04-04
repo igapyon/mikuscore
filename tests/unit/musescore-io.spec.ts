@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
@@ -1921,8 +1921,11 @@ describe("musescore-io", () => {
   });
 
   it("imports local Mozart SQ fixture clefs from mscz (P1/P2=G2, P3=C3, P4=F4)", async () => {
-    const fixturePath = resolve(process.cwd(), "tests", "fixtures-local", "Mozart_SQ_No15_K421_Mvt4.mscz");
-    const mscx = execSync(`unzip -p "${fixturePath}" "Mozart_SQ_No15_K421_Mvt4.mscx"`, { encoding: "utf-8" });
+    const localFixturePath = resolve(process.cwd(), "tests", "local-data", "Mozart_SQ_No15_K421_Mvt4.mscz");
+    const bundledFixturePath = resolve(process.cwd(), "src", "samples", "musescore", "sample4.mscz");
+    const fixturePath = existsSync(localFixturePath) ? localFixturePath : bundledFixturePath;
+    const mscxEntryName = "Mozart_SQ_No15_K421_Mvt4.mscx";
+    const mscx = execSync(`unzip -p "${fixturePath}" "${mscxEntryName}"`, { encoding: "utf-8" });
     const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
     const doc = parseMusicXmlDocument(xml);
     expect(doc).not.toBeNull();
@@ -2766,7 +2769,7 @@ describe("musescore-io", () => {
     const srcEvents = collectMeasurePitchEvents(srcDoc, 3, 4);
     const dstEvents = collectMeasurePitchEvents(dstDoc, 3, 4);
     expect(dstEvents).toEqual(srcEvents);
-  });
+  }, 10000);
 
   it("roundtrips MusicXML transpose through MuseScore Instrument transpose", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>

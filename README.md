@@ -59,6 +59,7 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
   - `docs/spec/MIDI_IO.md`
   - `docs/spec/ABC_IO.md`
   - `docs/spec/TEST_MATRIX.md`
+  - `docs/spec/AI_JSON_SPEC.md` (currently experimental, but this English document is the current source for the AI-facing JSON projection / patch contract)
 
 Debugging note:
 - For import-side incident analysis, check `docs/spec/MIDI_IO.md` and `docs/spec/ABC_IO.md` sections about `attributes > miscellaneous > miscellaneous-field` (`mks:*` debug fields).
@@ -119,6 +120,7 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
   - `docs/spec/MIDI_IO.md`
   - `docs/spec/ABC_IO.md`
   - `docs/spec/TEST_MATRIX.md`
+  - `docs/spec/AI_JSON_SPEC.md`（現在は実験的だが、生成AI向け JSON projection / patch 契約の現行正本はこの英語文書）
 
 デバッグメモ:
 - インポート時の事象解析は `docs/spec/MIDI_IO.md` と `docs/spec/ABC_IO.md` の `attributes > miscellaneous > miscellaneous-field`（`mks:*` デバッグ項目）を参照してください。

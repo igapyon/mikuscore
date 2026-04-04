@@ -284,6 +284,14 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
   };
 };
 
+export const createJsonDownloadPayload = (jsonText: string, stem = "measure-detail"): DownloadFilePayload => {
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${stem}-${ts}.json`,
+    blob: new Blob([jsonText], { type: "application/json;charset=utf-8" }),
+  };
+};
+
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
   const ts = buildFileTimestamp();
   const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
