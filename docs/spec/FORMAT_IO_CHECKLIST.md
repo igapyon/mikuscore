@@ -123,6 +123,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - event addressing key (`voice + measure + event`)
   - fallback when hint is absent or invalid
   - safety against conflicts with existing source comments
+- [ ] If such hints are `mikuscore`-specific (for example `%@mks ...`), document them explicitly as `mikuscore` extension metadata rather than as standard format syntax.
 - [ ] Keep namespace separation strict (`mks:src:*` vs `mks:meta:*` vs `mks:diag:*` vs `mks:dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
 
 ### LilyPond Note (Current `mks` usage)

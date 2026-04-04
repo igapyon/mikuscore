@@ -5,10 +5,17 @@ This document defines the grammar baseline for the project ABC parser.
 
 It is based on ABC 2.1 and includes currently supported compatibility behavior observed in real-world `abcjs` / `abcm2ps` style inputs.
 
+The parser should be understood in three layers:
+
+- standard ABC surface
+- compatibility behavior for real-world ABC variance
+- `mikuscore` extension metadata comments (`%@mks ...`) used for roundtrip support
+
 ## Scope
 - Header: `X,T,C,M,L,K,V` and `%%score`
 - Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets
-- Compatibility extensions: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`), mikuscore `%@mks ...` metadata comments
+- Compatibility behavior: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
+- `mikuscore` extension metadata comments: `%@mks ...`
 
 ## EBNF
 
@@ -81,9 +88,13 @@ digit            = "0".."9" ;
 - Treat `x` rest as `z` rest.
 - Support chords (`[CEG]`, `[A,,CE]`).
 - Support tuplets (`(3abc`, `(5:4:5abcde`) with duration scaling.
-- Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
 - Ignore `:` in barline variants (`:|`, `|:`, `||`) without parse failure.
 - Ignore standalone `,` / `'` for compatibility.
+
+## `mikuscore` Extension Notes
+- Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
+- These comments are not part of the standard ABC musical surface.
+- They are `mikuscore`-specific extension metadata used for restoration and roundtrip support.
 
 ## Growth Policy
 - Parsing robustness first (warning-first policy).
@@ -101,5 +112,6 @@ digit            = "0".."9" ;
 ### 要点
 - ABC 2.1 を基準に、実データ互換（`abcjs` / `abcm2ps` 系）を取り込みます。
 - EBNF は English セクションを正本として扱います。
-- 互換拡張（`M:C`, `M:C|`, `%@mks`, standalone `,` / `'` など）を許容します。
+- 互換挙動（`M:C`, `M:C|`, standalone `,` / `'` など）を許容します。
+- `%@mks` は `mikuscore` 独自拡張コメントとして扱います。
 - 文法・意味解釈の拡張時は回帰テストを追加します。

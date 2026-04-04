@@ -8,12 +8,13 @@ Use `docs/AI_INTERACTION_POLICY.md` for the higher-level format-routing policy (
 
 ## What Each File Is For
 
-- `AI_JSON_PROMPT.md`
-  Prompt file to send to another generative model before starting bounded partial AI JSON interaction.
+- `AI_ABC_JSON_WORKFLOW_PROMPT.md`
+  Prompt file to send to another generative model before starting the current `ABC` + `JSON (Partial)` workflow.
   The intended flow is:
   1. send this file first
   2. confirm the model replies with `OK`
-  3. continue the conversation with projection JSON and user requests
+  3. continue with `ABC` for broad score context when needed
+  4. continue with bounded projection JSON and user requests when local patch/review work is needed
 
 - `examples/`
   Example projection JSON files that can be pasted into AI JSON conversations.
@@ -35,11 +36,12 @@ For AI JSON interaction experiments:
 
 1. Read `docs/spec/AI_JSON_SPEC.md` if you need the current contract/design intent.
 2. Confirm that the task is actually a partial JSON task, not a whole-score/new-score task that should go through ABC.
-3. Send `AI_JSON_PROMPT.md` to the target model first.
+3. Send `AI_ABC_JSON_WORKFLOW_PROMPT.md` to the target model first.
 4. Wait for `OK`.
-5. Paste one of the example JSON files.
-6. Add the user request.
-7. Observe whether the model reads the JSON correctly and returns bounded patch JSON.
+5. If the task needs broad score communication, provide `ABC`.
+6. If the task needs bounded local patch/review work, provide one of the example JSON files.
+7. Add the user request.
+8. Observe whether the model uses `ABC` as broad context and returns bounded patch JSON only when the JSON contract supports it.
 
 ## Notes
 

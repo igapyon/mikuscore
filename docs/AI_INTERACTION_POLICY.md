@@ -5,7 +5,7 @@ This document records the current `mikuscore` policy for interacting with genera
 It complements:
 
 - `docs/spec/AI_JSON_SPEC.md`
-- `docs/generation/AI_JSON_PROMPT.md`
+- `docs/generation/AI_ABC_JSON_WORKFLOW_PROMPT.md`
 
 ## Current adopted policy
 

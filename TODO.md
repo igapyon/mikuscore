@@ -37,7 +37,7 @@
   - Current session root was not `mikuscore`, which caused awkward sandbox/build behavior.
   - When resuming in a `mikuscore`-root session:
     - review the current markdown/spec updates
-    - run `npm run build` so `docs/generation/AI_JSON_PROMPT.md` changes are reflected into generated artifacts such as `src/ts/aiJsonPromptText.ts`, `src/js/main.js`, and `mikuscore.html`
+    - run `npm run build` so `docs/generation/AI_ABC_JSON_WORKFLOW_PROMPT.md` changes are reflected into generated artifacts such as `src/ts/aiJsonPromptText.ts`, `src/js/main.js`, and `mikuscore.html`
     - verify there is no remaining wording that implies full-score JSON handoff
 
 ## English

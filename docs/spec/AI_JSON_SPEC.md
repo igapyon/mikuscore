@@ -1,4 +1,4 @@
-# mikuscore AI JSON Spec `v20260404e`
+# mikuscore AI JSON Spec `v20260404f`
 
 This document defines the experimental AI-facing JSON interface for `mikuscore`.
 
@@ -8,6 +8,7 @@ This document is a specification and design reference. It is not the runtime pro
 
 This spec covers the bounded partial JSON contract only.
 It does not define the preferred whole-score handoff format for generative models.
+It also does not replace the current mixed operational workflow where `ABC` may be used for broad score context and `JSON (Partial)` may be used for bounded local patch work.
 
 ## Current Positioning
 
@@ -19,6 +20,7 @@ It does not define the preferred whole-score handoff format for generative model
 - the AI-facing interface must not require the model to read or rewrite full MusicXML directly
 
 For the broader operational policy, see `docs/AI_INTERACTION_POLICY.md`.
+For the current operational prompt used in the mixed `ABC` + `JSON (Partial)` workflow, see `docs/generation/AI_ABC_JSON_WORKFLOW_PROMPT.md`.
 
 ## Design Intent
 
@@ -27,6 +29,7 @@ This spec is designed around three priorities:
 - bounded patch-based editing that does not break the MusicXML preservation policy
 - purpose-specific projection JSON that generative models can read reliably
 - a clear separation between human explanation text and machine-applied JSON
+- a clean division between broad-score context handoff (`ABC`) and bounded local patch authority (`JSON (Partial)`)
 
 ## Core Principle
 
@@ -40,6 +43,10 @@ Instead:
 - `mikuscore` validates and applies that patch through its own mutation authority
 
 This extends the existing architectural rule that UI and external layers must not mutate the score DOM directly.
+
+In the current mixed workflow, `ABC` may also be supplied as broad score context.
+That broad context does not expand local edit authority by itself.
+When bounded patch output is required, the JSON projection and its `rules` remain authoritative.
 
 ## Current Implementation Baseline
 
@@ -78,6 +85,7 @@ Therefore this AI JSON spec distinguishes:
 - missing information must not be guessed
 - unspecified fields are treated as unchanged
 - the AI must stay within the provided projection and `rules`
+- if `ABC` and bounded JSON are both provided, `ABC` may inform broad musical understanding, but bounded JSON and its `rules` govern editable scope and patch output
 
 ## Critical Policy
 
@@ -90,6 +98,7 @@ Therefore this AI JSON spec distinguishes:
 - if musical meaning is unclear, the AI should prefer minimal change or no change
 - if a request exceeds the allowed edit boundary, the AI may explain the constraint but must not return a forbidden operation
 - the AI must not bypass `rules`
+- broad score context must not be mistaken for patch authority
 
 ## Projection JSON Families
 
@@ -106,6 +115,7 @@ At the current MVP stage, `measure_detail_view` and `note_edit_view` are the pri
 The preferred operational JSON path is still partial/local, not whole-score.
 The first four are context projections for reading and edit judgment.
 `score_patch_request` is a wrapper that bundles a user request with bounded context.
+In current operation, `score_overview_view` may coexist with `ABC`, but neither one overrides the bounded authority expressed by local JSON plus `rules`.
 
 ## Projection Overview
 
@@ -155,6 +165,7 @@ Position:
 
 - auxiliary / future-facing view
 - not the primary operational handoff for current generative-model interaction
+- may complement broad `ABC` context, but is not itself a license for full-score rewrite
 - not required at the start of the MVP AI editing flow
 
 Typical contents:
@@ -192,6 +203,7 @@ Purpose:
 
 - package a user request together with bounded views
 - make the patch contract explicit for the AI
+- provide the bounded authority layer when broad `ABC` context may also exist elsewhere in the interaction
 
 Typical contents:
 
@@ -206,6 +218,9 @@ Using JSON is not sufficient by itself.
 The real question is what kind of JSON a generative model can read reliably while minimizing unsafe inference.
 
 At minimum, `mikuscore` should prefer JSON that satisfies the following conditions.
+
+In the current mixed workflow, these conditions apply specifically to the bounded JSON layer.
+They do not imply that whole-score context should also be forced into JSON when `ABC` is the more practical broad handoff format.
 
 ### 1. High locality
 

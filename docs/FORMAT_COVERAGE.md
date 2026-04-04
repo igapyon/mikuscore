@@ -14,7 +14,7 @@
 | MuseScore (`.mscz`) | import/export | Supported | Focus on reliable conversion and parity tests |
 | MIDI (`.mid`) | import/export | Supported | Quantization/notation reconstruction has expected limits |
 | VSQX | import/export | Supported via vendored integration | Uses `utaformatix3-ts-plus` |
-| ABC | import/export | Experimental | Coverage and edge-case handling are evolving |
+| ABC | import/export | Experimental | Coverage and edge-case handling are evolving; implementation is compatibility-oriented and may emit/accept `mikuscore` extension metadata comments such as `%@mks ...` for roundtrip support |
 | MEI | import/export | Experimental | Compatibility work tracked with reference samples |
 | LilyPond (`.ly`) | import/export | Experimental | Conversion coverage is limited |
 
