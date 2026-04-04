@@ -71,7 +71,7 @@
 
 - 手本付き変換比較（Reference-guided parity test）を任意で実施できる。
 - 例: `source.mscx` と MuseScore公式 `reference.musicxml` を比較して、mikuscore 変換結果の差分を意味ベースで分類する。
-- 実データがライセンス上コミット不可の場合は `tests/fixtures-local/` 配下で扱う。
+- 実データがライセンス上コミット不可の場合は `tests/local-data/` 配下で扱う。
 - 詳細方針は `docs/spec/MUSESCORE_EXPORT_PARITY_TEST.md` を参照する。
 
 ## 6. 禁止事項（本運用）

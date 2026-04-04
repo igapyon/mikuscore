@@ -74,7 +74,7 @@
 
 ## 当面の運用（CI未導入・repo外）
 - ライセンスや再配布条件が未確定な間は、実曲fixtureをリポジトリに置かない。
-- 比較データは Git 非管理ディレクトリで管理する（例: `tests/fixtures-local/roundtrip/musescore/` または `~/mikuscore-private-fixtures/`）。
+- 比較データは Git 非管理ディレクトリで管理する（例: `tests/local-data/roundtrip/musescore/` または `~/mikuscore-private-fixtures/`）。
 - 当面はローカル実行で次を行う。
   1. `MuseScore -> candidate_from_musescore.musicxml`
   2. `MIDI -> candidate_from_midi.musicxml`
@@ -90,7 +90,7 @@
 
 ### ローカル実行例（Git非管理 fixture）
 
-- 例: `tests/fixtures-local/roundtrip/musescore/paganini/` に `source.mscx` と `reference.musicxml` を置く。
+- 例: `tests/local-data/roundtrip/musescore/paganini/` に `source.mscx` と `reference.musicxml` を置く。
 - 実行コマンド:
   - `npm run test:all -- tests/spot/local-musescore-reference-parity.spot.spec.ts`
   - `npm run test:all -- tests/spot/local-musicxml-reference-to-musescore.spot.spec.ts`
