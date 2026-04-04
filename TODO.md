@@ -1,5 +1,45 @@
 # TODO
 
+## Resume Note (2026-04-04)
+
+- [ ] Resume output-format UI cleanup and confirm the new ABC/JSON policy is reflected consistently.
+  - Current decision:
+    - Full-score handoff to generative AI: use `ABC`
+    - New score generation by generative AI: use `ABC`
+    - Partial inspection / patch exchange with generative AI: use `JSON (Partial)`
+    - Canonical source remains `MusicXML`
+  - Already changed in working tree:
+    - Removed full `JSON` output button from Output UI
+    - Renamed `JSON (Measure)` to `JSON (Partial)`
+    - Split Output actions into two rows so AI/partial JSON actions are separated from full export formats
+    - Rebuilt generated files (`mikuscore.html`, `src/js/main.js`)
+  - Next checks when resuming:
+    - Verify the two-row Output layout visually on desktop and mobile
+    - Reconfirm whether `AI Prompt` label should stay as-is or be renamed to clarify ABC/JSON roles
+    - Check docs/help text for any remaining wording that still implies full-score JSON export
+    - Decide whether any dead code around full-score JSON projection/download should be removed beyond the current UI/export path cleanup
+
+- [ ] Record and maintain the MCP-oriented goal for AI interaction routing.
+  - Current transition-phase rule:
+    - canonical source: `MusicXML`
+    - whole-score AI handoff: `ABC`
+    - new-score AI generation: `ABC`
+    - partial inspection / patch exchange: `JSON (Partial)`
+  - MCP-oriented goal:
+    - the human should mostly express intent, not choose format manually
+    - the tool layer should route whole-score tasks to `ABC`
+    - the tool layer should route bounded local edit/review tasks to `JSON (Partial)`
+    - `MusicXML` should stay canonical underneath
+  - Transition constraint:
+    - until MCP-style mediation is common enough, docs and some UI still need to expose the format split explicitly
+
+- [ ] Resume this work from a `mikuscore`-root session, not from another repo workspace.
+  - Current session root was not `mikuscore`, which caused awkward sandbox/build behavior.
+  - When resuming in a `mikuscore`-root session:
+    - review the current markdown/spec updates
+    - run `npm run build` so `docs/generation/AI_JSON_PROMPT.md` changes are reflected into generated artifacts such as `src/ts/aiJsonPromptText.ts`, `src/js/main.js`, and `mikuscore.html`
+    - verify there is no remaining wording that implies full-score JSON handoff
+
 ## English
 ### Current Status (2026-02)
 

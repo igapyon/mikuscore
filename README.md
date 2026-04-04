@@ -53,6 +53,7 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
   - `docs/CONVERSION_PRINCIPLES.md`
   - `docs/FORMAT_COVERAGE.md`
   - `docs/QUALITY.md`
+  - `docs/AI_INTERACTION_POLICY.md`
 - Specification docs (`docs/spec/*`) are normative implementation specs:
   - `docs/spec/SPEC.md`
   - `docs/spec/ARCHITECTURE.md`
@@ -62,6 +63,13 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
   - `docs/spec/ABC_IO.md`
   - `docs/spec/TEST_MATRIX.md`
   - `docs/spec/AI_JSON_SPEC.md` (currently experimental, but this English document is the current source for the AI-facing JSON projection / patch contract)
+
+### AI interaction policy (transition phase)
+- Canonical score source remains MusicXML.
+- For generative-AI interaction, full-score handoff and new-score generation are currently centered on ABC.
+- JSON is currently reserved for bounded partial inspection and patch exchange (`JSON (Partial)`), not full-score handoff.
+- This is an intentional transition-phase design until MCP-style tool mediation becomes common enough to hide most format routing from the human user.
+- See `docs/AI_INTERACTION_POLICY.md` for the operational policy and `docs/spec/AI_JSON_SPEC.md` for the bounded JSON contract.
 
 Debugging note:
 - For import-side incident analysis, check `docs/spec/MIDI_IO.md` and `docs/spec/ABC_IO.md` sections about `attributes > miscellaneous > miscellaneous-field` (`mks:*` debug fields).
@@ -114,6 +122,7 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
   - `docs/CONVERSION_PRINCIPLES.md`
   - `docs/FORMAT_COVERAGE.md`
   - `docs/QUALITY.md`
+  - `docs/AI_INTERACTION_POLICY.md`
 - 仕様文書（`docs/spec/*`）は実装規範:
   - `docs/spec/SPEC.md`
   - `docs/spec/ARCHITECTURE.md`
@@ -123,6 +132,13 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
   - `docs/spec/ABC_IO.md`
   - `docs/spec/TEST_MATRIX.md`
   - `docs/spec/AI_JSON_SPEC.md`（現在は実験的だが、生成AI向け JSON projection / patch 契約の現行正本はこの英語文書）
+
+### 生成AI 連携方針（過渡期）
+- 正本は引き続き MusicXML です。
+- 生成AI とのやり取りでは、全体の受け渡しと新規譜面生成は現在 ABC を中心にします。
+- JSON は全体受け渡しには使わず、部分確認と差分伝達（`JSON (Partial)`）に限定します。
+- これは MCP 的なツール仲介が一般化するまでの過渡期設計です。
+- 運用方針は `docs/AI_INTERACTION_POLICY.md`、部分 JSON 契約は `docs/spec/AI_JSON_SPEC.md` を参照してください。
 
 デバッグメモ:
 - インポート時の事象解析は `docs/spec/MIDI_IO.md` と `docs/spec/ABC_IO.md` の `attributes > miscellaneous > miscellaneous-field`（`mks:*` デバッグ項目）を参照してください。

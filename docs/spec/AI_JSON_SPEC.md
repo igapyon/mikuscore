@@ -1,4 +1,4 @@
-# mikuscore AI JSON Spec `v20260404b`
+# mikuscore AI JSON Spec `v20260404e`
 
 This document defines the experimental AI-facing JSON interface for `mikuscore`.
 
@@ -6,12 +6,19 @@ This document defines the experimental AI-facing JSON interface for `mikuscore`.
 
 This document is a specification and design reference. It is not the runtime prompt that should be sent to an AI model verbatim.
 
+This spec covers the bounded partial JSON contract only.
+It does not define the preferred whole-score handoff format for generative models.
+
 ## Current Positioning
 
 - `mikuscore` treats MusicXML as the canonical score format
+- whole-score handoff and new-score generation with generative models are currently centered on `ABC`
+- AI-facing JSON is currently reserved for bounded partial inspection and patch exchange (`JSON (Partial)`)
 - the app supports conversion, visualization, playback, and limited editing
 - the current MVP editing core is command-based and centered on safe note-level edits
 - the AI-facing interface must not require the model to read or rewrite full MusicXML directly
+
+For the broader operational policy, see `docs/AI_INTERACTION_POLICY.md`.
 
 ## Design Intent
 
@@ -74,6 +81,7 @@ Therefore this AI JSON spec distinguishes:
 
 ## Critical Policy
 
+- whole-score JSON handoff is not the current recommended AI path
 - full-score JSON re-output is forbidden in edit mode
 - full MusicXML re-output is forbidden
 - missing notes, measures, voices, tuplets, ties, slurs, or metadata must not be inferred unless they are explicitly exposed and editable under `rules`
@@ -95,6 +103,7 @@ Representative projection families for `mikuscore` are:
 
 At the current MVP stage, `measure_detail_view` and `note_edit_view` are the primary views.
 `score_overview_view` and `selection_context_view` are auxiliary or still being adjusted.
+The preferred operational JSON path is still partial/local, not whole-score.
 The first four are context projections for reading and edit judgment.
 `score_patch_request` is a wrapper that bundles a user request with bounded context.
 
@@ -145,6 +154,7 @@ Purpose:
 Position:
 
 - auxiliary / future-facing view
+- not the primary operational handoff for current generative-model interaction
 - not required at the start of the MVP AI editing flow
 
 Typical contents:

@@ -189,7 +189,6 @@ const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadVsqxBtn = q<HTMLButtonElement>("#downloadVsqxBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
-const downloadJsonBtn = q<HTMLButtonElement>("#downloadJsonBtn");
 const copyAiJsonPromptBtn = q<HTMLButtonElement>("#copyAiJsonPromptBtn");
 const downloadMeasureJsonBtn = q<HTMLButtonElement>("#downloadMeasureJsonBtn");
 const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
@@ -1760,7 +1759,6 @@ const renderOutput = (): void => {
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
   downloadVsqxBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
-  downloadJsonBtn.disabled = !state.lastSaveResult?.ok;
   downloadMeasureJsonBtn.disabled = !state.lastSaveResult?.ok || !selectedMeasure || !draftCore || !state.selectedNodeId;
   downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
   downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
@@ -3640,19 +3638,6 @@ const onDownloadAbc = (): void => {
   }
 };
 
-const onDownloadJson = (): void => {
-  const jsonText = buildScoreFullJsonText();
-  if (!jsonText) {
-    failExport("JSON", "No valid saved XML is available.");
-    return;
-  }
-  try {
-    triggerFileDownload(createJsonDownloadPayload(jsonText, "score-full"));
-  } catch (err) {
-    failExport("JSON", err instanceof Error ? err.message : "Unknown download error.");
-  }
-};
-
 const onDownloadMeasureJson = (): void => {
   const jsonText = buildMeasureDetailJsonText();
   if (!jsonText) {
@@ -3789,7 +3774,7 @@ const onDownloadAll = async (): Promise<void> => {
       return;
     }
     const svgPayload = createSvgDownloadPayload(new XMLSerializer().serializeToString(svgNode));
-    const allPayload = await createZipBundleDownloadPayload([
+    const allEntries = [
       musicXmlPayload,
       museScorePayload,
       midiPayload,
@@ -3798,7 +3783,19 @@ const onDownloadAll = async (): Promise<void> => {
       meiPayload,
       lilyPondPayload,
       svgPayload,
-    ]);
+      {
+        fileName: "ai/ai-json-prompt.txt",
+        blob: new Blob([aiJsonPromptText], { type: "text/plain;charset=utf-8" }),
+      },
+    ];
+    const measureJsonText = buildMeasureDetailJsonText();
+    if (measureJsonText) {
+      allEntries.push({
+        fileName: "ai/measure-detail.json",
+        blob: new Blob([measureJsonText], { type: "application/json;charset=utf-8" }),
+      });
+    }
+    const allPayload = await createZipBundleDownloadPayload(allEntries);
     triggerFileDownload(allPayload);
   } catch (err) {
     failExport("All", err instanceof Error ? err.message : "Unknown download error.");
@@ -4087,7 +4084,6 @@ downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
-downloadJsonBtn.addEventListener("click", onDownloadJson);
 copyAiJsonPromptBtn.addEventListener("click", () => {
   void onCopyAiJsonPrompt();
 });
