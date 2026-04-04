@@ -13,6 +13,25 @@ The module is responsible for:
 
 ---
 
+## Positioning
+
+`mikuscore` handles ABC in three layers:
+
+- **Standard ABC surface**
+  - ordinary ABC headers, body tokens, and supported musical decorations
+- **Compatibility behavior**
+  - pragmatic parsing support for real-world ABC variants commonly seen in `abcjs` / `abcm2ps` style inputs
+- **`mikuscore` extension metadata**
+  - `%@mks ...` comment lines used to preserve roundtrip-relevant information that plain ABC cannot carry reliably
+
+This distinction is important:
+
+- compatibility behavior is about accepting real-world ABC variance without failing unnecessarily
+- `mikuscore` extension metadata is not part of the standard ABC musical surface
+- `%@mks ...` lines are `mikuscore`-specific comment hints for restoration and roundtrip support
+
+---
+
 ## Public API
 
 ### Types
@@ -44,17 +63,34 @@ The module is responsible for:
 
 ## ABC -> internal parse (`AbcCompatParser.parseForMusicXml`)
 
-## Input structure
+### Accepted input layers
 
-Parser reads:
+The parser accepts three categories of input:
+
+#### 1. Standard ABC surface
 
 - headers (`X:`, `T:`, `C:`, `M:`, `L:`, `K:`)
 - voice directives (`V:` with optional `name`, `clef`, `transpose`)
-- optional `%%score` voice ordering directive
-- optional mikuscore metadata comments (`%@mks key ...`, `%@mks measure ...`, `%@mks transpose ...`)
 - body note/rest/chord tokens
 
-## Compatibility behavior
+#### 2. Compatibility behavior
+
+- optional `%%score` voice ordering directive
+- partial/legacy patterns accepted for practical compatibility
+- unsupported inline text / decoration forms may be skipped with warnings
+- standalone octave marks may be tolerated in unsupported positions
+
+#### 3. `mikuscore` extension metadata
+
+- optional `mikuscore` metadata comments:
+  - `%@mks key ...`
+  - `%@mks measure ...`
+  - `%@mks transpose ...`
+
+These `%@mks ...` comments are not treated as standard ABC musical notation.
+They are extension metadata used to improve roundtrip restoration.
+
+### Compatibility behavior
 
 Parser is intentionally lenient for real-world ABC:
 
@@ -62,7 +98,9 @@ Parser is intentionally lenient for real-world ABC:
 - skips unsupported decorations/inline strings with warnings
 - accepts partial/legacy patterns where possible
 
-## Supported musical tokens
+### Supported musical tokens
+
+#### Standard musical content
 
 - notes and rests
 - accidentals (`^`, `_`, `=`)
@@ -72,10 +110,13 @@ Parser is intentionally lenient for real-world ABC:
 - tuplets (`(n[:q][:r]`)
 - broken rhythm (`>` / `<`)
 - barlines
+
+#### Supported decorations and grace forms
+
 - decorations: `!trill!`, `!turn!`, `!invertedturn!`, `!staccato!`
 - grace groups `{...}` including slash grace variant (`{/g}`)
 
-## Parse result characteristics
+### Parse result characteristics
 
 Returned structure includes:
 
@@ -99,7 +140,7 @@ Fatal parse failures (e.g., no body, no notes/rests, unrecoverable token parse) 
 
 ## MusicXML -> ABC (`exportMusicXmlDomToAbc`)
 
-## Header mapping
+### Standard ABC output
 
 Exports:
 
@@ -110,14 +151,14 @@ Exports:
 - `L:1/8` (fixed)
 - `K:` from key fifths/mode conversion
 
-## Voice / part mapping
+### Voice / part mapping
 
 - each MusicXML `part` maps to `V:` section
 - voice id is sanitized from part id
 - part name exported as `name="..."`
 - clef mapped to ABC clef suffix when recognized
 
-## Note export policy
+### Standard musical export policy
 
 - supports rests, pitch notes, chords, durations, ties
 - supports tuplet roundtrip export (`(n:q:r` style) from MusicXML time-modification/tuplet notations
@@ -131,10 +172,16 @@ Exports:
   - suppresses redundant naturals in-context
   - emits required naturals where key/measure context differs
 - serializes each part as ABC measure stream (`|` separated)
-- emits mikuscore metadata lines for lossless roundtrip:
-  - `%@mks key voice=... measure=... fifths=...`
-  - `%@mks measure voice=... measure=... number=... implicit=... [repeat=...] [times=...]`
-  - `%@mks transpose voice=... chromatic=... [diatonic=...]`
+
+### `mikuscore` extension metadata on export
+
+For lossless or safer roundtrip behavior, `mikuscore` may emit extension comment lines after the ABC body:
+
+- `%@mks key voice=... measure=... fifths=...`
+- `%@mks measure voice=... measure=... number=... implicit=... [repeat=...] [times=...]`
+- `%@mks transpose voice=... chromatic=... [diatonic=...]`
+
+These lines are `mikuscore` extension metadata, not part of the standard ABC musical surface.
 
 ---
 
@@ -144,6 +191,8 @@ Exports:
 
 1. parse ABC via `AbcCompatParser.parseForMusicXml`
 2. transform parsed result into MusicXML 4.0 document text
+
+### Restoration policy
 
 Generation policy:
 
@@ -155,8 +204,11 @@ Generation policy:
 - restores tuplet semantics using both `<time-modification>` and `<notations><tuplet>`
 - restores measure metadata (`number`, `implicit`) and repeat barlines from `%@mks measure`
 - restores transpose (`chromatic`, `diatonic`) from `%@mks transpose`
-- emits metadata to `attributes/miscellaneous-field` (`mks:dbg:abc:meta:*`) by default; disable with `debugMetadata:false`
 - inserts a fallback whole-rest note for empty measures
+
+### Debug / investigation metadata
+
+- emits metadata to `attributes/miscellaneous-field` (`mks:dbg:abc:meta:*`) by default; disable with `debugMetadata:false`
 
 ### Incident analysis using `miscellaneous-field`
 
@@ -197,3 +249,4 @@ Supported mappings:
 - This module is compatibility-oriented and intentionally pragmatic.
 - It does not aim to be a complete strict ABC standard implementation.
 - Behavior prioritizes stable import/export for mikuscore workflows.
+- `%@mks ...` comments are `mikuscore` extension metadata for roundtrip support, not standard ABC musical notation.

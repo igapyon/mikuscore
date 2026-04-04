@@ -3485,61 +3485,6 @@ const buildMeasureDetailJsonText = (): string | null => {
   }, null, 2);
 };
 
-const buildScoreFullJsonText = (): string | null => {
-  const xmlText = resolveMusicXmlOutput();
-  if (!xmlText) return null;
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) return null;
-
-  let noteIndex = 0;
-  const parts = Array.from(doc.querySelectorAll("score-partwise > part")).map((part) => {
-    const partId = part.getAttribute("id")?.trim() || "P1";
-    const partMeasures = Array.from(part.querySelectorAll(":scope > measure"));
-    const measures = partMeasures.map((measure, measureIndex) => {
-      const measureNumber = measure.getAttribute("number")?.trim() || "1";
-      const localNotes = Array.from(measure.querySelectorAll(":scope > note"));
-      const localNodeIds = state.noteNodeIds.slice(noteIndex, noteIndex + localNotes.length);
-      noteIndex += localNotes.length;
-      const measureAttributes = buildEffectiveMeasureContextForPart(partMeasures, measureIndex);
-      return {
-        measure_id: `${partId}-M${measureNumber}`,
-        measure_number: measureNumber,
-        divisions: measureAttributes.divisions,
-        time: measureAttributes.time,
-        attributes_context: measureAttributes.attributes_context,
-        inherited_context: measureAttributes.inherited,
-        voices: buildMeasureVoiceProjection(measure, localNodeIds),
-      };
-    });
-    return {
-      part_id: partId,
-      name: partIdToName.get(partId) ?? partId,
-      measures,
-    };
-  });
-
-  return JSON.stringify({
-    view_type: "score_full_view",
-    score: {
-      title: scoreTitleText || "Untitled",
-      composer: scoreComposerText || undefined,
-      format: "mikuscore_score_full_json",
-    },
-    summary: {
-      part_count: parts.length,
-      measure_count: parts.reduce((sum, part) => sum + part.measures.length, 0),
-      note_count: state.noteNodeIds.length,
-    },
-    parts,
-    target: state.selectedNodeId
-      ? {
-          target_node_id: state.selectedNodeId,
-          location: nodeIdToLocation.get(state.selectedNodeId) ?? null,
-        }
-      : null,
-  }, null, 2);
-};
-
 const onDownload = async (): Promise<void> => {
   const xmlText = resolveMusicXmlOutput();
   if (!xmlText) {
