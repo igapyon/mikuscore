@@ -1,5 +1,7 @@
 # mikuscore
 
+![mikuscore OGP image](screenshots/mikuscore-ogp.png)
+
 ## Language Policy
 - English text is the normative source unless explicitly noted otherwise.
 - Japanese sections are abridged translations for readability.
