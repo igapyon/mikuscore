@@ -223,6 +223,7 @@ const abcCommon = AbcCommon;
       .map((token) => token.trim())
       .filter(Boolean);
     const tokens = [];
+    let pendingHyphenWord = false;
     for (const chunk of chunks) {
       if (chunk === "*") {
         tokens.push({ type: "skip" });
@@ -233,9 +234,23 @@ const abcCommon = AbcCommon;
         continue;
       }
       const normalized = chunk.replace(/~/g, " ");
+      if (normalized.endsWith("-") && normalized.length > 1) {
+        tokens.push({
+          type: "text",
+          text: normalized.slice(0, -1),
+          syllabic: pendingHyphenWord ? "middle" : "begin"
+        });
+        pendingHyphenWord = true;
+        continue;
+      }
       const parts = normalized.split("-").filter((part) => part.length > 0);
       if (parts.length <= 1) {
-        tokens.push({ type: "text", text: normalized, syllabic: "single" });
+        tokens.push({
+          type: "text",
+          text: normalized,
+          syllabic: pendingHyphenWord ? "end" : "single"
+        });
+        pendingHyphenWord = false;
         continue;
       }
       for (let i = 0; i < parts.length; i += 1) {
@@ -245,6 +260,7 @@ const abcCommon = AbcCommon;
             : (i === parts.length - 1 ? "end" : "middle");
         tokens.push({ type: "text", text: parts[i], syllabic });
       }
+      pendingHyphenWord = false;
     }
     return tokens;
   }
@@ -639,6 +655,14 @@ const abcCommon = AbcCommon;
                 parsedVoice.skippedText
             );
           }
+          for (const unsupportedKey of parsedVoice.unsupportedKeys || []) {
+            warnings.push(
+              "line " +
+                lineNo +
+                ": Skipped unsupported V: property: " +
+                unsupportedKey
+            );
+          }
           if (parsedVoice.bodyText) {
             const expandedBodyText = expandUserDefinedDecorationSymbols(parsedVoice.bodyText, userDefinedDecorationBySymbol);
             const inlineVoiceSegments = splitBodyTextByInlineVoice(expandedBodyText, currentVoiceId);
@@ -819,6 +843,8 @@ const abcCommon = AbcCommon;
       let pendingHarmonic = false;
       let pendingStopped = false;
       let pendingThumbPosition = false;
+      let pendingEditorialAccidental = false;
+      let pendingCourtesyAccidental = false;
       let pendingDoubleTongue = false;
       let pendingTripleTongue = false;
       let pendingHeel = false;
@@ -1068,6 +1094,10 @@ const abcCommon = AbcCommon;
           const decoration = rawDecoration.toLowerCase();
           if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
             pendingTrill = true;
+          } else if (decoration === "editorial") {
+            pendingEditorialAccidental = true;
+          } else if (decoration === "courtesy") {
+            pendingCourtesyAccidental = true;
           } else if (decoration === "trill(") {
             pendingTrill = true;
             pendingTrillLineStart = true;
@@ -1275,6 +1305,7 @@ const abcCommon = AbcCommon;
             pendingHarmonic = true;
           } else if (
             decoration === "stopped" ||
+            decoration === "+" ||
             decoration === "plus" ||
             decoration === "stopped horn" ||
             decoration === "stopped-horn"
@@ -1456,6 +1487,14 @@ const abcCommon = AbcCommon;
               pendingTurn = "";
               pendingTurnSlash = false;
               pendingDelayedTurn = false;
+            }
+            if (chordIndex === 0 && !note.isRest && (pendingEditorialAccidental || pendingCourtesyAccidental)) {
+              if (note.accidentalText) {
+                note.accidentalEditorial = pendingEditorialAccidental || undefined;
+                note.accidentalCautionary = pendingCourtesyAccidental || undefined;
+              }
+              pendingEditorialAccidental = false;
+              pendingCourtesyAccidental = false;
             }
             if (chordIndex === 0 && pendingMordent && !note.isRest) {
               note.mordentType = pendingMordent;
@@ -1825,6 +1864,14 @@ const abcCommon = AbcCommon;
           pendingTurnSlash = false;
           pendingDelayedTurn = false;
         }
+        if (!note.isRest && (pendingEditorialAccidental || pendingCourtesyAccidental)) {
+          if (note.accidentalText) {
+            note.accidentalEditorial = pendingEditorialAccidental || undefined;
+            note.accidentalCautionary = pendingCourtesyAccidental || undefined;
+          }
+          pendingEditorialAccidental = false;
+          pendingCourtesyAccidental = false;
+        }
         if (pendingMordent && !note.isRest) {
           note.mordentType = pendingMordent;
           pendingMordent = "";
@@ -2178,7 +2225,7 @@ const abcCommon = AbcCommon;
             repeatTimes: hintedMeta?.repeatTimes ?? notationMeta?.repeatTimes ?? null,
             endingStart: String(notationMeta?.endingStart || hintedMeta?.endingStart || ""),
             endingStop: String(notationMeta?.endingStop || hintedMeta?.endingStop || ""),
-            endingStopType: notationMeta?.endingStopType || hintedMeta?.endingStopType || "",
+            endingStopType: hintedMeta?.endingStopType || notationMeta?.endingStopType || "",
           };
         }
         if (meterHint) {
@@ -2268,12 +2315,13 @@ const abcCommon = AbcCommon;
 
   function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-      return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "" };
+      return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "", unsupportedKeys: [] };
     }
     let bodyText = String(raw);
     let name = "";
     let clef = "";
     let transpose = null;
+    const unsupportedKeys = [];
     const bareClefMatch = bodyText.match(/^\s*(bass|treble|alto|tenor|c3|c4)(?=\s|$)/i);
     if (bareClefMatch) {
       clef = String(bareClefMatch[1] || "").trim().toLowerCase();
@@ -2291,6 +2339,8 @@ const abcCommon = AbcCommon;
         if (Number.isFinite(parsed) && parsed >= -24 && parsed <= 24) {
           transpose = { chromatic: parsed };
         }
+      } else {
+        unsupportedKeys.push(lowerKey);
       }
       return " ";
     });
@@ -2307,7 +2357,8 @@ const abcCommon = AbcCommon;
       clef: clef.trim(),
       transpose,
       bodyText,
-      skippedText
+      skippedText,
+      unsupportedKeys
     };
   }
 
@@ -3210,8 +3261,11 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             const alterRaw = child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "";
             const explicitAlter =
               alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
-            const accidentalText = child.querySelector(":scope > accidental")?.textContent?.trim() ?? "";
+            const accidentalNode = child.querySelector(":scope > accidental");
+            const accidentalText = accidentalNode?.textContent?.trim() ?? "";
             const accidentalAlter = accidentalTextToAlter(accidentalText);
+            const accidentalEditorial = ((accidentalNode?.getAttribute("editorial") || "").trim().toLowerCase() === "yes");
+            const accidentalCautionary = ((accidentalNode?.getAttribute("cautionary") || "").trim().toLowerCase() === "yes");
 
             const keyAlter = keyAlterMap[upperStep] ?? 0;
             const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
@@ -3234,6 +3288,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
               : "";
             measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
             pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
+            if (accidentalEditorial && accidental) {
+              pitchToken = `!editorial!${pitchToken}`;
+            }
+            if (accidentalCautionary && accidental) {
+              pitchToken = `!courtesy!${pitchToken}`;
+            }
           }
           if (isGrace) {
             const graceSlashPrefix = hasGraceSlash ? "/" : "";
@@ -3638,6 +3698,8 @@ type AbcParsedNote = {
   octave?: number;
   alter?: number | null;
   accidentalText?: string | null;
+  accidentalEditorial?: boolean;
+  accidentalCautionary?: boolean;
   tieStart?: boolean;
   tieStop?: boolean;
   slurStart?: boolean;
@@ -4154,7 +4216,15 @@ const buildMusicXmlFromAbcParsed = (
                     );
                   }
                   if (note.accidentalText) {
-                    chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);
+                    const accidentalAttrs = [
+                      note.accidentalEditorial ? 'editorial="yes"' : "",
+                      note.accidentalCautionary ? 'cautionary="yes"' : "",
+                    ].filter(Boolean).join(" ");
+                    chunks.push(
+                      accidentalAttrs
+                        ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
+                        : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`,
+                    );
                   }
                   if (note.tieStart) chunks.push('<tie type="start"/>');
                   if (note.tieStop) chunks.push('<tie type="stop"/>');
@@ -4213,14 +4283,14 @@ const buildMusicXmlFromAbcParsed = (
                     if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
                     if (note.trill || note.trillLineStop) {
                       const trillParts: string[] = [];
-                      if (note.trill) {
-                        trillParts.push("<trill-mark/>");
-                      }
-                      if (note.trillLineStop) {
-                        trillParts.push('<wavy-line type="stop"/>');
-                      } else if (note.trillLineStart || note.trill) {
-                        trillParts.push('<wavy-line type="start"/>');
-                      }
+                    if (note.trill) {
+                      trillParts.push("<trill-mark/>");
+                    }
+                    if (note.trillLineStop) {
+                      trillParts.push('<wavy-line type="stop"/>');
+                    } else if (note.trillLineStart) {
+                      trillParts.push('<wavy-line type="start"/>');
+                    }
                       if (note.trillAccidentalText) {
                         trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
                       }

@@ -131,7 +131,7 @@
     - use that file as the source of truth for completion judgment; use this TODO only for actionable deltas
     - broader actionable backlog is enumerated there as `ABC-COV-*`; local TODO items should reference those backlog ids when possible
   - Ordered coverage-derived backlog (`ABC-COV-*`):
-    - [ ] `ABC-COV-009` (`P1`, `mixed`, initial stance: `support now`)
+    - [x] `ABC-COV-009` (`P1`, `mixed`, initial stance: `support now`)
       - Resolve pending decoration policy items:
         - `!arpeggio!` / `!roll!`
         - `!+!` / `!plus!`
@@ -143,81 +143,193 @@
         - `!+!` / `!plus!`, mordent-family canonical export, and `!slide!` stop-side extension policy are already consistent with the written policy
       - Done when:
         - each pending item is resolved in spec text, with implementation/tests if needed
-    - [ ] `ABC-COV-016` (`P1`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-016` (`P1`, `mixed`, initial stance: `support bounded subset`)
       - Enumerate which standard voice properties are supported, unsupported, or extension-only
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now decomposes `7.1 Voice properties` into:
+          - supported: `V:id`, `name=...`, common `clef=...`
+          - partial: `transpose=...`
+          - ext-only: transpose-preserving roundtrip through `%@mks transpose ...`
+          - unsupported: broader standard properties such as `staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`
+        - `docs/spec/ABC_IO.md` now states the current supported `V:` property subset explicitly
+        - unsupported standard `V:` properties are now specified to warn rather than silently widening the supported subset
       - Done when:
         - supported/unsupported voice-property list is explicit and testable
-    - [ ] `ABC-COV-005` (`P1`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-005` (`P1`, `mixed`, initial stance: `support bounded subset`)
       - Decide how far ABC whitespace-as-beam-separation must be preserved on export
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the bounded policy:
+          - import: whitespace is a beam-break hint within the current voice/measure
+          - export: canonical ABC does not currently preserve beam-specific spacing text; it emits ordinary token spacing
+          - exact source whitespace preservation is currently out of scope for standard roundtrip claims
+        - `docs/spec/ABC_IO.md` now mirrors this beam / whitespace policy
+        - regression coverage now exists for both import-side beam-break hints and current export-side non-preservation of exact beam spacing
       - Done when:
         - whitespace-beam preservation target is decided and tested to that level
-    - [ ] `ABC-COV-006` (`P1`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-006` (`P1`, `mixed`, initial stance: `support bounded subset`)
       - Audit remaining repeat/ending edge variants and mark what is still unsupported
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the bounded subset:
+          - standard surface: `|:`, `:|`, `[1`, `[2`, `|1`, `:|2`
+          - extension-assisted edge cases: `%@mks measure ... times=...`, `%@mks measure ... ending-stop=... ending-type=discontinue`
+        - `docs/spec/ABC_IO.md` now mirrors the current repeat / ending policy
+        - regression coverage now exists for:
+          - standard repeat barlines
+          - standard alternate endings
+          - repeat counts beyond the ordinary case via `%@mks measure ... times=...`
+          - ending stop type `discontinue` via `%@mks measure ... ending-stop=... ending-type=discontinue`
       - Done when:
         - remaining repeat/ending edge forms are either supported with tests or explicitly marked unsupported
-    - [ ] `ABC-COV-012` (`P1`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-012` (`P1`, `mixed`, initial stance: `support bounded subset`)
       - Expand or explicitly bound the supported chord-symbol inventory
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now enumerates the current bounded quoted-chord inventory
+        - `docs/spec/ABC_IO.md` now mirrors the supported suffix/root/bass subset
+        - unsupported quoted chord-like text is now specified to fall back to annotation/words instead of being forced into `harmony`
+        - regression coverage now exists for both the supported quoted-chord subset and unsupported quoted-chord fallback to annotation
       - Done when:
         - supported chord-symbol inventory is enumerated enough to test and maintain
-    - [ ] `ABC-COV-007` (`P1`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-007` (`P1`, `mixed`, initial stance: `support bounded subset`)
       - Close the slur-span reconstruction policy or keep it explicitly partial with defined limits
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the bounded slur policy:
+          - supported: common unnumbered start/stop slur presence
+          - unsupported/not yet claimed: numbered/nested slur identity preservation
+          - explicit limit: slur stop without a preceding non-rest note is unsupported and warning-based
+        - `docs/spec/ABC_IO.md` now mirrors the current slur policy
+        - regression coverage now exists for both common slur start/stop roundtrip and the warning-based unsupported edge case
       - Done when:
         - slur-span limits are written down and tested, or stronger preservation is implemented
-    - [ ] `ABC-COV-017` (`P1`, `policy`, initial stance: `defer intentionally`)
+    - [x] `ABC-COV-017` (`P1`, `policy`, initial stance: `defer intentionally`)
       - Decide whether faithful same-part overlay preservation is required
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the overlay policy:
+          - supported: `&` import acceptance via synthetic overlay voices / parts
+          - intentionally not claimed: faithful same-part multi-voice preservation and exact `&` roundtrip preservation
+        - `docs/spec/ABC_IO.md` now mirrors the same bounded overlay policy
       - Done when:
         - overlay preservation target is explicitly accepted or rejected
-    - [ ] `ABC-COV-018` (`P2`, `policy`, initial stance: `defer intentionally`)
+    - [x] `ABC-COV-018` (`P2`, `mixed`, initial stance: `support bounded subset`)
       - Decide whether `!editorial!` and `!courtesy!` are in the supported roadmap or intentionally deferred
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now moves both `!editorial!` and `!courtesy!` into the bounded supported 2.2 subset
+        - `docs/spec/ABC_IO.md` now mirrors the same accidental-level support stance
+        - implementation and regression tests now cover import/export/roundtrip through MusicXML accidental `editorial="yes"` / `cautionary="yes"`
       - Done when:
-        - 2.2 delta items are either put on roadmap or marked intentionally deferred
-    - [ ] `ABC-COV-008` (`P2`, `mixed`, initial stance: `support bounded subset`)
+        - the 2.2 delta stance is explicit in spec and the bounded accidental-level support has code/test parity
+    - [x] `ABC-COV-008` (`P2`, `mixed`, initial stance: `support bounded subset`)
       - Audit remaining tuplet ratio/edge semantics and mark what is still unsupported
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the tuplet scope as a bounded subset
+        - `docs/spec/ABC_IO.md` now mirrors the same tuplet stance
+        - supported: common `(n[:q][:r])` syntax and current MusicXML roundtrip through `time-modification` plus note-level `tuplet`
+        - not currently claimed: broader ratio/edge semantics or more complex span behavior
       - Done when:
         - remaining tuplet edge semantics are either tested or explicitly excluded
-    - [ ] `ABC-COV-011` (`P2`, `policy`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-011` (`P2`, `policy`, initial stance: `support bounded subset`)
       - Decide whether `U:` remains import-only or needs broader parity/export support
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes `U:` as bounded import-first functionality
+        - `docs/spec/ABC_IO.md` now mirrors the same `U:` stance
+        - current supported subset is explicit:
+          - single-character alias import
+          - `!decor!` / `+decor+` right-hand side forms
+          - malformed `U:` ignored
+        - export parity for `U:` is intentionally not claimed
       - Done when:
         - `U:` support boundary is explicitly written down
-    - [ ] `ABC-COV-015` (`P2`, `mixed`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-015` (`P2`, `mixed`, initial stance: `support bounded subset`)
       - Audit lyrics alignment, multi-verse behavior, and numbering scope
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the lyrics scope as a bounded subset
+        - `docs/spec/ABC_IO.md` now mirrors the same lyric stance
+        - supported: common `w:` underlay import/export and ordinary hyphenated lyric handling
+        - not currently claimed: full alignment nuance, full multi-verse parity, or verse numbering semantics
       - Done when:
         - lyric scope is bounded and tested for the chosen supported subset
-    - [ ] `ABC-COV-001` (`P2`, `policy`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-001` (`P2`, `policy`, initial stance: `support bounded subset`)
       - Decide and document which non-core standard information fields are intentionally unsupported versus planned
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the supported core field subset to `X/T/C/M/L/K/Q` plus separately-scoped `V:`
+        - non-core information fields are now explicitly marked unsupported at the semantic level even if they are lexically tolerated by header scanning
+        - `docs/spec/ABC_IO.md` now mirrors the same information-field stance
       - Done when:
         - non-core field policy is written in spec and reflected in linked docs
-    - [ ] `ABC-COV-002` (`P2`, `policy`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-002` (`P2`, `policy`, initial stance: `support bounded subset`)
       - Decide whether the supported inline-field subset stops at `[K/M/L/Q/V]` or should expand
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the supported inline-field subset at `[K/M/L/Q/V]`
+        - unsupported inline fields are now explicitly documented as warning-based skips
+        - `docs/spec/ABC_IO.md` now mirrors the same inline-field stance
       - Done when:
         - supported inline subset is explicitly bounded in spec text
-    - [ ] `ABC-COV-013` (`P2`, `policy`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-013` (`P2`, `policy`, initial stance: `support bounded subset`)
       - Define the supported annotation behavior and explicit exclusions
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the bounded annotation subset
+        - `docs/spec/ABC_IO.md` now mirrors the same annotation stance
+        - supported: common quoted non-harmonic text as direction words / annotations
+        - supported fallback: unsupported quoted chord-like text becomes annotation/words rather than forced `harmony`
+        - broader annotation placement semantics are intentionally not claimed
       - Done when:
         - supported annotation subset and exclusions are written down
-    - [ ] `ABC-COV-003` (`P3`, `policy`, initial stance: `defer intentionally`)
+    - [x] `ABC-COV-003` (`P3`, `policy`, initial stance: `defer intentionally`)
       - Either implement field continuation support or explicitly freeze it as unsupported in the practical scope
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now freezes field continuation as intentionally deferred / unsupported in the current bounded target
+        - `docs/spec/ABC_IO.md` now mirrors the same field-continuation stance
+        - lexical tolerance is explicitly distinguished from actual continuation support
       - Done when:
         - continuation is explicitly frozen as unsupported or promoted to planned work
-    - [ ] `ABC-COV-010` (`P3`, `policy`, initial stance: `out of practical scope`)
+    - [x] `ABC-COV-010` (`P3`, `policy`, initial stance: `out of practical scope`)
       - Decide whether `s:` symbol lines are in scope or intentionally out of scope
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes `s:` symbol lines as out of practical scope
+        - `docs/spec/ABC_IO.md` now mirrors the same symbol-line stance
+        - there is explicitly no current import/export or roundtrip support claim
       - Done when:
         - `s:` is explicitly marked in-scope or frozen out-of-scope
-    - [ ] `ABC-COV-014` (`P3`, `policy`, initial stance: `support bounded subset`)
+    - [x] `ABC-COV-014` (`P3`, `policy`, initial stance: `support bounded subset`)
       - Decide whether broad practical acceptance is enough or whether stricter conformance is required
+      - Progress:
+        - `docs/spec/ABC_STANDARD_COVERAGE.md` now fixes the order-of-constructs stance as bounded practical acceptance
+        - `docs/spec/ABC_IO.md` now mirrors the same acceptance philosophy
+        - supported stance: common construct orderings already handled by the parser
+        - explicit limit: full formal order-of-constructs conformance is not currently claimed
+        - explicit boundary: unusual ordering is only rejected when it becomes structurally ambiguous or breaks directive/body interpretation
       - Done when:
         - acceptance philosophy and explicit exclusions are written down
   - Resume note for next ABC session:
     - Stop point:
-      - `ABC-COV-009` policy has been written down in `docs/spec/ABC_STANDARD_COVERAGE.md` and `docs/spec/ABC_IO.md`
-      - canonical `!arpeggio!` export is now aligned in code/tests
-      - `!+!` / `!plus!`, mordent-family canonical export, and `!slide!` stop-side extension policy are already aligned with the written policy
-    - First task to resume:
-      - decide whether `ABC-COV-009` can be closed outright, or whether one more focused regression pass is needed before checking it off
-    - If `ABC-COV-009` is closed, continue in this order:
-      - 1. `ABC-COV-016` voice-property enumeration
-      - 2. `ABC-COV-005` beam-separation preservation target
-      - 3. `ABC-COV-006` repeat / ending edge audit
+      - the current `ABC-COV-*` coverage pass is closed in md
+      - `docs/spec/ABC_STANDARD_COVERAGE.md` is now the completion baseline, not an active discovery scratchpad
+    - Continue in this order:
+      - 1. implementation/test follow-up where a closed policy still needs stronger code parity
+      - 2. add or strengthen regression tests for bounded subsets that are already policy-closed
+      - 3. only after that, derive new ABC backlog items if real input data exposes uncovered gaps
+    - Closed in latest md pass:
+      - `ABC-COV-004` clef breadth policy
+      - `ABC-COV-008` tuplet edge policy
+      - `ABC-COV-015` lyrics scope
+    - Recent code/test follow-up already completed after the md pass:
+      - added `MusicXML -> ABC -> MusicXML` regression for `alto` / `tenor` C-clef headers
+      - fixed hyphenated `w:` lyric tokenization so exported `hal- le- lu` roundtrips back to `begin/middle/end`
+      - added bounded-subset roundtrip regression for hyphenated lyrics
+      - added bounded-subset regression for common tuplet shorthand `(3`
+      - added roundtrip regression proving unsupported chord-like quoted text stays in annotation/words instead of becoming `harmony`
+      - added canonicalization regressions for decoration aliases (`!roll!`, `!arpeggiate!`, mordent-family aliases, wedge aliases)
+      - fixed literal `!+!` stopped alias import so it roundtrips back to canonical `!stopped!`
+      - added stop-side wedge alias regressions so `!<)!` / `!>)!` canonicalize to `!crescendo)!` / `!diminuendo)!`
+      - added stopped-family hyphen alias regression so `!stopped-horn!` canonicalizes to `!stopped!`
+      - added spaced-alias regressions so `!breath mark!`, `!open string!`, and `!snap pizzicato!` canonicalize to `!breath!`, `!open!`, and `!snap!`
+      - added more canonicalization regressions for `!strong-accent!`, `!down-bow!`, and `!triple tongue!`
+      - added technical-family regressions so `!toe mark!`, `!thumb pos!`, and `!thumb position!` canonicalize to `!toe!` / `!thumb!`
+      - added more technical-family regressions so `!down bow!`, `!double-tongue!`, and `!heel mark!` canonicalize to `!downbow!` / `!doubletongue!` / `!heel!`
+      - added short-form alias regressions so `!stacc!`, `!stac!`, and `!up-bow!` canonicalize to `!staccato!` / `!upbow!`
+      - added hyphen-alias regressions so `!breath-mark!`, `!triple-tongue!`, and `!thumb-position!` canonicalize to `!breath!` / `!tripletongue!` / `!thumb!`
+      - added turn-family regression so `!lowerturn!` canonicalizes to `!invertedturn!`
+      - aligned plain trill behavior so `!tr!` / `!triller!` canonicalize to `!trill!` without being promoted to long-trill start; added `!spiccato! -> !wedge!` regression
+      - moved `!editorial!` / `!courtesy!` from deferred 2.2 delta items into the bounded supported subset with import/export/roundtrip coverage
     - Files to open first:
       - `docs/spec/ABC_STANDARD_COVERAGE.md`
       - `docs/spec/ABC_IO.md`
@@ -229,24 +341,20 @@
     - [x] warn on unsupported bare `V:` tail words instead of letting them fail later as note/rest parsing errors
   - Resume note (2026-04-06):
     - Stop point for this series: quoted chord symbols and standard shorthand decoration symbols are already covered.
-    - Next restart target: continue the remaining standard-decoration expansion, not the chord-symbol work.
+    - Next restart target: continue only small decoration-audit follow-up, not a broad expansion pass.
     - Recommended restart order:
-      - 1. audit standard ABC 2.1 decoration names against the currently hardcoded subset
-      - 2. pick one small missing standard decoration cluster at a time
-      - 3. add import support
-      - 4. add `MusicXML -> ABC -> MusicXML` regression tests
-      - 5. update `docs/spec/ABC_IO.md` and this TODO entry
+      - 1. audit whether any standard ABC 2.1 decoration aliases are still import-only without canonical roundtrip coverage
+      - 2. add a small regression only if a real missing alias or canonicalization gap is found
+      - 3. update `docs/spec/ABC_IO.md` and this TODO entry only if the bounded supported subset changes
     - Current practical interpretation:
       - quoted chord symbols are now good enough for common forms; broader coverage can wait
-      - the main remaining ABC-series work is standard decoration coverage
+      - the main remaining ABC-series work is small decoration alias audit, not broad standard-surface expansion
   - Decoration backlog from ABC decoration-list cross-check:
     - Standard 2.1 candidates still missing or only partially supported:
-      - Partial with semantics/export-policy still open:
-        - implementation follow-up so canonical export fully matches the now-settled policy for:
-          - `!arpeggio!` versus `!roll!`
-          - `!+!` / `!plus!`
-          - mordent-family export naming: `!lowermordent!` / `!uppermordent!` / `!mordent!` / `!pralltriller!`
-          - `!slide!` stop-side standard policy versus current `!slide-stop!` extension
+      - No current standard 2.1 blocker is known inside the bounded supported subset.
+      - Remaining follow-up is audit-oriented:
+        - check whether any standard alias is still accepted only on import without canonical roundtrip regression
+        - keep `!slide-stop!` as extension-only unless the bounded slide policy is intentionally widened later
     - Completed in current series:
       - phrase marks `!shortphrase!` / `!mediumphrase!` / `!longphrase!` now import/export and roundtrip via MusicXML `other-articulation`
       - `!trill(!` / `!trill)!` now import/export and roundtrip as long-trill start/stop markers
@@ -258,12 +366,11 @@
       - `!>!` / `!emphasis!` now import as accent aliases and roundtrip back to canonical `!accent!`
       - `!turnx!` / `!invertedturnx!` now import/export and roundtrip as slashed turn variants
     - Standard 2.2 / ext candidates still missing or only partially supported:
-      - `!editorial!`
-      - `!courtesy!`
+      - none currently prioritized inside the bounded accidental-decoration subset
     - Recommended execution order for the next decoration pass:
-      - 1. align implementation/export behavior with the now-settled decoration policy items
-      - 2. add regression tests where canonical export spelling changes
-      - 3. only after that, consider 2.2 / ext additions such as `!editorial!` / `!courtesy!`
+      - 1. do a final alias audit against the current hardcoded decoration table
+      - 2. add regression tests only for any real canonicalization gap found there
+      - 3. only after that, consider any further 2.2 / ext additions beyond `!editorial!` / `!courtesy!`
   - A. Spec says or strongly implies "supported", but implementation is still weak:
     - Completed in current series:
       - Chord-tie handling now ties whole chords in paths such as `[CE]-[CE]`.
