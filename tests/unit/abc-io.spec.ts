@@ -343,6 +343,48 @@ C D E F |`;
     );
   });
 
+  it("ABC import applies supported V: transpose property as chromatic transpose", () => {
+    const abc = `X:1
+T:Voice transpose
+M:4/4
+L:1/4
+K:C
+V:1 name="Clarinet in A" clef=treble transpose=-3
+C D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
+  });
+
+  it("ABC import warns on unsupported standard V: properties instead of treating them as supported metadata", () => {
+    const abc = `X:1
+T:Unsupported V property warning
+M:4/4
+L:1/4
+K:C
+V:1 name="Upper" staves=2 middle=c
+C D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part > measure note").length).toBe(4);
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported V: property: staves"
+    );
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0002"]')?.textContent).toContain(
+      "Skipped unsupported V: property: middle"
+    );
+  });
+
   it("ABC import reflows overfull measure content to avoid MEASURE_OVERFULL", () => {
     const overfullAbc = `X:1
 T:Overfull
@@ -587,6 +629,25 @@ K:C
     expect(harmonies[3]?.querySelector(":scope > bass > bass-alter")?.textContent?.trim()).toBe("1");
   });
 
+  it("ABC->MusicXML keeps unsupported quoted chord-like text as annotation instead of forcing harmony", () => {
+    const abc = `X:1
+T:Unsupported chord inventory
+M:4/4
+L:1/8
+K:C
+"Cadd9"C "Fmaj13"D |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part > measure > harmony").length).toBe(0);
+    const words = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type > words"))
+      .map((node) => node.textContent?.trim());
+    expect(words).toContain("Cadd9");
+    expect(words).toContain("Fmaj13");
+  });
+
   it("ABC->MusicXML parses mikuscore rehearsal decoration as rehearsal direction", () => {
     const abc = `X:1
 T:Rehearsal
@@ -659,6 +720,47 @@ K:C
 
     const abc = exportMusicXmlDomToAbc(doc);
     expect(abc).toContain('"rit."C');
+  });
+
+  it("MusicXML->ABC->MusicXML keeps unsupported chord-like quoted text as annotation", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><direction-type><words>Cadd9</words></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <direction><direction-type><words>Fmaj13</words></direction-type></direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"Cadd9"C');
+    expect(abc).toContain('"Fmaj13"D');
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part > measure > harmony").length).toBe(0);
+    const words = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type > words"))
+      .map((node) => node.textContent?.trim());
+    expect(words).toContain("Cadd9");
+    expect(words).toContain("Fmaj13");
   });
 
   it("MusicXML->ABC exports harmony as quoted chord symbols", () => {
@@ -881,6 +983,55 @@ w: hal-le-lu`;
     expect(syllabics).toEqual(["begin", "middle", "end"]);
   });
 
+  it("MusicXML->ABC->MusicXML roundtrips common hyphenated lyrics in the bounded subset", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Voice</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type>
+        <lyric><syllabic>begin</syllabic><text>hal</text></lyric>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type>
+        <lyric><syllabic>middle</syllabic><text>le</text></lyric>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type>
+        <lyric><syllabic>end</syllabic><text>lu</text></lyric>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("w: hal- le- lu");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const lyrics = Array.from(outDoc.querySelectorAll("part > measure > note > lyric > text"))
+      .map((node) => node.textContent?.trim());
+    expect(lyrics).toEqual(["hal", "le", "lu"]);
+    const syllabics = Array.from(outDoc.querySelectorAll("part > measure > note > lyric > syllabic"))
+      .map((node) => node.textContent?.trim());
+    expect(syllabics).toEqual(["begin", "middle", "end"]);
+  });
+
   it("ABC->MusicXML supports inline [V:...] voice switches in body text", () => {
     const abc = `X:1
 T:Inline voice switch
@@ -906,6 +1057,44 @@ V:2 name="Lower"
     expect(outDoc.querySelector('part-list > score-part[id="P1"] > part-name')?.textContent?.trim()).toBe("Upper");
     expect(outDoc.querySelector('part-list > score-part[id="P2"] > part-name')?.textContent?.trim()).toBe("Lower");
     expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
+  });
+
+  it("ABC->MusicXML applies !editorial! to the next explicit accidental", () => {
+    const abc = `X:1
+T:Editorial accidental
+M:4/4
+L:1/4
+K:C
+!editorial!^C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const accidental = outDoc.querySelector("part > measure > note > accidental");
+    expect(accidental?.textContent?.trim()).toBe("sharp");
+    expect(accidental?.getAttribute("editorial")).toBe("yes");
+    expect(accidental?.getAttribute("cautionary")).toBeNull();
+  });
+
+  it("ABC->MusicXML applies !courtesy! to the next explicit accidental", () => {
+    const abc = `X:1
+T:Courtesy accidental
+M:4/4
+L:1/4
+K:G
+!courtesy!=F z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const accidental = outDoc.querySelector("part > measure > note > accidental");
+    expect(accidental?.textContent?.trim()).toBe("natural");
+    expect(accidental?.getAttribute("cautionary")).toBe("yes");
+    expect(accidental?.getAttribute("editorial")).toBeNull();
   });
 
   it("ABC->MusicXML supports U: user-defined decoration symbols with punctuation", () => {
@@ -2976,6 +3165,54 @@ CD EF GA Bc |`;
     expect(beams).toEqual(["begin", "end", "begin", "end", "begin", "end", "begin", "end"]);
   });
 
+  it("MusicXML->ABC does not preserve beam grouping through exact ABC spacing", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>eighth</type>
+        <beam number="1">begin</beam>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>eighth</type>
+        <beam number="1">end</beam>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>eighth</type>
+        <beam number="1">begin</beam>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>eighth</type>
+        <beam number="1">end</beam>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("V:P1");
+    expect(abc).toContain("C D E F |");
+    expect(abc).not.toContain("CD EF");
+  });
+
   it("ABC->MusicXML uses meter-sized empty-measure rests for missing voice measures", () => {
     const abc = `X:1
 T:Missing measure fallback
@@ -3073,6 +3310,26 @@ V:1
     expect(secondPitched?.querySelector(':scope > notations > slur[type="stop"]')).not.toBeNull();
   });
 
+  it("ABC->MusicXML warns when slur stop has no preceding non-rest note", () => {
+    const abc = `X:1
+T:Slur stop after rest
+M:4/4
+L:1/8
+K:C
+V:1
+(c2 z2) e2 f2 |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "slur stop()) has no preceding note; skipped."
+    );
+  });
+
   it("ABC->MusicXML applies chord ties to all notes in the chord", () => {
     const abc = `X:1
 T:Chord tie test
@@ -3142,7 +3399,7 @@ K:C
     if (!outDoc) return;
     expect(outDoc.querySelector("note > grace")).not.toBeNull();
     expect(outDoc.querySelector("note > notations > ornaments > trill-mark")).not.toBeNull();
-    expect(outDoc.querySelector('note > notations > ornaments > wavy-line[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > notations > ornaments > wavy-line[type="start"]')).toBeNull();
   });
 
   it("MusicXML->ABC preserves grace notes without ornaments", () => {
@@ -3231,7 +3488,45 @@ K:C
     if (!outDoc) return;
     expect(outDoc.querySelector("note > grace")).toBeNull();
     expect(outDoc.querySelector("note > notations > ornaments > trill-mark")).not.toBeNull();
-    expect(outDoc.querySelector('note > notations > ornaments > wavy-line[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > notations > ornaments > wavy-line[type="start"]')).toBeNull();
+  });
+
+  it("ABC trill alias !tr! roundtrips back to canonical !trill!", () => {
+    const abc = `X:1
+T:Trill short alias
+M:4/4
+L:1/4
+K:C
+!tr!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > trill-mark")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!trill!");
+    expect(exportedAbc).not.toContain("!tr!");
+  });
+
+  it("ABC trill alias !triller! roundtrips back to canonical !trill!", () => {
+    const abc = `X:1
+T:Trill alias
+M:4/4
+L:1/4
+K:C
+!triller!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > trill-mark")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!trill!");
+    expect(exportedAbc).not.toContain("!triller!");
   });
 
   it("MusicXML->ABC exports turn and grace slash notes and roundtrips them", () => {
@@ -3443,6 +3738,25 @@ K:C
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("note > notations > ornaments > inverted-turn")).not.toBeNull();
+  });
+
+  it("ABC inverted-turn alias !lowerturn! roundtrips back to canonical !invertedturn!", () => {
+    const abc = `X:1
+T:Lower turn alias
+M:4/4
+L:1/4
+K:C
+!lowerturn!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > inverted-turn")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!invertedturn!");
+    expect(exportedAbc).not.toContain("!lowerturn!");
   });
 
   it("MusicXML->ABC exports turnx and invertedturnx variants and roundtrips them", () => {
@@ -4316,6 +4630,44 @@ K:C
     expect(exportedAbc).not.toContain("!emphasis!");
   });
 
+  it("ABC staccato alias !stacc! roundtrips back to canonical !staccato!", () => {
+    const abc = `X:1
+T:Stacc alias
+M:4/4
+L:1/4
+K:C
+!stacc!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > staccato")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!staccato!");
+    expect(exportedAbc).not.toContain("!stacc!");
+  });
+
+  it("ABC staccato alias !stac! roundtrips back to canonical !staccato!", () => {
+    const abc = `X:1
+T:Stac alias
+M:4/4
+L:1/4
+K:C
+!stac!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > staccato")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!staccato!");
+    expect(exportedAbc).not.toContain("!stac!");
+  });
+
   it("MusicXML->ABC exports tenuto decoration and roundtrips it", () => {
     const xmlWithTenuto = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -4709,6 +5061,25 @@ K:C
     expect(exportedAbc).not.toContain("!strongaccent!");
   });
 
+  it("ABC marcato alias !strong-accent! roundtrips back to canonical !marcato!", () => {
+    const abc = `X:1
+T:Marcato hyphen alias
+M:4/4
+L:1/4
+K:C
+!strong-accent!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > strong-accent")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!marcato!");
+    expect(exportedAbc).not.toContain("!strong-accent!");
+  });
+
   it("MusicXML->ABC exports breath decoration and roundtrips it", () => {
     const xmlWithBreath = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -4764,6 +5135,44 @@ K:C
     const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
     expect(exportedAbc).toContain("!breath!");
     expect(exportedAbc).not.toContain("!breathmark!");
+  });
+
+  it("ABC breath-mark alias !breath mark! roundtrips back to canonical !breath!", () => {
+    const abc = `X:1
+T:Breath spaced alias
+M:4/4
+L:1/4
+K:C
+!breath mark!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > breath-mark")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!breath!");
+    expect(exportedAbc).not.toContain("!breath mark!");
+  });
+
+  it("ABC breath-mark alias !breath-mark! roundtrips back to canonical !breath!", () => {
+    const abc = `X:1
+T:Breath hyphen alias
+M:4/4
+L:1/4
+K:C
+!breath-mark!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > breath-mark")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!breath!");
+    expect(exportedAbc).not.toContain("!breath-mark!");
   });
 
   it("MusicXML->ABC exports caesura decoration and roundtrips it", () => {
@@ -4843,6 +5252,25 @@ K:C
     if (!outDoc) return;
     expect(outDoc.querySelector("note > notations > articulations > staccatissimo")).not.toBeNull();
     expect(outDoc.querySelector("note > notations > articulations > staccato")).toBeNull();
+  });
+
+  it("ABC staccatissimo alias !spiccato! roundtrips back to canonical !wedge!", () => {
+    const abc = `X:1
+T:Spiccato alias
+M:4/4
+L:1/4
+K:C
+!spiccato!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > articulations > staccatissimo")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!wedge!");
+    expect(exportedAbc).not.toContain("!spiccato!");
   });
 
   it("MusicXML->ABC exports wedge directions as ABC wedge decorations and roundtrips them", () => {
@@ -4961,6 +5389,25 @@ K:C
     expect(outDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("crescendo");
   });
 
+  it("ABC wedge alias !<(! roundtrips back to canonical !crescendo(!", () => {
+    const abc = `X:1
+T:Symbolic crescendo alias
+M:4/4
+L:1/4
+K:C
+!<(!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("crescendo");
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!crescendo(!C");
+    expect(exportedAbc).not.toContain("!<(!");
+  });
+
   it("MusicXML->ABC exports wedge stop and roundtrips it", () => {
     const xml = `<score-partwise version="3.1">
   <part-list>
@@ -5023,6 +5470,67 @@ K:C
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("diminuendo");
+  });
+
+  it("ABC wedge alias !>(! roundtrips back to canonical !diminuendo(!", () => {
+    const abc = `X:1
+T:Symbolic diminuendo alias
+M:4/4
+L:1/4
+K:C
+!>(!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("diminuendo");
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!diminuendo(!C");
+    expect(exportedAbc).not.toContain("!>(!");
+  });
+
+  it("ABC wedge alias !<)! roundtrips back to canonical !crescendo)!", () => {
+    const abc = `X:1
+T:Symbolic crescendo stop alias
+M:4/4
+L:1/4
+K:C
+C !<)!D |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("stop");
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!crescendo)!D");
+    expect(exportedAbc).not.toContain("!<)!");
+  });
+
+  it("ABC wedge alias !>)! roundtrips back to canonical !diminuendo)!", () => {
+    const abc = `X:1
+T:Symbolic diminuendo stop alias
+M:4/4
+L:1/4
+K:C
+!>(!C !>)!D |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(
+      Array.from(srcDoc.querySelectorAll("part > measure > direction > direction-type > wedge")).some(
+        (node) => node.getAttribute("type") === "stop",
+      ),
+    ).toBe(true);
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!diminuendo)!D");
+    expect(exportedAbc).not.toContain("!>)!");
   });
 
   it("MusicXML->ABC exports up-bow/down-bow and roundtrips them", () => {
@@ -5128,6 +5636,63 @@ K:C
     const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
     expect(exportedAbc).toContain("!upbow!");
     expect(exportedAbc).not.toContain("!up bow!");
+  });
+
+  it("ABC bowing alias !up-bow! roundtrips back to canonical !upbow!", () => {
+    const abc = `X:1
+T:Up-bow hyphen alias
+M:4/4
+L:1/4
+K:C
+!up-bow!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > up-bow")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!upbow!");
+    expect(exportedAbc).not.toContain("!up-bow!");
+  });
+
+  it("ABC bowing alias !down-bow! roundtrips back to canonical !downbow!", () => {
+    const abc = `X:1
+T:Down-bow hyphen alias
+M:4/4
+L:1/4
+K:C
+!down-bow!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > down-bow")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!downbow!");
+    expect(exportedAbc).not.toContain("!down-bow!");
+  });
+
+  it("ABC bowing alias !down bow! roundtrips back to canonical !downbow!", () => {
+    const abc = `X:1
+T:Down bow spaced alias
+M:4/4
+L:1/4
+K:C
+!down bow!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > down-bow")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!downbow!");
+    expect(exportedAbc).not.toContain("!down bow!");
   });
 
   it("MusicXML->ABC exports down-bow and roundtrips it", () => {
@@ -5284,6 +5849,63 @@ K:C
     expect(exportedAbc).not.toContain("!double tongue!");
   });
 
+  it("ABC tongue alias !double-tongue! roundtrips back to canonical !doubletongue!", () => {
+    const abc = `X:1
+T:Double tongue hyphen alias
+M:4/4
+L:1/4
+K:C
+!double-tongue!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > double-tongue")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!doubletongue!");
+    expect(exportedAbc).not.toContain("!double-tongue!");
+  });
+
+  it("ABC tongue alias !triple tongue! roundtrips back to canonical !tripletongue!", () => {
+    const abc = `X:1
+T:Triple tongue alias
+M:4/4
+L:1/4
+K:C
+!triple tongue!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > triple-tongue")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!tripletongue!");
+    expect(exportedAbc).not.toContain("!triple tongue!");
+  });
+
+  it("ABC tongue alias !triple-tongue! roundtrips back to canonical !tripletongue!", () => {
+    const abc = `X:1
+T:Triple tongue hyphen alias
+M:4/4
+L:1/4
+K:C
+!triple-tongue!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > triple-tongue")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!tripletongue!");
+    expect(exportedAbc).not.toContain("!triple-tongue!");
+  });
+
   it("MusicXML->ABC exports triple-tongue and roundtrips it", () => {
     const xmlWithTripleTongue = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -5358,6 +5980,44 @@ K:C
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("note > notations > technical > heel")).not.toBeNull();
+  });
+
+  it("ABC toe alias !toe mark! roundtrips back to canonical !toe!", () => {
+    const abc = `X:1
+T:Toe mark alias
+M:4/4
+L:1/4
+K:C
+!toe mark!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > toe")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!toe!");
+    expect(exportedAbc).not.toContain("!toe mark!");
+  });
+
+  it("ABC heel alias !heel mark! roundtrips back to canonical !heel!", () => {
+    const abc = `X:1
+T:Heel mark alias
+M:4/4
+L:1/4
+K:C
+!heel mark!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > heel")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!heel!");
+    expect(exportedAbc).not.toContain("!heel mark!");
   });
 
   it("MusicXML->ABC exports toe and roundtrips it", () => {
@@ -5810,6 +6470,25 @@ K:C
     expect(exportedAbc).not.toContain("!open-string!");
   });
 
+  it("ABC open-string alias !open string! roundtrips back to canonical !open!", () => {
+    const abc = `X:1
+T:Open string spaced alias
+M:4/4
+L:1/4
+K:C
+!open string!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > open-string")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!open!");
+    expect(exportedAbc).not.toContain("!open string!");
+  });
+
   it("MusicXML->ABC exports snap-pizzicato and roundtrips it", () => {
     const xmlWithSnapPizzicato = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -5886,6 +6565,25 @@ K:C
     const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
     expect(exportedAbc).toContain("!snap!");
     expect(exportedAbc).not.toContain("!snap-pizzicato!");
+  });
+
+  it("ABC snap-pizzicato alias !snap pizzicato! roundtrips back to canonical !snap!", () => {
+    const abc = `X:1
+T:Snap pizzicato spaced alias
+M:4/4
+L:1/4
+K:C
+!snap pizzicato!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > snap-pizzicato")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!snap!");
+    expect(exportedAbc).not.toContain("!snap pizzicato!");
   });
 
   it("MusicXML->ABC exports harmonic and roundtrips it", () => {
@@ -6004,6 +6702,63 @@ K:C
     const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
     expect(exportedAbc).toContain("!thumb!");
     expect(exportedAbc).not.toContain("!thumbposition!");
+  });
+
+  it("ABC thumb-position alias !thumb pos! roundtrips back to canonical !thumb!", () => {
+    const abc = `X:1
+T:Thumb spaced alias
+M:4/4
+L:1/4
+K:C
+!thumb pos!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > thumb-position")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!thumb!");
+    expect(exportedAbc).not.toContain("!thumb pos!");
+  });
+
+  it("ABC thumb-position alias !thumb position! roundtrips back to canonical !thumb!", () => {
+    const abc = `X:1
+T:Thumb position alias
+M:4/4
+L:1/4
+K:C
+!thumb position!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > thumb-position")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!thumb!");
+    expect(exportedAbc).not.toContain("!thumb position!");
+  });
+
+  it("ABC thumb-position alias !thumb-position! roundtrips back to canonical !thumb!", () => {
+    const abc = `X:1
+T:Thumb hyphen alias
+M:4/4
+L:1/4
+K:C
+!thumb-position!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > thumb-position")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!thumb!");
+    expect(exportedAbc).not.toContain("!thumb-position!");
   });
 
   it("MusicXML->ABC exports mordent/inverted-mordent and roundtrips them", () => {
@@ -6130,6 +6885,104 @@ K:C
     expect(outDoc.querySelector("note > notations > ornaments > inverted-mordent")).not.toBeNull();
   });
 
+  it("ABC mordent aliases roundtrip back to canonical mordent-family names", () => {
+    const abc = `X:1
+T:Mordent alias canonicalization
+M:4/4
+L:1/4
+K:C
+!lowermordent!C !uppermordent!D |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > mordent")).not.toBeNull();
+    expect(srcDoc.querySelectorAll("note > notations > ornaments > inverted-mordent").length).toBeGreaterThanOrEqual(1);
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!mordent!");
+    expect(exportedAbc).toContain("!pralltriller!");
+    expect(exportedAbc).not.toContain("!lowermordent!");
+    expect(exportedAbc).not.toContain("!uppermordent!");
+  });
+
+  it("ABC mordent alias !prall! roundtrips back to canonical !pralltriller!", () => {
+    const abc = `X:1
+T:Prall alias canonicalization
+M:4/4
+L:1/4
+K:C
+!prall!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > inverted-mordent")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!pralltriller!");
+    expect(exportedAbc).not.toContain("!prall!");
+  });
+
+  it("ABC mordent alias !pralltrill! roundtrips back to canonical !pralltriller!", () => {
+    const abc = `X:1
+T:Pralltrill alias canonicalization
+M:4/4
+L:1/4
+K:C
+!pralltrill!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > inverted-mordent")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!pralltriller!");
+    expect(exportedAbc).not.toContain("!pralltrill!");
+  });
+
+  it("ABC mordent alias !invertedmordent! roundtrips back to canonical !pralltriller!", () => {
+    const abc = `X:1
+T:Invertedmordent alias canonicalization
+M:4/4
+L:1/4
+K:C
+!invertedmordent!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > inverted-mordent")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!pralltriller!");
+    expect(exportedAbc).not.toContain("!invertedmordent!");
+  });
+
+  it("ABC mordent alias !inverted-mordent! roundtrips back to canonical !pralltriller!", () => {
+    const abc = `X:1
+T:Inverted-mordent alias canonicalization
+M:4/4
+L:1/4
+K:C
+!inverted-mordent!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > ornaments > inverted-mordent")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!pralltriller!");
+    expect(exportedAbc).not.toContain("!inverted-mordent!");
+  });
+
   it("MusicXML->ABC exports arpeggiate as canonical !arpeggio! and roundtrips it", () => {
     const xmlWithArpeggiate = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -6174,6 +7027,44 @@ K:C
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("note > notations > arpeggiate")).not.toBeNull();
+  });
+
+  it("ABC arpeggiate alias !roll! roundtrips back to canonical !arpeggio!", () => {
+    const abc = `X:1
+T:Roll alias
+M:4/4
+L:1/4
+K:C
+!roll![CEG] z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > arpeggiate")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!arpeggio![");
+    expect(exportedAbc).not.toContain("!roll!");
+  });
+
+  it("ABC arpeggiate alias !arpeggiate! roundtrips back to canonical !arpeggio!", () => {
+    const abc = `X:1
+T:Arpeggiate alias canonicalization
+M:4/4
+L:1/4
+K:C
+!arpeggiate![CEG] z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > arpeggiate")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!arpeggio![");
+    expect(exportedAbc).not.toContain("!arpeggiate!");
   });
 
   it("MusicXML->ABC exports schleifer/shake and roundtrips them", () => {
@@ -7308,6 +8199,25 @@ K:C
     expect(exportedAbc).not.toContain("!plus!");
   });
 
+  it("ABC stopped alias !+! roundtrips back to canonical !stopped!", () => {
+    const abc = `X:1
+T:Stopped symbol alias
+M:4/4
+L:1/4
+K:C
+!+!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > stopped")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!stopped!");
+    expect(exportedAbc).not.toContain("!+!");
+  });
+
   it("ABC stopped alias !stopped horn! roundtrips back to canonical !stopped!", () => {
     const abc = `X:1
 T:Stopped horn alias
@@ -7325,6 +8235,25 @@ K:C
     const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
     expect(exportedAbc).toContain("!stopped!");
     expect(exportedAbc).not.toContain("!stopped horn!");
+  });
+
+  it("ABC stopped alias !stopped-horn! roundtrips back to canonical !stopped!", () => {
+    const abc = `X:1
+T:Stopped horn hyphen alias
+M:4/4
+L:1/4
+K:C
+!stopped-horn!C z |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+    expect(srcDoc.querySelector("note > notations > technical > stopped")).not.toBeNull();
+
+    const exportedAbc = exportMusicXmlDomToAbc(srcDoc);
+    expect(exportedAbc).toContain("!stopped!");
+    expect(exportedAbc).not.toContain("!stopped-horn!");
   });
 
   it("MusicXML->ABC exports slur notation and roundtrips it", () => {
@@ -7589,6 +8518,86 @@ K:C
     expect(outDoc.querySelector("note > notations > ornaments > accidental-mark")?.textContent?.trim()).toBe("sharp");
   });
 
+  it("MusicXML->ABC exports editorial accidentals and roundtrips them", () => {
+    const xmlWithEditorialAccidental = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><alter>1</alter><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <accidental editorial="yes">sharp</accidental>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithEditorialAccidental);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!editorial!^C");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const accidental = outDoc.querySelector("note > accidental");
+    expect(accidental?.textContent?.trim()).toBe("sharp");
+    expect(accidental?.getAttribute("editorial")).toBe("yes");
+  });
+
+  it("MusicXML->ABC exports courtesy accidentals and roundtrips them", () => {
+    const xmlWithCourtesyAccidental = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>1</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>F</step><alter>0</alter><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <accidental cautionary="yes">natural</accidental>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithCourtesyAccidental);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!courtesy!=F");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const accidental = outDoc.querySelector("note > accidental");
+    expect(accidental?.textContent?.trim()).toBe("natural");
+    expect(accidental?.getAttribute("cautionary")).toBe("yes");
+  });
+
   it("MusicXML->ABC->MusicXML preserves per-part key signatures via standard K fields", () => {
     const xmlWithMixedPartKeys = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -7793,6 +8802,57 @@ z6 |
     expect(p3Block).toContain("=G");
   });
 
+  it("MusicXML->ABC exports common C-clef headers and roundtrips them", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Alto staff</part-name></score-part>
+    <score-part id="P2"><part-name>Tenor staff</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>C</sign><line>3</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>C</sign><line>4</line></clef>
+      </attributes>
+      <note><pitch><step>D</step><octave>3</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain('V:P1 name="Alto staff" clef=alto');
+    expect(abc).toContain('V:P2 name="Tenor staff" clef=tenor');
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const parts = Array.from(outDoc.querySelectorAll("part"));
+    expect(parts[0]?.querySelector("measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(parts[0]?.querySelector("measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
+    expect(parts[1]?.querySelector("measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(parts[1]?.querySelector("measure > attributes > clef > line")?.textContent?.trim()).toBe("4");
+  });
+
   it("MusicXML->ABC emits mks metadata for measure/repeat/transpose and tuplet syntax", () => {
     const xmlWithMeasureMeta = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -7880,6 +8940,28 @@ V:P1
     expect(outDoc.querySelector('part > measure[number="2"] note > notations > tuplet[type="stop"]')).not.toBeNull();
   });
 
+  it("ABC->MusicXML supports common tuplet shorthand (3 in the bounded subset", () => {
+    const abc = `X:1
+T:Tuplet shorthand
+M:3/4
+L:1/8
+K:C
+V:1
+(3 DEF z2 |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = Array.from(outDoc.querySelectorAll("part > measure note"));
+    expect(notes.length).toBeGreaterThanOrEqual(4);
+    expect(notes[0]?.querySelector("time-modification > actual-notes")?.textContent?.trim()).toBe("3");
+    expect(notes[0]?.querySelector("time-modification > normal-notes")?.textContent?.trim()).toBe("2");
+    expect(notes[0]?.querySelector('notations > tuplet[type="start"]')).not.toBeNull();
+    expect(notes[2]?.querySelector('notations > tuplet[type="stop"]')).not.toBeNull();
+  });
+
   it("MusicXML->ABC keeps %@mks repeat times only when standard ABC cannot express them", () => {
     const xmlWithThreeTimesRepeat = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -7911,6 +8993,78 @@ V:P1
     expect(abc).toContain("|:");
     expect(abc).toContain(":|");
     expect(abc).toContain("%@mks measure voice=P1 measure=2 number=2 implicit=0 times=3");
+  });
+
+  it("ABC->MusicXML restores repeat times from %@mks measure metadata when standard ABC surface is insufficient", () => {
+    const abc = `X:1
+T:Repeat times restore
+M:4/4
+L:1/4
+K:C
+V:P1
+|: C D E F | G A B c :|
+%@mks measure voice=P1 measure=1 number=1 implicit=0
+%@mks measure voice=P1 measure=2 number=2 implicit=0 times=3
+`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('part > measure[number="2"] > barline[location="right"] > repeat')?.getAttribute("direction")).toBe("backward");
+    expect(outDoc.querySelector('part > measure[number="2"] > barline[location="right"] > repeat')?.getAttribute("times")).toBe("3");
+  });
+
+  it("MusicXML->ABC keeps discontinue ending metadata only when standard ABC surface is insufficient", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <barline location="left"><ending number="1" type="start"/></barline>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>3840</duration><voice>1</voice><type>whole</type></note>
+      <barline location="right"><ending number="1" type="discontinue"/></barline>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("[1");
+    expect(abc).toContain("%@mks measure voice=P1 measure=1 number=1 implicit=0 ending-stop=1 ending-type=discontinue");
+  });
+
+  it("ABC->MusicXML restores discontinue ending type from %@mks measure metadata", () => {
+    const abc = `X:1
+T:Ending discontinue restore
+M:4/4
+L:1/4
+K:C
+V:P1
+[1 C D E F |
+%@mks measure voice=P1 measure=1 number=1 implicit=0 ending-stop=1 ending-type=discontinue
+`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="left"] > ending')?.getAttribute("type")).toBe("start");
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="right"] > ending')?.getAttribute("number")).toBe("1");
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="right"] > ending')?.getAttribute("type")).toBe("discontinue");
   });
 
   it("MusicXML->ABC does not split a separate lane for grace notes missing voice", () => {

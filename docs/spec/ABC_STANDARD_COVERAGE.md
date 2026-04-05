@@ -150,20 +150,80 @@ Start here when converting coverage findings into concrete TODO items.
 | Core identification / title / attribution: `X:`, `T:`, `C:` | supported | Supported in ordinary import/export flows. |
 | Core musical defaults: `M:`, `L:`, `K:`, `Q:` | supported | Supported in ordinary import/export flows, including inline-core variants where implemented. |
 | Voice field: `V:` | partial | Common voice metadata is supported, but full property breadth is not yet covered. |
-| Other standard fields outside the current core subset | unsupported | No complete support claim yet. |
+| Other standard fields outside the current core subset | unsupported | They may be lexically accepted as inert header text, but no supported semantic import/export claim is made for them. |
+
+### 3.1 Information-Field Policy Notes
+
+Current bounded subset for `mikuscore` header-field support:
+
+- supported core subset
+  - `X:`, `T:`, `C:`
+  - `M:`, `L:`, `K:`, `Q:`
+  - `V:` remains covered separately under the voice-property policy
+- unsupported non-core field family
+  - standard information fields outside the current core subset are not part of the supported ABC interchange target
+  - they may be lexically tolerated in the header scan, but `mikuscore` does not currently claim semantic import/export support for them
+- export policy
+  - standard ABC export emits only the current core subset and `V:` sections needed by the current bounded target
+
+Practical result mode for `ABC-COV-001`:
+
+- `support bounded subset`
+- keep the supported header-field family explicit
+- do not treat lexically accepted but semantically inert fields as supported ABC coverage
 
 #### 3.2 Use of fields within the tune body
 
 | Inline field group | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Core inline fields: `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` | supported | These are supported in the current standard path. |
-| Broader inline-field family beyond the current core subset | unsupported | No complete support claim yet. |
+| Broader inline-field family beyond the current core subset | unsupported | Unsupported inline fields are skipped with warnings rather than treated as semantically supported. |
+
+### 3.2 / 7.3 Inline-Field Policy Notes
+
+Current bounded subset for `mikuscore` inline-field support:
+
+- supported
+  - `[K:...]`
+  - `[M:...]`
+  - `[L:...]`
+  - `[Q:...]`
+  - `[V:...]`
+- unsupported
+  - broader inline-field family beyond that core subset
+- handling rule
+  - unsupported inline fields are skipped with warnings
+  - lexical recognition of an inline field does not count as semantic support
+
+Practical result mode for `ABC-COV-002`:
+
+- `support bounded subset`
+- keep the inline-field subset explicit at `[K/M/L/Q/V]`
+- require deliberate policy work before expanding beyond that subset
 
 #### 3.3 Field continuation
 
 | Area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Continued information-field lines | unsupported | No current support claim or dedicated reconstruction policy. |
+
+### 3.3 Field-Continuation Policy Notes
+
+Current policy for `mikuscore`:
+
+- unsupported in the present bounded ABC target
+  - continued information-field lines are not part of the supported interchange subset
+  - lexical tolerance of adjacent header text does not count as continuation support
+- intentionally deferred
+  - field continuation will not be treated as planned work unless practical input evidence makes it necessary
+- rationale
+  - current core field subset works without continuation support
+  - continuation support looks low-value relative to other practical ABC interoperability gaps
+
+Practical result mode for `ABC-COV-003`:
+
+- `defer intentionally`
+- keep field continuation explicitly outside the current supported subset unless real-world demand changes that priority
 
 ### 4.6 Clefs and Transposition
 
@@ -173,12 +233,58 @@ Start here when converting coverage findings into concrete TODO items.
 | Broader standard clef forms and exact parity | partial | Full standard breadth and export parity are not yet closed. |
 | Voice-level transpose handling | partial | Some `V:`-level transpose behavior exists, but full standard coverage is not yet claimed. |
 
+### 4.6 Clef / Transposition Policy Notes
+
+Current policy for `mikuscore`:
+
+- supported in the bounded subset
+  - common standard `V:` clef values: `treble`, `bass`, `alto`, `tenor`, `c3`, `c4`
+  - compatibility shorthand import such as bare `V:2 bass`
+  - current clef export for the common recognized subset
+- partial / extension-assisted
+  - standard `V:` transpose is import-partial in the current path
+  - transpose-preserving roundtrip currently relies on `%@mks transpose ...`
+- intentionally not claimed
+  - broader standard clef breadth or exact parity beyond the current recognized subset
+  - full standard `V:` transpose parity on export
+- rationale
+  - the common working clef subset already covers practical interchange cases seen in current inputs
+  - explicit boundary-setting is clearer than implying broader clef/transpose parity than the implementation actually provides
+
+Practical result mode for `ABC-COV-004`:
+
+- `support bounded subset`
+- keep the current common clef subset and extension-assisted transpose story explicit
+- do not claim broader clef/transpose parity beyond the current recognized subset
+
 ### 4.7 Beams
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Duration-based beam reconstruction | supported | Normal export reconstructs beams from note values. |
-| Whitespace as explicit beam-separation intent | partial | Import recognizes it, but export does not yet preserve ABC spacing intent faithfully. |
+| Whitespace as explicit beam-separation intent | partial | Import recognizes it as a beam-break hint within a voice/measure beam run, but export does not preserve original ABC spacing textually. |
+| Exact source whitespace preservation for beam grouping | unsupported | Original ABC inter-note spacing is not currently treated as canonical roundtrip data. |
+
+### 4.7 Beam Policy Notes
+
+Current bounded subset for `mikuscore`:
+
+- import side
+  - whitespace between beamable notes is treated as an explicit beam-break hint
+  - this hint applies within the current voice and measure
+  - beat boundaries still split implicit beam runs even without whitespace
+- export side
+  - canonical export does not currently encode beam grouping through preserved ABC spacing patterns
+  - exported ABC uses ordinary token spacing and leaves beam reconstruction largely to downstream ABC consumers
+- roundtrip claim
+  - `mikuscore` currently preserves beam-break intent on ABC import into MusicXML
+  - `mikuscore` does not currently claim export-side preservation of original ABC whitespace used only as beam layout intent
+
+Practical result mode for `ABC-COV-005`:
+
+- `support bounded subset`
+- preserve import-side beam-break interpretation in the current MusicXML/ABC interchange level
+- do not treat exact original inter-note spacing as canonical interchange data unless a future extension carrier is introduced
 
 ### 4.8-4.10 Repeat Structure
 
@@ -187,6 +293,7 @@ Start here when converting coverage findings into concrete TODO items.
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Common repeat barlines | supported | Standard repeat/barline handling works in common cases. |
+| Repeat counts beyond ordinary `:|` behavior | partial | Backward repeat is supported in the standard surface; explicit repeat counts beyond the ordinary case currently rely on `%@mks measure ... times=...` extension metadata. |
 | Broader repeat/barline variants and edge reconstruction | partial | Full closure is not yet claimed. |
 
 #### 4.9 First and second repeats
@@ -201,15 +308,56 @@ Start here when converting coverage findings into concrete TODO items.
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Common variant-ending surface syntax | supported | Common standard syntax works in the current path. |
+| Ending stop type `discontinue` | partial | Ordinary start/stop endings are supported in the standard surface; `discontinue` currently relies on `%@mks measure ... ending-stop=... ending-type=discontinue` extension metadata. |
 | Broader variant-ending semantics | partial | Full semantics and edge-case coverage remain to be audited. |
+
+### 4.8-4.10 Repeat / Ending Policy Notes
+
+Current bounded subset for `mikuscore`:
+
+- standard ABC surface support
+  - common repeat barlines: `|:` and `:|`
+  - common alternate-ending starts/stops: `[1`, `[2`, `|1`, `:|2`
+- extension-assisted repeat / ending preservation
+  - backward repeat counts beyond the ordinary case use `%@mks measure ... times=...`
+  - ending stop type `discontinue` uses `%@mks measure ... ending-stop=... ending-type=discontinue`
+- unsupported or not yet claimed
+  - broader repeat/barline variants beyond the current common subset
+  - broader variant-ending semantics beyond ordinary start/stop behavior
+
+Practical result mode for `ABC-COV-006`:
+
+- `support bounded subset`
+- prefer standard ABC surface syntax for common repeat / ending cases
+- use `%@mks measure` only for edge semantics that the current standard export path does not encode directly
 
 ### 4.11 Ties and Slurs
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Tie syntax and common reconstruction | supported | Common tie handling is solid, including whole-chord tie paths. |
-| Slur syntax acceptance | supported | Common slur syntax is accepted. |
-| Exact slur span reconstruction and edge semantics | partial | Cross-format span behavior still needs care. |
+| Slur syntax acceptance | supported | Common unnumbered slur start/stop syntax is accepted. |
+| Exact slur span reconstruction and edge semantics | partial | Cross-format span behavior still needs care; numbered/nested slur identity and broader edge semantics are not fully preserved. |
+
+### 4.11 Slur Policy Notes
+
+Current bounded subset for `mikuscore` slur handling:
+
+- supported
+  - ordinary ABC `(` / `)` slur markers in common note-to-note cases
+  - MusicXML note-level slur start/stop presence in simple cases
+- current interpretation limits
+  - slur handling is currently presence-based, not identity-based
+  - `mikuscore` does not currently claim faithful preservation of slur numbering, nested slur identity, or other exact span-matching semantics
+  - ABC slur stop without a preceding non-rest note is treated as unsupported and currently yields a warning
+- tie distinction
+  - ties remain stronger than slurs and are tracked separately; chord ties are preserved more faithfully than generic slur span identity
+
+Practical result mode for `ABC-COV-007`:
+
+- `support bounded subset`
+- preserve common start/stop slur presence
+- do not claim numbered/nested slur identity preservation until a stronger span model is implemented
 
 ### 4.13 Tuplets
 
@@ -217,6 +365,27 @@ Start here when converting coverage findings into concrete TODO items.
 |---|---|---|
 | Core tuplet syntax and common roundtrip | supported | Core parse/export works in the current path. |
 | Full standard ratio nuance and edge semantics | partial | Full audit closure is not yet complete. |
+
+### 4.13 Tuplet Policy Notes
+
+Current policy for `mikuscore`:
+
+- supported in the bounded subset
+  - common ABC tuplet syntax `(n[:q][:r])` in ordinary note sequences
+  - common MusicXML roundtrip through `<time-modification>` and note-level `<tuplet>` start/stop
+  - common explicit tuplet export such as `(3:2:3` in the current MusicXML -> ABC path
+- intentionally not claimed
+  - full standard nuance for broader ratio/edge semantics beyond the currently tested subset
+  - broader cross-measure or more complex tuplet-span semantics
+- rationale
+  - core tuplet interchange is already useful and covered by focused regression tests
+  - the remaining work is edge clarification, not basic support
+
+Practical result mode for `ABC-COV-008`:
+
+- `support bounded subset`
+- keep common tuplet syntax and current MusicXML roundtrip behavior supported and tested
+- do not claim broader ratio/span semantics beyond the current bounded subset
 
 ### 4.14 Decorations (ABC 2.1)
 
@@ -286,27 +455,108 @@ These notes are the current canonical policy for standard-decoration handling.
 |---|---|---|
 | `s:` symbol lines | unsupported | No current support claim. |
 
+### 4.15 Symbol-Line Policy Notes
+
+Current policy for `mikuscore`:
+
+- out of practical scope for the present bounded ABC target
+  - standard `s:` symbol lines are not part of the supported interchange subset
+  - there is no current import/export or roundtrip support claim for them
+- intentionally frozen out of scope unless real input demand changes priority
+- rationale
+  - symbol lines currently look low-value compared with other musical-structure interoperability work
+  - leaving them unsupported is clearer than implying partial support without a defined preservation model
+
+Practical result mode for `ABC-COV-010`:
+
+- `out of practical scope`
+- keep `s:` explicitly outside the current bounded support target unless practical demand changes
+
 ### 4.16 Redefinable Symbols
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | `U:` single-character import aliases | supported | Current import path supports user-defined decoration aliases. |
-| Broader `U:` parity, export, and exact standard semantics | partial | Full support claim is not yet made. |
+| Broader `U:` parity, export, and exact standard semantics | partial | Current support is import-first; export parity and broader semantics are not claimed. |
+
+### 4.16 `U:` Policy Notes
+
+Current bounded subset for `mikuscore`:
+
+- supported
+  - import of `U:` single-character decoration aliases
+  - both `!decor!` and `+decor+` style right-hand side wrappers in the current import path
+- intentionally not claimed
+  - export of `U:` declarations as a standard ABC roundtrip feature
+  - exact parity for broader redefinable-symbol semantics beyond the current single-character decoration-alias import behavior
+- malformed input handling
+  - malformed `U:` declarations are ignored rather than treated as fatal parse errors
+
+Practical result mode for `ABC-COV-011`:
+
+- `support bounded subset`
+- keep `U:` as import-first functionality
+- do not currently require `U:` export parity for ABC completion claims
 
 ### 4.18 Chord Symbols
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
-| Common harmonic quoted symbols | partial | Many common forms now roundtrip through MusicXML `harmony`. |
-| Broader quality inventory and edge spelling | partial | Coverage remains incomplete. |
+| Common harmonic quoted symbols | supported | The current bounded inventory roundtrips through MusicXML `harmony`. |
+| Broader quality inventory and edge spelling | partial | Coverage remains incomplete; unsupported chord-like quoted text falls back to annotation/words instead of being forced into `harmony`. |
 | Full standard chord-symbol breadth | unsupported | No full support claim yet. |
+
+### 4.18 Chord-Symbol Policy Notes
+
+Current bounded subset for `mikuscore` quoted chord-symbol support:
+
+- supported root spelling
+  - `A`-`G`
+  - optional `#` / `b`
+  - optional slash bass with the same root spelling subset
+- supported suffix inventory
+  - major: empty suffix
+  - minor: `m`, `min`
+  - sixths: `6`, `m6`, `min6`
+  - sevenths / extensions: `7`, `9`, `11`, `13`, `maj7`, `maj9`, `m7`, `min7`, `m9`, `min9`
+  - suspended / altered common subset: `7sus4`, `sus4`, `sus2`
+  - diminished / augmented subset: `dim`, `dim7`, `aug`, `+`, `m7b5`, `min7b5`, `ø`
+- export policy
+  - recognized MusicXML harmony kinds are exported back to canonical ABC quoted chord symbols in the current subset
+  - unsupported harmony kinds are not claimed as standard quoted-chord coverage
+- fallback policy
+  - quoted text outside the supported chord-symbol inventory is treated as annotation/words rather than forced into MusicXML `harmony`
+
+Practical result mode for `ABC-COV-012`:
+
+- `support bounded subset`
+- keep the recognized quoted-chord inventory explicit and testable
+- treat unsupported chord-like quoted text as annotation fallback unless and until the supported inventory is deliberately expanded
 
 ### 4.19 Annotations
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
-| Common quoted non-harmonic text | partial | Common forms are partially mapped as direction words / annotations. |
+| Common quoted non-harmonic text | supported | Common quoted non-harmonic text is mapped as direction words / annotations in the current bounded subset. |
 | Broader annotation placement and behavior | unsupported | No full standard support claim yet. |
+
+### 4.19 Annotation Policy Notes
+
+Current bounded subset for `mikuscore` annotation handling:
+
+- supported
+  - quoted non-harmonic text attached to notes is imported as MusicXML direction words
+  - MusicXML direction words are exported as quoted ABC annotations in common cases
+  - quoted text that does not fit the supported chord-symbol inventory falls back to annotation/words
+- intentionally not claimed
+  - broader annotation placement semantics beyond the current note-attached quoted-text / direction-words path
+  - full parity for all standard annotation positioning/behavior nuances
+
+Practical result mode for `ABC-COV-013`:
+
+- `support bounded subset`
+- keep quoted non-harmonic text support explicit through the current direction-words path
+- do not claim broader annotation semantics beyond that bounded subset
 
 ### 4.20 Order of abc constructs
 
@@ -314,6 +564,27 @@ These notes are the current canonical policy for standard-decoration handling.
 |---|---|---|
 | Common construct orderings seen in practical ABC | partial | Many common orders work, but there is no complete conformance claim. |
 | Full order-of-constructs conformance | unsupported | Not yet audited to closure. |
+
+### 4.20 Order-of-Constructs Policy Notes
+
+Current policy for `mikuscore`:
+
+- supported in the bounded practical sense
+  - accept the common construct orderings already handled by the current parser
+  - prefer practical acceptance of structurally recognizable real-world ABC over strict rejection based only on a narrower reading of construct-order rules
+  - keep the failure boundary at cases that remain structurally ambiguous or that break note/directive interpretation
+- intentionally not claimed
+  - full formal conformance to every standard order-of-constructs nuance
+  - exact acceptance parity with every ABC implementation for unusual but technically legal construct orderings
+- rationale
+  - the current ABC target is practical interchange, not a fully validated reference implementation of the standard grammar
+  - the important boundary is to avoid misparsing or silently reclassifying structurally unclear input as supported music content
+
+Practical result mode for `ABC-COV-014`:
+
+- `support bounded subset`
+- keep broad practical acceptance where the current parser behavior is stable and musically interpretable
+- do not claim complete formal order-of-constructs conformance beyond that bounded subset
 
 ### 5. Lyrics
 
@@ -337,13 +608,40 @@ These notes are the current canonical policy for standard-decoration handling.
 |---|---|---|
 | Verse numbering semantics | unsupported | No current support claim. |
 
+### 5.1-5.3 Lyrics Policy Notes
+
+Current policy for `mikuscore`:
+
+- supported in the bounded subset
+  - common `w:` underlay import/export
+  - common single-verse lyric alignment in ordinary note sequences
+  - ordinary hyphenated lyric token handling in the current `w:` path
+- intentionally not claimed
+  - full lyric alignment nuance across rests, spacers, grace, and more complex spacing rules
+  - full multi-verse behavior parity
+  - verse numbering semantics
+- rationale
+  - current lyric support is useful for common interchange cases and is already exercised by focused tests
+  - broader lyric semantics should not be implied until alignment and multi-verse behavior are audited more deeply
+
+Practical result mode for `ABC-COV-015`:
+
+- `support bounded subset`
+- keep common `w:` lyric behavior supported and tested
+- do not claim broader lyric alignment, multi-verse, or numbering semantics beyond that subset
+
 ### 7. Multiple Voices
 
 #### 7.1 Voice properties
 
 | Sub-area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
-| Common voice identity and metadata (`V:`, name, clef, common transpose) | partial | Common working subset is supported. |
+| Voice identity / lane selection (`V:id`) | supported | Standard voice selection and per-voice body routing are supported in normal import/export flow. |
+| Voice name (`name=...`) | supported | Import/export of `name=...` is supported in the current standard path. |
+| Common clef metadata (`clef=treble`, `clef=bass`, `clef=alto`, `clef=tenor`, `clef=c3`, `clef=c4`) | supported | Common working clef subset is supported on import/export; bare clef shorthand is accepted as compatibility behavior. |
+| Voice transpose property (`transpose=...`) | partial | Import path accepts a bounded chromatic transpose value, but standard `V:` transpose is not yet emitted on export; export currently relies on `%@mks transpose ...` extension metadata for roundtrip restoration. |
+| Extension-assisted voice transpose roundtrip (`%@mks transpose ...`) | ext-only | Voice transpose can be preserved on export/import roundtrip through `mikuscore` extension metadata even where the standard `V:` property is not emitted. |
+| Broader standard voice properties (`staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`, etc.) | unsupported | No current support claim in the standard ABC path; unsupported properties should be skipped with warnings rather than silently treated as supported metadata. |
 | Full standard voice-property breadth | unsupported | No complete support claim yet. |
 
 #### 7.2 Breaking lines
@@ -366,14 +664,58 @@ These notes are the current canonical policy for standard-decoration handling.
 | Import acceptance of `&` overlay syntax | supported | Overlay syntax is accepted on import. |
 | Faithful preservation as one part with synchronized voices | unsupported | Current import expands overlays into synthetic parts instead. |
 
+### 7.4 Overlay Policy Notes
+
+Current policy for `mikuscore`:
+
+- supported
+  - accept ABC overlay syntax `&` on import
+  - preserve the overlaid musical material by expanding it into synthetic overlay voices / parts
+- intentionally not claimed
+  - faithful preservation as one MusicXML part with synchronized internal voices
+  - exact overlay identity roundtrip back to standard ABC `&` surface syntax
+- rationale
+  - current synthetic-part expansion preserves musical content well enough for practical import
+  - faithful same-part overlay preservation would require a stronger internal/roundtrip model than the current bounded ABC support target
+
+Practical result mode for `ABC-COV-017`:
+
+- `defer intentionally`
+- keep `&` import acceptance as supported compatibility behavior
+- do not currently require faithful same-part overlay preservation for ABC completion claims
+
 ## ABC 2.2 Delta
 
 This section tracks standard items that are better treated as post-2.1 additions rather than silently folded into the baseline table.
 
 | ABC 2.2 delta item | Status | Current interpretation for `mikuscore` |
 |---|---|---|
-| `!editorial!` decoration | unsupported | Not yet supported in the standard ABC path. |
-| `!courtesy!` decoration | unsupported | Not yet supported in the standard ABC path. |
+| `!editorial!` decoration | supported | Supported as a bounded accidental-decoration modifier on the following explicit accidental, mapped to MusicXML `accidental@editorial="yes"`. |
+| `!courtesy!` decoration | supported | Supported as a bounded accidental-decoration modifier on the following explicit accidental, mapped to MusicXML `accidental@cautionary="yes"`. |
+
+### ABC 2.2 Delta Policy Notes
+
+Current policy for `mikuscore`:
+
+- `!editorial!`
+  - now included in the bounded supported roadmap
+  - interpreted as a modifier for the following explicit accidental
+- `!courtesy!`
+  - now included in the bounded supported roadmap
+  - interpreted as a modifier for the following explicit accidental
+
+Rationale:
+
+- current ABC completion work is organized around the `2.1` baseline plus explicit delta triage
+- both decorations fit naturally into the existing accidental import/export path
+- both are standard 2.2 decorations with practical musical value, and are narrower than broader deferred engraving/layout areas
+- the bounded support target is accidental-level editorial/cautionary flags, not wider engraving semantics
+
+Practical result mode for `ABC-COV-018`:
+
+- `support bounded subset`
+- keep broader 2.2 delta expansion explicit, but treat these two accidental decorations as in-scope
+- do not include them in current ABC completion claims
 
 ## Derived Actionable Backlog
 
@@ -420,24 +762,24 @@ This is a non-binding starting recommendation for turning the backlog into TODOs
 
 | Item | Recommended result mode | Rationale |
 |---|---|---|
-| `ABC-COV-001` | `support bounded subset` | Core fields already work; the main need is to bound the rest. |
-| `ABC-COV-002` | `support bounded subset` | The current inline subset is already practical; expansion should be deliberate. |
+| `ABC-COV-001` | `support bounded subset` | Closed for the current bounded subset: the supported core field family is explicit, and non-core information fields are now explicitly treated as semantically unsupported even if lexically tolerated. |
+| `ABC-COV-002` | `support bounded subset` | Closed for the current bounded subset: supported inline fields are explicitly limited to `[K/M/L/Q/V]`, and broader inline fields are now explicitly treated as warning-based skips rather than supported semantics. |
 | `ABC-COV-003` | `defer intentionally` | Field continuation looks low-value unless real input data demands it. |
-| `ABC-COV-004` | `support bounded subset` | Common clefs/transpose already exist; the next step is explicit boundary-setting. |
-| `ABC-COV-005` | `support bounded subset` | Beam intent preservation likely needs a bounded target rather than full formal parity. |
-| `ABC-COV-006` | `support bounded subset` | Common repeat/ending forms are already strong; finish the edge boundary. |
-| `ABC-COV-007` | `support bounded subset` | Ties are strong, but slurs likely need explicit limits before deeper work. |
+| `ABC-COV-004` | `support bounded subset` | Closed for the current bounded subset: the supported clef set is explicit, compatibility shorthand is documented, and transpose remains explicitly partial/extension-assisted. |
+| `ABC-COV-005` | `support bounded subset` | Closed for the current bounded policy: import-side beam-break hints are supported, while exact export-side ABC spacing preservation remains out of scope and is now explicitly documented/tested. |
+| `ABC-COV-006` | `support bounded subset` | Closed for the current bounded subset: common repeat / ending forms use standard ABC surface, while edge cases such as repeat counts beyond the ordinary case and `ending type=discontinue` are explicitly extension-assisted and now covered by tests/spec text. |
+| `ABC-COV-007` | `support bounded subset` | Closed for the current bounded subset: common unnumbered slur start/stop presence is supported, while numbered/nested slur identity and broader span semantics remain explicitly out of claim and are now documented/tested. |
 | `ABC-COV-008` | `support bounded subset` | Tuplets are usable; the remaining work is edge clarification. |
-| `ABC-COV-009` | `support now` | These decoration-policy items are close enough to close in the current series. |
+| `ABC-COV-009` | `support now` | Closed in the current series; canonical policy and implementation/tests are aligned for the tracked items. |
 | `ABC-COV-010` | `out of practical scope` | `s:` symbol lines currently look like a low-priority notation surface. |
-| `ABC-COV-011` | `support bounded subset` | `U:` already has an import path; scope should be bounded before any export ambitions. |
-| `ABC-COV-012` | `support bounded subset` | Chord symbols are important, but inventory-bounding is more realistic than full parity. |
+| `ABC-COV-011` | `support bounded subset` | Closed for the current bounded subset: `U:` remains import-first, single-character decoration-alias support is explicit, malformed declarations are ignored, and export parity is intentionally not claimed. |
+| `ABC-COV-012` | `support bounded subset` | Closed for the current bounded inventory: supported quoted chord-symbol roots/suffixes are now enumerated in spec text and backed by tests, while unsupported quoted chord-like text explicitly falls back to annotation rather than forced harmony parsing. |
 | `ABC-COV-013` | `support bounded subset` | Annotation support should be explicit, not accidental. |
 | `ABC-COV-014` | `support bounded subset` | Practical acceptance is likely sufficient, but that should be stated plainly. |
-| `ABC-COV-015` | `support bounded subset` | Lyrics already work in useful cases; scope clarification is the next step. |
-| `ABC-COV-016` | `support bounded subset` | Voice-property breadth should be enumerated explicitly around the current working subset. |
-| `ABC-COV-017` | `defer intentionally` | Faithful overlay preservation may be expensive relative to current value unless demanded. |
-| `ABC-COV-018` | `defer intentionally` | ABC 2.2 delta items should be roadmap decisions, not silent obligations. |
+| `ABC-COV-015` | `support bounded subset` | Closed for the current bounded subset: common `w:` underlay and ordinary hyphenation are supported, while broader alignment, multi-verse, and numbering semantics remain explicitly out of claim. |
+| `ABC-COV-016` | `support bounded subset` | Closed for the current working subset; supported, partial, ext-only, and unsupported `V:` properties are now enumerated explicitly and backed by tests. |
+| `ABC-COV-017` | `defer intentionally` | Closed by policy: `&` import acceptance remains supported via synthetic overlay voices / parts, while faithful same-part overlay preservation and exact `&` roundtrip are intentionally not current completion targets. |
+| `ABC-COV-018` | `support bounded subset` | Closed for the current bounded 2.2 subset: `!editorial!` and `!courtesy!` are now supported as accidental-level modifiers with import/export/roundtrip coverage. |
 
 ## Ready-to-Transfer TODO Order
 
@@ -454,6 +796,11 @@ If the goal is to turn this document into executable TODO items with minimal ext
 9. `ABC-COV-008`, `ABC-COV-011`, `ABC-COV-015`
 10. `ABC-COV-001`, `ABC-COV-002`, `ABC-COV-003`, `ABC-COV-010`, `ABC-COV-013`, `ABC-COV-014`
 
+Current phase note:
+
+- this transfer order has been fully consumed for the current bounded-coverage pass
+- treat it as historical execution order, not as the current active queue
+
 ## Likely Practical-Scope Freezes
 
 These are not final decisions, but they currently look like the strongest candidates for "explicitly unsupported unless real-world demand appears":
@@ -464,17 +811,159 @@ These are not final decisions, but they currently look like the strongest candid
 - `6.2` playback semantics from ABC notation itself
 - `7.2` line-breaking semantics
 
-## Current High-Priority Gaps
+## Current High-Priority Follow-Ups
 
 - `4.14 Decorations`
-  - ABC 2.2 delta decorations `!editorial!` / `!courtesy!` are still open
-  - implementation follow-up remains open only where code still differs from the settled policy
+  - canonical decoration policy is closed, but implementation/test follow-up may still be needed where broader parity is intentionally bounded
 - `4.7 Beams`
-  - whitespace-as-beam-separation is only partially preserved
+  - bounded policy is closed, but exact export-side spacing preservation remains intentionally out of scope
 - `4.18 Chord symbols`
-  - common forms work, but broader standard harmony spelling coverage remains incomplete
+  - bounded inventory is closed, but broader harmony spelling coverage remains intentionally outside the current subset
 - `7.4 Voice overlay`
-  - imported overlays still become separate MusicXML parts instead of preserved synchronized voices inside one part
+  - policy is closed, but current import still expands overlays into synthetic parts rather than synchronized voices inside one part
+
+## Recently Closed Backlog Items
+
+- `ABC-COV-009`
+  - closed as `support now`
+  - policy text is settled in this document and `docs/spec/ABC_IO.md`
+  - current implementation/tests align on:
+    - canonical `!arpeggio!` export for the current MusicXML `arpeggiate` carrier
+    - canonical `!stopped!` export for `!+!` / `!plus!` import aliases
+    - canonical `!mordent!` / `!pralltriller!` export for mordent-family import aliases
+    - standard `!slide!` as start-side support, with explicit stop kept as `mikuscore` extension `!slide-stop!`
+- `ABC-COV-016`
+  - closed as `support bounded subset`
+  - `7.1 Voice properties` is now decomposed into:
+    - supported: `V:id`, `name=...`, common `clef=...`
+    - partial: standard `transpose=...` import
+    - ext-only: transpose-preserving roundtrip through `%@mks transpose ...`
+    - unsupported: broader standard properties such as `staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`
+  - regression coverage now exists for:
+    - supported `transpose=...` import
+    - warnings on unsupported standard `V:` properties
+- `ABC-COV-005`
+  - closed as `support bounded subset`
+  - bounded policy is now explicit:
+    - import: whitespace is a beam-break hint within the current voice/measure
+    - export: exact beam-specific ABC spacing is not preserved
+    - practical interchange target is beam-break interpretation on import, not verbatim source spacing roundtrip
+  - regression coverage now exists for:
+    - import-side whitespace beam-break hints
+    - current export-side non-preservation of exact beam spacing text
+- `ABC-COV-006`
+  - closed as `support bounded subset`
+  - bounded policy is now explicit:
+    - standard surface support covers common repeat / ending forms: `|:`, `:|`, `[1`, `[2`, `|1`, `:|2`
+    - edge semantics beyond that subset currently rely on `%@mks measure` metadata
+    - repeat counts beyond the ordinary case use `times=...`
+    - ending stop type `discontinue` uses `ending-stop=... ending-type=discontinue`
+  - regression coverage now exists for:
+    - standard repeat barlines
+    - standard alternate endings
+    - extension-assisted repeat counts
+    - extension-assisted `discontinue` ending stop
+- `ABC-COV-012`
+  - closed as `support bounded subset`
+  - bounded quoted-chord inventory is now explicit:
+    - roots/bass: `A`-`G` with optional `#` / `b`
+    - supported suffix subset:
+      - ``
+      - `m`, `min`
+      - `6`, `m6`, `min6`
+      - `7`, `9`, `11`, `13`
+      - `maj7`, `maj9`
+      - `m7`, `min7`, `m9`, `min9`
+      - `7sus4`, `sus4`, `sus2`
+      - `dim`, `dim7`, `aug`, `+`, `m7b5`, `min7b5`, `ø`
+    - unsupported quoted chord-like text falls back to annotation/words
+  - regression coverage now exists for:
+    - supported quoted-chord harmony parsing/export
+    - unsupported quoted chord-like fallback to annotation
+- `ABC-COV-007`
+  - closed as `support bounded subset`
+  - bounded slur policy is now explicit:
+    - supported: common unnumbered start/stop slur presence
+    - unsupported/not yet claimed: numbered/nested slur identity preservation and broader exact span semantics
+    - warning-based edge handling: slur stop without a preceding non-rest note
+  - regression coverage now exists for:
+    - common slur start/stop roundtrip
+    - warning-based unsupported edge behavior
+- `ABC-COV-017`
+  - closed as `defer intentionally`
+  - overlay policy is now explicit:
+    - supported: import acceptance of `&` via synthetic overlay voices / parts
+    - intentionally not claimed: faithful same-part multi-voice preservation
+    - intentionally not claimed: exact standard ABC `&` roundtrip preservation
+- `ABC-COV-018`
+  - closed as `support bounded subset`
+  - 2.2 delta policy is now explicit:
+    - `!editorial!` is supported as a bounded accidental-level modifier
+    - `!courtesy!` is supported as a bounded accidental-level modifier
+    - broader 2.2 delta work still remains outside the current bounded target
+- `ABC-COV-011`
+  - closed as `support bounded subset`
+  - `U:` policy is now explicit:
+    - supported: single-character decoration-alias import
+    - supported: `!decor!` / `+decor+` right-hand side forms in the current import path
+    - malformed `U:` declarations are ignored
+    - export parity for `U:` is intentionally not claimed
+- `ABC-COV-001`
+  - closed as `support bounded subset`
+  - information-field policy is now explicit:
+    - supported core subset: `X:`, `T:`, `C:`, `M:`, `L:`, `K:`, `Q:`
+    - `V:` remains supported only through its separately bounded voice-property subset
+    - non-core information fields are not semantically supported
+    - lexical tolerance of an unsupported field does not count as ABC coverage
+- `ABC-COV-002`
+  - closed as `support bounded subset`
+  - inline-field policy is now explicit:
+    - supported subset: `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]`
+    - broader inline fields are not semantically supported
+    - unsupported inline fields are skipped with warnings
+- `ABC-COV-013`
+  - closed as `support bounded subset`
+  - annotation policy is now explicit:
+    - supported: common quoted non-harmonic text as direction words / annotations
+    - supported: unsupported quoted chord-like text falls back to annotation/words instead of being forced into `harmony`
+    - not currently claimed: broader annotation placement and behavior semantics
+- `ABC-COV-014`
+  - closed as `support bounded subset`
+  - order-of-constructs policy is now explicit:
+    - supported in the practical sense: common construct orderings already handled by the parser
+    - preferred stance: broad practical acceptance for structurally recognizable real-world ABC
+    - not currently claimed: full formal conformance to every order-of-constructs nuance
+- `ABC-COV-003`
+  - closed as `defer intentionally`
+  - field-continuation policy is now explicit:
+    - continued information-field lines are outside the current supported subset
+    - lexical tolerance does not count as continuation support
+    - this area is intentionally deferred unless practical input evidence makes it worth revisiting
+- `ABC-COV-010`
+  - closed as `out of practical scope`
+  - symbol-line policy is now explicit:
+    - standard `s:` symbol lines are outside the current bounded support target
+    - there is no current import/export or roundtrip support claim
+    - this area stays out of scope unless practical input demand changes priority
+- `ABC-COV-015`
+  - closed as `support bounded subset`
+  - lyrics policy is now explicit:
+    - supported: common `w:` underlay import/export and ordinary hyphenated lyric handling
+    - not currently claimed: full alignment nuance, full multi-verse behavior, or verse numbering semantics
+    - current support target is useful common lyric interchange, not full lyric-parity coverage
+- `ABC-COV-008`
+  - closed as `support bounded subset`
+  - tuplet policy is now explicit:
+    - supported: common `(n[:q][:r])` syntax and common MusicXML roundtrip through `time-modification` plus note-level `tuplet` markers
+    - supported: current explicit tuplet export such as `(3:2:3` in the common path
+    - not currently claimed: broader ratio/edge semantics or more complex span behavior beyond the current tested subset
+- `ABC-COV-004`
+  - closed as `support bounded subset`
+  - clef / transposition policy is now explicit:
+    - supported: common `V:` clef subset `treble`, `bass`, `alto`, `tenor`, `c3`, `c4`
+    - supported: bare clef shorthand as compatibility behavior on import
+    - partial/ext-only: standard `V:` transpose import plus `%@mks transpose ...` for roundtrip preservation
+    - not currently claimed: broader standard clef breadth or full standard `V:` transpose export parity
 
 ## TODO Derivation Rule
 

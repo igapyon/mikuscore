@@ -102,6 +102,55 @@ The parser accepts three categories of input:
 - voice directives (`V:` with optional `name`, `clef`, `transpose`)
 - body note/rest/chord tokens
 
+### Current information-field stance
+
+`mikuscore` currently treats the following as the supported core ABC field subset:
+
+- `X:`
+- `T:`
+- `C:`
+- `M:`
+- `L:`
+- `K:`
+- `Q:`
+- `V:` (with the bounded voice-property subset documented separately)
+
+Fields outside that core subset are not currently part of the supported ABC interchange target.
+They may be lexically tolerated by the header scan, but they are not claimed as semantically supported import/export behavior.
+
+### Current inline-field stance
+
+`mikuscore` currently treats the following as the supported inline-field subset:
+
+- `[K:...]`
+- `[M:...]`
+- `[L:...]`
+- `[Q:...]`
+- `[V:...]`
+
+Inline fields outside that subset are not currently part of the supported ABC interchange target.
+They are skipped with warnings rather than treated as semantically supported behavior.
+
+### Current field-continuation stance
+
+`mikuscore` does not currently treat continued information-field lines as part of the supported ABC interchange subset.
+
+This means:
+
+- field continuation is currently unsupported
+- lexical tolerance of adjacent header text does not count as continuation support
+- continuation support is intentionally deferred unless practical input evidence makes it necessary
+
+### Current symbol-line stance
+
+`mikuscore` does not currently treat standard `s:` symbol lines as part of the supported ABC interchange subset.
+
+This means:
+
+- `s:` symbol lines are out of practical scope for the present bounded target
+- there is no current import/export or roundtrip support claim for them
+- this area stays out of scope unless practical input demand changes priority
+
 #### 2. Compatibility behavior
 
 - optional `%%score` voice ordering directive
@@ -134,6 +183,90 @@ Parser is intentionally lenient for real-world ABC:
 - should not pass unknown directive-tail fragments through as ordinary body note text
 - should warn on unsupported bare `V:` tail words instead of letting them fail later as body note/rest parsing errors
 
+### Current overlay policy
+
+`mikuscore` currently treats ABC overlay syntax `&` as bounded import-side compatibility behavior:
+
+- accepted on import
+- preserved by expanding overlay material into synthetic overlay voices / parts
+- not currently claimed as faithful one-part multi-voice preservation
+- not currently claimed as exact standard ABC `&` roundtrip preservation
+
+This is an intentional scope boundary, not an accidental gap.
+
+### Current beam / whitespace policy
+
+`mikuscore` currently uses a bounded beam policy:
+
+- on import, inter-note whitespace between beamable notes is treated as an explicit beam-break hint
+- this affects the current voice/measure parse stream and is used when forming MusicXML beam state
+- beat boundaries still split implicit beam runs even when there is no whitespace
+- on export, ABC is not currently generated with beam-specific spacing preservation; note tokens are emitted in ordinary measure text and original spacing is not replayed verbatim
+
+This means:
+
+- beam-break intent is preserved on ABC import into MusicXML
+- exact source whitespace used for beam layout is not currently treated as canonical roundtrip data
+
+### Current supported `V:` property subset
+
+In the standard ABC path, `mikuscore` currently treats the following `V:` properties as the supported working subset:
+
+- `name=...`
+  - supported on import and export
+- `clef=...`
+  - supported on import and export for the common working subset: `treble`, `bass`, `alto`, `tenor`, `c3`, `c4`
+- `transpose=...`
+  - accepted on import as a bounded chromatic transpose value
+  - not currently emitted back as standard `V:` metadata on export
+  - roundtrip export currently relies on `%@mks transpose ...` extension metadata instead
+
+In other words:
+
+- standard `V:` transpose support is currently `import-partial`
+- transpose-preserving roundtrip is currently `extension-assisted` through `%@mks transpose ...`
+
+The following standard voice-property family is currently outside the supported standard subset and should be treated as unsupported unless documented otherwise:
+
+- `staves`
+- `brace`
+- `bracket`
+- `merge`
+- `middle`
+- `gchords`
+
+Current handling for unsupported standard `V:` properties:
+
+- unsupported `key=value` voice-property tokens are skipped in the standard path
+- they should produce warnings rather than silently expanding the supported subset
+- they should not be reinterpreted as body note text
+
+Compatibility note:
+
+- recognized bare clef shorthand such as `V:2 bass` is accepted as compatibility behavior, not as a separate standard property form
+
+### Current clef / transposition stance
+
+`mikuscore` currently uses a bounded clef / transposition policy:
+
+- supported standard clef subset in `V:` metadata:
+  - `treble`
+  - `bass`
+  - `alto`
+  - `tenor`
+  - `c3`
+  - `c4`
+- supported compatibility behavior:
+  - recognized bare clef shorthand such as `V:2 bass`
+- partial / extension-assisted:
+  - standard `V:` transpose is currently import-partial
+  - transpose-preserving roundtrip currently relies on `%@mks transpose ...`
+
+Current limits:
+
+- broader standard clef forms beyond the current recognized subset are not currently claimed
+- full standard `V:` transpose export parity is not currently claimed
+
 ### Supported musical tokens
 
 #### Standard musical content
@@ -146,6 +279,60 @@ Parser is intentionally lenient for real-world ABC:
 - tuplets (`(n[:q][:r]`)
 - broken rhythm (`>` / `<`)
 - barlines
+
+#### Current quoted chord-symbol subset
+
+Quoted text attached to notes is split between:
+
+- harmonic chord-symbol parsing into MusicXML `harmony`
+- ordinary quoted annotation text into MusicXML direction words
+
+Current supported harmonic quoted-chord subset:
+
+- root / bass spelling
+  - `A`-`G`
+  - optional `#` / `b`
+  - optional slash bass with the same spelling subset
+- supported suffixes
+  - ``
+  - `m`, `min`
+  - `6`, `m6`, `min6`
+  - `7`, `9`, `11`, `13`
+  - `maj7`, `maj9`
+  - `m7`, `min7`, `m9`, `min9`
+  - `7sus4`, `sus4`, `sus2`
+  - `dim`, `dim7`, `aug`, `+`, `m7b5`, `min7b5`, `ø`
+
+Current fallback rule:
+
+- quoted text outside that inventory is treated as annotation/words, not forced into MusicXML `harmony`
+
+### Current annotation stance
+
+`mikuscore` currently uses a bounded annotation policy for quoted non-harmonic text:
+
+- common quoted non-harmonic text attached to notes is supported as MusicXML direction words / annotations
+- quoted text that does not fit the supported harmony inventory falls back to annotation/words rather than being forced into `harmony`
+- this bounded subset is supported as practical interchange behavior
+
+Current limits:
+
+- broader annotation placement semantics are not currently claimed as preserved
+- the current support target is ordinary quoted annotation text, not full ABC annotation behavior parity
+
+### Current order-of-constructs stance
+
+`mikuscore` currently uses a bounded practical-acceptance stance for ABC construct ordering:
+
+- common construct orderings already handled by the parser are supported
+- practical acceptance of structurally recognizable real-world ABC is preferred over strict rejection based only on narrower construct-order readings
+- unsupported order cases should fail only when they become structurally ambiguous or break directive/body interpretation
+
+Current limits:
+
+- full formal conformance to every standard order-of-constructs nuance is not currently claimed
+- exact acceptance parity with every ABC implementation is not currently claimed
+- lexical tolerance of unusual ordering does not by itself widen the supported subset unless the behavior is documented
 
 #### Supported decorations and grace forms
 
@@ -258,6 +445,99 @@ Generation policy:
 - preserves tie semantics using both `<tie>` and `<notations><tied>`
 - restores tuplet semantics using both `<time-modification>` and `<notations><tuplet>`
 - restores standard repeat/ending barlines and key changes from ABC surface syntax, and restores non-standard measure metadata (`number`, `implicit`, extra repeat hints when needed) from `%@mks measure`
+
+### Current repeat / ending policy
+
+`mikuscore` currently uses this bounded repeat / ending policy:
+
+- standard ABC surface is preferred for common cases:
+  - `|:`
+  - `:|`
+  - `[1`, `[2`
+  - `|1`, `:|2`
+- `%@mks measure ...` is used only for edge semantics not directly represented in the current standard export path, including:
+  - backward repeat counts beyond the ordinary case via `times=...`
+  - ending stop type `discontinue` via `ending-stop=... ending-type=discontinue`
+
+This means:
+
+- common repeat / ending forms are standard-path behavior
+- some edge semantics are currently extension-assisted rather than pure standard-surface roundtrip behavior
+
+### Current slur policy
+
+`mikuscore` currently uses a bounded slur policy:
+
+- ABC `(` / `)` slur markers are supported in common note-to-note cases
+- MusicXML note-level slur start/stop presence is exported/imported in simple cases
+- slur handling is currently presence-based rather than identity-based
+
+Current limits:
+
+- slur numbering / nested-slur identity is not currently claimed as preserved
+- a slur stop without a preceding non-rest note is treated as unsupported and yields a warning in the ABC import path
+- ties are tracked separately and have stronger preservation guarantees than generic slur span identity
+
+### Current tuplet stance
+
+`mikuscore` currently uses a bounded tuplet policy:
+
+- common ABC tuplet syntax `(n[:q][:r])` is supported in ordinary note sequences
+- MusicXML roundtrip through `<time-modification>` and note-level `<tuplet>` start/stop is supported in the current path
+- common explicit tuplet export such as `(3:2:3` is supported
+
+Current limits:
+
+- broader ratio/edge semantics beyond the current tested subset are not currently claimed
+- broader cross-measure or more complex tuplet-span semantics are not currently claimed
+
+### Current lyric stance
+
+`mikuscore` currently uses a bounded lyric policy for ABC `w:` underlay:
+
+- common `w:` lyric import/export is supported
+- common single-verse lyric alignment in ordinary note sequences is supported
+- ordinary hyphenated lyric tokens are supported in the current `w:` path
+
+Current limits:
+
+- full lyric alignment nuance across rests, spacers, grace, and more complex spacing is not currently claimed
+- full multi-verse behavior is not currently claimed
+- verse numbering semantics are not currently claimed
+
+### Current ABC 2.2 delta stance
+
+The following ABC 2.2 decorations are currently supported in a bounded accidental-level subset:
+
+- `!editorial!`
+- `!courtesy!`
+
+Current bounded interpretation:
+
+- `!editorial!`
+  - applies to the following explicit accidental in the ABC import path
+  - maps to MusicXML `accidental editorial="yes"`
+- `!courtesy!`
+  - applies to the following explicit accidental in the ABC import path
+  - maps to MusicXML `accidental cautionary="yes"`
+
+Current limits:
+
+- support is intentionally bounded to accidental-level editorial/cautionary flags
+- broader engraving/layout semantics beyond those accidental attributes are not currently claimed
+
+### Current `U:` stance
+
+`mikuscore` currently treats `U:` as bounded import-first functionality:
+
+- supported
+  - single-character user-defined decoration aliases on import
+  - right-hand side decoration text written as either `!decor!` or `+decor+`
+- not currently claimed
+  - export of `U:` declarations as part of standard ABC roundtrip output
+  - broader parity for redefinable-symbol semantics beyond the current alias-import subset
+
+Malformed `U:` declarations are ignored rather than treated as fatal parse errors.
 - restores transpose (`chromatic`, `diatonic`) from `%@mks transpose`
 - inserts a fallback whole-rest note for empty measures
 
