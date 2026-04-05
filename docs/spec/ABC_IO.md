@@ -30,6 +30,34 @@ This distinction is important:
 - `mikuscore` extension metadata is not part of the standard ABC musical surface
 - `%@mks ...` lines are `mikuscore`-specific comment hints for restoration and roundtrip support
 
+`mikuscore` treats ABC as a supported score interchange format.
+Compatibility behavior and extension metadata are support mechanisms for practical import/export and roundtrip stability, not an indication that ABC support is merely experimental.
+
+### Practical ecosystem note
+
+In practice, ABC support cannot be defined only by a narrow reading of the base grammar.
+Real-world ABC interchange is also shaped by de facto ecosystem behavior, especially inputs and conventions commonly accepted by tools such as `abcjs` and `abcm2ps`.
+
+For `mikuscore`, these ecosystems are not treated as normative specifications by themselves.
+However, they are treated as important evidence for what counts as common, practical ABC interchange behavior in the wild.
+
+This means:
+
+- the formal ABC surface remains the baseline reference
+- behavior widely accepted by `abcjs` / `abcm2ps` may be adopted as compatibility behavior even when it is better described as de facto practice than narrow core grammar
+- such compatibility acceptance must still be documented explicitly in spec text and tests
+- de facto compatibility is not the same thing as accepting arbitrary malformed input
+
+Because of that, `mikuscore` uses the following stance:
+
+- preserve a clear distinction between standard ABC surface syntax and compatibility-only behavior
+- accept widely used real-world variants when their musical intent is clear enough
+- avoid silently treating non-body directive leftovers as body note text
+- reject or warn on inputs that remain structurally ambiguous or musically unclear
+
+The goal is not "accept everything".
+The goal is to accept broadly used ABC variants without unnecessary failure, while still failing clearly on genuinely broken or uninterpretable input.
+
 ---
 
 ## Public API
@@ -78,6 +106,8 @@ The parser accepts three categories of input:
 
 - optional `%%score` voice ordering directive
 - partial/legacy patterns accepted for practical compatibility
+- de facto ecosystem conventions commonly accepted by `abcjs` / `abcm2ps` may be supported when the intended musical meaning is clear and implementation behavior can be specified
+- `V:` directive tails may accept recognized bare clef names / aliases such as `bass`, `treble`, `alto`, `tenor`, `c3`, `c4` as compatibility shorthand for `clef=...`
 - unsupported inline text / decoration forms may be skipped with warnings
 - overlay marker `&` is imported by splitting one ABC body stream into synthetic overlay voices
 - current overlay limitation: these synthetic overlay voices become separate MusicXML parts rather than one part with multiple synchronized voices
@@ -100,6 +130,9 @@ Parser is intentionally lenient for real-world ABC:
 - ignores standalone octave marks in unsupported positions
 - skips unsupported decorations/inline strings with warnings
 - accepts partial/legacy patterns where possible
+- may accept de facto ecosystem forms seen in `abcjs` / `abcm2ps`-style inputs when they are structurally recognizable and musically interpretable
+- should not pass unknown directive-tail fragments through as ordinary body note text
+- should warn on unsupported bare `V:` tail words instead of letting them fail later as body note/rest parsing errors
 
 ### Supported musical tokens
 
@@ -116,10 +149,25 @@ Parser is intentionally lenient for real-world ABC:
 
 #### Supported decorations and grace forms
 
-- decorations: `!trill!` (also accepts `!tr!` / `!triller!` on import), `!turn!` (also accepts `!lowerturn!` as inverted-turn on import), `!invertedturn!`, `!mordent!`/`!pralltriller!` (including `!prall!`, `!pralltrill!`, `!uppermordent!`, `!lowermordent!`, `!invertedmordent!`, `!inverted-mordent!` aliases), `!schleifer!`, `!shake!`, `!roll!` (also accepts `!arpeggio!` / `!arpeggiate!` on import), `!staccato!` (also accepts `!stacc!` / `!stac!` on import), `!wedge!`/`!staccatissimo!` (also accepts `!spiccato!` on import), `!accent!`, `!tenuto!`, `!stress!`, `!unstress!`, `!fermata!` / `!invertedfermata!` (also accepts `!inverted fermata!` on import), `!marcato!` (also accepts `!strong accent!` / `!strongaccent!` / `!strong-accent!` on import), `!breath!` (also accepts `!breathmark!` / `!breath mark!` / `!breath-mark!` on import), `!caesura!`, `!segno!`, `!coda!`, `!fine!`, `!dacapo!` (also accepts `!da capo!` / `!da-capo!` on import), `!dalsegno!` (also accepts `!dal segno!` / `!dal-segno!` on import), `!tocoda!` (also accepts `!to coda!` / `!to-coda!` on import), wedge decorations `!crescendo(!`, `!crescendo)!`, `!diminuendo(!`, `!diminuendo)!` (also accepts aliases `!cresc(!`, `!cresc)!`, `!dim(!`, `!dim)!`, `!decresc(!`, `!decresc)!`, `!decrescendo(!`, `!decrescendo)!` on import), dynamics `!ppp!`, `!pp!`, `!p!`, `!mp!`, `!mf!`, `!f!`, `!ff!`, `!fff!`, `!fp!`, `!fz!`, `!rfz!`, `!sf!`, `!sfp!`, `!sfz!`, `!upbow!` / `!downbow!` (also accepts `!up bow!` / `!down bow!` / `!up-bow!` / `!down-bow!` on import), `!doubletongue!` / `!tripletongue!` (also accepts `!double tongue!` / `!triple tongue!` / `!double-tongue!` / `!triple-tongue!` on import), `!heel!` / `!toe!` (also accepts `!heel mark!` / `!toe mark!` on import), `!open!` (also accepts `!openstring!` / `!open string!` / `!open-string!` on import), `!snap!` (also accepts `!snappizzicato!` / `!snap pizzicato!` / `!snap-pizzicato!` on import), `!harmonic!`, `!stopped!` (including `!plus!`, `!stopped horn!`, `!stopped-horn!` aliases), `!thumb!` (also accepts `!thumbposition!` / `!thumb-position!` / `!thumbpos!` / `!thumb pos!` / `!thumb position!` on import)
+- decorations: `!trill!` (also accepts `!tr!` / `!triller!` on import), long-trill delimiters `!trill(!` / `!trill)!`, `!turn!` (also accepts `!lowerturn!` as inverted-turn on import), `!turnx!`, `!invertedturn!`, `!invertedturnx!`, `!mordent!`/`!pralltriller!` (including `!prall!`, `!pralltrill!`, `!uppermordent!`, `!lowermordent!`, `!invertedmordent!`, `!inverted-mordent!` aliases), `!schleifer!`, `!shake!`, `!roll!` (also accepts `!arpeggio!` / `!arpeggiate!` on import), `!slide!` (canonical import/export for MusicXML slide start; explicit stop still uses `mikuscore` extension `!slide-stop!`), phrase marks `!shortphrase!`, `!mediumphrase!`, `!longphrase!` (roundtrip via MusicXML `other-articulation`), `!staccato!` (also accepts `!stacc!` / `!stac!` on import), `!wedge!`/`!staccatissimo!` (also accepts `!spiccato!` on import), `!accent!` (also accepts `!>!` / `!emphasis!` on import), `!tenuto!`, `!stress!`, `!unstress!`, `!fermata!` / `!invertedfermata!` (also accepts `!inverted fermata!` on import), `!marcato!` (also accepts `!strong accent!` / `!strongaccent!` / `!strong-accent!` on import), `!breath!` (also accepts `!breathmark!` / `!breath mark!` / `!breath-mark!` on import), `!caesura!`, `!segno!`, `!coda!`, `!fine!`, `!dacapo!` (also accepts `!da capo!` / `!da-capo!` / `!D.C.!` on import), `!dalsegno!` (also accepts `!dal segno!` / `!dal-segno!` / `!D.S.!` on import), `!tocoda!` (also accepts `!to coda!` / `!to-coda!` on import), `!dacoda!`, fingering decorations `!0!`, `!1!`, `!2!`, `!3!`, `!4!`, `!5!` (single-digit technical fingering export prefers these standard forms over `!fingering:TEXT!`), wedge decorations `!crescendo(!`, `!crescendo)!`, `!diminuendo(!`, `!diminuendo)!` (also accepts aliases `!cresc(!`, `!cresc)!`, `!dim(!`, `!dim)!`, `!decresc(!`, `!decresc)!`, `!decrescendo(!`, `!decrescendo)!`, `!<(!`, `!<)!`, `!>(!`, `!>)!` on import), dynamics `!pppp!`, `!ppp!`, `!pp!`, `!p!`, `!mp!`, `!mf!`, `!f!`, `!ff!`, `!fff!`, `!ffff!`, `!fp!`, `!fz!`, `!rfz!`, `!sf!`, `!sfp!`, `!sfz!`, `!upbow!` / `!downbow!` (also accepts `!up bow!` / `!down bow!` / `!up-bow!` / `!down-bow!` on import), `!doubletongue!` / `!tripletongue!` (also accepts `!double tongue!` / `!triple tongue!` / `!double-tongue!` / `!triple-tongue!` on import), `!heel!` / `!toe!` (also accepts `!heel mark!` / `!toe mark!` on import), `!open!` (also accepts `!openstring!` / `!open string!` / `!open-string!` on import), `!snap!` (also accepts `!snappizzicato!` / `!snap pizzicato!` / `!snap-pizzicato!` on import), `!harmonic!`, `!stopped!` (including `!plus!`, `!stopped horn!`, `!stopped-horn!` aliases), `!thumb!` (also accepts `!thumbposition!` / `!thumb-position!` / `!thumbpos!` / `!thumb pos!` / `!thumb position!` on import)
 - standard shorthand decoration symbols on import: `~` (roll), `H` (fermata), `L` (accent), `M` (lowermordent), `O` (coda), `P` (uppermordent), `S` (segno), `T` (trill), `u` (up-bow), `v` (down-bow)
-- mikuscore extension decorations: `!delayedturn!`, `!delayedinvertedturn!`, `!tremolo-single-N!`, `!tremolo-start-N!`, `!tremolo-stop-N!`, `!gliss-start!`, `!gliss-stop!`, `!slide-start!`, `!slide-stop!`, `!rehearsal:TEXT!`, `!fingering:TEXT!`, `!string:TEXT!`, `!pluck:TEXT!`
+- mikuscore extension decorations: `!delayedturn!`, `!delayedinvertedturn!`, `!tremolo-single-N!`, `!tremolo-start-N!`, `!tremolo-stop-N!`, `!gliss-start!`, `!gliss-stop!`, `!slide-start!` (legacy import alias for standard `!slide!`), `!slide-stop!`, `!rehearsal:TEXT!`, `!fingering:TEXT!`, `!string:TEXT!`, `!pluck:TEXT!`
 - grace groups `{...}` including slash grace variant (`{/g}`)
+
+#### Pending standard-decoration policy notes
+
+- `!arpeggio!` and `!roll!`
+  - import compatibility remains broad
+  - canonical export should prefer `!arpeggio!` for the current MusicXML `<arpeggiate/>` carrier
+  - `!roll!` remains an accepted compatibility alias on import unless a distinct roundtrip carrier is added
+- `!+!` / `!plus!`
+  - current support is a narrow technical/stopped-style interpretation
+  - canonical export remains `!stopped!`, not `!+!` / `!plus!`
+- mordent-family aliases
+  - import aliases stay broad
+  - canonical export remains `!mordent!` for lower mordent and `!pralltriller!` for upper/inverted mordent
+- `!slide!`
+  - current standard support is start-side only; explicit stop currently remains a `mikuscore` extension via `!slide-stop!`
 
 ### Parse result characteristics
 
@@ -169,6 +217,7 @@ Exports:
 - supports tuplet roundtrip export (`(n:q:r` style) from MusicXML time-modification/tuplet notations
 - supports ornament export/import mapping:
   - `trill-mark` / `wavy-line(start)` <-> `!trill!`
+  - extended trill line start/stop via `trill-mark` + `wavy-line(type="start")` / `wavy-line(type="stop")` <-> `!trill(!` / `!trill)!`
   - `turn` <-> `!turn!`
   - `inverted-turn` <-> `!invertedturn!`
 - supports grace slash mapping:
@@ -252,7 +301,7 @@ Supported mappings:
 
 ## Scope notes
 
-- This module is compatibility-oriented and intentionally pragmatic.
+- This module is intentionally compatibility-oriented and pragmatic.
 - It does not aim to be a complete strict ABC standard implementation.
-- Behavior prioritizes stable import/export for mikuscore workflows.
+- ABC is a supported format in `mikuscore`; behavior prioritizes stable import/export and roundtrip reliability for practical workflows.
 - `%@mks ...` comments are `mikuscore` extension metadata for roundtrip support, not standard ABC musical notation.

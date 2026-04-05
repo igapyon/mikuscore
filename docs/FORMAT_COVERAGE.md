@@ -4,7 +4,7 @@
 
 - Priority order: MusicXML fidelity > conversion breadth.
 - "Supported" means available in product flows, not full notation parity.
-- Experimental formats may change behavior as compatibility work progresses.
+- Supported formats may still change behavior as compatibility and parity work progress.
 
 ## Current Coverage
 
@@ -14,7 +14,7 @@
 | MuseScore (`.mscz`) | import/export | Supported | Focus on reliable conversion and parity tests |
 | MIDI (`.mid`) | import/export | Supported | Quantization/notation reconstruction has expected limits |
 | VSQX | import/export | Supported via vendored integration | Uses `utaformatix3-ts-plus` |
-| ABC | import/export | Experimental | Coverage and edge-case handling are evolving; implementation is compatibility-oriented and may emit/accept `mikuscore` extension metadata comments such as `%@mks ...` for roundtrip support |
+| ABC | import/export | Supported | ABC standard 2.2 baseline with practical import/export coverage; some standard features remain partial or unsupported, and `mikuscore` may emit/accept extension metadata comments such as `%@mks ...` for roundtrip support |
 | MEI | import/export | Experimental | Compatibility work tracked with reference samples |
 | LilyPond (`.ly`) | import/export | Experimental | Conversion coverage is limited |
 
@@ -30,5 +30,6 @@
 
 - `docs/spec/MIDI_IO.md`
 - `docs/spec/ABC_IO.md`
+- `docs/spec/ABC_STANDARD_COVERAGE.md`
 - `docs/spec/DIAGNOSTICS.md`
 - `docs/spec/MISCELLANEOUS_FIELDS.md`
