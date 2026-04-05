@@ -12,8 +12,8 @@ The parser should be understood in three layers:
 - `mikuscore` extension metadata comments (`%@mks ...`) used for roundtrip support
 
 ## Scope
-- Header: `X,T,C,M,L,K,V` and `%%score`
-- Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets
+- Header: `X,T,C,M,L,K,U,V` and `%%score`
+- Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets, overlay (`&`)
 - Compatibility behavior: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
 - `mikuscore` extension metadata comments: `%@mks ...`
 
@@ -28,7 +28,7 @@ score_expr       = { score_group | voice_id | ws } ;
 score_group      = "(" , { ws | voice_id } , ")" ;
 
 header           = header_key , ":" , ws* , header_value ;
-header_key       = "X" | "T" | "C" | "M" | "L" | "K" | "V" | letter ;
+header_key       = "X" | "T" | "C" | "M" | "L" | "K" | "U" | "V" | letter ;
 header_value     = { any_char_except_newline } ;
 
 body             = { body_token | ws } ;
@@ -88,6 +88,8 @@ digit            = "0".."9" ;
 - Treat `x` rest as `z` rest.
 - Support chords (`[CEG]`, `[A,,CE]`).
 - Support tuplets (`(3abc`, `(5:4:5abcde`) with duration scaling.
+- Support overlay marker `&` by splitting the body stream into synthetic overlay voices at measure boundaries.
+- Support `U:` single-character user-defined decoration aliases on import by expanding them into regular decoration markers before parsing.
 - Ignore `:` in barline variants (`:|`, `|:`, `||`) without parse failure.
 - Ignore standalone `,` / `'` for compatibility.
 
