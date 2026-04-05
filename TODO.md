@@ -121,6 +121,48 @@
     - Progress (2026-03-07): `npm run build`, `npm run test:unit`, and `npm run build:all` passed after `lht-cmn` follow-up work and after making `core-spec.css` optional in `scripts/build.mjs`.
 
 #### P2: Spec and tests sync
+- [ ] ABC spec/implementation audit follow-up (2026-04-05):
+  - Current audit result:
+    - high-confidence gaps where the spec reads as supported but the implementation is still incomplete: `0`
+    - known standard-ABC features that are still unsupported / only partially implemented: `3`
+  - Resume note (2026-04-06):
+    - Stop point for this series: quoted chord symbols and standard shorthand decoration symbols are already covered.
+    - Next restart target: continue the remaining standard-decoration expansion, not the chord-symbol work.
+    - Recommended restart order:
+      - 1. audit standard ABC 2.1 decoration names against the currently hardcoded subset
+      - 2. pick one small missing standard decoration cluster at a time
+      - 3. add import support
+      - 4. add `MusicXML -> ABC -> MusicXML` regression tests
+      - 5. update `docs/spec/ABC_IO.md` and this TODO entry
+    - Current practical interpretation:
+      - quoted chord symbols are now good enough for common forms; broader coverage can wait
+      - the main remaining ABC-series work is standard decoration coverage
+  - A. Spec says or strongly implies "supported", but implementation is still weak:
+    - Completed in current series:
+      - Chord-tie handling now ties whole chords in paths such as `[CE]-[CE]`.
+      - Standard alternate-ending syntax now covers both `[1` / `[2` and `|1` / `:|2`.
+      - Trill roundtrip now restores both `trill-mark` and `wavy-line(start)`.
+      - Turn variants now include delayed-turn preservation via `mikuscore` ABC decorations (`!delayedturn!`, `!delayedinvertedturn!`).
+      - Tremolo variants now roundtrip via `mikuscore` ABC decorations (`!tremolo-single-N!`, `!tremolo-start-N!`, `!tremolo-stop-N!`).
+      - Glissando / slide now roundtrip via `mikuscore` ABC decorations (`!gliss-start!`, `!gliss-stop!`, `!slide-start!`, `!slide-stop!`).
+      - Rehearsal mark text now roundtrips via `mikuscore` ABC decoration (`!rehearsal:TEXT!`).
+      - Fingering / string now roundtrip via `mikuscore` ABC decorations (`!fingering:TEXT!`, `!string:TEXT!`).
+      - Pluck text now roundtrips via `mikuscore` ABC decoration (`!pluck:TEXT!`).
+  - B. Standard ABC includes these, but `mikuscore` ABC import/export still does not support them properly:
+    - Beam-separation semantics expressed by whitespace are only partially preserved.
+      - Current status: import now treats whitespace as an explicit beam-break hint, but export/render behavior still primarily reconstructs beams from durations instead of preserving original ABC spacing intent.
+    - Standard ABC chord symbols / annotations in quotes such as `"Am"` are only partially mapped.
+      - Current status: common chord symbols such as `"Am"`, `"C6"`, `"Dm6"`, `"G9"`, `"Fmaj9"`, `"Em9"`, `"G11/B"`, `"A13"`, and slash-chord forms now roundtrip through MusicXML `harmony`, while non-harmonic quoted text still roundtrips as direction words / quoted annotations; broader chord-quality coverage is still incomplete.
+    - Standard decoration set beyond the currently hardcoded subset (`trill`, `turn`, `invertedturn`, `staccato`).
+      - Current status: the supported subset is now larger (`trill` with `tr` / `triller` aliases and `T` shorthand on import, `turn` with `lowerturn` alias on import, `invertedturn`, `mordent`, `inverted-mordent` with `prall` / `pralltrill` / `uppermordent` / `invertedmordent` / `inverted-mordent` aliases and `M` / `P` shorthand on import, `schleifer`, `shake`, `roll` with `arpeggio` / `arpeggiate` aliases and `~` shorthand on import, `staccato` with `stacc` / `stac` aliases on import, `staccatissimo` with `spiccato` alias on import, `accent` with `L` shorthand on import, `tenuto`, `stress`, `unstress`, `fermata` / `inverted-fermata` with `inverted fermata` alias and `H` shorthand on import, `marcato` with `strong accent` / `strongaccent` / `strong-accent` aliases on import, `breath` with `breathmark` / `breath mark` / `breath-mark` aliases on import, `caesura`, `segno` with `S` shorthand on import, `coda` with `O` shorthand on import, `fine`, `dacapo` with `da capo` / `da-capo` aliases on import, `dalsegno` with `dal segno` / `dal-segno` aliases on import, `tocoda` with `to coda` / `to-coda` aliases on import, `crescendo(` / `crescendo)` / `diminuendo(` / `diminuendo)` with `cresc` / `dim` / `decresc` / `decrescendo` aliases on import, `ppp`, `pp`, `p`, `mp`, `mf`, `f`, `ff`, `fff`, `fp`, `fz`, `rfz`, `sf`, `sfp`, `sfz`, `upbow` / `downbow` with `up bow` / `down bow` / `up-bow` / `down-bow` aliases and `u` / `v` shorthand on import, `doubletongue` / `tripletongue` with `double tongue` / `triple tongue` / `double-tongue` / `triple-tongue` aliases on import, `heel` / `toe` with `heel mark` / `toe mark` aliases on import, `open` with `openstring` / `open string` / `open-string` aliases on import, `snap` with `snappizzicato` / `snap pizzicato` / `snap-pizzicato` aliases on import, `harmonic`, `stopped`, `thumb` with `thumbposition` / `thumb-position` / `thumbpos` / `thumb pos` / `thumb position` aliases on import), but broader standard decoration coverage is still incomplete.
+      - Restart from here next time.
+    - Completed in current series:
+      - Inline body fields `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]`.
+      - `U:` user-defined single-character decoration aliases now import through normal decoration parsing.
+      - Inline quoted annotations / chord symbols such as `"Am"` attached to notes.
+      - Lyrics / underlay lines such as `w:`.
+      - Overlay syntax `&` now imports as synthetic overlay voices aligned at measure boundaries.
+        - Remaining limitation: overlay voices still become separate MusicXML parts, not one part with multiple synchronized voices.
 - [ ] Add save-XML/re-render consistency checks in `docs/spec`.
 - [ ] Document and test selection retention rules across re-render.
 - [ ] Add ABC roundtrip golden tests (`MusicXML -> ABC -> MusicXML`) for representative orchestral/piano scores.
@@ -128,6 +170,30 @@
 - [ ] Add optional `%@mks ...` metadata compaction:
   - On `MusicXML -> ABC`, suppress consecutive `%@mks` comment lines when values are unchanged from the previous measure.
   - On `ABC -> MusicXML`, if `%@mks` metadata is omitted, inherit the previous measure's metadata for reconstruction.
+- [ ] Plan removal of `%@mks` metadata that standard ABC now covers natively:
+  - Goal:
+    - stop emitting `mks` extension lines for cases now representable by standard ABC surface syntax, after regression tests prove roundtrip safety
+  - Progress (2026-04-05):
+    - `MusicXML -> ABC` now emits standard ABC repeat/ending surface syntax first.
+    - Redundant repeat/ending fields are no longer emitted in `%@mks measure` when standard ABC already carries them.
+    - `%@mks measure` is still kept for non-standard fields such as `number`, `implicit`, and extra hints such as `times>2`.
+    - `MusicXML -> ABC` now emits standard `K:` / inline `[K:...]` first.
+    - Redundant `%@mks key` emission has been removed from the standard export path; import compatibility remains.
+  - Removal candidates confirmed by the current ABC work:
+    - `%@mks measure ... repeat=... [times=...] [ending-start=...] [ending-stop=...] [ending-type=...]`
+      - remove only for repeat/ending information that is now expressible as standard ABC barlines / alternate endings (`|:`, `:|`, `[1`, `[2`, `|1`, `:|2`)
+      - keep `%@mks measure` for non-standard reconstruction fields such as `number` / `implicit`
+    - `%@mks key voice=... measure=... fifths=...`
+      - completed for the standard export path by preferring `K:` / inline `[K:...]`
+      - keep parser support for legacy/imported `%@mks key` lines
+  - Explicitly not removal candidates in this pass:
+    - `%@mks transpose ...`
+    - `%@mks trill ...`
+    - `%@mks diag ...`
+    - `mks:dbg:*` / `mks:src:*` MusicXML miscellaneous metadata
+  - Required before deletion:
+    - add focused `MusicXML -> ABC -> MusicXML` golden tests that prove the standard ABC form preserves the same repeat/ending and key semantics
+    - then switch export to prefer the standard ABC form first and drop the redundant `%@mks` emission
 - [ ] Reduce MuseScore MIDI parity gap (`moonlight` baseline, 2026-02-25):
   - `safe (cand(midi)) practical diff = 307`
   - `musescore_parity (cand(parity)) practical diff = 172`
