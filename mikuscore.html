@@ -30009,6 +30009,12 @@ function parseForMusicXml(source, settings) {
                 if (parsedVoice.transpose) {
                     voiceTransposeById[currentVoiceId] = parsedVoice.transpose;
                 }
+                if (parsedVoice.skippedText) {
+                    warnings.push("line " +
+                        lineNo +
+                        ": Skipped unsupported V: directive tail token: " +
+                        parsedVoice.skippedText);
+                }
                 if (parsedVoice.bodyText) {
                     const expandedBodyText = expandUserDefinedDecorationSymbols(parsedVoice.bodyText, userDefinedDecorationBySymbol);
                     const inlineVoiceSegments = splitBodyTextByInlineVoice(expandedBodyText, currentVoiceId);
@@ -31536,12 +31542,17 @@ function parseScoreVoiceOrder(raw, declaredVoiceIds) {
 }
 function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-        return { name: "", clef: "", transpose: null, bodyText: "" };
+        return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "" };
     }
     let bodyText = String(raw);
     let name = "";
     let clef = "";
     let transpose = null;
+    const bareClefMatch = bodyText.match(/^\s*(bass|treble|alto|tenor)(?=\s|$)/i);
+    if (bareClefMatch) {
+        clef = String(bareClefMatch[1] || "").trim().toLowerCase();
+        bodyText = bodyText.slice(bareClefMatch[0].length);
+    }
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
         const lowerKey = String(key).toLowerCase();
@@ -31559,11 +31570,20 @@ function parseVoiceDirectiveTail(raw) {
         }
         return " ";
     });
+    bodyText = bodyText.trim();
+    let skippedText = "";
+    const firstTokenMatch = bodyText.match(/^(\S+)/);
+    const firstToken = firstTokenMatch ? firstTokenMatch[1] : "";
+    if (firstToken && /^[A-Za-z][A-Za-z0-9_-]*$/.test(firstToken) && /[^A-Ga-gzZxX]/.test(firstToken)) {
+        skippedText = firstToken;
+        bodyText = bodyText.slice(firstToken.length).trim();
+    }
     return {
         name: name.trim(),
         clef: clef.trim(),
         transpose,
-        bodyText: bodyText.trim()
+        bodyText,
+        skippedText
     };
 }
 function inferTransposeFromPartName(partName) {

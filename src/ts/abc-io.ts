@@ -631,6 +631,14 @@ const abcCommon = AbcCommon;
           if (parsedVoice.transpose) {
             voiceTransposeById[currentVoiceId] = parsedVoice.transpose;
           }
+          if (parsedVoice.skippedText) {
+            warnings.push(
+              "line " +
+                lineNo +
+                ": Skipped unsupported V: directive tail token: " +
+                parsedVoice.skippedText
+            );
+          }
           if (parsedVoice.bodyText) {
             const expandedBodyText = expandUserDefinedDecorationSymbols(parsedVoice.bodyText, userDefinedDecorationBySymbol);
             const inlineVoiceSegments = splitBodyTextByInlineVoice(expandedBodyText, currentVoiceId);
@@ -766,7 +774,10 @@ const abcCommon = AbcCommon;
       let lastEventNotes = [];
       let pendingTieToNext = false;
       let pendingTrill = false;
+      let pendingTrillLineStart = false;
+      let pendingTrillLineStop = false;
       let pendingTurn: "" | "turn" | "inverted-turn" = "";
+      let pendingTurnSlash = false;
       let pendingDelayedTurn = false;
       let pendingMordent: "" | "mordent" | "inverted-mordent" = "";
       let pendingTremolo: { type: "single" | "start" | "stop"; marks: number } | null = null;
@@ -787,6 +798,7 @@ const abcCommon = AbcCommon;
       let pendingStrongAccent = false;
       let pendingBreathMark = false;
       let pendingCaesura = false;
+      let pendingPhraseMark: "" | "shortphrase" | "mediumphrase" | "longphrase" = "";
       let pendingSegno = false;
       let pendingCoda = false;
       let pendingFine = false;
@@ -1056,6 +1068,11 @@ const abcCommon = AbcCommon;
           const decoration = rawDecoration.toLowerCase();
           if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
             pendingTrill = true;
+          } else if (decoration === "trill(") {
+            pendingTrill = true;
+            pendingTrillLineStart = true;
+          } else if (decoration === "trill)") {
+            pendingTrillLineStop = true;
           } else if (decoration.startsWith("rehearsal:")) {
             const rehearsalText = rawDecoration.slice("rehearsal:".length).trim();
             if (rehearsalText) {
@@ -1069,8 +1086,16 @@ const abcCommon = AbcCommon;
             pendingDelayedTurn = true;
           } else if (decoration === "turn") {
             pendingTurn = "turn";
+            pendingTurnSlash = false;
+          } else if (decoration === "turnx") {
+            pendingTurn = "turn";
+            pendingTurnSlash = true;
           } else if (decoration === "invertedturn" || decoration === "inverted-turn" || decoration === "lowerturn") {
             pendingTurn = "inverted-turn";
+            pendingTurnSlash = false;
+          } else if (decoration === "invertedturnx" || decoration === "inverted-turnx") {
+            pendingTurn = "inverted-turn";
+            pendingTurnSlash = true;
           } else if (decoration === "mordent" || decoration === "lowermordent") {
             pendingMordent = "mordent";
           } else if (
@@ -1094,7 +1119,7 @@ const abcCommon = AbcCommon;
             pendingGlissandoStart = true;
           } else if (decoration === "gliss-stop" || decoration === "glissando-stop") {
             pendingGlissandoStop = true;
-          } else if (decoration === "slide-start") {
+          } else if (decoration === "slide" || decoration === "slide-start") {
             pendingSlideStart = true;
           } else if (decoration === "slide-stop") {
             pendingSlideStop = true;
@@ -1112,7 +1137,7 @@ const abcCommon = AbcCommon;
             pendingStaccato = true;
           } else if (decoration === "staccatissimo" || decoration === "wedge" || decoration === "spiccato") {
             pendingStaccatissimo = true;
-          } else if (decoration === "accent") {
+          } else if (decoration === "accent" || decoration === ">" || decoration === "emphasis") {
             pendingAccent = true;
           } else if (decoration === "tenuto") {
             pendingTenuto = true;
@@ -1144,37 +1169,45 @@ const abcCommon = AbcCommon;
             pendingBreathMark = true;
           } else if (decoration === "caesura") {
             pendingCaesura = true;
+          } else if (decoration === "shortphrase" || decoration === "mediumphrase" || decoration === "longphrase") {
+            pendingPhraseMark = decoration as "shortphrase" | "mediumphrase" | "longphrase";
           } else if (decoration === "segno") {
             pendingSegno = true;
           } else if (decoration === "coda") {
             pendingCoda = true;
           } else if (decoration === "fine") {
             pendingFine = true;
-          } else if (decoration === "dacapo" || decoration === "da-capo" || decoration === "da capo") {
+          } else if (decoration === "dacoda") {
             pendingDaCapo = true;
-          } else if (decoration === "dalsegno" || decoration === "dal-segno" || decoration === "dal segno") {
+            pendingToCoda = true;
+          } else if (decoration === "dacapo" || decoration === "da-capo" || decoration === "da capo" || decoration === "d.c.") {
+            pendingDaCapo = true;
+          } else if (decoration === "dalsegno" || decoration === "dal-segno" || decoration === "dal segno" || decoration === "d.s.") {
             pendingDalSegno = true;
           } else if (decoration === "tocoda" || decoration === "to-coda" || decoration === "to coda") {
             pendingToCoda = true;
-          } else if (decoration === "crescendo(" || decoration === "cresc(") {
+          } else if (decoration === "crescendo(" || decoration === "cresc(" || decoration === "<(") {
             pendingCrescendoStart = true;
-          } else if (decoration === "crescendo)" || decoration === "cresc)") {
+          } else if (decoration === "crescendo)" || decoration === "cresc)" || decoration === "<)") {
             pendingCrescendoStop = true;
           } else if (
             decoration === "diminuendo(" ||
             decoration === "decrescendo(" ||
             decoration === "dim(" ||
-            decoration === "decresc("
+            decoration === "decresc(" ||
+            decoration === ">("
           ) {
             pendingDiminuendoStart = true;
           } else if (
             decoration === "diminuendo)" ||
             decoration === "decrescendo)" ||
             decoration === "dim)" ||
-            decoration === "decresc)"
+            decoration === "decresc)" ||
+            decoration === ">)"
           ) {
             pendingDiminuendoStop = true;
           } else if (
+            decoration === "pppp" ||
             decoration === "ppp" ||
             decoration === "p" ||
             decoration === "pp" ||
@@ -1183,6 +1216,7 @@ const abcCommon = AbcCommon;
             decoration === "f" ||
             decoration === "ff" ||
             decoration === "fff" ||
+            decoration === "ffff" ||
             decoration === "fp" ||
             decoration === "fz" ||
             decoration === "rfz" ||
@@ -1212,6 +1246,8 @@ const abcCommon = AbcCommon;
             pendingHeel = true;
           } else if (decoration === "toe" || decoration === "toe mark") {
             pendingToe = true;
+          } else if (/^[0-5]$/.test(decoration)) {
+            pendingFingerings.push(decoration);
           } else if (decoration.startsWith("fingering:")) {
             const fingeringText = rawDecoration.slice("fingering:".length).trim();
             if (fingeringText) pendingFingerings.push(fingeringText);
@@ -1405,17 +1441,29 @@ const abcCommon = AbcCommon;
             }
             if (chordIndex === 0 && pendingTrill && !note.isRest) {
               note.trill = true;
+              note.trillLineStart = pendingTrillLineStart;
               pendingTrill = false;
+              pendingTrillLineStart = false;
+            }
+            if (chordIndex === 0 && pendingTrillLineStop && !note.isRest) {
+              note.trillLineStop = true;
+              pendingTrillLineStop = false;
             }
             if (chordIndex === 0 && pendingTurn && !note.isRest) {
               note.turnType = pendingTurn;
+              note.turnSlash = pendingTurnSlash;
               note.delayedTurn = pendingDelayedTurn;
               pendingTurn = "";
+              pendingTurnSlash = false;
               pendingDelayedTurn = false;
             }
             if (chordIndex === 0 && pendingMordent && !note.isRest) {
               note.mordentType = pendingMordent;
               pendingMordent = "";
+            }
+            if (chordIndex === 0 && pendingPhraseMark && !note.isRest) {
+              note.phraseMark = pendingPhraseMark;
+              pendingPhraseMark = "";
             }
             if (chordIndex === 0 && pendingTremolo && !note.isRest) {
               note.tremoloType = pendingTremolo.type;
@@ -1761,17 +1809,29 @@ const abcCommon = AbcCommon;
         applyBeamModeForEvent(note, dur);
         if (pendingTrill && !note.isRest) {
           note.trill = true;
+          note.trillLineStart = pendingTrillLineStart;
           pendingTrill = false;
+          pendingTrillLineStart = false;
+        }
+        if (pendingTrillLineStop && !note.isRest) {
+          note.trillLineStop = true;
+          pendingTrillLineStop = false;
         }
         if (pendingTurn && !note.isRest) {
           note.turnType = pendingTurn;
+          note.turnSlash = pendingTurnSlash;
           note.delayedTurn = pendingDelayedTurn;
           pendingTurn = "";
+          pendingTurnSlash = false;
           pendingDelayedTurn = false;
         }
         if (pendingMordent && !note.isRest) {
           note.mordentType = pendingMordent;
           pendingMordent = "";
+        }
+        if (pendingPhraseMark && !note.isRest) {
+          note.phraseMark = pendingPhraseMark;
+          pendingPhraseMark = "";
         }
         if (pendingTremolo && !note.isRest) {
           note.tremoloType = pendingTremolo.type;
@@ -2208,12 +2268,17 @@ const abcCommon = AbcCommon;
 
   function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-      return { name: "", clef: "", transpose: null, bodyText: "" };
+      return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "" };
     }
     let bodyText = String(raw);
     let name = "";
     let clef = "";
     let transpose = null;
+    const bareClefMatch = bodyText.match(/^\s*(bass|treble|alto|tenor|c3|c4)(?=\s|$)/i);
+    if (bareClefMatch) {
+      clef = String(bareClefMatch[1] || "").trim().toLowerCase();
+      bodyText = bodyText.slice(bareClefMatch[0].length);
+    }
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
       const lowerKey = String(key).toLowerCase();
@@ -2229,11 +2294,20 @@ const abcCommon = AbcCommon;
       }
       return " ";
     });
+    bodyText = bodyText.trim();
+    let skippedText = "";
+    const firstTokenMatch = bodyText.match(/^(\S+)/);
+    const firstToken = firstTokenMatch ? firstTokenMatch[1] : "";
+    if (firstToken && /^[A-Za-z][A-Za-z0-9_-]*$/.test(firstToken) && /[^A-Ga-gzZxX]/.test(firstToken)) {
+      skippedText = firstToken;
+      bodyText = bodyText.slice(firstToken.length).trim();
+    }
     return {
       name: name.trim(),
       clef: clef.trim(),
       transpose,
-      bodyText: bodyText.trim()
+      bodyText,
+      skippedText
     };
   }
 
@@ -2979,13 +3053,17 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             if (child.querySelector(':scope > sound[fine="yes"]')) {
               pendingDirectionDecorations.push("!fine!");
             }
-            if (child.querySelector(':scope > sound[dacapo="yes"]')) {
+            const hasDaCapo = Boolean(child.querySelector(':scope > sound[dacapo="yes"]'));
+            const hasToCoda = Boolean(child.querySelector(":scope > sound[tocoda]"));
+            if (hasDaCapo && hasToCoda) {
+              pendingDirectionDecorations.push("!dacoda!");
+            } else if (hasDaCapo) {
               pendingDirectionDecorations.push("!dacapo!");
             }
             if (child.querySelector(":scope > sound[dalsegno]")) {
               pendingDirectionDecorations.push("!dalsegno!");
             }
-            if (child.querySelector(":scope > sound[tocoda]")) {
+            if (hasToCoda && !hasDaCapo) {
               pendingDirectionDecorations.push("!tocoda!");
             }
             for (const wedgeNode of Array.from(child.querySelectorAll(":scope > direction-type > wedge"))) {
@@ -3001,7 +3079,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
                 activeWedgeType = "";
               }
             }
-            for (const dynamicName of ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "fp", "fz", "rfz", "sf", "sfp", "sfz"]) {
+            for (const dynamicName of ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp", "sfz"]) {
               if (child.querySelector(`:scope > direction-type > dynamics > ${dynamicName}`)) {
                 pendingDirectionDecorations.push(`!${dynamicName}!`);
               }
@@ -3030,6 +3108,8 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
           const hasTurn = Boolean(child.querySelector(":scope > notations > ornaments > turn"));
           const hasInvertedTurn = Boolean(child.querySelector(":scope > notations > ornaments > inverted-turn"));
+          const hasTurnSlash = Array.from(child.querySelectorAll(":scope > notations > ornaments > turn, :scope > notations > ornaments > inverted-turn"))
+            .some((node) => (node.getAttribute("slash") || "").trim().toLowerCase() === "yes");
           const hasDelayedTurn = Boolean(child.querySelector(":scope > notations > ornaments > delayed-turn"));
           const hasMordent = Boolean(child.querySelector(":scope > notations > ornaments > mordent"));
           const hasInvertedMordent = Boolean(child.querySelector(":scope > notations > ornaments > inverted-mordent"));
@@ -3046,6 +3126,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           ).some((node) => {
             const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
             return type === "" || type === "start";
+          });
+          const hasWavyLineStop = Array.from(
+            child.querySelectorAll(":scope > notations > ornaments > wavy-line")
+          ).some((node) => {
+            const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
+            return type === "stop";
           });
           const hasTrill = hasTrillMark || hasWavyLineStart;
           const turnType: "" | "turn" | "inverted-turn" = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
@@ -3066,6 +3152,9 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const hasStrongAccent = Boolean(child.querySelector(":scope > notations > articulations > strong-accent"));
           const hasBreathMark = Boolean(child.querySelector(":scope > notations > articulations > breath-mark"));
           const hasCaesura = Boolean(child.querySelector(":scope > notations > articulations > caesura"));
+          const phraseMarkText = Array.from(child.querySelectorAll(":scope > notations > articulations > other-articulation"))
+            .map((node) => (node.textContent || "").trim().toLowerCase())
+            .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") || "";
           const hasUpBow = Boolean(child.querySelector(":scope > notations > technical > up-bow"));
           const hasDownBow = Boolean(child.querySelector(":scope > notations > technical > down-bow"));
           const hasDoubleTongue = Boolean(child.querySelector(":scope > notations > technical > double-tongue"));
@@ -3175,18 +3264,20 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
                   ? `(${activeTuplet.actual}:${activeTuplet.normal}:${activeTuplet.actual}`
                   : "")
               : "";
-          const trillPrefix = hasTrill ? "!trill!" : "";
+          const trillPrefix = hasWavyLineStop
+            ? "!trill)!"
+            : (hasWavyLineStart && !hasTrillMark ? "!trill!" : (hasWavyLineStart ? "!trill(!" : (hasTrill ? "!trill!" : "")));
           const turnPrefix =
             turnType === "inverted-turn"
-              ? (hasDelayedTurn ? "!delayedinvertedturn!" : "!invertedturn!")
-              : (turnType === "turn" ? (hasDelayedTurn ? "!delayedturn!" : "!turn!") : "");
+              ? (hasDelayedTurn ? "!delayedinvertedturn!" : (hasTurnSlash ? "!invertedturnx!" : "!invertedturn!"))
+              : (turnType === "turn" ? (hasDelayedTurn ? "!delayedturn!" : (hasTurnSlash ? "!turnx!" : "!turn!")) : "");
           const mordentPrefix = mordentType === "inverted-mordent" ? "!pralltriller!" : (mordentType === "mordent" ? "!mordent!" : "");
           const tremoloPrefix = tremoloType ? `!tremolo-${tremoloType}-${tremoloMarks}!` : "";
           const glissandoPrefix = hasGlissandoStart ? "!gliss-start!" : (hasGlissandoStop ? "!gliss-stop!" : "");
-          const slidePrefix = hasSlideStart ? "!slide-start!" : (hasSlideStop ? "!slide-stop!" : "");
+          const slidePrefix = hasSlideStart ? "!slide!" : (hasSlideStop ? "!slide-stop!" : "");
           const schleiferPrefix = hasSchleifer ? "!schleifer!" : "";
           const shakePrefix = hasShake ? "!shake!" : "";
-          const arpeggiatePrefix = hasArpeggiate ? "!roll!" : "";
+          const arpeggiatePrefix = hasArpeggiate ? "!arpeggio!" : "";
           const staccatoPrefix = hasStaccatissimo ? "!wedge!" : (hasStaccato ? "!staccato!" : "");
           const accentPrefix = hasAccent ? "!accent!" : "";
           const tenutoPrefix = hasTenuto ? "!tenuto!" : "";
@@ -3195,13 +3286,19 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const strongAccentPrefix = hasStrongAccent ? "!marcato!" : "";
           const breathMarkPrefix = hasBreathMark ? "!breath!" : "";
           const caesuraPrefix = hasCaesura ? "!caesura!" : "";
+          const phraseMarkPrefix =
+            phraseMarkText === "shortphrase" || phraseMarkText === "mediumphrase" || phraseMarkText === "longphrase"
+              ? `!${phraseMarkText}!`
+              : "";
           const upBowPrefix = hasUpBow ? "!upbow!" : "";
           const downBowPrefix = hasDownBow ? "!downbow!" : "";
           const doubleTonguePrefix = hasDoubleTongue ? "!doubletongue!" : "";
           const tripleTonguePrefix = hasTripleTongue ? "!tripletongue!" : "";
           const heelPrefix = hasHeel ? "!heel!" : "";
           const toePrefix = hasToe ? "!toe!" : "";
-          const fingeringPrefix = fingeringTexts.map((value) => `!fingering:${value}!`).join("");
+          const fingeringPrefix = fingeringTexts
+            .map((value) => (/^[0-5]$/.test(value) ? `!${value}!` : `!fingering:${value}!`))
+            .join("");
           const stringPrefix = stringTexts.map((value) => `!string:${value}!`).join("");
           const pluckPrefix = pluckTexts.map((value) => `!pluck:${value}!`).join("");
           const openStringPrefix = hasOpenString ? "!open!" : "";
@@ -3221,7 +3318,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
               : "";
           const directionDecorationPrefix =
             !isChord && pendingDirectionDecorations.length > 0 ? pendingDirectionDecorations.join("") : "";
-          const eventPrefix = `${harmonyPrefix}${wordsPrefix}${directionDecorationPrefix}${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${mordentPrefix}${tremoloPrefix}${glissandoPrefix}${slidePrefix}${schleiferPrefix}${shakePrefix}${arpeggiatePrefix}${staccatoPrefix}${accentPrefix}${tenutoPrefix}${stressPrefix}${unstressPrefix}${strongAccentPrefix}${breathMarkPrefix}${caesuraPrefix}${upBowPrefix}${downBowPrefix}${doubleTonguePrefix}${tripleTonguePrefix}${heelPrefix}${toePrefix}${fingeringPrefix}${stringPrefix}${pluckPrefix}${openStringPrefix}${snapPizzicatoPrefix}${harmonicPrefix}${stoppedPrefix}${thumbPrefix}${fermataPrefix}`;
+          const eventPrefix = `${harmonyPrefix}${wordsPrefix}${directionDecorationPrefix}${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${mordentPrefix}${tremoloPrefix}${glissandoPrefix}${slidePrefix}${schleiferPrefix}${shakePrefix}${arpeggiatePrefix}${staccatoPrefix}${accentPrefix}${tenutoPrefix}${stressPrefix}${unstressPrefix}${strongAccentPrefix}${breathMarkPrefix}${caesuraPrefix}${phraseMarkPrefix}${upBowPrefix}${downBowPrefix}${doubleTonguePrefix}${tripleTonguePrefix}${heelPrefix}${toePrefix}${fingeringPrefix}${stringPrefix}${pluckPrefix}${openStringPrefix}${snapPizzicatoPrefix}${harmonicPrefix}${stoppedPrefix}${thumbPrefix}${fermataPrefix}`;
           if (!isChord && pendingHarmonySymbols.length > 0) {
             pendingHarmonySymbols.length = 0;
           }
@@ -3549,10 +3646,14 @@ type AbcParsedNote = {
   grace?: boolean;
   graceSlash?: boolean;
   trill?: boolean;
+  trillLineStart?: boolean;
+  trillLineStop?: boolean;
   trillAccidentalText?: string;
   turnType?: "turn" | "inverted-turn";
+  turnSlash?: boolean;
   delayedTurn?: boolean;
   mordentType?: "mordent" | "inverted-mordent";
+  phraseMark?: "shortphrase" | "mediumphrase" | "longphrase";
   tremoloType?: "single" | "start" | "stop";
   tremoloMarks?: number;
   glissandoStart?: boolean;
@@ -4063,6 +4164,7 @@ const buildMusicXmlFromAbcParsed = (
                     note.slurStart ||
                     note.slurStop ||
                     note.trill ||
+                    note.trillLineStop ||
                     note.turnType ||
                     note.delayedTurn ||
                     note.mordentType ||
@@ -4084,6 +4186,7 @@ const buildMusicXmlFromAbcParsed = (
                     note.strongAccent ||
                     note.breathMark ||
                     note.caesura ||
+                    note.phraseMark ||
                     note.upBow ||
                     note.downBow ||
                     note.doubleTongue ||
@@ -4108,10 +4211,16 @@ const buildMusicXmlFromAbcParsed = (
                     if (note.slurStop) chunks.push('<slur type="stop"/>');
                     if (note.tupletStart) chunks.push('<tuplet type="start"/>');
                     if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
-                    if (note.trill) {
+                    if (note.trill || note.trillLineStop) {
                       const trillParts: string[] = [];
-                      trillParts.push("<trill-mark/>");
-                      trillParts.push('<wavy-line type="start"/>');
+                      if (note.trill) {
+                        trillParts.push("<trill-mark/>");
+                      }
+                      if (note.trillLineStop) {
+                        trillParts.push('<wavy-line type="stop"/>');
+                      } else if (note.trillLineStart || note.trill) {
+                        trillParts.push('<wavy-line type="start"/>');
+                      }
                       if (note.trillAccidentalText) {
                         trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
                       }
@@ -4119,7 +4228,8 @@ const buildMusicXmlFromAbcParsed = (
                     }
                     if (note.turnType) {
                       const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
-                      chunks.push(`<ornaments><${tag}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
+                      const slashAttr = note.turnSlash ? ' slash="yes"' : "";
+                      chunks.push(`<ornaments><${tag}${slashAttr}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
                     }
                     if (note.mordentType) {
                       const tag = note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent";
@@ -4160,6 +4270,7 @@ const buildMusicXmlFromAbcParsed = (
                     if (note.strongAccent) articulationParts.push("<strong-accent/>");
                     if (note.breathMark) articulationParts.push("<breath-mark/>");
                     if (note.caesura) articulationParts.push("<caesura/>");
+                    if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
                     if (articulationParts.length > 0) {
                       chunks.push(`<articulations>${articulationParts.join("")}</articulations>`);
                     }

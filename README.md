@@ -33,7 +33,7 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
 - MuseScore (`.mscx` / `.mscz`)
 - MIDI (`.mid` / `.midi`)
 - VSQX (`.vsqx`) (via vendored `utaformatix3-ts-plus`)
-- ABC (`.abc`) (experimental)
+- ABC (`.abc`) (ABC standard 2.2 baseline; some standard features remain partially implemented or unimplemented)
 - MEI (`.mei`) (experimental)
 - LilyPond (`.ly`) (experimental)
 
@@ -102,7 +102,7 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
 - MuseScore（`.mscx` / `.mscz`）
 - MIDI（`.mid` / `.midi`）
 - VSQX（`.vsqx`）（同梱 `utaformatix3-ts-plus` 経由）
-- ABC（`.abc`）（実験的対応）
+- ABC（`.abc`）（ABC standard 2.2 ベース。一部の標準機能は未実装または部分対応）
 - MEI（`.mei`）（実験的対応）
 - LilyPond（`.ly`）（実験的対応）
 
