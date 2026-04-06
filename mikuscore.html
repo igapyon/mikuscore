@@ -29418,6 +29418,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertAbcToMusicXml = exports.clefXmlFromAbcClef = exports.exportMusicXmlDomToAbc = exports.AbcCompatParser = exports.AbcCommon = void 0;
 // @ts-nocheck
 const beam_common_1 = require("./beam-common");
+const abc_parser_1 = require("./abc-parser");
 const staffClefPolicy_1 = require("../../core/staffClefPolicy");
 const DEFAULT_UNIT = { num: 1, den: 8 };
 const DEFAULT_RATIO = { num: 1, den: 1 };
@@ -29471,6 +29472,9 @@ const parseAbcLengthToken = (token, lineNo) => {
     }
     if (/^\d+$/.test(token)) {
         return { num: Number(token), den: 1 };
+    }
+    if (/^\d+\/$/.test(token)) {
+        return { num: Number(token.slice(0, -1)), den: 2 };
     }
     if (/^\/\d+$/.test(token)) {
         return { num: 1, den: Number(token.slice(1)) };
@@ -30410,22 +30414,17 @@ function parseForMusicXml(source, settings) {
                 continue;
             }
             if (ch === "(") {
-                const tupletMatch = text.slice(idx).match(/^\((\d)(?::(\d))?(?::(\d))?/);
-                if (tupletMatch) {
-                    const n = Number(tupletMatch[1] || 0);
-                    const qRaw = tupletMatch[2] ? Number(tupletMatch[2]) : NaN;
-                    const rRaw = tupletMatch[3] ? Number(tupletMatch[3]) : NaN;
-                    const q = Number.isFinite(qRaw) && qRaw > 0 ? qRaw : (n === 3 ? 2 : n);
-                    const r = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : n;
-                    if (n > 0 && q > 0 && r > 0) {
-                        tupletScale = { num: q, den: n };
-                        tupletRemaining = r;
-                        tupletSpec = { actual: n, normal: q, remaining: r };
+                const tuplet = (0, abc_parser_1.parseAbcTupletAt)(text, idx);
+                if (tuplet) {
+                    if (tuplet.actual > 0 && tuplet.normal > 0 && tuplet.count > 0) {
+                        tupletScale = { num: tuplet.normal, den: tuplet.actual };
+                        tupletRemaining = tuplet.count;
+                        tupletSpec = { actual: tuplet.actual, normal: tuplet.normal, remaining: tuplet.count };
                     }
                     else {
-                        warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tupletMatch[0]);
+                        warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tuplet.raw);
                     }
-                    idx += tupletMatch[0].length;
+                    idx = tuplet.nextIdx;
                     continue;
                 }
                 pendingSlurStart += 1;
@@ -31239,40 +31238,17 @@ function parseForMusicXml(source, settings) {
                 sawInterEventWhitespace = false;
                 continue;
             }
-            let accidentalText = "";
-            while (idx < text.length && (text[idx] === "^" || text[idx] === "_" || text[idx] === "=")) {
-                accidentalText += text[idx];
-                idx += 1;
-                if (accidentalText === "=" || accidentalText.startsWith("^") || accidentalText.startsWith("_")) {
-                    if (accidentalText.length >= 2 && accidentalText[0] !== accidentalText[1]) {
-                        break;
-                    }
-                    if (accidentalText.length >= 2 && accidentalText[0] === "=") {
-                        accidentalText = "=";
-                        break;
-                    }
-                }
+            const noteResult = (0, abc_parser_1.parseAbcNoteAt)(text, idx);
+            if ((noteResult === null || noteResult === void 0 ? void 0 : noteResult.kind) === "malformed-accidental") {
+                warnings.push("line " + entry.lineNo + ": Skipped malformed accidental token: " + noteResult.accidentalText);
+                idx = noteResult.nextIdx;
+                continue;
             }
-            const pitchChar = text[idx];
-            if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-                if (accidentalText) {
-                    warnings.push("line " + entry.lineNo + ": Skipped malformed accidental token: " + accidentalText);
-                    continue;
-                }
+            if (!noteResult || noteResult.kind !== "note") {
                 throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
             }
-            idx += 1;
-            let octaveShift = "";
-            while (idx < text.length && (text[idx] === "'" || text[idx] === ",")) {
-                octaveShift += text[idx];
-                idx += 1;
-            }
-            let lengthToken = "";
-            const lengthMatch = text.slice(idx).match(/^(\d+\/\d+|\d+|\/\d+|\/+)/);
-            if (lengthMatch) {
-                lengthToken = lengthMatch[1];
-                idx += lengthToken.length;
-            }
+            const { accidentalText, pitchChar, octaveShift, lengthToken, nextIdx } = noteResult.note;
+            idx = nextIdx;
             const len = parseLengthToken(lengthToken, entry.lineNo);
             let absoluteLength = multiplyFractions(activeUnitLength, len);
             if (pendingRhythmScale) {
@@ -31909,85 +31885,16 @@ function parseLengthToken(token, lineNo) {
     return abcCommon.parseAbcLengthToken(token, lineNo);
 }
 function parseChordAt(text, startIdx, lineNo) {
-    if (text[startIdx] !== "[") {
-        return null;
-    }
-    const closeIdx = text.indexOf("]", startIdx + 1);
-    if (closeIdx < 0) {
-        return null;
-    }
-    const inner = text.slice(startIdx + 1, closeIdx);
-    const noteRegex = /(\^{1,2}|_{1,2}|=)?([A-Ga-g])([',]*)(\d+\/\d+|\d+|\/\d+|\/)?/g;
-    const notes = [];
-    let match;
-    while ((match = noteRegex.exec(inner)) !== null) {
-        notes.push({
-            accidentalText: match[1] || "",
-            pitchChar: match[2],
-            octaveShift: match[3] || "",
-            lengthToken: match[4] || ""
-        });
-    }
-    if (notes.length === 0) {
-        return null;
-    }
-    const after = text.slice(closeIdx + 1);
-    const lengthMatch = after.match(/^(\d+\/\d+|\d+|\/\d+|\/+)/);
-    const lengthToken = lengthMatch ? lengthMatch[1] : "";
-    const nextIdx = closeIdx + 1 + (lengthMatch ? lengthMatch[1].length : 0);
-    return {
-        notes,
-        lengthToken,
-        nextIdx
-    };
+    return (0, abc_parser_1.parseAbcChordAt)(text, startIdx);
 }
 function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId, warnings) {
-    if (text[startIdx] !== "{")
+    const parsedGrace = (0, abc_parser_1.parseAbcGraceGroupAt)(text, startIdx, lineNo, warnings);
+    if (!parsedGrace)
         return null;
-    const closeIdx = text.indexOf("}", startIdx + 1);
-    if (closeIdx < 0)
-        return null;
-    const inner = text.slice(startIdx + 1, closeIdx);
     const graceAccidentals = { ...measureAccidentals };
     const notes = [];
-    let idx = 0;
-    let graceSlashPending = false;
-    while (idx < inner.length) {
-        const ch = inner[idx];
-        if (ch === " " || ch === "\t") {
-            idx += 1;
-            continue;
-        }
-        if (ch === "/") {
-            graceSlashPending = true;
-            idx += 1;
-            continue;
-        }
-        let accidentalText = "";
-        while (idx < inner.length && (inner[idx] === "^" || inner[idx] === "_" || inner[idx] === "=")) {
-            accidentalText += inner[idx];
-            idx += 1;
-        }
-        const pitchChar = inner[idx];
-        if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-            if (accidentalText) {
-                warnings.push("line " + lineNo + ": Skipped malformed grace accidental token: " + accidentalText);
-            }
-            idx += 1;
-            continue;
-        }
-        idx += 1;
-        let octaveShift = "";
-        while (idx < inner.length && (inner[idx] === "'" || inner[idx] === ",")) {
-            octaveShift += inner[idx];
-            idx += 1;
-        }
-        let lengthToken = "";
-        const lengthMatch = inner.slice(idx).match(/^(\d+\/\d+|\d+|\/\d+|\/+)/);
-        if (lengthMatch) {
-            lengthToken = lengthMatch[1];
-            idx += lengthToken.length;
-        }
+    for (const parsedNote of parsedGrace.notes) {
+        const { accidentalText, pitchChar, octaveShift, lengthToken, graceSlash } = parsedNote;
         const len = parseLengthToken(lengthToken, lineNo);
         const absoluteLength = multiplyFractions(unitLength, len);
         const dur = durationInDivisions(absoluteLength, 960);
@@ -32008,11 +31915,10 @@ function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccid
         }
         note.voice = voiceId;
         note.grace = true;
-        note.graceSlash = graceSlashPending;
-        graceSlashPending = false;
+        note.graceSlash = graceSlash;
         notes.push(note);
     }
-    return { notes, nextIdx: closeIdx + 1 };
+    return { notes, nextIdx: parsedGrace.nextIdx };
 }
 function scaleNotesDuration(notes, scale) {
     if (!Array.isArray(notes) || notes.length === 0 || !scale) {
@@ -33750,6 +33656,226 @@ const convertAbcToMusicXml = (abcSource, options = {}) => {
     return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };
 exports.convertAbcToMusicXml = convertAbcToMusicXml;
+
+  },
+  "src/ts/abc-parser.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.parseAbcTupletAt = exports.parseAbcGraceGroupAt = exports.parseAbcChordAt = exports.parseAbcNoteAt = void 0;
+const abc_lexer_1 = require("./abc-lexer");
+const parseAbcNoteAt = (text, startIdx) => {
+    const note = (0, abc_lexer_1.lexAbcNote)(text, startIdx);
+    if (note) {
+        return { kind: "note", note };
+    }
+    const accidental = (0, abc_lexer_1.lexAbcAccidental)(text, startIdx);
+    if (accidental) {
+        return {
+            kind: "malformed-accidental",
+            accidentalText: accidental.accidentalText,
+            nextIdx: accidental.nextIdx,
+        };
+    }
+    return null;
+};
+exports.parseAbcNoteAt = parseAbcNoteAt;
+const parseAbcChordAt = (text, startIdx) => {
+    if (text[startIdx] !== "[") {
+        return null;
+    }
+    const closeIdx = text.indexOf("]", startIdx + 1);
+    if (closeIdx < 0) {
+        return null;
+    }
+    const inner = text.slice(startIdx + 1, closeIdx);
+    const notes = [];
+    let idx = 0;
+    while (idx < inner.length) {
+        const ch = inner[idx];
+        if (ch === " " || ch === "\t") {
+            idx += 1;
+            continue;
+        }
+        const noteResult = (0, exports.parseAbcNoteAt)(inner, idx);
+        if ((noteResult === null || noteResult === void 0 ? void 0 : noteResult.kind) === "note") {
+            notes.push({
+                accidentalText: noteResult.note.accidentalText,
+                pitchChar: noteResult.note.pitchChar,
+                octaveShift: noteResult.note.octaveShift,
+                lengthToken: noteResult.note.lengthToken,
+            });
+            idx = noteResult.note.nextIdx;
+            continue;
+        }
+        idx = (noteResult === null || noteResult === void 0 ? void 0 : noteResult.kind) === "malformed-accidental" ? noteResult.nextIdx : idx + 1;
+    }
+    if (notes.length === 0) {
+        return null;
+    }
+    const length = (0, abc_lexer_1.lexAbcLengthToken)(text, closeIdx + 1);
+    return {
+        notes,
+        lengthToken: (length === null || length === void 0 ? void 0 : length.token) || "",
+        nextIdx: (length === null || length === void 0 ? void 0 : length.nextIdx) || closeIdx + 1,
+    };
+};
+exports.parseAbcChordAt = parseAbcChordAt;
+const parseAbcGraceGroupAt = (text, startIdx, lineNo, warnings) => {
+    if (text[startIdx] !== "{")
+        return null;
+    const closeIdx = text.indexOf("}", startIdx + 1);
+    if (closeIdx < 0)
+        return null;
+    const inner = text.slice(startIdx + 1, closeIdx);
+    const notes = [];
+    let idx = 0;
+    let graceSlashPending = false;
+    while (idx < inner.length) {
+        const ch = inner[idx];
+        if (ch === " " || ch === "\t") {
+            idx += 1;
+            continue;
+        }
+        if (ch === "/") {
+            graceSlashPending = true;
+            idx += 1;
+            continue;
+        }
+        const noteResult = (0, exports.parseAbcNoteAt)(inner, idx);
+        if ((noteResult === null || noteResult === void 0 ? void 0 : noteResult.kind) === "note") {
+            notes.push({
+                accidentalText: noteResult.note.accidentalText,
+                pitchChar: noteResult.note.pitchChar,
+                octaveShift: noteResult.note.octaveShift,
+                lengthToken: noteResult.note.lengthToken,
+                graceSlash: graceSlashPending,
+            });
+            graceSlashPending = false;
+            idx = noteResult.note.nextIdx;
+            continue;
+        }
+        if ((noteResult === null || noteResult === void 0 ? void 0 : noteResult.kind) === "malformed-accidental") {
+            warnings.push("line " + lineNo + ": Skipped malformed grace accidental token: " + noteResult.accidentalText);
+            idx = noteResult.nextIdx;
+            continue;
+        }
+        idx += 1;
+    }
+    return { notes, nextIdx: closeIdx + 1 };
+};
+exports.parseAbcGraceGroupAt = parseAbcGraceGroupAt;
+const parseAbcTupletAt = (text, startIdx) => {
+    if (text[startIdx] !== "(") {
+        return null;
+    }
+    const match = text.slice(startIdx).match(/^\((\d)(?::(\d))?(?::(\d))?/);
+    if (!match) {
+        return null;
+    }
+    const actual = Number(match[1] || 0);
+    const normalRaw = match[2] ? Number(match[2]) : NaN;
+    const countRaw = match[3] ? Number(match[3]) : NaN;
+    const normal = Number.isFinite(normalRaw) && normalRaw > 0 ? normalRaw : (actual === 3 ? 2 : actual);
+    const count = Number.isFinite(countRaw) && countRaw > 0 ? countRaw : actual;
+    return {
+        actual,
+        normal,
+        count,
+        nextIdx: startIdx + match[0].length,
+        raw: match[0],
+    };
+};
+exports.parseAbcTupletAt = parseAbcTupletAt;
+
+  },
+  "src/ts/abc-lexer.js": function (require, module, exports) {
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.lexAbcNote = exports.lexAbcAccidental = exports.lexAbcLengthToken = void 0;
+const lexAbcLengthToken = (text, startIdx) => {
+    const start = Math.max(0, Number(startIdx) || 0);
+    const first = text[start];
+    if (!first)
+        return null;
+    if (first === "/") {
+        let idx = start;
+        while (text[idx] === "/") {
+            idx += 1;
+        }
+        if (idx > start + 1) {
+            return { token: text.slice(start, idx), nextIdx: idx };
+        }
+        while (/\d/.test(text[idx] || "")) {
+            idx += 1;
+        }
+        return { token: text.slice(start, idx), nextIdx: idx };
+    }
+    if (!/\d/.test(first)) {
+        return null;
+    }
+    let idx = start;
+    while (/\d/.test(text[idx] || "")) {
+        idx += 1;
+    }
+    if (text[idx] === "/") {
+        idx += 1;
+        while (/\d/.test(text[idx] || "")) {
+            idx += 1;
+        }
+    }
+    return { token: text.slice(start, idx), nextIdx: idx };
+};
+exports.lexAbcLengthToken = lexAbcLengthToken;
+const lexAbcAccidental = (text, startIdx) => {
+    let idx = Math.max(0, Number(startIdx) || 0);
+    let accidentalText = "";
+    while (idx < text.length && (text[idx] === "^" || text[idx] === "_" || text[idx] === "=")) {
+        accidentalText += text[idx];
+        idx += 1;
+        if (accidentalText === "=" || accidentalText.startsWith("^") || accidentalText.startsWith("_")) {
+            if (accidentalText.length >= 2 && accidentalText[0] !== accidentalText[1]) {
+                break;
+            }
+            if (accidentalText.length >= 2 && accidentalText[0] === "=") {
+                accidentalText = "=";
+                break;
+            }
+        }
+    }
+    return accidentalText ? { accidentalText, nextIdx: idx } : null;
+};
+exports.lexAbcAccidental = lexAbcAccidental;
+const lexAbcNote = (text, startIdx) => {
+    let idx = Math.max(0, Number(startIdx) || 0);
+    const accidental = (0, exports.lexAbcAccidental)(text, idx);
+    const accidentalText = (accidental === null || accidental === void 0 ? void 0 : accidental.accidentalText) || "";
+    if (accidental) {
+        idx = accidental.nextIdx;
+    }
+    const pitchChar = text[idx];
+    if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
+        return null;
+    }
+    idx += 1;
+    const octaveStart = idx;
+    while (text[idx] === "'" || text[idx] === ",") {
+        idx += 1;
+    }
+    const octaveShift = text.slice(octaveStart, idx);
+    const length = (0, exports.lexAbcLengthToken)(text, idx);
+    const lengthToken = (length === null || length === void 0 ? void 0 : length.token) || "";
+    if (length) {
+        idx = length.nextIdx;
+    }
+    return {
+        accidentalText,
+        pitchChar,
+        octaveShift,
+        lengthToken,
+        nextIdx: idx,
+    };
+};
+exports.lexAbcNote = lexAbcNote;
 
   },
   "core/timeIndex.js": function (require, module, exports) {

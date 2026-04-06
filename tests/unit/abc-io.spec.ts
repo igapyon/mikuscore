@@ -113,6 +113,26 @@ C/D/E/F/ G/F/E/D/ C//D//E//F// G//F//E//D// C2 |`;
     expect(notes[16]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("960");
   });
 
+  it("ABC->MusicXML parses numerator-slash shorthand in notes, chords, and grace groups", () => {
+    const abc = `X:1
+T:Numerator slash shorthand
+M:4/4
+L:1/8
+K:C
+V:1
+C3/ D | [CE]3/ G | {/g3/}a2 z2 |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(notes[0]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("720");
+    expect(notes[2]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("720");
+    expect(outDoc.querySelector("part > measure:nth-of-type(3) > note > grace")).not.toBeNull();
+  });
+
   it("roundtrip of grand staff score should not trigger MEASURE_OVERFULL", () => {
     const grandStaffXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -9431,6 +9451,27 @@ V:1
     expect(notes[0]?.querySelector("time-modification > normal-notes")?.textContent?.trim()).toBe("2");
     expect(notes[0]?.querySelector('notations > tuplet[type="start"]')).not.toBeNull();
     expect(notes[2]?.querySelector('notations > tuplet[type="stop"]')).not.toBeNull();
+  });
+
+  it("ABC->MusicXML parses explicit tuplet ratios through the parser path", () => {
+    const abc = `X:1
+T:Tuplet explicit ratio
+M:4/4
+L:1/8
+K:C
+V:1
+(5:4:5 C D E F G z2 |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note")).slice(0, 5);
+    expect(notes[0]?.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim()).toBe("5");
+    expect(notes[0]?.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim()).toBe("4");
+    expect(notes[0]?.querySelector('notations > tuplet[type="start"]')).not.toBeNull();
+    expect(notes[4]?.querySelector('notations > tuplet[type="stop"]')).not.toBeNull();
   });
 
   it("MusicXML->ABC keeps %@mks repeat times only when standard ABC cannot express them", () => {
