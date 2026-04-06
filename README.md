@@ -39,6 +39,8 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
 
 ### Build and local development
 - `npm run build`
+- `npm run test:build`
+- `npm run test:integration`
 - `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
@@ -46,6 +48,14 @@ It is delivered as a **single-file web app** (`mikuscore.html`) and runs offline
 - `npm run test:property`
 - `npm run test:all`
 - `npm run build:vendor:utaformatix3`
+
+Practical command split:
+- `npm run build`: faster day-to-day build (`typecheck` + `test:build` + `build:dist`)
+- `build:dist` reuses incremental TypeScript cache and skips unchanged generated sample/prompt sources when possible
+- `npm run test:build`: build-gating unit tests without the heaviest integration-style suites
+- `npm run test:property`: property tests kept outside the day-to-day build gate
+- `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
+- `npm run check:all`: full verification (`typecheck` + full `test:all` + `build:dist`)
 
 ### Documentation map
 - Product docs (positioning / policy / coverage / quality):
@@ -108,6 +118,8 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
 
 ### ビルドとローカル開発
 - `npm run build`
+- `npm run test:build`
+- `npm run test:integration`
 - `npm run check:all`
 - `npm run clean`
 - `npm run typecheck`
@@ -115,6 +127,14 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
 - `npm run test:property`
 - `npm run test:all`
 - `npm run build:vendor:utaformatix3`
+
+実用的なコマンド分割:
+- `npm run build`: 日常用の比較的速いビルド（`typecheck` + `test:build` + `build:dist`）
+- `build:dist` は incremental な TypeScript キャッシュを再利用し、未変更の生成 sample / prompt 同期を可能な範囲で省略
+- `npm run test:build`: ビルドゲート用 unit テスト（最重量の統合寄り suite は除外）
+- `npm run test:property`: property テスト（日常 build gate の外に維持）
+- `npm run test:integration`: 重い統合寄り suite（`cffp-series`, `mei-io`, `musescore-io`）
+- `npm run check:all`: フル検証（`typecheck` + full `test:all` + `build:dist`）
 
 ### ドキュメントマップ
 - プロダクト文書（位置づけ / 方針 / 対応範囲 / 品質方針）:

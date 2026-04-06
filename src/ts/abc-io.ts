@@ -501,13 +501,77 @@ const abcCommon = AbcCommon;
     const voiceClefById = {};
     const voiceTransposeById = {};
     const userDefinedDecorationBySymbol = {};
+    const supportedStandaloneBodyFieldNames = new Set(["K", "L", "M", "Q"]);
     let currentVoiceId = "1";
     let scoreDirective = "";
+    let bodyStarted = false;
+    let pendingUnsupportedContinuedFieldName = "";
+
+    function pushBodyText(rawBodyText, lineNo, voiceId) {
+      const normalizedBodyText = String(rawBodyText || "").replace(/\\\s*$/, "");
+      if (!normalizedBodyText.trim()) {
+        return;
+      }
+      bodyStarted = true;
+      const inlineVoiceSegments = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
+      for (const segment of inlineVoiceSegments) {
+        const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
+        for (const overlaySegment of overlaySegments) {
+          if (!declaredVoiceIds.includes(overlaySegment.voiceId)) {
+            declaredVoiceIds.push(overlaySegment.voiceId);
+          }
+          if (overlaySegment.overlayIndex > 0) {
+            const overlayLabel = `overlay ${overlaySegment.overlayIndex + 1}`;
+            voiceNameById[overlaySegment.voiceId] = voiceNameById[segment.voiceId]
+              ? `${voiceNameById[segment.voiceId]} ${overlayLabel}`
+              : `Voice ${segment.voiceId} ${overlayLabel}`;
+            if (voiceClefById[segment.voiceId] && !voiceClefById[overlaySegment.voiceId]) {
+              voiceClefById[overlaySegment.voiceId] = voiceClefById[segment.voiceId];
+            }
+            if (voiceTransposeById[segment.voiceId] && !voiceTransposeById[overlaySegment.voiceId]) {
+              voiceTransposeById[overlaySegment.voiceId] = { ...voiceTransposeById[segment.voiceId] };
+            }
+          }
+          bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
+        }
+      }
+    }
 
     for (let i = 0; i < lines.length; i += 1) {
       const lineNo = i + 1;
       const raw = lines[i];
       const rawTrimmed = raw.trim();
+      if (!rawTrimmed) {
+        pendingUnsupportedContinuedFieldName = "";
+        continue;
+      }
+      if (
+        pendingUnsupportedContinuedFieldName &&
+        !bodyStarted &&
+        !/^%@mks\s+/i.test(rawTrimmed) &&
+        !/^%%\s*/i.test(rawTrimmed) &&
+        !/^[A-Za-z]:\s*(.*)$/.test(rawTrimmed)
+      ) {
+        warnings.push(
+          "line " +
+            lineNo +
+            ": Skipped unsupported continued field text for " +
+            pendingUnsupportedContinuedFieldName +
+            ": " +
+            rawTrimmed
+        );
+        if (!/\\\s*$/.test(raw)) {
+          pendingUnsupportedContinuedFieldName = "";
+        }
+        continue;
+      }
+      if (
+        pendingUnsupportedContinuedFieldName &&
+        !bodyStarted &&
+        (/^%@mks\s+/i.test(rawTrimmed) || /^%%\s*/i.test(rawTrimmed) || /^[A-Za-z]:\s*(.*)$/.test(rawTrimmed))
+      ) {
+        pendingUnsupportedContinuedFieldName = "";
+      }
       const metaMatch = rawTrimmed.match(/^%@mks\s+trill\s+(.+)$/i);
       if (metaMatch) {
         const params = {};
@@ -606,25 +670,30 @@ const abcCommon = AbcCommon;
       const noComment = raw.split("%")[0];
       const trimmed = noComment.trim();
 
-      if (!trimmed) {
-        continue;
-      }
-
       const scoreMatch = trimmed.match(/^%%\s*score\s+(.+)$/i);
       if (scoreMatch) {
         scoreDirective = scoreMatch[1].trim();
+        continue;
+      }
+      if (/^%%\s*/.test(rawTrimmed)) {
+        warnings.push("line " + lineNo + ": Skipped unsupported ABC directive: " + rawTrimmed);
         continue;
       }
 
       const headerMatch = trimmed.match(/^([A-Za-z]):\s*(.*)$/);
       if (headerMatch && /^[A-Za-z]$/.test(headerMatch[1])) {
         const key = headerMatch[1];
-        const value = headerMatch[2].trim();
+        const valueHasContinuation = /\\\s*$/.test(headerMatch[2]);
+        const value = headerMatch[2].replace(/\\\s*$/, "").trim();
         if (key === "w") {
           if (!Object.prototype.hasOwnProperty.call(lyricEntriesByVoice, currentVoiceId)) {
             lyricEntriesByVoice[currentVoiceId] = [];
           }
           lyricEntriesByVoice[currentVoiceId].push({ text: value, lineNo });
+          continue;
+        }
+        if (bodyStarted && supportedStandaloneBodyFieldNames.has(key)) {
+          pushBodyText(`[${key}:${value}]`, lineNo, currentVoiceId);
           continue;
         }
         if (key === "V") {
@@ -665,29 +734,16 @@ const abcCommon = AbcCommon;
           }
           if (parsedVoice.bodyText) {
             const expandedBodyText = expandUserDefinedDecorationSymbols(parsedVoice.bodyText, userDefinedDecorationBySymbol);
-            const inlineVoiceSegments = splitBodyTextByInlineVoice(expandedBodyText, currentVoiceId);
-            for (const segment of inlineVoiceSegments) {
-              const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
-              for (const overlaySegment of overlaySegments) {
-                if (!declaredVoiceIds.includes(overlaySegment.voiceId)) {
-                  declaredVoiceIds.push(overlaySegment.voiceId);
-                }
-                if (overlaySegment.overlayIndex > 0) {
-                  const overlayLabel = `overlay ${overlaySegment.overlayIndex + 1}`;
-                  voiceNameById[overlaySegment.voiceId] = voiceNameById[segment.voiceId]
-                    ? `${voiceNameById[segment.voiceId]} ${overlayLabel}`
-                    : `Voice ${segment.voiceId} ${overlayLabel}`;
-                  if (voiceClefById[segment.voiceId] && !voiceClefById[overlaySegment.voiceId]) {
-                    voiceClefById[overlaySegment.voiceId] = voiceClefById[segment.voiceId];
-                  }
-                  if (voiceTransposeById[segment.voiceId] && !voiceTransposeById[overlaySegment.voiceId]) {
-                    voiceTransposeById[overlaySegment.voiceId] = { ...voiceTransposeById[segment.voiceId] };
-                  }
-                }
-                bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
-              }
-            }
+            pushBodyText(expandedBodyText, lineNo, currentVoiceId);
           }
+          if (!bodyStarted && valueHasContinuation) {
+            warnings.push("line " + lineNo + ": Unsupported continued field after V:; following continuation text will be skipped.");
+            pendingUnsupportedContinuedFieldName = "V:";
+          }
+          continue;
+        }
+        if (bodyStarted) {
+          warnings.push("line " + lineNo + ": Skipped unsupported standalone body field: " + key + ":" + value);
           continue;
         }
         if (key === "U") {
@@ -698,32 +754,15 @@ const abcCommon = AbcCommon;
           continue;
         }
         headers[key] = value;
+        if (!bodyStarted && valueHasContinuation) {
+          warnings.push("line " + lineNo + ": Unsupported continued field after " + key + ":; following continuation text will be skipped.");
+          pendingUnsupportedContinuedFieldName = key + ":";
+        }
         continue;
       }
 
       const expandedBodyText = expandUserDefinedDecorationSymbols(noComment, userDefinedDecorationBySymbol);
-      const inlineVoiceSegments = splitBodyTextByInlineVoice(expandedBodyText, currentVoiceId);
-      for (const segment of inlineVoiceSegments) {
-        const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
-        for (const overlaySegment of overlaySegments) {
-          if (!declaredVoiceIds.includes(overlaySegment.voiceId)) {
-            declaredVoiceIds.push(overlaySegment.voiceId);
-          }
-          if (overlaySegment.overlayIndex > 0) {
-            const overlayLabel = `overlay ${overlaySegment.overlayIndex + 1}`;
-            voiceNameById[overlaySegment.voiceId] = voiceNameById[segment.voiceId]
-              ? `${voiceNameById[segment.voiceId]} ${overlayLabel}`
-              : `Voice ${segment.voiceId} ${overlayLabel}`;
-            if (voiceClefById[segment.voiceId] && !voiceClefById[overlaySegment.voiceId]) {
-              voiceClefById[overlaySegment.voiceId] = voiceClefById[segment.voiceId];
-            }
-            if (voiceTransposeById[segment.voiceId] && !voiceTransposeById[overlaySegment.voiceId]) {
-              voiceTransposeById[overlaySegment.voiceId] = { ...voiceTransposeById[segment.voiceId] };
-            }
-          }
-          bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
-        }
-      }
+      pushBodyText(expandedBodyText, lineNo, currentVoiceId);
     }
 
     if (bodyEntries.length === 0) {
@@ -901,6 +940,12 @@ const abcCommon = AbcCommon;
           continue;
         }
 
+        if (ch === "\\") {
+          warnings.push("line " + entry.lineNo + ": Skipped stray body continuation marker: \\");
+          idx += 1;
+          continue;
+        }
+
         if (ch === "," || ch === "'") {
           // Lenient compatibility: some real-world sources include standalone octave marks.
           // They are non-standard in strict ABC, but skipping them improves interoperability.
@@ -949,6 +994,60 @@ const abcCommon = AbcCommon;
           }
           beamRunActive = false;
           sawInterEventWhitespace = false;
+          continue;
+        }
+
+        const standaloneBodyFieldMatch = text.slice(idx).match(/^([A-Za-z]):([^\s\]|]+)/);
+        if (standaloneBodyFieldMatch) {
+          const standaloneFieldName = String(standaloneBodyFieldMatch[1] || "").toUpperCase();
+          const standaloneFieldValue = String(standaloneBodyFieldMatch[2] || "").trim();
+          const standaloneFieldToken = standaloneBodyFieldMatch[0];
+          if (standaloneFieldName === "K") {
+            const inlineKeyInfo = parseKey(standaloneFieldValue || "C", warnings);
+            activeKeyFifths = inlineKeyInfo.fifths;
+            activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+            currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
+            keyHintFifthsByKey.set(`${entry.voiceId}#${currentMeasureNo}`, activeKeyFifths);
+            measureAccidentals = {};
+          } else if (standaloneFieldName === "L") {
+            activeUnitLength = parseFraction(standaloneFieldValue || "1/8", "L", warnings);
+          } else if (standaloneFieldName === "M") {
+            activeMeter = parseMeter(standaloneFieldValue || "4/4", warnings);
+            ensureMeterByMeasure(entry.voiceId)[currentMeasureNo] = {
+              beats: activeMeter.beats,
+              beatType: activeMeter.beatType,
+            };
+          } else if (standaloneFieldName === "Q") {
+            activeTempoBpm = parseTempoFromQ(standaloneFieldValue || "", warnings);
+            if (Number.isFinite(activeTempoBpm)) {
+              ensureTempoByMeasure(entry.voiceId)[currentMeasureNo] = Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
+            }
+          } else {
+            warnings.push(
+              "line " + entry.lineNo + ": Skipped unsupported standalone body field token: " + standaloneFieldToken
+            );
+          }
+          idx += standaloneFieldToken.length;
+          continue;
+        }
+
+        const unsupportedBodyWordMatch = text
+          .slice(idx)
+          .match(/^([IJNQRWY][A-Za-z0-9_-]*|[h-jl-pr-twy][a-z][A-Za-z0-9_-]*)/);
+        if (unsupportedBodyWordMatch) {
+          warnings.push(
+            "line " + entry.lineNo + ": Skipped unsupported body token: " + unsupportedBodyWordMatch[1]
+          );
+          idx += unsupportedBodyWordMatch[1].length;
+          continue;
+        }
+
+        const unsupportedBodyNumberMatch = text.slice(idx).match(/^(\d+)/);
+        if (unsupportedBodyNumberMatch) {
+          warnings.push(
+            "line " + entry.lineNo + ": Skipped unsupported body number token: " + unsupportedBodyNumberMatch[1]
+          );
+          idx += unsupportedBodyNumberMatch[1].length;
           continue;
         }
 
@@ -1335,7 +1434,8 @@ const abcCommon = AbcCommon;
             activeUnitLength,
             activeKeySignatureAccidentals,
             measureAccidentals,
-            entry.voiceId
+            entry.voiceId,
+            warnings
           );
           if (!graceResult) {
             warnings.push("line " + entry.lineNo + ": Failed to parse grace group; skipped.");
@@ -1449,23 +1549,34 @@ const abcCommon = AbcCommon;
           }
           const dur = durationInDivisions(absoluteLength, 960);
           if (dur <= 0) {
-            throw new Error("line " + entry.lineNo + ": Invalid length");
+            warnings.push("line " + entry.lineNo + ": Skipped chord with invalid length.");
+            continue;
           }
           const chordNotes = [];
           currentEventNo += 1;
           const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
           for (let chordIndex = 0; chordIndex < chordResult.notes.length; chordIndex += 1) {
             const chordNote = chordResult.notes[chordIndex];
-            const note = buildNoteData(
-              chordNote.pitchChar,
-              chordNote.accidentalText,
-              chordNote.octaveShift,
-              absoluteLength,
-              dur,
-              entry.lineNo,
-              activeKeySignatureAccidentals,
-              measureAccidentals
-            );
+            let note;
+            try {
+              note = buildNoteData(
+                chordNote.pitchChar,
+                chordNote.accidentalText,
+                chordNote.octaveShift,
+                absoluteLength,
+                dur,
+                entry.lineNo,
+                activeKeySignatureAccidentals,
+                measureAccidentals
+              );
+            } catch (error) {
+              if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+                warnings.push("line " + entry.lineNo + ": Skipped chord note with unsupported octave range.");
+                chordNotes.length = 0;
+                break;
+              }
+              throw error;
+            }
             note.voice = entry.voiceId;
             if (chordIndex === 0) {
               applyBeamModeForEvent(note, dur);
@@ -1725,6 +1836,12 @@ const abcCommon = AbcCommon;
           for (const note of chordNotes) {
             currentMeasure.push(note);
           }
+          if (chordNotes.length === 0) {
+            pendingTieToNext = false;
+            lastNote = null;
+            lastEventNotes = [];
+            continue;
+          }
           lastNote = chordNotes[0] || null;
           lastEventNotes = chordNotes;
           noteCount += chordNotes.length;
@@ -1762,6 +1879,14 @@ const abcCommon = AbcCommon;
           continue;
         }
 
+        if (ch === ";" || ch === "`" || ch === "?" || ch === "@" || ch === "#" || ch === "$" || ch === "*") {
+          warnings.push("line " + entry.lineNo + ": Skipped unsupported body punctuation: " + ch);
+          idx += 1;
+          beamRunActive = false;
+          sawInterEventWhitespace = false;
+          continue;
+        }
+
         let accidentalText = "";
         while (idx < text.length && (text[idx] === "^" || text[idx] === "_" || text[idx] === "=")) {
           accidentalText += text[idx];
@@ -1779,6 +1904,10 @@ const abcCommon = AbcCommon;
 
         const pitchChar = text[idx];
         if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
+          if (accidentalText) {
+            warnings.push("line " + entry.lineNo + ": Skipped malformed accidental token: " + accidentalText);
+            continue;
+          }
           throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
         }
         idx += 1;
@@ -1832,19 +1961,32 @@ const abcCommon = AbcCommon;
 
         const dur = durationInDivisions(absoluteLength, 960);
         if (dur <= 0) {
-          throw new Error("line " + entry.lineNo + ": Invalid length");
+          warnings.push("line " + entry.lineNo + ": Skipped note with invalid length.");
+          continue;
         }
 
-        const note = buildNoteData(
-          pitchChar,
-          accidentalText,
-          octaveShift,
-          absoluteLength,
-          dur,
-          entry.lineNo,
-          activeKeySignatureAccidentals,
-          measureAccidentals
-        );
+        let note;
+        try {
+          note = buildNoteData(
+            pitchChar,
+            accidentalText,
+            octaveShift,
+            absoluteLength,
+            dur,
+            entry.lineNo,
+            activeKeySignatureAccidentals,
+            measureAccidentals
+          );
+        } catch (error) {
+          if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+            warnings.push("line " + entry.lineNo + ": Skipped note with unsupported octave range.");
+            pendingTieToNext = false;
+            lastNote = null;
+            lastEventNotes = [];
+            continue;
+          }
+          throw error;
+        }
         applyBeamModeForEvent(note, dur);
         if (pendingTrill && !note.isRest) {
           note.trill = true;
@@ -2484,7 +2626,7 @@ const abcCommon = AbcCommon;
     };
   }
 
-  function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId) {
+  function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId, warnings) {
     if (text[startIdx] !== "{") return null;
     const closeIdx = text.indexOf("}", startIdx + 1);
     if (closeIdx < 0) return null;
@@ -2511,6 +2653,9 @@ const abcCommon = AbcCommon;
       }
       const pitchChar = inner[idx];
       if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
+        if (accidentalText) {
+          warnings.push("line " + lineNo + ": Skipped malformed grace accidental token: " + accidentalText);
+        }
         idx += 1;
         continue;
       }
@@ -2529,17 +2674,29 @@ const abcCommon = AbcCommon;
       const len = parseLengthToken(lengthToken, lineNo);
       const absoluteLength = multiplyFractions(unitLength, len);
       const dur = durationInDivisions(absoluteLength, 960);
-      if (dur <= 0) continue;
-      const note = buildNoteData(
-        pitchChar,
-        accidentalText,
-        octaveShift,
-        absoluteLength,
-        dur,
-        lineNo,
-        keySignatureAccidentals,
-        graceAccidentals
-      );
+      if (dur <= 0) {
+        warnings.push("line " + lineNo + ": Skipped grace note with invalid length.");
+        continue;
+      }
+      let note;
+      try {
+        note = buildNoteData(
+          pitchChar,
+          accidentalText,
+          octaveShift,
+          absoluteLength,
+          dur,
+          lineNo,
+          keySignatureAccidentals,
+          graceAccidentals
+        );
+      } catch (error) {
+        if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+          warnings.push("line " + lineNo + ": Skipped grace note with unsupported octave range.");
+          continue;
+        }
+        throw error;
+      }
       note.voice = voiceId;
       note.grace = true;
       note.graceSlash = graceSlashPending;

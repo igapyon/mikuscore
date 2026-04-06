@@ -104,7 +104,7 @@ At that point, further progress should usually happen in `TODO.md`, `docs/spec/A
 | ABC 2.1 area | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | 3.1 Information fields | partial | Core fields such as `X:`, `T:`, `C:`, `M:`, `L:`, `K:`, `Q:`, and `V:` are handled, but not the full field family or all field semantics. |
-| 3.2 Use of fields within the tune body | partial | Inline body fields `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` are supported, but full field-level parity is not yet claimed. |
+| 3.2 Use of fields within the tune body | partial | Inline body fields `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` are supported, and a narrow compatibility subset also accepts standalone body-side `K:` / `M:` / `L:` / `Q:` lines or tokens. Full field-level parity is not yet claimed. |
 | 3.3 Field continuation | unsupported | No complete coverage claim yet. |
 | 4.1 Pitch | supported | Ordinary pitch spelling and octave notation are core supported behavior. |
 | 4.2 Accidentals | supported | Standard accidental forms are supported, with measure/key-context export rules implemented. |
@@ -177,6 +177,7 @@ Practical result mode for `ABC-COV-001`:
 | Inline field group | Status | Current interpretation for `mikuscore` |
 |---|---|---|
 | Core inline fields: `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` | supported | These are supported in the current standard path. |
+| Standalone body-side core field lines/tokens: `K:...`, `M:...`, `L:...`, `Q:...` | partial | Accepted as bounded compatibility shorthand for the corresponding inline fields after body parsing has begun. |
 | Broader inline-field family beyond the current core subset | unsupported | Unsupported inline fields are skipped with warnings rather than treated as semantically supported. |
 
 ### 3.2 / 7.3 Inline-Field Policy Notes
@@ -189,10 +190,18 @@ Current bounded subset for `mikuscore` inline-field support:
   - `[L:...]`
   - `[Q:...]`
   - `[V:...]`
+- compatibility-only
+  - standalone body-side `K:...`
+  - standalone body-side `M:...`
+  - standalone body-side `L:...`
+  - standalone body-side `Q:...`
+  - these may appear as lines or tokens and are treated as shorthand for the corresponding inline fields only after body parsing has begun
 - unsupported
   - broader inline-field family beyond that core subset
+  - other standalone body-side single-letter fields/tokens outside the bounded compatibility subset
 - handling rule
   - unsupported inline fields are skipped with warnings
+  - unsupported standalone body-side single-letter fields/tokens are also skipped with warnings
   - lexical recognition of an inline field does not count as semantic support
 
 Practical result mode for `ABC-COV-002`:
@@ -214,11 +223,31 @@ Current policy for `mikuscore`:
 - unsupported in the present bounded ABC target
   - continued information-field lines are not part of the supported interchange subset
   - lexical tolerance of adjacent header text does not count as continuation support
+  - unsupported continued header-field text should be skipped with warnings rather than later misparsed as body note/rest text
+- bounded compatibility safeguard
+  - a trailing body-line continuation marker `\` is stripped before body tokenization so it does not fall through into note/rest parsing
+  - this is not a full support claim for continued information-field semantics
 - intentionally deferred
   - field continuation will not be treated as planned work unless practical input evidence makes it necessary
 - rationale
   - current core field subset works without continuation support
   - continuation support looks low-value relative to other practical ABC interoperability gaps
+
+Directive-handling note:
+
+- `%%score` is the current supported working directive subset
+- broader `%%...` directive families remain unsupported
+- unsupported directives should be skipped with warnings rather than silently treated as supported semantics
+
+Body-token safety note:
+
+- stray body-side continuation markers `\` should be skipped with warnings rather than reaching note/rest parsing as unknown tokens
+- unsupported body-side word-token leftovers should be skipped with warnings when they are clearly outside note/rest syntax, including bounded lower-case word leftovers
+- stray body-side number tokens should be skipped with warnings when they are clearly outside attached note-length syntax
+- notes, chord-notes, or grace-notes with unsupported octave range should be skipped with warnings rather than failing the whole tune parse
+- notes, chords, or grace-notes with invalid zero-length results should be skipped with warnings rather than failing the whole tune parse
+- malformed accidental leftovers should be skipped with warnings when they do not lead into a valid note/rest token
+- bounded stray body punctuation leftovers such as `;`, `` ` ``, `?`, `@`, `#`, `$`, and `*` should be skipped with warnings rather than failing note/rest parsing
 
 Practical result mode for `ABC-COV-003`:
 
