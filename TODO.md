@@ -401,6 +401,46 @@
 - [ ] Document and test selection retention rules across re-render.
 - [ ] Add ABC roundtrip golden tests (`MusicXML -> ABC -> MusicXML`) for representative orchestral/piano scores.
 - [ ] Define acceptable roundtrip delta policy for ABC path (what may change vs must be preserved).
+- [ ] Follow up ABC unsupported-input boundary audit after the 2026-04-06 body-continuation incident.
+  - Trigger / what happened:
+    - real-world ABC input used body lines ending with `\` and then continued with standalone body-side field changes such as `K:...`
+    - current parser policy had explicitly deferred field continuation as unsupported
+    - actual failure mode was worse than the documented policy: `\` leaked into body token parsing and ended as `Failed to parse note/rest: \`
+    - a focused compatibility fix is now in place for the reported case:
+      - strip trailing body continuation `\` before body tokenization
+      - accept standalone body-side `K:` / `L:` / `M:` / `Q:` lines after body start by routing them through the existing inline-field path
+  - Knowledge gained:
+    - the problem was not only "unsupported input exists"
+    - the larger issue was "unsupported or deferred syntax can still leak into note/rest parsing and produce misleading hard failures"
+    - this means the next work should prioritize unsupported-input failure boundaries, not only feature expansion
+  - Next work order:
+    - 1. Audit all current `ABC -> MusicXML` hard-failure paths and classify each as either:
+      - structurally unrecoverable, so hard failure is correct
+      - unsupported-but-skippable, so warning/skip behavior is preferable
+    - 2. Specifically audit any syntax families that can leave raw unsupported characters in body text and later reach `Failed to parse note/rest`
+    - 3. Revisit continuation policy:
+      - decide whether continued information-field lines remain intentionally unsupported
+      - decide separately whether body-line continuation with `\` should now be promoted from compatibility fix to documented supported behavior
+    - 4. Add regression coverage for unsupported/deferred syntax so it either:
+      - degrades with explicit warnings, or
+      - fails early with a precise structural message
+  - Candidate audit targets beyond the already-fixed reported case:
+    - continued information-field lines outside the current core subset
+    - body-started standalone fields/directives that are not currently routed through inline-field handling
+    - unsupported inline/directive leftovers that may still fall through into ordinary body token parsing
+    - any remaining "unsupported but should warn" cases promised by `docs/spec/ABC_IO.md` but not yet verified by regression tests
+  - Progress (2026-04-06):
+    - unsupported standalone body-side single-letter fields now warn-and-skip instead of being silently treated as header metadata after body start
+    - unsupported continued header-field text now warns-and-skips instead of falling through into body parsing and producing misleading note/rest failures
+    - standalone body-side `K:` / `M:` / `L:` / `Q:` tokens now also work mid-line as inline-field compatibility; unsupported same-line field tokens now warn-and-skip
+    - unsupported `%%...` directives now warn-and-skip instead of being silently ignored
+    - stray body `\` markers and bounded unsupported body-word leftovers now warn-and-skip instead of failing note/rest parsing
+    - unsupported octave-range notes/chord-notes now warn-and-skip instead of failing the whole tune parse
+    - grace-note octave-range overflow now also warns-and-skips; bounded lower-case body-word leftovers are covered too
+    - bounded stray body punctuation leftovers (`;`, `` ` ``, `?`, `@`, `#`, `$`, `*`) now also warn-and-skip
+    - stray body number tokens now also warn-and-skip when they are clearly not attached note-length syntax
+    - invalid zero-length notes/chords/grace-notes now also warn-and-skip instead of failing the whole tune parse
+    - malformed accidental leftovers in body/grace text now also warn-and-skip instead of surfacing as note/rest parse failures
 - [ ] Add optional `%@mks ...` metadata compaction:
   - On `MusicXML -> ABC`, suppress consecutive `%@mks` comment lines when values are unchanged from the previous measure.
   - On `ABC -> MusicXML`, if `%@mks` metadata is omitted, inherit the previous measure's metadata for reconstruction.

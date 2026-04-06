@@ -473,6 +473,54 @@ C D E F | [K:G] G A B c |`;
     expect(outDoc.querySelector('part > measure[number="2"] > attributes > key > fifths')?.textContent?.trim()).toBe("1");
   });
 
+  it("ABC->MusicXML accepts continued body lines with standalone K: field changes", () => {
+    const abc = `X:1
+T:Keys and modes
+M:4/4
+L:1/8
+K:C
+T:C/CMAJOR/Cmajor
+CDEF GABc |\\
+K:CMAJOR
+CDEF GABc |\\
+K:Cmajor
+CDEF GABc |]`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const measure2Key = outDoc.querySelector('part > measure[number="2"] > attributes > key > fifths')?.textContent?.trim();
+    const measure3Key = outDoc.querySelector('part > measure[number="3"] > attributes > key > fifths')?.textContent?.trim();
+    expect(measure2Key).toBe("0");
+    expect(measure3Key).toBe("0");
+  });
+
+  it("ABC->MusicXML warns and skips unsupported continued header-field text instead of parsing it as body", () => {
+    const abc = `X:1
+T:Continued title\\
+still title text
+M:4/4
+L:1/8
+K:C
+C D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Unsupported continued field after T:"
+    );
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0002"]')?.textContent).toContain(
+      "Skipped unsupported continued field text for T:"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
   it("ABC->MusicXML supports inline [M:...] field changes", () => {
     const abc = `X:1
 T:Inline meter change
@@ -1191,6 +1239,429 @@ K:C
     expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "Skipped unsupported inline field: [P:A]"
     );
+  });
+
+  it("ABC->MusicXML warns on unsupported standalone body fields instead of treating them as header metadata", () => {
+    const abc = `X:1
+T:Standalone unsupported body field
+M:4/4
+L:1/8
+K:C
+C D E F |
+P:A
+G A B c |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported standalone body field: P:A"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure")).length).toBe(2);
+  });
+
+  it("ABC->MusicXML accepts same-line standalone body K: tokens as inline-field compatibility", () => {
+    const abc = `X:1
+T:Same-line body key token
+M:4/4
+L:1/8
+K:C
+C D E F | K:G G A B c |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('part > measure[number="2"] > attributes > key > fifths')?.textContent?.trim()).toBe("1");
+  });
+
+  it("ABC->MusicXML warns on unsupported same-line standalone body field tokens", () => {
+    const abc = `X:1
+T:Same-line unsupported body token
+M:4/4
+L:1/8
+K:C
+C D E F | P:A G A B c |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported standalone body field token: P:A"
+    );
+  });
+
+  it("ABC->MusicXML warns on unsupported ABC directives instead of silently ignoring them", () => {
+    const abc = `X:1
+T:Unsupported directive
+M:4/4
+L:1/8
+K:C
+%%text ignored
+C D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported ABC directive: %%text ignored"
+    );
+  });
+
+  it("ABC->MusicXML warns on stray body continuation markers instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray body continuation
+M:4/4
+L:1/8
+K:C
+C D \\ E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped stray body continuation marker"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on unsupported body word tokens instead of failing note parsing", () => {
+    const abc = `X:1
+T:Unsupported body word
+M:4/4
+L:1/8
+K:C
+C D ignored E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body token: ignored"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on lower-case unsupported body word leftovers instead of failing note parsing", () => {
+    const abc = `X:1
+T:Lower-case unsupported body word
+M:4/4
+L:1/8
+K:C
+C D still E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body token: still"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on unsupported octave range in a single note instead of failing the parse", () => {
+    const abc = `X:1
+T:Unsupported octave single
+M:4/4
+L:1/8
+K:C
+C'''''''''' D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped note with unsupported octave range."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on unsupported octave range in a chord instead of failing the parse", () => {
+    const abc = `X:1
+T:Unsupported octave chord
+M:4/4
+L:1/8
+K:C
+[C''''''''''E] D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped chord note with unsupported octave range."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on unsupported octave range in grace notes instead of failing the parse", () => {
+    const abc = `X:1
+T:Unsupported octave grace
+M:4/4
+L:1/8
+K:C
+{C''''''''''} D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped grace note with unsupported octave range."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on invalid single-note length instead of failing the parse", () => {
+    const abc = `X:1
+T:Invalid single-note length
+M:4/4
+L:1/8
+K:C
+C0 D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped note with invalid length."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on invalid chord length instead of failing the parse", () => {
+    const abc = `X:1
+T:Invalid chord length
+M:4/4
+L:1/8
+K:C
+[CE]0 D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped chord with invalid length."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on invalid grace-note length instead of failing the parse", () => {
+    const abc = `X:1
+T:Invalid grace-note length
+M:4/4
+L:1/8
+K:C
+{C0} D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped grace note with invalid length."
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on malformed accidental leftovers instead of failing note parsing", () => {
+    const abc = `X:1
+T:Malformed accidental leftover
+M:4/4
+L:1/8
+K:C
+C ^; D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped malformed accidental token: ^"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on malformed grace accidental leftovers instead of failing note parsing", () => {
+    const abc = `X:1
+T:Malformed grace accidental leftover
+M:4/4
+L:1/8
+K:C
+{^;} D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped malformed grace accidental token: ^"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(3);
+  });
+
+  it("ABC->MusicXML warns on stray body punctuation instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray body punctuation
+M:4/4
+L:1/8
+K:C
+C ; D \` E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: ;"
+    );
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0002"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: `"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on additional bounded stray body punctuation instead of failing note parsing", () => {
+    const abc = `X:1
+T:Additional stray body punctuation
+M:4/4
+L:1/8
+K:C
+C ? D @ E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: ?"
+    );
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0002"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: @"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on stray sharp-sign punctuation instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray sharp sign
+M:4/4
+L:1/8
+K:C
+C # D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: #"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on stray dollar-sign punctuation instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray dollar sign
+M:4/4
+L:1/8
+K:C
+C $ D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: $"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on stray asterisk punctuation instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray asterisk
+M:4/4
+L:1/8
+K:C
+C * D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body punctuation: *"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
+  });
+
+  it("ABC->MusicXML warns on stray body number tokens instead of failing note parsing", () => {
+    const abc = `X:1
+T:Stray body number
+M:4/4
+L:1/8
+K:C
+C 123 D E F |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent?.trim()).toBe("1");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported body number token: 123"
+    );
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note")).length).toBe(4);
   });
 
   it("ABC->MusicXML maps overlay syntax & into synthetic overlay voices", () => {

@@ -131,6 +131,19 @@ They may be lexically tolerated by the header scan, but they are not claimed as 
 Inline fields outside that subset are not currently part of the supported ABC interchange target.
 They are skipped with warnings rather than treated as semantically supported behavior.
 
+### Current body-side standalone core-field compatibility
+
+`mikuscore` also accepts a narrow compatibility subset where body-side standalone core field lines or tokens are treated like the corresponding inline fields after body parsing has begun:
+
+- `K:...`
+- `M:...`
+- `L:...`
+- `Q:...`
+
+This is compatibility behavior, not a broad claim that arbitrary information fields may freely appear as standalone body syntax.
+
+Body-side standalone single-letter fields outside that bounded compatibility subset are skipped with warnings rather than silently treated as supported body semantics.
+
 ### Current field-continuation stance
 
 `mikuscore` does not currently treat continued information-field lines as part of the supported ABC interchange subset.
@@ -140,6 +153,13 @@ This means:
 - field continuation is currently unsupported
 - lexical tolerance of adjacent header text does not count as continuation support
 - continuation support is intentionally deferred unless practical input evidence makes it necessary
+- unsupported continued header-field text should be skipped with warnings rather than falling through into body note/rest parsing
+
+However, `mikuscore` now applies one bounded compatibility rule for body parsing:
+
+- a trailing body-line continuation marker `\` is stripped before body tokenization
+- this avoids treating the continuation marker itself as note/rest text in the next parse stage
+- this does not by itself promote full continued-information-field semantics to supported status
 
 ### Current symbol-line stance
 
@@ -154,8 +174,12 @@ This means:
 #### 2. Compatibility behavior
 
 - optional `%%score` voice ordering directive
+- unsupported `%%...` directives are skipped with warnings rather than silently treated as supported semantics
 - partial/legacy patterns accepted for practical compatibility
 - de facto ecosystem conventions commonly accepted by `abcjs` / `abcm2ps` may be supported when the intended musical meaning is clear and implementation behavior can be specified
+- trailing body-line continuation marker `\` may be tolerated so it does not leak into note/rest parsing
+- body-side standalone core field lines or tokens `K:` / `M:` / `L:` / `Q:` may be accepted as compatibility shorthand for the corresponding inline fields once body parsing has begun
+- unsupported standalone body-side single-letter fields or tokens should be skipped with warnings rather than silently treated as supported body semantics
 - `V:` directive tails may accept recognized bare clef names / aliases such as `bass`, `treble`, `alto`, `tenor`, `c3`, `c4` as compatibility shorthand for `clef=...`
 - unsupported inline text / decoration forms may be skipped with warnings
 - overlay marker `&` is imported by splitting one ABC body stream into synthetic overlay voices
@@ -177,6 +201,15 @@ They are extension metadata used to improve roundtrip restoration.
 Parser is intentionally lenient for real-world ABC:
 
 - ignores standalone octave marks in unsupported positions
+- strips trailing body-line continuation `\` before body tokenization
+- accepts body-side standalone `K:` / `M:` / `L:` / `Q:` lines or tokens as compatibility shorthand for the corresponding inline fields
+- skips stray body-side continuation markers `\` with warnings when they still appear in token flow
+- skips unsupported body-side word-token leftovers with warnings when they are clearly not note/rest syntax, including bounded lower-case word leftovers
+- skips stray body-side number tokens with warnings when they are clearly not attached note-length syntax
+- skips notes/chord-notes/grace-notes with unsupported octave range using warnings rather than failing the whole tune parse
+- skips notes/chords/grace-notes with invalid zero-length results using warnings rather than failing the whole tune parse
+- skips malformed accidental leftovers with warnings when they do not lead into a valid note/rest token
+- skips bounded stray body punctuation leftovers such as `;`, `` ` ``, `?`, `@`, `#`, `$`, and `*` with warnings rather than failing note/rest parsing
 - skips unsupported decorations/inline strings with warnings
 - accepts partial/legacy patterns where possible
 - may accept de facto ecosystem forms seen in `abcjs` / `abcm2ps`-style inputs when they are structurally recognizable and musically interpretable
