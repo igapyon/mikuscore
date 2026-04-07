@@ -5,6 +5,12 @@ This document defines the current grammar baseline for the project ABC parser.
 
 It is based on ABC 2.1 and includes currently supported compatibility behavior observed in real-world `abcjs` / `abcm2ps` style inputs.
 
+Warning:
+
+- this document is a practical grammar baseline, not a fully synchronized dump of every parser helper and dispatch path in the current implementation
+- when this document and implementation detail appear to diverge, treat implementation, regression tests, and `docs/spec/ABC_IO.md` as the more authoritative source for the currently supported bounded behavior
+- update this document when the bounded grammar baseline changes materially, but do not assume every internal parser refactor requires line-by-line EBNF churn here
+
 The parser should be understood in three layers:
 
 - standard ABC surface

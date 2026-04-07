@@ -1261,6 +1261,44 @@ K:C
     );
   });
 
+  it("ABC->MusicXML skips abcjs wrapper lines with warning instead of failing", () => {
+    const abc = `[abcjs-audio engraver="{responsive:'resize'}"]
+X:1
+T:Kaeru
+M:4/4
+L:1/4
+Q:1/4=100
+K:C
+|CDEF | EDCz| EFGA | GFEz |
+| CzCz | CzCz | C/2C/2D/2D/2 E/2E/2F/2F/2 | EDCz||
+[/abcjs-audio]`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part > measure").length).toBeGreaterThan(0);
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).not.toBeNull();
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
+      "Skipped unsupported abcjs wrapper line"
+    );
+  });
+
+  it("ABC->MusicXML marks an underfull first bar as implicit pickup", () => {
+    const abc = `X:1
+K:D
+D | G3F E3
+w: Hey ho, hey ho!`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelector('part > measure[number="1"]')?.getAttribute("implicit")).toBe("yes");
+  });
+
   it("ABC->MusicXML warns on unsupported standalone body fields instead of treating them as header metadata", () => {
     const abc = `X:1
 T:Standalone unsupported body field
