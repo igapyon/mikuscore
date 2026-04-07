@@ -1,6 +1,16 @@
 // @ts-nocheck
 import { computeBeamAssignments } from "./beam-common";
-import { parseAbcChordAt, parseAbcGraceGroupAt, parseAbcNoteAt, parseAbcTupletAt } from "./abc-parser";
+import {
+  parseAbcBodyEntryAt,
+  parseAbcBracketTokenAt,
+  parseAbcBrokenRhythmAt,
+  parseAbcDelimitedSpanAt,
+  parseAbcBareRepeatEndingMarkerAt,
+  parseAbcBarlineTokenAt,
+  parseAbcGraceGroupAt,
+  parseAbcPlayableEventAt,
+  parseAbcSingleCharShorthandAt,
+} from "./abc-parser";
 import { chooseSingleClefByKeys } from "../../core/staffClefPolicy";
 
 export type Fraction = { num: number; den: number };
@@ -49,6 +59,33 @@ const parseFractionText = (text: string, fallback: Fraction = DEFAULT_UNIT): Fra
     return { num: fallback.num, den: fallback.den };
   }
   return reduceFraction(num, den, fallback);
+};
+
+const isAbcjsWrapperLine = (text: string): boolean =>
+  /^\[\s*\/?\s*abcjs(?:-[A-Za-z0-9_-]+)?(?:\s+[^\]]*)?\]$/i.test(String(text || "").trim());
+
+const estimateAbcMeasureContentDiv = (notes: any[]): number => {
+  const byVoice = new Map<string, number>();
+  const lastStartByVoice = new Map<string, number>();
+  for (const note of Array.isArray(notes) ? notes : []) {
+    if (!note || note.grace) continue;
+    const voice = String(note.voice || "1");
+    const durationDiv = Math.max(0, Math.round(Number(note.duration) || 0));
+    if (durationDiv <= 0) continue;
+    const current = byVoice.get(voice) ?? 0;
+    if (note.chord) {
+      const startDiv = lastStartByVoice.get(voice) ?? current;
+      byVoice.set(voice, Math.max(current, startDiv + durationDiv));
+      continue;
+    }
+    lastStartByVoice.set(voice, current);
+    byVoice.set(voice, current + durationDiv);
+  }
+  let maxDiv = 0;
+  for (const value of byVoice.values()) {
+    maxDiv = Math.max(maxDiv, value);
+  }
+  return maxDiv;
 };
 
 const parseAbcLengthToken = (token: string, lineNo: number): Fraction => {
@@ -184,39 +221,47 @@ if (typeof window !== "undefined") {
 
 const abcCommon = AbcCommon;
 
-  function parseRepeatEndingMarkerAt(text, idx) {
-    const match = String(text || "").slice(idx).match(/^\[(\d+(?:[,-]\d+)*)/);
-    if (!match) {
-      return null;
-    }
-    return {
-      marker: match[1],
-      nextIdx: idx + match[0].length,
-    };
-  }
-
-  function parseBareRepeatEndingMarkerAt(text, idx) {
-    const match = String(text || "").slice(idx).match(/^(\d+(?:[,-]\d+)*)/);
-    if (!match) {
-      return null;
-    }
-    return {
-      marker: match[1],
-      nextIdx: idx + match[0].length,
-    };
-  }
-
-  function parseInlineFieldAt(text, idx) {
-    const match = String(text || "").slice(idx).match(/^\[([A-Za-z]):([^\]]*)\]/);
-    if (!match) {
-      return null;
-    }
-    return {
-      fieldName: String(match[1] || "").toUpperCase(),
-      fieldValue: String(match[2] || "").trim(),
-      nextIdx: idx + match[0].length,
-    };
-  }
+const TRILL_DECORATIONS = new Set(["trill", "tr", "triller"]);
+const TURN_DECORATIONS = new Set(["turn"]);
+const TURN_SLASH_DECORATIONS = new Set(["turnx"]);
+const INVERTED_TURN_DECORATIONS = new Set(["invertedturn", "inverted-turn", "lowerturn"]);
+const INVERTED_TURN_SLASH_DECORATIONS = new Set(["invertedturnx", "inverted-turnx"]);
+const LOWER_MORDENT_DECORATIONS = new Set(["mordent", "lowermordent"]);
+const UPPER_MORDENT_DECORATIONS = new Set([
+  "pralltriller",
+  "pralltrill",
+  "prall",
+  "uppermordent",
+  "invertedmordent",
+  "inverted-mordent",
+]);
+const GLISS_START_DECORATIONS = new Set(["gliss-start", "glissando-start"]);
+const GLISS_STOP_DECORATIONS = new Set(["gliss-stop", "glissando-stop"]);
+const SLIDE_START_DECORATIONS = new Set(["slide", "slide-start"]);
+const ARPEGGIATE_DECORATIONS = new Set(["roll", "arpeggio", "arpeggiate"]);
+const STACCATO_DECORATIONS = new Set(["staccato", "stacc", "stac"]);
+const STACCATISSIMO_DECORATIONS = new Set(["staccatissimo", "wedge", "spiccato"]);
+const ACCENT_DECORATIONS = new Set(["accent", ">", "emphasis"]);
+const INVERTED_FERMATA_DECORATIONS = new Set(["invertedfermata", "inverted-fermata", "inverted fermata"]);
+const STRONG_ACCENT_DECORATIONS = new Set(["marcato", "strongaccent", "strong-accent", "strong accent"]);
+const BREATH_DECORATIONS = new Set(["breath", "breath-mark", "breathmark", "breath mark"]);
+const PHRASE_DECORATIONS = new Set(["shortphrase", "mediumphrase", "longphrase"]);
+const DACAPO_DECORATIONS = new Set(["dacapo", "da-capo", "da capo", "d.c."]);
+const DALSEGNO_DECORATIONS = new Set(["dalsegno", "dal-segno", "dal segno", "d.s."]);
+const TOCODA_DECORATIONS = new Set(["tocoda", "to-coda", "to coda"]);
+const CRESC_START_DECORATIONS = new Set(["crescendo(", "cresc(", "<("]);
+const CRESC_STOP_DECORATIONS = new Set(["crescendo)", "cresc)", "<)"]);
+const DIM_START_DECORATIONS = new Set(["diminuendo(", "decrescendo(", "dim(", "decresc(", ">("]);
+const DIM_STOP_DECORATIONS = new Set(["diminuendo)", "decrescendo)", "dim)", "decresc)", ">)"]);
+const DYNAMIC_DECORATIONS = new Set(["pppp", "ppp", "p", "pp", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp"]);
+const UPBOW_DECORATIONS = new Set(["upbow", "up-bow", "up bow"]);
+const DOWNBOW_DECORATIONS = new Set(["downbow", "down-bow", "down bow"]);
+const DOUBLE_TONGUE_DECORATIONS = new Set(["doubletongue", "double-tongue", "double tongue"]);
+const TRIPLE_TONGUE_DECORATIONS = new Set(["tripletongue", "triple-tongue", "triple tongue"]);
+const OPEN_STRING_DECORATIONS = new Set(["open", "open-string", "openstring", "open string"]);
+const SNAP_PIZZICATO_DECORATIONS = new Set(["snap", "snap-pizzicato", "snappizzicato", "snap pizzicato"]);
+const STOPPED_DECORATIONS = new Set(["stopped", "+", "plus", "stopped horn", "stopped-horn"]);
+const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-position", "thumbpos", "thumb pos", "thumb position"]);
 
   function tokenizeAbcLyricLine(text) {
     const raw = String(text || "").trim();
@@ -277,8 +322,9 @@ const abcCommon = AbcCommon;
     let idx = 0;
     while (idx < raw.length) {
       if (raw[idx] === "[") {
-        const inlineField = parseInlineFieldAt(raw, idx);
-        if (inlineField && inlineField.fieldName === "V") {
+        const bracketToken = parseAbcBracketTokenAt(raw, idx);
+        if (bracketToken.kind === "inline-field" && bracketToken.inlineField.fieldName === "V") {
+          const { inlineField } = bracketToken;
           if (buffer.trim()) {
             segments.push({ voiceId: activeVoiceId, text: buffer });
           }
@@ -320,30 +366,30 @@ const abcCommon = AbcCommon;
       const ch = raw[idx];
 
       if (ch === '"') {
-        let endIdx = idx + 1;
-        while (endIdx < raw.length && raw[endIdx] !== '"') {
-          endIdx += 1;
+        const token = parseAbcDelimitedSpanAt(raw, idx, '"');
+        if (!token) {
+          idx += 1;
+          continue;
         }
-        const token = raw.slice(idx, Math.min(raw.length, endIdx + 1));
         ensureOverlayBuffer(activeOverlayIndex);
-        overlayBuffers[activeOverlayIndex] += token;
-        idx = Math.min(raw.length, endIdx + 1);
+        overlayBuffers[activeOverlayIndex] += token.text;
+        idx = token.nextIdx;
         continue;
       }
 
       if (ch === "!" || ch === "+") {
-        let endIdx = idx + 1;
-        while (endIdx < raw.length && raw[endIdx] !== ch) {
-          endIdx += 1;
+        const token = parseAbcDelimitedSpanAt(raw, idx, ch);
+        if (!token) {
+          idx += 1;
+          continue;
         }
-        const token = raw.slice(idx, Math.min(raw.length, endIdx + 1));
         ensureOverlayBuffer(activeOverlayIndex);
-        overlayBuffers[activeOverlayIndex] += token;
-        idx = Math.min(raw.length, endIdx + 1);
+        overlayBuffers[activeOverlayIndex] += token.text;
+        idx = token.nextIdx;
         continue;
       }
 
-      const barlineToken = parseBarlineTokenAt(raw, idx);
+      const barlineToken = parseAbcBarlineTokenAt(raw, idx);
       if (barlineToken) {
         const tokenText = raw.slice(idx, barlineToken.nextIdx);
         if (barlineToken.endsMeasure) {
@@ -406,12 +452,14 @@ const abcCommon = AbcCommon;
     while (idx < raw.length) {
       const ch = raw[idx];
       if (ch === '"' || ch === "!" || ch === "+") {
-        let endIdx = idx + 1;
-        while (endIdx < raw.length && raw[endIdx] !== ch) {
-          endIdx += 1;
+        const token = parseAbcDelimitedSpanAt(raw, idx, ch);
+        if (!token) {
+          out += ch;
+          idx += 1;
+          continue;
         }
-        out += raw.slice(idx, Math.min(raw.length, endIdx + 1));
-        idx = Math.min(raw.length, endIdx + 1);
+        out += token.text;
+        idx = token.nextIdx;
         continue;
       }
       if (Object.prototype.hasOwnProperty.call(symbolMap, ch)) {
@@ -423,34 +471,6 @@ const abcCommon = AbcCommon;
       idx += 1;
     }
     return out;
-  }
-
-  function parseBarlineTokenAt(text, idx) {
-    const slice = String(text || "").slice(idx);
-    const candidates = [
-      { token: ":|]", endsMeasure: true, repeatEnd: true, repeatStart: false, endingStop: true },
-      { token: ":|:", endsMeasure: true, repeatEnd: true, repeatStart: true, endingStop: false },
-      { token: "|:", endsMeasure: true, repeatEnd: false, repeatStart: true, endingStop: false },
-      { token: ":|", endsMeasure: true, repeatEnd: true, repeatStart: false, endingStop: false },
-      { token: "::", endsMeasure: true, repeatEnd: true, repeatStart: true, endingStop: false },
-      { token: "[|", endsMeasure: true, repeatEnd: false, repeatStart: false, endingStop: false },
-      { token: "|]", endsMeasure: true, repeatEnd: false, repeatStart: false, endingStop: false },
-      { token: "||", endsMeasure: true, repeatEnd: false, repeatStart: false, endingStop: false },
-      { token: "|", endsMeasure: true, repeatEnd: false, repeatStart: false, endingStop: false },
-      { token: ":", endsMeasure: false, repeatEnd: false, repeatStart: false, endingStop: false },
-    ];
-    for (const candidate of candidates) {
-      if (slice.startsWith(candidate.token)) {
-        return {
-          nextIdx: idx + candidate.token.length,
-          endsMeasure: candidate.endsMeasure,
-          repeatEnd: candidate.repeatEnd,
-          repeatStart: candidate.repeatStart,
-          endingStop: candidate.endingStop,
-        };
-      }
-    }
-    return null;
   }
 
   function parseTempoFromQ(rawQ, warnings) {
@@ -546,6 +566,11 @@ const abcCommon = AbcCommon;
       const raw = lines[i];
       const rawTrimmed = raw.trim();
       if (!rawTrimmed) {
+        pendingUnsupportedContinuedFieldName = "";
+        continue;
+      }
+      if (isAbcjsWrapperLine(rawTrimmed)) {
+        warnings.push("line " + lineNo + ": Skipped unsupported abcjs wrapper line: " + rawTrimmed);
         pendingUnsupportedContinuedFieldName = "";
         continue;
       }
@@ -911,1056 +936,307 @@ const abcCommon = AbcCommon;
       let idx = 0;
       const text = entry.text;
 
-      const isBeamableAbcNote = (note) =>
-        Boolean(
-          note &&
-          !note.isRest &&
-          !note.grace &&
-          ["eighth", "16th", "32nd", "64th"].includes(String(note.type || "").trim().toLowerCase())
-        );
-      const applyBeamModeForEvent = (note, durationDiv) => {
-        const resolvedDurationDiv = Math.max(0, Math.round(Number(durationDiv) || 0));
-        const beatDiv = Math.max(1, Math.round((960 * 4) / Math.max(1, Math.round(Number(activeMeter?.beatType) || 4))));
-        const startsAtBeatBoundary = beamCursorDiv > 0 && beamCursorDiv % beatDiv === 0;
-        if (startsAtBeatBoundary) {
-          beamRunActive = false;
-        }
-        if (isBeamableAbcNote(note)) {
-          note.beamMode = !beamRunActive || sawInterEventWhitespace ? "begin" : "mid";
-          beamRunActive = true;
-        } else {
-          beamRunActive = false;
-        }
-        sawInterEventWhitespace = false;
-        beamCursorDiv += resolvedDurationDiv;
+      const warnBody = (message) => {
+        warnings.push("line " + entry.lineNo + ": " + message);
       };
 
-      while (idx < text.length) {
-        const ch = text[idx];
-
-        if (ch === " " || ch === "\t") {
-          sawInterEventWhitespace = true;
-          idx += 1;
-          continue;
+      // Field and decoration application.
+      const applyBodyField = (fieldName, fieldValue) => {
+        if (fieldName === "K") {
+          const inlineKeyInfo = parseKey(fieldValue || "C", warnings);
+          activeKeyFifths = inlineKeyInfo.fifths;
+          activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+          currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
+          keyHintFifthsByKey.set(`${entry.voiceId}#${currentMeasureNo}`, activeKeyFifths);
+          measureAccidentals = {};
+          return true;
         }
-
-        if (ch === "\\") {
-          warnings.push("line " + entry.lineNo + ": Skipped stray body continuation marker: \\");
-          idx += 1;
-          continue;
+        if (fieldName === "L") {
+          activeUnitLength = parseFraction(fieldValue || "1/8", "L", warnings);
+          return true;
         }
-
-        if (ch === "," || ch === "'") {
-          // Lenient compatibility: some real-world sources include standalone octave marks.
-          // They are non-standard in strict ABC, but skipping them improves interoperability.
-          idx += 1;
-          continue;
+        if (fieldName === "M") {
+          activeMeter = parseMeter(fieldValue || "4/4", warnings);
+          ensureMeterByMeasure(entry.voiceId)[currentMeasureNo] = {
+            beats: activeMeter.beats,
+            beatType: activeMeter.beatType,
+          };
+          return true;
         }
-
-        if (ch === "|" || ch === ":") {
-          const barlineToken = parseBarlineTokenAt(text, idx);
-          if (!barlineToken) {
-            idx += 1;
-            continue;
+        if (fieldName === "Q") {
+          activeTempoBpm = parseTempoFromQ(fieldValue || "", warnings);
+          if (Number.isFinite(activeTempoBpm)) {
+            ensureTempoByMeasure(entry.voiceId)[currentMeasureNo] = Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
           }
-          const bareRepeatEndingMarker =
-            barlineToken.endsMeasure ? parseBareRepeatEndingMarkerAt(text, barlineToken.nextIdx) : null;
-          if (barlineToken.repeatEnd) {
-            ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo).repeatEnd = true;
+          return true;
+        }
+        return false;
+      };
+
+      const applyPrefixedDecoration = (rawDecoration, decoration) => {
+        if (decoration.startsWith("rehearsal:")) {
+          const rehearsalText = rawDecoration.slice("rehearsal:".length).trim();
+          if (rehearsalText) {
+            pendingRehearsalMark = rehearsalText;
           }
-          if ((barlineToken.endingStop || bareRepeatEndingMarker) && activeEndingMarker) {
-            const measureMeta = ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo);
-            measureMeta.endingStop = activeEndingMarker;
-            measureMeta.endingStopType = "stop";
-            activeEndingMarker = "";
+          return true;
+        }
+        if (decoration.startsWith("fingering:")) {
+          const fingeringText = rawDecoration.slice("fingering:".length).trim();
+          if (fingeringText) {
+            pendingFingerings.push(fingeringText);
           }
-          if (barlineToken.endsMeasure && (currentMeasure.length > 0 || measures.length === 0)) {
-            currentMeasure = [];
-            measures.push(currentMeasure);
-            currentMeasureNo = Math.max(1, measures.length);
-            currentEventNo = 0;
-            beamCursorDiv = 0;
+          return true;
+        }
+        if (decoration.startsWith("string:")) {
+          const stringText = rawDecoration.slice("string:".length).trim();
+          if (stringText) {
+            pendingStrings.push(stringText);
           }
-          if (barlineToken.endsMeasure) {
-            measureAccidentals = {};
-            lastNote = null;
+          return true;
+        }
+        if (decoration.startsWith("pluck:")) {
+          const pluckText = rawDecoration.slice("pluck:".length).trim();
+          if (pluckText) {
+            pendingPlucks.push(pluckText);
           }
-          if (barlineToken.repeatStart) {
-            ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo).repeatStart = true;
-          }
-          if (bareRepeatEndingMarker) {
-            const measureMeta = ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo);
-            measureMeta.endingStart = bareRepeatEndingMarker.marker;
-            activeEndingMarker = bareRepeatEndingMarker.marker;
-            idx = bareRepeatEndingMarker.nextIdx;
-          } else {
-            idx = barlineToken.nextIdx;
-          }
-          beamRunActive = false;
-          sawInterEventWhitespace = false;
-          continue;
+          return true;
         }
+        return false;
+      };
 
-        const standaloneBodyFieldMatch = text.slice(idx).match(/^([A-Za-z]):([^\s\]|]+)/);
-        if (standaloneBodyFieldMatch) {
-          const standaloneFieldName = String(standaloneBodyFieldMatch[1] || "").toUpperCase();
-          const standaloneFieldValue = String(standaloneBodyFieldMatch[2] || "").trim();
-          const standaloneFieldToken = standaloneBodyFieldMatch[0];
-          if (standaloneFieldName === "K") {
-            const inlineKeyInfo = parseKey(standaloneFieldValue || "C", warnings);
-            activeKeyFifths = inlineKeyInfo.fifths;
-            activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
-            currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
-            keyHintFifthsByKey.set(`${entry.voiceId}#${currentMeasureNo}`, activeKeyFifths);
-            measureAccidentals = {};
-          } else if (standaloneFieldName === "L") {
-            activeUnitLength = parseFraction(standaloneFieldValue || "1/8", "L", warnings);
-          } else if (standaloneFieldName === "M") {
-            activeMeter = parseMeter(standaloneFieldValue || "4/4", warnings);
-            ensureMeterByMeasure(entry.voiceId)[currentMeasureNo] = {
-              beats: activeMeter.beats,
-              beatType: activeMeter.beatType,
-            };
-          } else if (standaloneFieldName === "Q") {
-            activeTempoBpm = parseTempoFromQ(standaloneFieldValue || "", warnings);
-            if (Number.isFinite(activeTempoBpm)) {
-              ensureTempoByMeasure(entry.voiceId)[currentMeasureNo] = Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
-            }
-          } else {
-            warnings.push(
-              "line " + entry.lineNo + ": Skipped unsupported standalone body field token: " + standaloneFieldToken
-            );
-          }
-          idx += standaloneFieldToken.length;
-          continue;
+      const applyTurnDecoration = (decoration) => {
+        if (decoration === "delayedturn" || decoration === "delayed-turn") {
+          pendingTurn = pendingTurn || "turn";
+          pendingDelayedTurn = true;
+          return true;
         }
-
-        const unsupportedBodyWordMatch = text
-          .slice(idx)
-          .match(/^([IJNQRWY][A-Za-z0-9_-]*|[h-jl-pr-twy][a-z][A-Za-z0-9_-]*)/);
-        if (unsupportedBodyWordMatch) {
-          warnings.push(
-            "line " + entry.lineNo + ": Skipped unsupported body token: " + unsupportedBodyWordMatch[1]
-          );
-          idx += unsupportedBodyWordMatch[1].length;
-          continue;
+        if (decoration === "delayedinvertedturn" || decoration === "delayed-inverted-turn") {
+          pendingTurn = "inverted-turn";
+          pendingDelayedTurn = true;
+          return true;
         }
-
-        const unsupportedBodyNumberMatch = text.slice(idx).match(/^(\d+)/);
-        if (unsupportedBodyNumberMatch) {
-          warnings.push(
-            "line " + entry.lineNo + ": Skipped unsupported body number token: " + unsupportedBodyNumberMatch[1]
-          );
-          idx += unsupportedBodyNumberMatch[1].length;
-          continue;
+        const turnDecorationAppliers = [
+          [TURN_DECORATIONS, "turn", false],
+          [TURN_SLASH_DECORATIONS, "turn", true],
+          [INVERTED_TURN_DECORATIONS, "inverted-turn", false],
+          [INVERTED_TURN_SLASH_DECORATIONS, "inverted-turn", true],
+        ];
+        const matchedTurn = turnDecorationAppliers.find(([decorationSet]) => decorationSet.has(decoration));
+        if (!matchedTurn) {
+          return false;
         }
+        pendingTurn = matchedTurn[1];
+        pendingTurnSlash = matchedTurn[2];
+        return true;
+      };
 
-        if (ch === ">" || ch === "<") {
-          if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
-            warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ")  has no preceding note; skipped.");
-            idx += 1;
-            continue;
-          }
-          const lastScale = ch === ">" ? { num: 3, den: 2 } : { num: 1, den: 2 };
-          pendingRhythmScale = ch === ">" ? { num: 1, den: 2 } : { num: 3, den: 2 };
-          scaleNotesDuration(lastEventNotes, lastScale);
-          idx += 1;
-          continue;
+      const applyTremoloDecoration = (decoration) => {
+        const matched = decoration.match(/^tremolo-(single|start|stop)-([1-9]\d*)$/);
+        if (!matched) {
+          return false;
         }
+        pendingTremolo = {
+          type: matched[1] as "single" | "start" | "stop",
+          marks: Math.max(1, Math.min(8, Number.parseInt(matched[2], 10) || 1))
+        };
+        return true;
+      };
 
-        if (ch === "(") {
-          const tuplet = parseAbcTupletAt(text, idx);
-          if (tuplet) {
-            if (tuplet.actual > 0 && tuplet.normal > 0 && tuplet.count > 0) {
-              tupletScale = { num: tuplet.normal, den: tuplet.actual };
-              tupletRemaining = tuplet.count;
-              tupletSpec = { actual: tuplet.actual, normal: tuplet.normal, remaining: tuplet.count };
-            } else {
-              warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tuplet.raw);
-            }
-            idx = tuplet.nextIdx;
-            continue;
-          }
-          pendingSlurStart += 1;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "~") {
-          pendingArpeggiate = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "H") {
-          pendingFermata = "normal";
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "L") {
-          pendingAccent = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "M") {
-          pendingMordent = "mordent";
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "O") {
-          pendingCoda = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "P") {
-          pendingMordent = "inverted-mordent";
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "S") {
-          pendingSegno = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "T") {
-          pendingTrill = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "u") {
-          pendingUpBow = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "v") {
-          pendingDownBow = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "-") {
-          if (lastEventNotes && lastEventNotes.length > 0 && lastEventNotes.some((n) => !n.isRest)) {
-            for (const eventNote of lastEventNotes) {
-              if (!eventNote.isRest) {
-                eventNote.tieStart = true;
-              }
-            }
-            pendingTieToNext = true;
-          } else {
-            warnings.push("line " + entry.lineNo + ": tie(-)  has no preceding note; skipped.");
-          }
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "\"") {
-          const endQuote = text.indexOf("\"", idx + 1);
-          if (endQuote >= 0) {
-            const rawAnnotation = text.slice(idx + 1, endQuote);
-            const normalizedAnnotation = rawAnnotation.replace(/^[\^_<>@]/, "").trim();
-            if (normalizedAnnotation) {
-              if (isLikelyAbcChordSymbol(normalizedAnnotation)) {
-                pendingChordSymbols.push(normalizedAnnotation);
-              } else {
-                pendingAnnotations.push(normalizedAnnotation);
-              }
-            }
-            idx = endQuote + 1;
-          } else {
-            idx = text.length;
-            warnings.push("line " + entry.lineNo + ': Unterminated inline string ("...").');
-          }
-          continue;
-        }
-
-        if (ch === "!" || ch === "+") {
-          const endMark = text.indexOf(ch, idx + 1);
-          if (endMark < 0) {
-            idx += 1;
-            warnings.push("line " + entry.lineNo + ": Unterminated decoration marker: " + ch);
-            continue;
-          }
-          const rawDecoration = text.slice(idx + 1, endMark).trim();
-          const decoration = rawDecoration.toLowerCase();
-          if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
-            pendingTrill = true;
-          } else if (decoration === "editorial") {
-            pendingEditorialAccidental = true;
-          } else if (decoration === "courtesy") {
+      const applyDecoration = (rawDecoration, decoration) => {
+        const exactDecorationAppliers = {
+          "caesura": () => {
+            pendingCaesura = true;
+          },
+          "coda": () => {
+            pendingCoda = true;
+          },
+          "courtesy": () => {
             pendingCourtesyAccidental = true;
-          } else if (decoration === "trill(") {
+          },
+          "editorial": () => {
+            pendingEditorialAccidental = true;
+          },
+          "fermata": () => {
+            pendingFermata = "normal";
+          },
+          "fine": () => {
+            pendingFine = true;
+          },
+          "harmonic": () => {
+            pendingHarmonic = true;
+          },
+          "heel": () => {
+            pendingHeel = true;
+          },
+          "heel mark": () => {
+            pendingHeel = true;
+          },
+          "schleifer": () => {
+            pendingSchleifer = true;
+          },
+          "segno": () => {
+            pendingSegno = true;
+          },
+          "sfz": () => {
+            pendingSfz = true;
+          },
+          "shake": () => {
+            pendingShake = true;
+          },
+          "slide-stop": () => {
+            pendingSlideStop = true;
+          },
+          "stress": () => {
+            pendingStress = true;
+          },
+          "tenuto": () => {
+            pendingTenuto = true;
+          },
+          "toe": () => {
+            pendingToe = true;
+          },
+          "toe mark": () => {
+            pendingToe = true;
+          },
+          "trill(": () => {
             pendingTrill = true;
             pendingTrillLineStart = true;
-          } else if (decoration === "trill)") {
+          },
+          "trill)": () => {
             pendingTrillLineStop = true;
-          } else if (decoration.startsWith("rehearsal:")) {
-            const rehearsalText = rawDecoration.slice("rehearsal:".length).trim();
-            if (rehearsalText) {
-              pendingRehearsalMark = rehearsalText;
-            }
-          } else if (decoration === "delayedturn" || decoration === "delayed-turn") {
-            pendingTurn = pendingTurn || "turn";
-            pendingDelayedTurn = true;
-          } else if (decoration === "delayedinvertedturn" || decoration === "delayed-inverted-turn") {
-            pendingTurn = "inverted-turn";
-            pendingDelayedTurn = true;
-          } else if (decoration === "turn") {
-            pendingTurn = "turn";
-            pendingTurnSlash = false;
-          } else if (decoration === "turnx") {
-            pendingTurn = "turn";
-            pendingTurnSlash = true;
-          } else if (decoration === "invertedturn" || decoration === "inverted-turn" || decoration === "lowerturn") {
-            pendingTurn = "inverted-turn";
-            pendingTurnSlash = false;
-          } else if (decoration === "invertedturnx" || decoration === "inverted-turnx") {
-            pendingTurn = "inverted-turn";
-            pendingTurnSlash = true;
-          } else if (decoration === "mordent" || decoration === "lowermordent") {
-            pendingMordent = "mordent";
-          } else if (
-            decoration === "pralltriller" ||
-            decoration === "pralltrill" ||
-            decoration === "prall" ||
-            decoration === "uppermordent" ||
-            decoration === "invertedmordent" ||
-            decoration === "inverted-mordent"
-          ) {
-            pendingMordent = "inverted-mordent";
-          } else if (/^tremolo-(single|start|stop)-([1-9]\d*)$/.test(decoration)) {
-            const m = decoration.match(/^tremolo-(single|start|stop)-([1-9]\d*)$/);
-            if (m) {
-              pendingTremolo = {
-                type: m[1] as "single" | "start" | "stop",
-                marks: Math.max(1, Math.min(8, Number.parseInt(m[2], 10) || 1))
-              };
-            }
-          } else if (decoration === "gliss-start" || decoration === "glissando-start") {
-            pendingGlissandoStart = true;
-          } else if (decoration === "gliss-stop" || decoration === "glissando-stop") {
-            pendingGlissandoStop = true;
-          } else if (decoration === "slide" || decoration === "slide-start") {
-            pendingSlideStart = true;
-          } else if (decoration === "slide-stop") {
-            pendingSlideStop = true;
-          } else if (decoration === "schleifer") {
-            pendingSchleifer = true;
-          } else if (decoration === "shake") {
-            pendingShake = true;
-          } else if (decoration === "roll" || decoration === "arpeggio" || decoration === "arpeggiate") {
-            pendingArpeggiate = true;
-          } else if (
-            decoration === "staccato" ||
-            decoration === "stacc" ||
-            decoration === "stac"
-          ) {
-            pendingStaccato = true;
-          } else if (decoration === "staccatissimo" || decoration === "wedge" || decoration === "spiccato") {
-            pendingStaccatissimo = true;
-          } else if (decoration === "accent" || decoration === ">" || decoration === "emphasis") {
-            pendingAccent = true;
-          } else if (decoration === "tenuto") {
-            pendingTenuto = true;
-          } else if (decoration === "stress") {
-            pendingStress = true;
-          } else if (decoration === "unstress") {
+          },
+          "unstress": () => {
             pendingUnstress = true;
-          } else if (decoration === "fermata") {
-            pendingFermata = "normal";
-          } else if (
-            decoration === "invertedfermata" ||
-            decoration === "inverted-fermata" ||
-            decoration === "inverted fermata"
-          ) {
+          },
+        };
+        const applyExactDecoration = exactDecorationAppliers[decoration];
+        if (applyExactDecoration) {
+          applyExactDecoration();
+          return true;
+        }
+        const setDecorationAppliers = [
+          [TRILL_DECORATIONS, () => {
+            pendingTrill = true;
+          }],
+          [LOWER_MORDENT_DECORATIONS, () => {
+            pendingMordent = "mordent";
+          }],
+          [UPPER_MORDENT_DECORATIONS, () => {
+            pendingMordent = "inverted-mordent";
+          }],
+          [GLISS_START_DECORATIONS, () => {
+            pendingGlissandoStart = true;
+          }],
+          [GLISS_STOP_DECORATIONS, () => {
+            pendingGlissandoStop = true;
+          }],
+          [SLIDE_START_DECORATIONS, () => {
+            pendingSlideStart = true;
+          }],
+          [ARPEGGIATE_DECORATIONS, () => {
+            pendingArpeggiate = true;
+          }],
+          [STACCATO_DECORATIONS, () => {
+            pendingStaccato = true;
+          }],
+          [STACCATISSIMO_DECORATIONS, () => {
+            pendingStaccatissimo = true;
+          }],
+          [ACCENT_DECORATIONS, () => {
+            pendingAccent = true;
+          }],
+          [INVERTED_FERMATA_DECORATIONS, () => {
             pendingFermata = "inverted";
-          } else if (
-            decoration === "marcato" ||
-            decoration === "strongaccent" ||
-            decoration === "strong-accent" ||
-            decoration === "strong accent"
-          ) {
+          }],
+          [STRONG_ACCENT_DECORATIONS, () => {
             pendingStrongAccent = true;
-          } else if (
-            decoration === "breath" ||
-            decoration === "breath-mark" ||
-            decoration === "breathmark" ||
-            decoration === "breath mark"
-          ) {
+          }],
+          [BREATH_DECORATIONS, () => {
             pendingBreathMark = true;
-          } else if (decoration === "caesura") {
-            pendingCaesura = true;
-          } else if (decoration === "shortphrase" || decoration === "mediumphrase" || decoration === "longphrase") {
-            pendingPhraseMark = decoration as "shortphrase" | "mediumphrase" | "longphrase";
-          } else if (decoration === "segno") {
-            pendingSegno = true;
-          } else if (decoration === "coda") {
-            pendingCoda = true;
-          } else if (decoration === "fine") {
-            pendingFine = true;
-          } else if (decoration === "dacoda") {
+          }],
+          [DACAPO_DECORATIONS, () => {
             pendingDaCapo = true;
-            pendingToCoda = true;
-          } else if (decoration === "dacapo" || decoration === "da-capo" || decoration === "da capo" || decoration === "d.c.") {
-            pendingDaCapo = true;
-          } else if (decoration === "dalsegno" || decoration === "dal-segno" || decoration === "dal segno" || decoration === "d.s.") {
+          }],
+          [DALSEGNO_DECORATIONS, () => {
             pendingDalSegno = true;
-          } else if (decoration === "tocoda" || decoration === "to-coda" || decoration === "to coda") {
+          }],
+          [TOCODA_DECORATIONS, () => {
             pendingToCoda = true;
-          } else if (decoration === "crescendo(" || decoration === "cresc(" || decoration === "<(") {
+          }],
+          [CRESC_START_DECORATIONS, () => {
             pendingCrescendoStart = true;
-          } else if (decoration === "crescendo)" || decoration === "cresc)" || decoration === "<)") {
+          }],
+          [CRESC_STOP_DECORATIONS, () => {
             pendingCrescendoStop = true;
-          } else if (
-            decoration === "diminuendo(" ||
-            decoration === "decrescendo(" ||
-            decoration === "dim(" ||
-            decoration === "decresc(" ||
-            decoration === ">("
-          ) {
+          }],
+          [DIM_START_DECORATIONS, () => {
             pendingDiminuendoStart = true;
-          } else if (
-            decoration === "diminuendo)" ||
-            decoration === "decrescendo)" ||
-            decoration === "dim)" ||
-            decoration === "decresc)" ||
-            decoration === ">)"
-          ) {
+          }],
+          [DIM_STOP_DECORATIONS, () => {
             pendingDiminuendoStop = true;
-          } else if (
-            decoration === "pppp" ||
-            decoration === "ppp" ||
-            decoration === "p" ||
-            decoration === "pp" ||
-            decoration === "mp" ||
-            decoration === "mf" ||
-            decoration === "f" ||
-            decoration === "ff" ||
-            decoration === "fff" ||
-            decoration === "ffff" ||
-            decoration === "fp" ||
-            decoration === "fz" ||
-            decoration === "rfz" ||
-            decoration === "sf" ||
-            decoration === "sfp"
-          ) {
-            pendingDynamicMark = decoration;
-          } else if (decoration === "sfz") {
-            pendingSfz = true;
-          } else if (decoration === "upbow" || decoration === "up-bow" || decoration === "up bow") {
+          }],
+          [UPBOW_DECORATIONS, () => {
             pendingUpBow = true;
-          } else if (decoration === "downbow" || decoration === "down-bow" || decoration === "down bow") {
+          }],
+          [DOWNBOW_DECORATIONS, () => {
             pendingDownBow = true;
-          } else if (
-            decoration === "doubletongue" ||
-            decoration === "double-tongue" ||
-            decoration === "double tongue"
-          ) {
+          }],
+          [DOUBLE_TONGUE_DECORATIONS, () => {
             pendingDoubleTongue = true;
-          } else if (
-            decoration === "tripletongue" ||
-            decoration === "triple-tongue" ||
-            decoration === "triple tongue"
-          ) {
+          }],
+          [TRIPLE_TONGUE_DECORATIONS, () => {
             pendingTripleTongue = true;
-          } else if (decoration === "heel" || decoration === "heel mark") {
-            pendingHeel = true;
-          } else if (decoration === "toe" || decoration === "toe mark") {
-            pendingToe = true;
-          } else if (/^[0-5]$/.test(decoration)) {
-            pendingFingerings.push(decoration);
-          } else if (decoration.startsWith("fingering:")) {
-            const fingeringText = rawDecoration.slice("fingering:".length).trim();
-            if (fingeringText) pendingFingerings.push(fingeringText);
-          } else if (decoration.startsWith("string:")) {
-            const stringText = rawDecoration.slice("string:".length).trim();
-            if (stringText) pendingStrings.push(stringText);
-          } else if (decoration.startsWith("pluck:")) {
-            const pluckText = rawDecoration.slice("pluck:".length).trim();
-            if (pluckText) pendingPlucks.push(pluckText);
-          } else if (
-            decoration === "open" ||
-            decoration === "open-string" ||
-            decoration === "openstring" ||
-            decoration === "open string"
-          ) {
+          }],
+          [OPEN_STRING_DECORATIONS, () => {
             pendingOpenString = true;
-          } else if (
-            decoration === "snap" ||
-            decoration === "snap-pizzicato" ||
-            decoration === "snappizzicato" ||
-            decoration === "snap pizzicato"
-          ) {
+          }],
+          [SNAP_PIZZICATO_DECORATIONS, () => {
             pendingSnapPizzicato = true;
-          } else if (decoration === "harmonic") {
-            pendingHarmonic = true;
-          } else if (
-            decoration === "stopped" ||
-            decoration === "+" ||
-            decoration === "plus" ||
-            decoration === "stopped horn" ||
-            decoration === "stopped-horn"
-          ) {
+          }],
+          [STOPPED_DECORATIONS, () => {
             pendingStopped = true;
-          } else if (
-            decoration === "thumb" ||
-            decoration === "thumbposition" ||
-            decoration === "thumb-position" ||
-            decoration === "thumbpos" ||
-            decoration === "thumb pos" ||
-            decoration === "thumb position"
-          ) {
+          }],
+          [THUMB_POSITION_DECORATIONS, () => {
             pendingThumbPosition = true;
-          } else if (decoration) {
-            warnings.push("line " + entry.lineNo + ": Skipped decoration: " + ch + decoration + ch);
-          }
-          idx = endMark + 1;
-          continue;
+          }],
+        ];
+        const applySetDecoration = setDecorationAppliers.find(([decorationSet]) => decorationSet.has(decoration));
+        if (applySetDecoration) {
+          applySetDecoration[1]();
+          return true;
         }
+        if (applyPrefixedDecoration(rawDecoration, decoration)) {
+          return true;
+        }
+        if (applyTurnDecoration(decoration)) {
+          return true;
+        }
+        if (applyTremoloDecoration(decoration)) {
+          return true;
+        }
+        if (PHRASE_DECORATIONS.has(decoration)) {
+          pendingPhraseMark = decoration as "shortphrase" | "mediumphrase" | "longphrase";
+          return true;
+        }
+        if (decoration === "dacoda") {
+          pendingDaCapo = true;
+          pendingToCoda = true;
+          return true;
+        }
+        if (DYNAMIC_DECORATIONS.has(decoration)) {
+          pendingDynamicMark = decoration;
+          return true;
+        }
+        if (/^[0-5]$/.test(decoration)) {
+          pendingFingerings.push(decoration);
+          return true;
+        }
+        return false;
+      };
 
-        if (ch === "{") {
-          const graceResult = parseGraceGroupAt(
-            text,
-            idx,
-            entry.lineNo,
-            activeUnitLength,
-            activeKeySignatureAccidentals,
-            measureAccidentals,
-            entry.voiceId,
-            warnings
-          );
-          if (!graceResult) {
-            warnings.push("line " + entry.lineNo + ": Failed to parse grace group; skipped.");
-            idx += 1;
-            continue;
-          }
-          idx = graceResult.nextIdx;
-          for (const graceNote of graceResult.notes) {
-            currentMeasure.push(graceNote);
-            noteCount += 1;
-          }
-          continue;
-        }
-
-        if (ch === ".") {
-          pendingStaccato = true;
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "[") {
-          const inlineField = parseInlineFieldAt(text, idx);
-          if (inlineField) {
-            if (inlineField.fieldName === "K") {
-              const inlineKeyInfo = parseKey(inlineField.fieldValue || "C", warnings);
-              activeKeyFifths = inlineKeyInfo.fifths;
-              activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
-              currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
-              keyHintFifthsByKey.set(`${entry.voiceId}#${currentMeasureNo}`, activeKeyFifths);
-              measureAccidentals = {};
-            } else if (inlineField.fieldName === "L") {
-              activeUnitLength = parseFraction(inlineField.fieldValue || "1/8", "L", warnings);
-            } else if (inlineField.fieldName === "M") {
-              activeMeter = parseMeter(inlineField.fieldValue || "4/4", warnings);
-              ensureMeterByMeasure(entry.voiceId)[currentMeasureNo] = {
-                beats: activeMeter.beats,
-                beatType: activeMeter.beatType,
-              };
-            } else if (inlineField.fieldName === "Q") {
-              activeTempoBpm = parseTempoFromQ(inlineField.fieldValue || "", warnings);
-              if (Number.isFinite(activeTempoBpm)) {
-                ensureTempoByMeasure(entry.voiceId)[currentMeasureNo] = Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
-              }
-            } else {
-              warnings.push(
-                "line " + entry.lineNo + ": Skipped unsupported inline field: [" + inlineField.fieldName + ":" + inlineField.fieldValue + "]"
-              );
-            }
-            idx = inlineField.nextIdx;
-            continue;
-          }
-          const repeatEndingMarker = parseRepeatEndingMarkerAt(text, idx);
-          if (repeatEndingMarker) {
-            if (activeEndingMarker) {
-              const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
-              if (stopMeasureNo >= 1) {
-                const prevMeta = ensureNotationMeasureMeta(entry.voiceId, stopMeasureNo);
-                prevMeta.endingStop = activeEndingMarker;
-                prevMeta.endingStopType = "stop";
-              }
-            }
-            const measureMeta = ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo);
-            measureMeta.endingStart = repeatEndingMarker.marker;
-            activeEndingMarker = repeatEndingMarker.marker;
-            idx = repeatEndingMarker.nextIdx;
-            beamRunActive = false;
-            sawInterEventWhitespace = false;
-            continue;
-          }
-          const chordResult = parseChordAt(text, idx, entry.lineNo);
-          if (!chordResult) {
-            warnings.push("line " + entry.lineNo + ": Failed to parse chord notation; skipped.");
-            idx += 1;
-            continue;
-          }
-          idx = chordResult.nextIdx;
-          let chordLength = parseLengthToken(chordResult.lengthToken, entry.lineNo);
-          if (!chordResult.lengthToken && chordResult.notes.length > 0 && chordResult.notes[0].lengthToken) {
-            chordLength = parseLengthToken(chordResult.notes[0].lengthToken, entry.lineNo);
-          }
-          let absoluteLength = multiplyFractions(activeUnitLength, chordLength);
-          if (pendingRhythmScale) {
-            absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
-            pendingRhythmScale = null;
-          }
-          const activeTuplet =
-            tupletRemaining > 0 && tupletScale && tupletSpec
-              ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
-              : null;
-          if (tupletRemaining > 0 && tupletScale) {
-            absoluteLength = multiplyFractions(absoluteLength, tupletScale);
-            tupletRemaining -= 1;
-            if (tupletSpec) {
-              tupletSpec.remaining -= 1;
-            }
-            if (tupletRemaining <= 0) {
-              tupletScale = null;
-              tupletSpec = null;
-            }
-          }
-          if (idx < text.length && (text[idx] === ">" || text[idx] === "<")) {
-            const rhythmChar = text[idx];
-            idx += 1;
-            if (rhythmChar === ">") {
-              absoluteLength = multiplyFractions(absoluteLength, { num: 3, den: 2 });
-              pendingRhythmScale = { num: 1, den: 2 };
-            } else {
-              absoluteLength = multiplyFractions(absoluteLength, { num: 1, den: 2 });
-              pendingRhythmScale = { num: 3, den: 2 };
-            }
-          }
-          const dur = durationInDivisions(absoluteLength, 960);
-          if (dur <= 0) {
-            warnings.push("line " + entry.lineNo + ": Skipped chord with invalid length.");
-            continue;
-          }
-          const chordNotes = [];
-          currentEventNo += 1;
-          const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
-          for (let chordIndex = 0; chordIndex < chordResult.notes.length; chordIndex += 1) {
-            const chordNote = chordResult.notes[chordIndex];
-            let note;
-            try {
-              note = buildNoteData(
-                chordNote.pitchChar,
-                chordNote.accidentalText,
-                chordNote.octaveShift,
-                absoluteLength,
-                dur,
-                entry.lineNo,
-                activeKeySignatureAccidentals,
-                measureAccidentals
-              );
-            } catch (error) {
-              if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
-                warnings.push("line " + entry.lineNo + ": Skipped chord note with unsupported octave range.");
-                chordNotes.length = 0;
-                break;
-              }
-              throw error;
-            }
-            note.voice = entry.voiceId;
-            if (chordIndex === 0) {
-              applyBeamModeForEvent(note, dur);
-            }
-            if (chordIndex === 0 && pendingTrill && !note.isRest) {
-              note.trill = true;
-              note.trillLineStart = pendingTrillLineStart;
-              pendingTrill = false;
-              pendingTrillLineStart = false;
-            }
-            if (chordIndex === 0 && pendingTrillLineStop && !note.isRest) {
-              note.trillLineStop = true;
-              pendingTrillLineStop = false;
-            }
-            if (chordIndex === 0 && pendingTurn && !note.isRest) {
-              note.turnType = pendingTurn;
-              note.turnSlash = pendingTurnSlash;
-              note.delayedTurn = pendingDelayedTurn;
-              pendingTurn = "";
-              pendingTurnSlash = false;
-              pendingDelayedTurn = false;
-            }
-            if (chordIndex === 0 && !note.isRest && (pendingEditorialAccidental || pendingCourtesyAccidental)) {
-              if (note.accidentalText) {
-                note.accidentalEditorial = pendingEditorialAccidental || undefined;
-                note.accidentalCautionary = pendingCourtesyAccidental || undefined;
-              }
-              pendingEditorialAccidental = false;
-              pendingCourtesyAccidental = false;
-            }
-            if (chordIndex === 0 && pendingMordent && !note.isRest) {
-              note.mordentType = pendingMordent;
-              pendingMordent = "";
-            }
-            if (chordIndex === 0 && pendingPhraseMark && !note.isRest) {
-              note.phraseMark = pendingPhraseMark;
-              pendingPhraseMark = "";
-            }
-            if (chordIndex === 0 && pendingTremolo && !note.isRest) {
-              note.tremoloType = pendingTremolo.type;
-              note.tremoloMarks = pendingTremolo.marks;
-              pendingTremolo = null;
-            }
-            if (chordIndex === 0 && pendingGlissandoStart && !note.isRest) {
-              note.glissandoStart = true;
-              pendingGlissandoStart = false;
-            }
-            if (chordIndex === 0 && pendingGlissandoStop && !note.isRest) {
-              note.glissandoStop = true;
-              pendingGlissandoStop = false;
-            }
-            if (chordIndex === 0 && pendingSlideStart && !note.isRest) {
-              note.slideStart = true;
-              pendingSlideStart = false;
-            }
-            if (chordIndex === 0 && pendingSlideStop && !note.isRest) {
-              note.slideStop = true;
-              pendingSlideStop = false;
-            }
-            if (chordIndex === 0 && pendingSchleifer && !note.isRest) {
-              note.schleifer = true;
-              pendingSchleifer = false;
-            }
-            if (chordIndex === 0 && pendingShake && !note.isRest) {
-              note.shake = true;
-              pendingShake = false;
-            }
-            if (chordIndex === 0 && pendingArpeggiate && !note.isRest) {
-              note.arpeggiate = true;
-              pendingArpeggiate = false;
-            }
-            if (chordIndex === 0 && pendingSlurStart > 0 && !note.isRest) {
-              note.slurStart = true;
-              pendingSlurStart = 0;
-            }
-            if (chordIndex === 0 && note.trill && trillHint) {
-              note.trillAccidentalText = trillHint;
-            }
-            if (chordIndex === 0 && pendingStaccato && !note.isRest) {
-              note.staccato = true;
-              pendingStaccato = false;
-            }
-            if (chordIndex === 0 && pendingStaccatissimo && !note.isRest) {
-              note.staccatissimo = true;
-              pendingStaccatissimo = false;
-            }
-            if (chordIndex === 0 && pendingAccent && !note.isRest) {
-              note.accent = true;
-              pendingAccent = false;
-            }
-            if (chordIndex === 0 && pendingTenuto && !note.isRest) {
-              note.tenuto = true;
-              pendingTenuto = false;
-            }
-            if (chordIndex === 0 && pendingStress && !note.isRest) {
-              note.stress = true;
-              pendingStress = false;
-            }
-            if (chordIndex === 0 && pendingUnstress && !note.isRest) {
-              note.unstress = true;
-              pendingUnstress = false;
-            }
-            if (chordIndex === 0 && pendingFermata && !note.isRest) {
-              note.fermataType = pendingFermata;
-              pendingFermata = "";
-            }
-            if (chordIndex === 0 && pendingStrongAccent && !note.isRest) {
-              note.strongAccent = true;
-              pendingStrongAccent = false;
-            }
-            if (chordIndex === 0 && pendingBreathMark && !note.isRest) {
-              note.breathMark = true;
-              pendingBreathMark = false;
-            }
-            if (chordIndex === 0 && pendingCaesura && !note.isRest) {
-              note.caesura = true;
-              pendingCaesura = false;
-            }
-            if (chordIndex === 0 && pendingSegno && !note.isRest) {
-              note.segno = true;
-              pendingSegno = false;
-            }
-            if (chordIndex === 0 && pendingCoda && !note.isRest) {
-              note.coda = true;
-              pendingCoda = false;
-            }
-            if (chordIndex === 0 && pendingFine && !note.isRest) {
-              note.fine = true;
-              pendingFine = false;
-            }
-            if (chordIndex === 0 && pendingDaCapo && !note.isRest) {
-              note.daCapo = true;
-              pendingDaCapo = false;
-            }
-            if (chordIndex === 0 && pendingDalSegno && !note.isRest) {
-              note.dalSegno = true;
-              pendingDalSegno = false;
-            }
-            if (chordIndex === 0 && pendingToCoda && !note.isRest) {
-              note.toCoda = true;
-              pendingToCoda = false;
-            }
-            if (chordIndex === 0 && pendingCrescendoStart && !note.isRest) {
-              note.crescendoStart = true;
-              pendingCrescendoStart = false;
-            }
-            if (chordIndex === 0 && pendingCrescendoStop && !note.isRest) {
-              note.crescendoStop = true;
-              pendingCrescendoStop = false;
-            }
-            if (chordIndex === 0 && pendingDiminuendoStart && !note.isRest) {
-              note.diminuendoStart = true;
-              pendingDiminuendoStart = false;
-            }
-            if (chordIndex === 0 && pendingDiminuendoStop && !note.isRest) {
-              note.diminuendoStop = true;
-              pendingDiminuendoStop = false;
-            }
-            if (chordIndex === 0 && pendingDynamicMark && !note.isRest) {
-              note.dynamicMark = pendingDynamicMark;
-              pendingDynamicMark = "";
-            }
-            if (chordIndex === 0 && pendingSfz && !note.isRest) {
-              note.sfz = true;
-              pendingSfz = false;
-            }
-            if (chordIndex === 0 && pendingRehearsalMark && !note.isRest) {
-              note.rehearsalMark = pendingRehearsalMark;
-              pendingRehearsalMark = "";
-            }
-            if (chordIndex === 0 && pendingUpBow && !note.isRest) {
-              note.upBow = true;
-              pendingUpBow = false;
-            }
-            if (chordIndex === 0 && pendingDownBow && !note.isRest) {
-              note.downBow = true;
-              pendingDownBow = false;
-            }
-            if (chordIndex === 0 && pendingDoubleTongue && !note.isRest) {
-              note.doubleTongue = true;
-              pendingDoubleTongue = false;
-            }
-            if (chordIndex === 0 && pendingTripleTongue && !note.isRest) {
-              note.tripleTongue = true;
-              pendingTripleTongue = false;
-            }
-            if (chordIndex === 0 && pendingHeel && !note.isRest) {
-              note.heel = true;
-              pendingHeel = false;
-            }
-            if (chordIndex === 0 && pendingToe && !note.isRest) {
-              note.toe = true;
-              pendingToe = false;
-            }
-            if (chordIndex === 0 && pendingFingerings.length > 0 && !note.isRest) {
-              note.fingerings = pendingFingerings.slice();
-              pendingFingerings = [];
-            }
-            if (chordIndex === 0 && pendingStrings.length > 0 && !note.isRest) {
-              note.strings = pendingStrings.slice();
-              pendingStrings = [];
-            }
-            if (chordIndex === 0 && pendingPlucks.length > 0 && !note.isRest) {
-              note.plucks = pendingPlucks.slice();
-              pendingPlucks = [];
-            }
-            if (chordIndex === 0 && pendingChordSymbols.length > 0 && !note.isRest) {
-              note.chordSymbols = pendingChordSymbols.slice();
-              pendingChordSymbols = [];
-            }
-            if (chordIndex === 0 && pendingOpenString && !note.isRest) {
-              note.openString = true;
-              pendingOpenString = false;
-            }
-            if (chordIndex === 0 && pendingSnapPizzicato && !note.isRest) {
-              note.snapPizzicato = true;
-              pendingSnapPizzicato = false;
-            }
-            if (chordIndex === 0 && pendingHarmonic && !note.isRest) {
-              note.harmonic = true;
-              pendingHarmonic = false;
-            }
-            if (chordIndex === 0 && pendingStopped && !note.isRest) {
-              note.stopped = true;
-              pendingStopped = false;
-            }
-            if (chordIndex === 0 && pendingThumbPosition && !note.isRest) {
-              note.thumbPosition = true;
-              pendingThumbPosition = false;
-            }
-            if (chordIndex === 0 && pendingAnnotations.length > 0 && !note.isRest) {
-              note.annotations = pendingAnnotations.slice();
-              pendingAnnotations = [];
-            }
-            if (chordIndex > 0) {
-              note.chord = true;
-            }
-            if (chordIndex === 0 && activeTuplet) {
-              note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
-              if (activeTuplet.remaining === activeTuplet.actual) {
-                note.tupletStart = true;
-              }
-              if (activeTuplet.remaining === 1) {
-                note.tupletStop = true;
-              }
-            }
-            chordNotes.push(note);
-          }
-          if (pendingTieToNext && chordNotes.length > 0) {
-            for (const chordNote of chordNotes) {
-              if (!chordNote.isRest) {
-                chordNote.tieStop = true;
-              }
-            }
-            pendingTieToNext = false;
-          }
-          for (const note of chordNotes) {
-            currentMeasure.push(note);
-          }
-          if (chordNotes.length === 0) {
-            pendingTieToNext = false;
-            lastNote = null;
-            lastEventNotes = [];
-            continue;
-          }
-          lastNote = chordNotes[0] || null;
-          lastEventNotes = chordNotes;
-          noteCount += chordNotes.length;
-          continue;
-        }
-
-        if (ch === ")") {
-          if (lastNote && !lastNote.isRest) {
-            lastNote.slurStop = true;
-          } else {
-            warnings.push("line " + entry.lineNo + ": slur stop()) has no preceding note; skipped.");
-          }
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "]" || ch === "}") {
-          if (ch === "]" && activeEndingMarker) {
-            const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
-            if (stopMeasureNo >= 1) {
-              const measureMeta = ensureNotationMeasureMeta(entry.voiceId, stopMeasureNo);
-              measureMeta.endingStop = activeEndingMarker;
-              measureMeta.endingStopType = "stop";
-              activeEndingMarker = "";
-            }
-            idx += 1;
-            beamRunActive = false;
-            sawInterEventWhitespace = false;
-            continue;
-          }
-          warnings.push("line " + entry.lineNo + ": Skipped unsupported notation: " + ch);
-          idx += 1;
-          beamRunActive = false;
-          sawInterEventWhitespace = false;
-          continue;
-        }
-
-        if (ch === ";" || ch === "`" || ch === "?" || ch === "@" || ch === "#" || ch === "$" || ch === "*") {
-          warnings.push("line " + entry.lineNo + ": Skipped unsupported body punctuation: " + ch);
-          idx += 1;
-          beamRunActive = false;
-          sawInterEventWhitespace = false;
-          continue;
-        }
-
-        const noteResult = parseAbcNoteAt(text, idx);
-        if (noteResult?.kind === "malformed-accidental") {
-          warnings.push("line " + entry.lineNo + ": Skipped malformed accidental token: " + noteResult.accidentalText);
-          idx = noteResult.nextIdx;
-          continue;
-        }
-        if (!noteResult || noteResult.kind !== "note") {
-          throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
-        }
-        const { accidentalText, pitchChar, octaveShift, lengthToken, nextIdx } = noteResult.note;
-        idx = nextIdx;
-
-        const len = parseLengthToken(lengthToken, entry.lineNo);
-        let absoluteLength = multiplyFractions(activeUnitLength, len);
-        if (pendingRhythmScale) {
-          absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
-          pendingRhythmScale = null;
-        }
-        const activeTuplet =
-          tupletRemaining > 0 && tupletScale && tupletSpec
-            ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
-            : null;
-        if (tupletRemaining > 0 && tupletScale) {
-          absoluteLength = multiplyFractions(absoluteLength, tupletScale);
-          tupletRemaining -= 1;
-          if (tupletSpec) {
-            tupletSpec.remaining -= 1;
-          }
-          if (tupletRemaining <= 0) {
-            tupletScale = null;
-            tupletSpec = null;
-          }
-        }
-
-        if (idx < text.length && (text[idx] === ">" || text[idx] === "<")) {
-          const rhythmChar = text[idx];
-          idx += 1;
-          if (rhythmChar === ">") {
-            absoluteLength = multiplyFractions(absoluteLength, { num: 3, den: 2 });
-            pendingRhythmScale = { num: 1, den: 2 };
-          } else {
-            absoluteLength = multiplyFractions(absoluteLength, { num: 1, den: 2 });
-            pendingRhythmScale = { num: 3, den: 2 };
-          }
-        }
-
-        const dur = durationInDivisions(absoluteLength, 960);
-        if (dur <= 0) {
-          warnings.push("line " + entry.lineNo + ": Skipped note with invalid length.");
-          continue;
-        }
-
-        let note;
-        try {
-          note = buildNoteData(
-            pitchChar,
-            accidentalText,
-            octaveShift,
-            absoluteLength,
-            dur,
-            entry.lineNo,
-            activeKeySignatureAccidentals,
-            measureAccidentals
-          );
-        } catch (error) {
-          if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
-            warnings.push("line " + entry.lineNo + ": Skipped note with unsupported octave range.");
-            pendingTieToNext = false;
-            lastNote = null;
-            lastEventNotes = [];
-            continue;
-          }
-          throw error;
-        }
-        applyBeamModeForEvent(note, dur);
+      const applyPendingOrnamentState = (note, options = {}) => {
+        const { applySlurStart = true, trillHint = "" } = options;
         if (pendingTrill && !note.isRest) {
           note.trill = true;
           note.trillLineStart = pendingTrillLineStart;
@@ -2028,15 +1304,16 @@ const abcCommon = AbcCommon;
           note.arpeggiate = true;
           pendingArpeggiate = false;
         }
-        if (pendingSlurStart > 0 && !note.isRest) {
+        if (applySlurStart && pendingSlurStart > 0 && !note.isRest) {
           note.slurStart = true;
           pendingSlurStart = 0;
         }
-        currentEventNo += 1;
-        const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
         if (note.trill && trillHint) {
           note.trillAccidentalText = trillHint;
         }
+      };
+
+      const applyPendingArticulationState = (note) => {
         if (pendingStaccato && !note.isRest) {
           note.staccato = true;
           pendingStaccato = false;
@@ -2077,6 +1354,9 @@ const abcCommon = AbcCommon;
           note.caesura = true;
           pendingCaesura = false;
         }
+      };
+
+      const applyPendingDirectionState = (note) => {
         if (pendingSegno && !note.isRest) {
           note.segno = true;
           pendingSegno = false;
@@ -2129,6 +1409,9 @@ const abcCommon = AbcCommon;
           note.rehearsalMark = pendingRehearsalMark;
           pendingRehearsalMark = "";
         }
+      };
+
+      const applyPendingTechnicalState = (note) => {
         if (pendingUpBow && !note.isRest) {
           note.upBow = true;
           pendingUpBow = false;
@@ -2193,27 +1476,710 @@ const abcCommon = AbcCommon;
           note.annotations = pendingAnnotations.slice();
           pendingAnnotations = [];
         }
-        if (pendingTieToNext && !note.isRest) {
+      };
+
+      const applyPendingToPlayableNote = (note, options = {}) => {
+        const {
+          applySlurStart = true,
+          applyTieStop = true,
+          trillHint = "",
+        } = options;
+
+        applyPendingOrnamentState(note, { applySlurStart, trillHint });
+        applyPendingArticulationState(note);
+        applyPendingDirectionState(note);
+        applyPendingTechnicalState(note);
+
+        if (applyTieStop && pendingTieToNext && !note.isRest) {
           note.tieStop = true;
           pendingTieToNext = false;
-        } else if (note.isRest && pendingTieToNext) {
-          warnings.push("line " + entry.lineNo + ": tie(-) was followed by a rest; tie removed.");
+        } else if (applyTieStop && note.isRest && pendingTieToNext) {
+          warnBody("tie(-) was followed by a rest; tie removed.");
           pendingTieToNext = false;
         }
-        if (activeTuplet) {
-          note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
-          if (activeTuplet.remaining === activeTuplet.actual) {
-            note.tupletStart = true;
+      };
+
+      // Event construction and commit helpers.
+      const applySingleCharShorthand = (char) => {
+        const shorthand = parseAbcSingleCharShorthandAt(char, 0);
+        if (!shorthand) {
+          return false;
+        }
+        const shorthandAppliers = {
+          "accent": () => {
+            pendingAccent = true;
+          },
+          "arpeggiate": () => {
+            pendingArpeggiate = true;
+          },
+          "coda": () => {
+            pendingCoda = true;
+          },
+          "downbow": () => {
+            pendingDownBow = true;
+          },
+          "fermata": () => {
+            pendingFermata = "normal";
+          },
+          "inverted-mordent": () => {
+            pendingMordent = "inverted-mordent";
+          },
+          "mordent": () => {
+            pendingMordent = "mordent";
+          },
+          "segno": () => {
+            pendingSegno = true;
+          },
+          "staccato": () => {
+            pendingStaccato = true;
+          },
+          "trill": () => {
+            pendingTrill = true;
+          },
+          "upbow": () => {
+            pendingUpBow = true;
+          },
+        };
+        const apply = shorthandAppliers[shorthand.kind];
+        if (!apply) {
+          return false;
+        }
+        apply();
+        return true;
+      };
+
+      const consumePlayableTiming = (rawLengthToken, tokenIdx) => {
+        const len = parseLengthToken(rawLengthToken, entry.lineNo);
+        let absoluteLength = multiplyFractions(activeUnitLength, len);
+        if (pendingRhythmScale) {
+          absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
+          pendingRhythmScale = null;
+        }
+        const activeTuplet =
+          tupletRemaining > 0 && tupletScale && tupletSpec
+            ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
+            : null;
+        if (tupletRemaining > 0 && tupletScale) {
+          absoluteLength = multiplyFractions(absoluteLength, tupletScale);
+          tupletRemaining -= 1;
+          if (tupletSpec) {
+            tupletSpec.remaining -= 1;
           }
-          if (activeTuplet.remaining === 1) {
-            note.tupletStop = true;
+          if (tupletRemaining <= 0) {
+            tupletScale = null;
+            tupletSpec = null;
           }
         }
+
+        let nextIdx = tokenIdx;
+        const trailingBrokenRhythm = parseAbcBrokenRhythmAt(text, nextIdx);
+        if (trailingBrokenRhythm) {
+          absoluteLength = multiplyFractions(absoluteLength, trailingBrokenRhythm.leftScale);
+          pendingRhythmScale = trailingBrokenRhythm.rightScale;
+          nextIdx = trailingBrokenRhythm.nextIdx;
+        }
+
+        return {
+          absoluteLength,
+          dur: durationInDivisions(absoluteLength, 960),
+          activeTuplet,
+          nextIdx,
+        };
+      };
+
+      const applyTupletToEventStart = (note, activeTuplet) => {
+        if (!activeTuplet) {
+          return;
+        }
+        note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
+        if (activeTuplet.remaining === activeTuplet.actual) {
+          note.tupletStart = true;
+        }
+        if (activeTuplet.remaining === 1) {
+          note.tupletStop = true;
+        }
+      };
+
+      const finalizePlayableEventStart = (note, dur, activeTuplet, options = {}) => {
+        const applyTieStop = options.applyTieStop !== false;
+        applyBeamModeForEvent(note, dur);
+        currentEventNo += 1;
+        const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
+        applyPendingToPlayableNote(note, { applySlurStart: true, applyTieStop, trillHint });
+        applyTupletToEventStart(note, activeTuplet);
         note.voice = entry.voiceId;
-        currentMeasure.push(note);
-        lastNote = note;
-        lastEventNotes = [note];
-        noteCount += 1;
+      };
+
+      const buildPlayableNoteForBody = (pitchSource, absoluteLength, dur, octaveWarningMessage) => {
+        let note;
+        try {
+          note = buildNoteData(
+            pitchSource.pitchChar,
+            pitchSource.accidentalText,
+            pitchSource.octaveShift,
+            absoluteLength,
+            dur,
+            entry.lineNo,
+            activeKeySignatureAccidentals,
+            measureAccidentals
+          );
+        } catch (error) {
+          if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+            warnBody(octaveWarningMessage);
+            return null;
+          }
+          throw error;
+        }
+        note.voice = entry.voiceId;
+        return note;
+      };
+
+      const clearLastEventState = (options = {}) => {
+        if (options.clearPendingTie !== false) {
+          pendingTieToNext = false;
+        }
+        lastNote = null;
+        lastEventNotes = [];
+      };
+
+      const commitPlayableEvent = (notes, options = {}) => {
+        const applyChordTieStop = options.applyChordTieStop === true;
+        if (applyChordTieStop && pendingTieToNext && notes.length > 0) {
+          for (const note of notes) {
+            if (!note.isRest) {
+              note.tieStop = true;
+            }
+          }
+          pendingTieToNext = false;
+        }
+        for (const note of notes) {
+          currentMeasure.push(note);
+        }
+        if (notes.length === 0) {
+          clearLastEventState();
+          return false;
+        }
+        lastNote = notes[0] || null;
+        lastEventNotes = notes;
+        noteCount += notes.length;
+        return true;
+      };
+
+      const buildPlayableEventFromPitches = (pitchSources, timing, options = {}) => {
+        const octaveWarningMessage = options.octaveWarningMessage || "Skipped note with unsupported octave range.";
+        const firstNoteOptions = options.firstNoteOptions || {};
+        const notes = [];
+        for (let pitchIndex = 0; pitchIndex < pitchSources.length; pitchIndex += 1) {
+          const note = buildPlayableNoteForBody(pitchSources[pitchIndex], timing.absoluteLength, timing.dur, octaveWarningMessage);
+          if (!note) {
+            notes.length = 0;
+            break;
+          }
+          if (pitchIndex === 0) {
+            finalizePlayableEventStart(note, timing.dur, timing.activeTuplet, firstNoteOptions);
+          } else {
+            note.chord = true;
+          }
+          notes.push(note);
+        }
+        return notes;
+      };
+
+      const playableEventOptionsForSource = (source) => ({
+        invalidLengthMessage: source === "chord" ? "Skipped chord with invalid length." : "Skipped note with invalid length.",
+        octaveWarningMessage:
+          source === "chord"
+            ? "Skipped chord note with unsupported octave range."
+            : "Skipped note with unsupported octave range.",
+        firstNoteOptions: source === "chord" ? { applyTieStop: false } : {},
+        commitOptions: source === "chord" ? { applyChordTieStop: true } : {},
+      });
+
+      // Body token handlers.
+      const handleBrokenRhythmBodyToken = (bodyToken) => {
+        const { brokenRhythm } = bodyToken;
+        if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
+          warnBody("broken rhythm(" + brokenRhythm.symbol + ")  has no preceding note; skipped.");
+          idx = brokenRhythm.nextIdx;
+          return true;
+        }
+        scaleNotesDuration(lastEventNotes, brokenRhythm.leftScale);
+        pendingRhythmScale = brokenRhythm.rightScale;
+        idx = brokenRhythm.nextIdx;
+        return true;
+      };
+
+      const handleParenBodyToken = (bodyToken) => {
+        const { parenToken } = bodyToken;
+        if (parenToken.kind === "tuplet") {
+          const { tuplet } = parenToken;
+          if (tuplet.actual > 0 && tuplet.normal > 0 && tuplet.count > 0) {
+            tupletScale = { num: tuplet.normal, den: tuplet.actual };
+            tupletRemaining = tuplet.count;
+            tupletSpec = { actual: tuplet.actual, normal: tuplet.normal, remaining: tuplet.count };
+          } else {
+            warnBody("Failed to parse tuplet notation: " + tuplet.raw);
+          }
+          idx = tuplet.nextIdx;
+          return true;
+        }
+        pendingSlurStart += 1;
+        idx = parenToken.nextIdx;
+        return true;
+      };
+
+      const enqueueQuotedBodyText = (normalizedText) => {
+        if (!normalizedText) {
+          return;
+        }
+        if (isLikelyAbcChordSymbol(normalizedText)) {
+          pendingChordSymbols.push(normalizedText);
+          return;
+        }
+        pendingAnnotations.push(normalizedText);
+      };
+
+      const markTieStartOnLastEvent = () => {
+        if (!lastEventNotes || lastEventNotes.length === 0 || !lastEventNotes.some((n) => !n.isRest)) {
+          return false;
+        }
+        for (const eventNote of lastEventNotes) {
+          if (!eventNote.isRest) {
+            eventNote.tieStart = true;
+          }
+        }
+        pendingTieToNext = true;
+        return true;
+      };
+
+      const handleTieBodyToken = (bodyToken) => {
+        if (!markTieStartOnLastEvent()) {
+          warnBody("tie(-)  has no preceding note; skipped.");
+        }
+        idx = bodyToken.tie.nextIdx;
+        return true;
+      };
+
+      const handleQuotedStringBodyToken = (bodyToken) => {
+        const { quotedString } = bodyToken;
+        enqueueQuotedBodyText(quotedString.normalizedText);
+        if (!quotedString.terminated) {
+          warnBody('Unterminated inline string ("...").');
+        }
+        idx = quotedString.nextIdx;
+        return true;
+      };
+
+      const handleSingleCharShorthandBodyToken = (bodyToken, char) => {
+        applySingleCharShorthand(char);
+        idx = bodyToken.shorthand.nextIdx;
+        return true;
+      };
+
+      const handleDecorationBodyToken = (bodyToken, char) => {
+        const parsedDecoration = bodyToken.decoration;
+        if (!parsedDecoration.terminated) {
+          warnBody("Unterminated decoration marker: " + char);
+          idx = parsedDecoration.nextIdx;
+          return true;
+        }
+        const { rawDecoration, decoration } = parsedDecoration;
+        if (!applyDecoration(rawDecoration, decoration) && decoration) {
+          warnBody("Skipped decoration: " + char + decoration + char);
+        }
+        idx = parsedDecoration.nextIdx;
+        return true;
+      };
+
+      const markSlurStopOnLastNote = () => {
+        if (!lastNote || lastNote.isRest) {
+          return false;
+        }
+        lastNote.slurStop = true;
+        return true;
+      };
+
+      const handleSlurStopBodyToken = (bodyToken) => {
+        const { slurStop } = bodyToken;
+        if (!markSlurStopOnLastNote()) {
+          warnBody("slur stop()) has no preceding note; skipped.");
+        }
+        idx = slurStop.nextIdx;
+        return true;
+      };
+
+      const handleSimpleBodyToken = (bodyToken, char) => {
+        if (!bodyToken) {
+          return false;
+        }
+        const bodyTokenHandlers = {
+          "broken-rhythm": () => handleBrokenRhythmBodyToken(bodyToken),
+          "decoration": () => handleDecorationBodyToken(bodyToken, char),
+          "paren": () => handleParenBodyToken(bodyToken),
+          "quoted-string": () => handleQuotedStringBodyToken(bodyToken),
+          "single-char-shorthand": () => handleSingleCharShorthandBodyToken(bodyToken, char),
+          "slur-stop": () => handleSlurStopBodyToken(bodyToken),
+          "tie": () => handleTieBodyToken(bodyToken),
+        };
+        const handler = bodyTokenHandlers[bodyToken.kind];
+        return handler ? handler() : false;
+      };
+
+      const handleInlineFieldBracketToken = (bracketToken) => {
+        const { inlineField } = bracketToken;
+        if (!applyBodyField(inlineField.fieldName, inlineField.fieldValue)) {
+          warnBody("Skipped unsupported inline field: [" + inlineField.fieldName + ":" + inlineField.fieldValue + "]");
+        }
+        idx = inlineField.nextIdx;
+        return true;
+      };
+
+      const handleRepeatEndingBracketToken = (bracketToken) => {
+        const { repeatEndingMarker } = bracketToken;
+        return startEndingAtCurrentMeasure(repeatEndingMarker.marker, repeatEndingMarker.nextIdx);
+      };
+
+      const handleBracketBodyToken = (bodyToken) => {
+        if (!bodyToken || bodyToken.kind !== "bracket") {
+          return false;
+        }
+        const { bracketToken } = bodyToken;
+        if (bracketToken.kind === "inline-field") {
+          return handleInlineFieldBracketToken(bracketToken);
+        }
+        if (bracketToken.kind === "repeat-ending") {
+          return handleRepeatEndingBracketToken(bracketToken);
+        }
+        const playableEvent = parseAbcPlayableEventAt(text, idx);
+        return handlePlayableEvent(playableEvent, { fallbackToNextChar: true });
+      };
+
+      const handleGraceGroup = (char) => {
+        if (char !== "{") {
+          return false;
+        }
+        const graceResult = parseGraceGroupAt(
+          text,
+          idx,
+          entry.lineNo,
+          activeUnitLength,
+          activeKeySignatureAccidentals,
+          measureAccidentals,
+          entry.voiceId,
+          warnings
+        );
+        if (!graceResult) {
+          warnBody("Failed to parse grace group; skipped.");
+          idx += 1;
+          return true;
+        }
+        idx = graceResult.nextIdx;
+        appendGraceNotes(graceResult.notes);
+        return true;
+      };
+
+      // Measure and ending state helpers.
+      const appendGraceNotes = (graceNotes) => {
+        for (const graceNote of graceNotes) {
+          currentMeasure.push(graceNote);
+          noteCount += 1;
+        }
+      };
+
+      const startEndingAtCurrentMeasure = (marker, nextIdx) => {
+        if (activeEndingMarker) {
+          const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
+          stopActiveEndingAtMeasure(stopMeasureNo);
+        }
+        const measureMeta = ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo);
+        measureMeta.endingStart = marker;
+        activeEndingMarker = marker;
+        idx = nextIdx;
+        resetBeamContext();
+        return true;
+      };
+
+      const stopActiveEndingAtMeasure = (measureNo) => {
+        if (!activeEndingMarker || measureNo < 1) {
+          return false;
+        }
+        const measureMeta = ensureNotationMeasureMeta(entry.voiceId, measureNo);
+        measureMeta.endingStop = activeEndingMarker;
+        measureMeta.endingStopType = "stop";
+        activeEndingMarker = "";
+        return true;
+      };
+
+      const advanceToNextMeasure = () => {
+        currentMeasure = [];
+        measures.push(currentMeasure);
+        currentMeasureNo = Math.max(1, measures.length);
+        currentEventNo = 0;
+        beamCursorDiv = 0;
+      };
+
+      const resetBeamContext = () => {
+        beamRunActive = false;
+        sawInterEventWhitespace = false;
+      };
+
+      const applyBarlineRepeatMarkers = (barlineToken) => {
+        if (barlineToken.repeatEnd) {
+          ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo).repeatEnd = true;
+        }
+        if (barlineToken.repeatStart) {
+          ensureNotationMeasureMeta(entry.voiceId, currentMeasureNo).repeatStart = true;
+        }
+      };
+
+      const applyBarlineMeasureBoundary = (barlineToken, bareRepeatEndingMarker) => {
+        if ((barlineToken.endingStop || bareRepeatEndingMarker) && activeEndingMarker) {
+          stopActiveEndingAtMeasure(currentMeasureNo);
+        }
+        if (barlineToken.endsMeasure && (currentMeasure.length > 0 || measures.length === 0)) {
+          advanceToNextMeasure();
+        }
+        if (barlineToken.endsMeasure) {
+          measureAccidentals = {};
+          lastNote = null;
+        }
+      };
+
+      const advanceAfterBarline = (barlineToken, bareRepeatEndingMarker) => {
+        if (bareRepeatEndingMarker) {
+          return startEndingAtCurrentMeasure(bareRepeatEndingMarker.marker, bareRepeatEndingMarker.nextIdx);
+        }
+        idx = barlineToken.nextIdx;
+        resetBeamContext();
+        return true;
+      };
+
+      const handleBarlineEntry = (bodyEntry) => {
+        if (!bodyEntry || bodyEntry.kind !== "barline") {
+          return false;
+        }
+        const { barlineToken } = bodyEntry;
+        const bareRepeatEndingMarker =
+          barlineToken.endsMeasure ? parseAbcBareRepeatEndingMarkerAt(text, barlineToken.nextIdx) : null;
+        applyBarlineRepeatMarkers(barlineToken);
+        applyBarlineMeasureBoundary(barlineToken, bareRepeatEndingMarker);
+        return advanceAfterBarline(barlineToken, bareRepeatEndingMarker);
+      };
+
+      const handleStandaloneBodyFieldEntry = (bodyEntry) => {
+        const { standaloneBodyField } = bodyEntry;
+        if (!applyBodyField(standaloneBodyField.fieldName, standaloneBodyField.fieldValue)) {
+          warnBody("Skipped unsupported standalone body field token: " + standaloneBodyField.token);
+        }
+        idx = standaloneBodyField.nextIdx;
+        return true;
+      };
+
+      const handleUnsupportedTokenEntry = (bodyEntry) => {
+        if (bodyEntry.kind === "unsupported-body-token") {
+          const { unsupportedBodyToken } = bodyEntry;
+          warnBody("Skipped unsupported body token: " + unsupportedBodyToken.token);
+          idx = unsupportedBodyToken.nextIdx;
+          return true;
+        }
+        if (bodyEntry.kind === "unsupported-body-number") {
+          const { unsupportedBodyNumber } = bodyEntry;
+          warnBody("Skipped unsupported body number token: " + unsupportedBodyNumber.token);
+          idx = unsupportedBodyNumber.nextIdx;
+          return true;
+        }
+        return false;
+      };
+
+      const handleNonPlayableBodyEntry = (bodyEntry) => {
+        if (!bodyEntry) {
+          return false;
+        }
+        if (bodyEntry.kind === "standalone-body-field") {
+          return handleStandaloneBodyFieldEntry(bodyEntry);
+        }
+        return handleUnsupportedTokenEntry(bodyEntry);
+      };
+
+      // Playable-event and fallback handlers.
+      const handleResolvedPlayableEvent = (playableEvent) => {
+        const timing = consumePlayableTiming(playableEvent.rawLengthToken, playableEvent.nextIdx);
+        idx = timing.nextIdx;
+        const eventOptions = playableEventOptionsForSource(playableEvent.source);
+        if (timing.dur <= 0) {
+          warnBody(eventOptions.invalidLengthMessage);
+          return true;
+        }
+        const eventNotes = buildPlayableEventFromPitches(playableEvent.pitchSources, timing, {
+          octaveWarningMessage: eventOptions.octaveWarningMessage,
+          firstNoteOptions: eventOptions.firstNoteOptions,
+        });
+        if (eventNotes.length === 0) {
+          clearLastEventState();
+          return true;
+        }
+        commitPlayableEvent(eventNotes, eventOptions.commitOptions);
+        return true;
+      };
+
+      const skipInvalidPlayableEvent = (message, nextIdx) => {
+        warnBody(message);
+        idx = nextIdx;
+        return true;
+      };
+
+      const handleInvalidPlayableEvent = (playableEvent, options = {}) => {
+        const { fallbackToNextChar = false } = options;
+        if (!playableEvent) {
+          return false;
+        }
+        if (playableEvent.kind === "malformed-accidental") {
+          return skipInvalidPlayableEvent("Skipped malformed accidental token: " + playableEvent.accidentalText, playableEvent.nextIdx);
+        }
+        if (playableEvent.kind === "invalid-chord") {
+          return skipInvalidPlayableEvent("Failed to parse chord notation; skipped.", playableEvent.nextIdx);
+        }
+        if (fallbackToNextChar) {
+          idx += 1;
+          return true;
+        }
+        return false;
+      };
+
+      const handlePlayableEvent = (playableEvent, options = {}) => {
+        const { fallbackToNextChar = false } = options;
+        if (playableEvent.kind !== "playable") {
+          return handleInvalidPlayableEvent(playableEvent, { fallbackToNextChar });
+        }
+        return handleResolvedPlayableEvent(playableEvent);
+      };
+
+      const advanceBodyCursorWithWarning = (message, nextIdx = idx + 1) => {
+        warnBody(message);
+        idx = nextIdx;
+        resetBeamContext();
+        return true;
+      };
+
+      const handleClosingNotation = (char) => {
+        if (char !== "]" && char !== "}") {
+          return false;
+        }
+        if (char === "]" && activeEndingMarker) {
+          const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
+          stopActiveEndingAtMeasure(stopMeasureNo);
+          idx += 1;
+          resetBeamContext();
+          return true;
+        }
+        return advanceBodyCursorWithWarning("Skipped unsupported notation: " + char);
+      };
+
+      const handleUnsupportedPunctuation = (char) => {
+        if (char !== ";" && char !== "`" && char !== "?" && char !== "@" && char !== "#" && char !== "$" && char !== "*") {
+          return false;
+        }
+        return advanceBodyCursorWithWarning("Skipped unsupported body punctuation: " + char);
+      };
+
+      const handleBodyEntry = (bodyEntry, char) => {
+        const bodyToken = bodyEntry?.kind === "body-token" ? bodyEntry.bodyToken : null;
+        const entryHandlers = [
+          () => handleBarlineEntry(bodyEntry),
+          () => handleNonPlayableBodyEntry(bodyEntry),
+          () => handleSimpleBodyToken(bodyToken, char),
+          () => handleGraceGroup(char),
+          () => handleBracketBodyToken(bodyToken),
+          () => (bodyEntry?.kind === "playable-event" ? handlePlayableEvent(bodyEntry.playableEvent) : false),
+        ];
+        for (const handler of entryHandlers) {
+          if (handler()) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const throwBodyParseError = () => {
+        throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
+      };
+
+      const handleBodyFallback = (bodyEntry, char) => {
+        const fallbackHandlers = [
+          () => handleClosingNotation(char),
+          () => handleUnsupportedPunctuation(char),
+        ];
+        for (const handler of fallbackHandlers) {
+          if (handler()) {
+            return true;
+          }
+        }
+        if (!bodyEntry) {
+          throwBodyParseError();
+        }
+        return false;
+      };
+
+      const consumeIgnorableBodyChar = (char) => {
+        if (char === " " || char === "\t") {
+          sawInterEventWhitespace = true;
+          idx += 1;
+          return true;
+        }
+        if (char === "\\") {
+          warnBody("Skipped stray body continuation marker: \\");
+          idx += 1;
+          return true;
+        }
+        if (char === "," || char === "'") {
+          // Lenient compatibility: some real-world sources include standalone octave marks.
+          // They are non-standard in strict ABC, but skipping them improves interoperability.
+          idx += 1;
+          return true;
+        }
+        return false;
+      };
+
+      const isBeamableAbcNote = (note) =>
+        Boolean(
+          note &&
+          !note.isRest &&
+          !note.grace &&
+          ["eighth", "16th", "32nd", "64th"].includes(String(note.type || "").trim().toLowerCase())
+        );
+      const applyBeamModeForEvent = (note, durationDiv) => {
+        const resolvedDurationDiv = Math.max(0, Math.round(Number(durationDiv) || 0));
+        const beatDiv = Math.max(1, Math.round((960 * 4) / Math.max(1, Math.round(Number(activeMeter?.beatType) || 4))));
+        const startsAtBeatBoundary = beamCursorDiv > 0 && beamCursorDiv % beatDiv === 0;
+        if (startsAtBeatBoundary) {
+          beamRunActive = false;
+        }
+        if (isBeamableAbcNote(note)) {
+          note.beamMode = !beamRunActive || sawInterEventWhitespace ? "begin" : "mid";
+          beamRunActive = true;
+        } else {
+          beamRunActive = false;
+        }
+        sawInterEventWhitespace = false;
+        beamCursorDiv += resolvedDurationDiv;
+      };
+
+      while (idx < text.length) {
+        const ch = text[idx];
+
+        if (consumeIgnorableBodyChar(ch)) {
+          continue;
+        }
+
+        const bodyEntry = parseAbcBodyEntryAt(text, idx);
+
+        if (handleBodyEntry(bodyEntry, ch)) {
+          continue;
+        }
+
+        if (handleBodyFallback(bodyEntry, ch)) {
+          continue;
+        }
       }
       activeEndingByVoice[entry.voiceId] = activeEndingMarker;
       currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
@@ -2563,10 +2529,6 @@ const abcCommon = AbcCommon;
 
   function parseLengthToken(token, lineNo) {
     return abcCommon.parseAbcLengthToken(token, lineNo);
-  }
-
-  function parseChordAt(text, startIdx, lineNo) {
-    return parseAbcChordAt(text, startIdx);
   }
 
   function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId, warnings) {
@@ -4069,6 +4031,16 @@ const buildMusicXmlFromAbcParsed = (
         if (hintedTempo !== null) {
           currentPartTempo = hintedTempo;
         }
+        const currentMeasureDurationDiv = Math.max(
+          1,
+          Math.round((960 * 4 * Math.max(1, Math.round(currentPartMeter.beats))) / Math.max(1, Math.round(currentPartMeter.beatType)))
+        );
+        const currentMeasureContentDiv = estimateAbcMeasureContentDiv(notes);
+        const inferredImplicitPickup =
+          i === 0 &&
+          !measureMeta?.implicit &&
+          currentMeasureContentDiv > 0 &&
+          currentMeasureContentDiv < currentMeasureDurationDiv;
         const header =
           i === 0
             ? [
@@ -4449,7 +4421,7 @@ const buildMusicXmlFromAbcParsed = (
             : `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type></note>`;
 
         const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
-        const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";
+        const implicitAttr = measureMeta?.implicit || inferredImplicitPickup ? ' implicit="yes"' : "";
         const leftBarlineChunks: string[] = [];
         if (measureMeta?.endingStart) {
           leftBarlineChunks.push(`<ending number="${xmlEscape(String(measureMeta.endingStart))}" type="start"/>`);

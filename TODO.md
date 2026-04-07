@@ -434,27 +434,34 @@
     - current failing/fragile note-length cases such as `3/` are covered by lexer/parser tests
     - note/chord/grace parsing no longer depends on ad hoc body regex matching inside `src/ts/abc-io.ts`
     - existing ABC unit tests stay green or regressions are explained and fixed in the same slice
-  - Progress (2026-04-06):
-    - added `src/ts/abc-lexer.ts`
-    - added `src/ts/abc-parser.ts`
-    - moved `note/chord/grace` parsing to the new parser path
-    - moved `tuplet` parsing to the new parser path
-    - `src/ts/abc-io.ts` now delegates these areas to parser helpers instead of owning the raw token scan directly
-    - added focused regressions for:
-      - numerator-slash shorthand such as `3/` in note/chord/grace paths
-      - explicit tuplet ratio parsing such as `(5:4:5`
+  - Progress:
+    - 2026-04-06:
+      - added `src/ts/abc-lexer.ts`
+      - added `src/ts/abc-parser.ts`
+      - moved `note/chord/grace` parsing to the new parser path
+      - moved `tuplet` parsing to the new parser path
+      - `src/ts/abc-io.ts` now delegates these areas to parser helpers instead of owning the raw token scan directly
+      - added focused regressions for:
+        - numerator-slash shorthand such as `3/` in note/chord/grace paths
+        - explicit tuplet ratio parsing such as `(5:4:5`
+    - 2026-04-07:
+      - moved body-side parser helpers such as `barline`, `repeat-ending`, `inline field`, `quoted string`, `decoration`, `broken rhythm`, `single-char shorthand`, `tie`, `slur-stop`, `bracket token`, `body token`, `playable event`, and `body entry` into `src/ts/abc-parser.ts`
+      - `src/ts/abc-io.ts` body import loop now runs primarily as parser-driven dispatch plus state application / MusicXML mapping
+      - added and expanded focused parser unit coverage in `tests/unit/abc-parser.spec.ts`
+      - parser / spec structure cleanup is substantially complete; remaining work is mainly test expansion, docs sync, and any future bounded helper extraction driven by real regressions
   - Resume note:
     - current stop point:
-      - `note/chord/grace/tuplet` are on the new parser path
-      - `barline / repeat-ending / decoration` are still parsed directly in `src/ts/abc-io.ts`
+      - the main staged lexer/parser migration is substantially landed
+      - `src/ts/abc-parser.ts` now owns most body-side parsing helpers and dispatch entrypoints
+      - `src/ts/abc-io.ts` is now mostly orchestration / state-application code for the body path
     - next restart target:
-      - move `barline / repeat-ending` parsing into `src/ts/abc-parser.ts`
+      - expand regression coverage only where real input or unsupported-boundary audits reveal gaps
     - recommended restart order:
-      - 1. extract parser helpers for barline tokens and alternate-ending markers
-      - 2. route `src/ts/abc-io.ts` through those helpers without changing higher-level measure orchestration
-      - 3. run focused repeat/ending regression tests
-      - 4. only then move decoration parsing/attachment
+      - 1. treat `tests/unit/abc-parser.spec.ts` and unsupported-input regression cases as the primary restart surface
+      - 2. update spec/docs only when the supported subset or parser behavior meaningfully changes
+      - 3. avoid reopening broad parser restructuring unless new failures show a concrete need
     - files to open first:
+      - `tests/unit/abc-parser.spec.ts`
       - `src/ts/abc-parser.ts`
       - `src/ts/abc-io.ts`
       - `tests/unit/abc-io.spec.ts`
