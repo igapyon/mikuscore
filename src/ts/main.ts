@@ -31,7 +31,6 @@ import {
 } from "./musicxml-io";
 import {
   createAbcDownloadPayload,
-  createJsonDownloadPayload,
   createLilyPondDownloadPayload,
   createMuseScoreDownloadPayload,
   createMeiDownloadPayload,
@@ -63,7 +62,6 @@ import { sampleXml3 } from "./sampleXml3";
 import { sampleXml4 } from "./sampleXml4";
 import { sampleXml6 } from "./sampleXml6";
 import { sampleXml7 } from "./sampleXml7";
-import { aiJsonPromptText } from "./aiJsonPromptText";
 import {
   buildPlaybackEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
@@ -189,8 +187,6 @@ const downloadBtn = q<HTMLButtonElement>("#downloadBtn");
 const downloadMidiBtn = q<HTMLButtonElement>("#downloadMidiBtn");
 const downloadVsqxBtn = q<HTMLButtonElement>("#downloadVsqxBtn");
 const downloadAbcBtn = q<HTMLButtonElement>("#downloadAbcBtn");
-const copyAiJsonPromptBtn = q<HTMLButtonElement>("#copyAiJsonPromptBtn");
-const downloadMeasureJsonBtn = q<HTMLButtonElement>("#downloadMeasureJsonBtn");
 const downloadMeiBtn = q<HTMLButtonElement>("#downloadMeiBtn");
 const downloadLilyPondBtn = q<HTMLButtonElement>("#downloadLilyPondBtn");
 const downloadMuseScoreBtn = q<HTMLButtonElement>("#downloadMuseScoreBtn");
@@ -1759,7 +1755,6 @@ const renderOutput = (): void => {
   downloadMidiBtn.disabled = !state.lastSaveResult?.ok;
   downloadVsqxBtn.disabled = !state.lastSaveResult?.ok;
   downloadAbcBtn.disabled = !state.lastSaveResult?.ok;
-  downloadMeasureJsonBtn.disabled = !state.lastSaveResult?.ok || !selectedMeasure || !draftCore || !state.selectedNodeId;
   downloadMeiBtn.disabled = !state.lastSaveResult?.ok;
   downloadLilyPondBtn.disabled = !state.lastSaveResult?.ok;
   downloadMuseScoreBtn.disabled = !state.lastSaveResult?.ok;
@@ -3198,293 +3193,6 @@ const parseDirectChildInt = (parent: Element, selector: string): number | null =
   return Number.isInteger(value) ? value : null;
 };
 
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {
-    // Fall back to legacy copy path below.
-  }
-
-  try {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    textarea.setAttribute("readonly", "true");
-    textarea.style.position = "fixed";
-    textarea.style.opacity = "0";
-    textarea.style.pointerEvents = "none";
-    document.body.appendChild(textarea);
-    textarea.select();
-    textarea.setSelectionRange(0, textarea.value.length);
-    const copied = document.execCommand("copy");
-    document.body.removeChild(textarea);
-    return copied;
-  } catch {
-    return false;
-  }
-};
-
-let copyAiJsonPromptLabelTimer = 0;
-
-const setCopyAiJsonPromptButtonLabel = (label: string): void => {
-  const labelEl = copyAiJsonPromptBtn.querySelector("span");
-  if (labelEl) {
-    labelEl.textContent = label;
-  }
-};
-
-const flashCopyAiJsonPromptButtonLabel = (label: string): void => {
-  if (copyAiJsonPromptLabelTimer) {
-    window.clearTimeout(copyAiJsonPromptLabelTimer);
-  }
-  setCopyAiJsonPromptButtonLabel(label);
-  copyAiJsonPromptLabelTimer = window.setTimeout(() => {
-    setCopyAiJsonPromptButtonLabel("AI Prompt");
-    copyAiJsonPromptLabelTimer = 0;
-  }, 1500);
-};
-
-type MeasureContextSnapshot = {
-  divisions: number;
-  time: { beats: number; beat_type: number } | null;
-  attributes_context: {
-    key_fifths: number | null;
-    mode: string | null;
-    clefs: Array<{ staff: string; sign: string; line: number }>;
-  };
-  inherited: {
-    divisions: boolean;
-    time: boolean;
-    key: boolean;
-    clefs: boolean;
-  };
-};
-
-const cloneClefs = (clefs: Array<{ staff: string; sign: string; line: number }>): Array<{ staff: string; sign: string; line: number }> => {
-  return clefs.map((clef) => ({ ...clef }));
-};
-
-const readDirectMeasureContext = (measure: Element): {
-  divisions: number | null;
-  time: { beats: number; beat_type: number } | null;
-  key: { key_fifths: number | null; mode: string | null } | null;
-  clefs: Array<{ staff: string; sign: string; line: number }> | null;
-} => {
-  const divisions = parseDirectChildInt(measure, "attributes > divisions");
-  const beats = parseDirectChildInt(measure, "attributes > time > beats");
-  const beatType = parseDirectChildInt(measure, "attributes > time > beat-type");
-  const keyFifths = parseDirectChildInt(measure, "attributes > key > fifths");
-  const mode = measure.querySelector("attributes > key > mode")?.textContent?.trim() ?? null;
-  const clefEls = Array.from(measure.querySelectorAll("attributes > clef"));
-  const clefs = clefEls.length > 0
-    ? clefEls.map((clef, index) => ({
-        staff: clef.querySelector("staff")?.textContent?.trim() ?? String(index + 1),
-        sign: clef.querySelector("sign")?.textContent?.trim() ?? "G",
-        line: parseDirectChildInt(clef, "line") ?? 2,
-      }))
-    : null;
-
-  return {
-    divisions,
-    time: beats !== null && beatType !== null ? { beats, beat_type: beatType } : null,
-    key: keyFifths !== null || mode !== null ? { key_fifths: keyFifths, mode } : null,
-    clefs,
-  };
-};
-
-const buildEffectiveMeasureContextForPart = (measures: Element[], measureIndex: number): MeasureContextSnapshot => {
-  let divisions = DEFAULT_DIVISIONS;
-  let time: { beats: number; beat_type: number } | null = null;
-  let key: { key_fifths: number | null; mode: string | null } | null = null;
-  let clefs: Array<{ staff: string; sign: string; line: number }> = [];
-
-  for (let i = 0; i <= measureIndex; i += 1) {
-    const direct = readDirectMeasureContext(measures[i]);
-    if (direct.divisions !== null) {
-      divisions = direct.divisions;
-    }
-    if (direct.time) {
-      time = { ...direct.time };
-    }
-    if (direct.key) {
-      key = { ...direct.key };
-    }
-    if (direct.clefs) {
-      clefs = cloneClefs(direct.clefs);
-    }
-  }
-
-  const directCurrent = readDirectMeasureContext(measures[measureIndex]);
-  return {
-    divisions,
-    time,
-    attributes_context: {
-      key_fifths: key?.key_fifths ?? null,
-      mode: key?.mode ?? null,
-      clefs: cloneClefs(clefs),
-    },
-    inherited: {
-      divisions: directCurrent.divisions === null,
-      time: directCurrent.time === null,
-      key: directCurrent.key === null,
-      clefs: directCurrent.clefs === null,
-    },
-  };
-};
-
-const buildDirectMeasureContext = (doc: Document, measure: Element): MeasureContextSnapshot => {
-  const direct = readDirectMeasureContext(measure);
-  const divisions = direct.divisions ?? resolveEffectiveDivisionsForMeasure(doc, measure);
-  return {
-    divisions,
-    time: direct.time,
-    attributes_context: {
-      key_fifths: direct.key?.key_fifths ?? null,
-      mode: direct.key?.mode ?? null,
-      clefs: cloneClefs(direct.clefs ?? []),
-    },
-    inherited: {
-      divisions: direct.divisions === null,
-      time: direct.time === null,
-      key: direct.key === null,
-      clefs: direct.clefs === null,
-    },
-  };
-};
-
-const buildMeasureVoiceProjection = (measure: Element, noteNodeIds: string[]): Array<{ voice_id: string; events: Array<Record<string, unknown>> }> => {
-  const voiceEvents = new Map<string, Array<Record<string, unknown>>>();
-  const voiceOffsets = new Map<string, number>();
-  const notes = Array.from(measure.querySelectorAll(":scope > note"));
-  for (let i = 0; i < notes.length; i += 1) {
-    const note = notes[i];
-    const voiceId = note.querySelector(":scope > voice")?.textContent?.trim() || DEFAULT_VOICE;
-    const currentOffset = voiceOffsets.get(voiceId) ?? 0;
-    const duration = parseDirectChildInt(note, ":scope > duration") ?? 0;
-    const isChord = note.querySelector(":scope > chord") !== null;
-    const offset = isChord ? Math.max(0, currentOffset - duration) : currentOffset;
-    const kind = note.querySelector(":scope > rest") ? "rest" : "note";
-    const blockedReasons = [
-      ...(note.querySelector(":scope > chord") ? ["chord"] : []),
-      ...(note.querySelector(":scope > grace") ? ["grace"] : []),
-      ...(note.querySelector(":scope > cue") ? ["cue"] : []),
-    ];
-
-    const event: Record<string, unknown> = {
-      node_id: noteNodeIds[i] ?? `note-${i + 1}`,
-      kind,
-      offset,
-      duration,
-      notations: {
-        tie_start: note.querySelector(':scope > tie[type="start"], :scope > notations > tied[type="start"]') !== null,
-        tie_stop: note.querySelector(':scope > tie[type="stop"], :scope > notations > tied[type="stop"]') !== null,
-        slur_start: note.querySelector(':scope > notations > slur[type="start"]') !== null,
-        slur_stop: note.querySelector(':scope > notations > slur[type="stop"]') !== null,
-      },
-      editability: {
-        editable: blockedReasons.length === 0,
-        blocked_reasons: blockedReasons,
-      },
-    };
-
-    if (kind === "note") {
-      const stepText = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? "";
-      const octave = parseDirectChildInt(note, ":scope > pitch > octave");
-      const alter = parseDirectChildInt(note, ":scope > pitch > alter");
-      if (isPitchStepValue(stepText) && octave !== null) {
-        event.pitch = {
-          step: stepText,
-          alter: alter ?? 0,
-          octave,
-        };
-      }
-    }
-
-    const events = voiceEvents.get(voiceId) ?? [];
-    events.push(event);
-    voiceEvents.set(voiceId, events);
-    if (!isChord) {
-      voiceOffsets.set(voiceId, currentOffset + duration);
-    }
-  }
-  return Array.from(voiceEvents.entries()).map(([voiceId, events]) => ({
-    voice_id: voiceId,
-    events,
-  }));
-};
-
-const buildMeasureDetailJsonText = (): string | null => {
-  if (!draftCore || !selectedMeasure || !state.selectedNodeId) return null;
-
-  const xmlText = draftCore.debugSerializeCurrentXml();
-  if (!xmlText) return null;
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) return null;
-  const measure = doc.querySelector("measure");
-  if (!measure) return null;
-
-  const partId = selectedMeasure.partId;
-  const measureNumber = selectedMeasure.measureNumber;
-  const previousMeasure = getMeasureNavigationTarget(selectedMeasure, "left");
-  const nextMeasure = getMeasureNavigationTarget(selectedMeasure, "right");
-  const mainXmlText = resolveMusicXmlOutput();
-  const mainDoc = mainXmlText ? parseMusicXmlDocument(mainXmlText) : null;
-  const mainPart = mainDoc?.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`) ?? null;
-  const mainMeasures = mainPart ? Array.from(mainPart.querySelectorAll(":scope > measure")) : [];
-  const mainMeasureIndex = mainMeasures.findIndex((candidate) => (candidate.getAttribute("number")?.trim() ?? "") === measureNumber);
-  const measureAttributes =
-    mainMeasureIndex >= 0
-      ? buildEffectiveMeasureContextForPart(mainMeasures, mainMeasureIndex)
-      : buildDirectMeasureContext(doc, measure);
-  const voices = buildMeasureVoiceProjection(measure, draftNoteNodeIds);
-  const notes = Array.from(measure.querySelectorAll(":scope > note"));
-  const targetIndex = draftNoteNodeIds.indexOf(state.selectedNodeId);
-  const targetVoiceId =
-    targetIndex >= 0 ? (notes[targetIndex]?.querySelector(":scope > voice")?.textContent?.trim() || DEFAULT_VOICE) : DEFAULT_VOICE;
-
-  return JSON.stringify({
-    view_type: "measure_detail_view",
-    score: {
-      title: scoreTitleText || "Untitled",
-      composer: scoreComposerText || undefined,
-      format: "mikuscore_measure_detail_json",
-    },
-    part: {
-      part_id: partId,
-      name: partIdToName.get(partId) ?? partId,
-    },
-    window: {
-      center_measure_number: measureNumber,
-      previous_measure_number: previousMeasure?.measureNumber ?? null,
-      next_measure_number: nextMeasure?.measureNumber ?? null,
-    },
-    measure: {
-      measure_id: `${partId}-M${measureNumber}`,
-      measure_number: measureNumber,
-      divisions: measureAttributes.divisions,
-      time: measureAttributes.time,
-      attributes_context: measureAttributes.attributes_context,
-      inherited_context: measureAttributes.inherited,
-    },
-    voices,
-    target: {
-      target_node_id: state.selectedNodeId,
-      target_voice_id: targetVoiceId,
-    },
-    rules: {
-      allow_patch_ops: ["change_to_pitch", "change_duration", "split_note", "delete_note"],
-      allowed_edit_fields: ["pitch", "duration"],
-      forbid_cross_voice_edit: true,
-      forbid_backup_forward_boundary_cross: true,
-      forbid_chord_target: true,
-      forbid_grace_target: true,
-      forbid_cue_target: true,
-    },
-  }, null, 2);
-};
-
 const onDownload = async (): Promise<void> => {
   const xmlText = resolveMusicXmlOutput();
   if (!xmlText) {
@@ -3581,26 +3289,6 @@ const onDownloadAbc = (): void => {
   } catch (err) {
     failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
   }
-};
-
-const onDownloadMeasureJson = (): void => {
-  const jsonText = buildMeasureDetailJsonText();
-  if (!jsonText) {
-    failExport("JSON", "No editable measure with a selected target note is available.");
-    return;
-  }
-  try {
-    triggerFileDownload(createJsonDownloadPayload(jsonText, "measure-detail"));
-  } catch (err) {
-    failExport("JSON", err instanceof Error ? err.message : "Unknown download error.");
-  }
-};
-
-const onCopyAiJsonPrompt = async (): Promise<void> => {
-  copyAiJsonPromptBtn.disabled = true;
-  const copied = await copyTextToClipboard(aiJsonPromptText);
-  flashCopyAiJsonPromptButtonLabel(copied ? "Copied" : "Copy failed");
-  copyAiJsonPromptBtn.disabled = false;
 };
 
 const onDownloadMei = (): void => {
@@ -3728,18 +3416,7 @@ const onDownloadAll = async (): Promise<void> => {
       meiPayload,
       lilyPondPayload,
       svgPayload,
-      {
-        fileName: "ai/ai-json-prompt.txt",
-        blob: new Blob([aiJsonPromptText], { type: "text/plain;charset=utf-8" }),
-      },
     ];
-    const measureJsonText = buildMeasureDetailJsonText();
-    if (measureJsonText) {
-      allEntries.push({
-        fileName: "ai/measure-detail.json",
-        blob: new Blob([measureJsonText], { type: "application/json;charset=utf-8" }),
-      });
-    }
     const allPayload = await createZipBundleDownloadPayload(allEntries);
     triggerFileDownload(allPayload);
   } catch (err) {
@@ -4029,10 +3706,6 @@ downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
-copyAiJsonPromptBtn.addEventListener("click", () => {
-  void onCopyAiJsonPrompt();
-});
-downloadMeasureJsonBtn.addEventListener("click", onDownloadMeasureJson);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);

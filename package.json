@@ -3,10 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "mikuscore": "scripts/mikuscore-cli.mjs"
+  },
   "scripts": {
     "build": "npm run typecheck && npm run test:build && npm run build:dist",
     "build:all": "npm run build",
     "build:dist": "node scripts/build.mjs",
+    "cli": "node scripts/mikuscore-cli.mjs",
     "check:all": "npm run typecheck && npm run test:all && npm run build:dist",
     "build:vendor:utaformatix3": "bash scripts/sync-utaformatix3-vendor.sh",
     "clean": "rm -rf mikuscore.html src/js/main.js .tsbuildinfo .mikuscore-build",
