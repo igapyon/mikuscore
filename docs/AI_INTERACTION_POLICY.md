@@ -4,58 +4,40 @@ This document records the current `mikuscore` policy for interacting with genera
 
 It complements:
 
-- `docs/spec/AI_JSON_SPEC.md`
-- `docs/generation/AI_ABC_JSON_WORKFLOW_PROMPT.md`
+- `docs/generation/README.md`
+- `docs/future/AI_JSON_INTERFACE.md`
 
 ## Current adopted policy
 
 - Canonical source remains `MusicXML`.
 - Full-score handoff to a generative model uses `ABC`.
 - New score generation by a generative model uses `ABC`.
-- Partial inspection and patch exchange with a generative model use `JSON (Partial)`.
-- Full-score JSON handoff is not the current recommended path.
+- A dedicated AI-facing JSON patch/projection interface is not part of the current product contract.
 
-## Why this split exists
+## Why this policy is simpler now
 
-`mikuscore` currently has to balance three different concerns:
+`mikuscore` currently prioritizes:
 
 - canonical score preservation
 - practical readability for generative models
-- bounded and safe machine-editable patch exchange
+- a smaller current-scope contract
 
-The current policy separates those roles:
+For the current product shape, `ABC` is the only documented AI-facing interchange layer.
 
-- `MusicXML` for canonical preservation
-- `ABC` for broad human/AI score communication
-- `JSON (Partial)` for local and bounded AI patch work
+## Current constraint
 
-## Current constraints
+- Humans may still explicitly choose `ABC` when working with external generative models.
+- `mikuscore` does not currently claim a supported AI-facing JSON workflow.
+- Existing JSON-related notes and examples should be treated as deferred design material, not current behavior guarantees.
 
-- Generative models often read whole-score `ABC` more reliably than whole-score JSON.
-- Whole-score JSON tends to be larger and easier for a model to truncate, skim, or partially ignore.
-- Local JSON is still useful when the task is bounded and patch-oriented.
-- Therefore JSON is currently positioned as a partial projection, not as the main full-score AI handoff format.
+## Deferred future note
 
-## Transition-phase note
+A dedicated AI-facing JSON interface may be revisited later as a future step.
 
-This policy should be understood as a transition-phase design.
+If that work resumes, the goal is still likely to be:
 
-Today, the human user may still need to be aware of whether the current AI task is:
+- keep `MusicXML` canonical underneath
+- avoid direct AI rewriting of full MusicXML
+- use a bounded machine-facing contract rather than unconstrained score rewrite
 
-- whole-score / new-score (`ABC`)
-- partial review / patch exchange (`JSON (Partial)`)
-
-That human-visible split is not the long-term ideal.
-
-## MCP-oriented future goal
-
-The longer-term goal is for an MCP-capable tool layer to choose the right representation automatically.
-
-In that future shape:
-
-- the human should mostly express intent, not choose data format manually
-- the tool layer should route whole-score AI tasks through `ABC`
-- the tool layer should route bounded edit/review tasks through `JSON (Partial)`
-- `MusicXML` should remain canonical underneath
-
-Until that mediation becomes normal, `mikuscore` keeps the format split explicit in docs and some UI decisions.
+That future work is tracked separately in `docs/future/AI_JSON_INTERFACE.md`.

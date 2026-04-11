@@ -7,3 +7,4 @@ tests/artifacts/roundtrip/
 tests/roundtrip/musescore/cases.local.json
 .tsbuildinfo
 .mikuscore-build/
+workplace/*

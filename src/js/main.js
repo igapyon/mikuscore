@@ -24,7 +24,6 @@ const sampleXml3_1 = require("./sampleXml3");
 const sampleXml4_1 = require("./sampleXml4");
 const sampleXml6_1 = require("./sampleXml6");
 const sampleXml7_1 = require("./sampleXml7");
-const aiJsonPromptText_1 = require("./aiJsonPromptText");
 const midi_io_1 = require("./midi-io");
 const DEFAULT_VOICE = "1";
 const q = (selector) => {
@@ -124,8 +123,6 @@ const downloadBtn = q("#downloadBtn");
 const downloadMidiBtn = q("#downloadMidiBtn");
 const downloadVsqxBtn = q("#downloadVsqxBtn");
 const downloadAbcBtn = q("#downloadAbcBtn");
-const copyAiJsonPromptBtn = q("#copyAiJsonPromptBtn");
-const downloadMeasureJsonBtn = q("#downloadMeasureJsonBtn");
 const downloadMeiBtn = q("#downloadMeiBtn");
 const downloadLilyPondBtn = q("#downloadLilyPondBtn");
 const downloadMuseScoreBtn = q("#downloadMuseScoreBtn");
@@ -1572,7 +1569,7 @@ const renderUiMessage = () => {
     }
 };
 const renderOutput = () => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     if (saveModeText) {
         saveModeText.textContent = state.lastSaveResult ? state.lastSaveResult.mode : "-";
     }
@@ -1583,11 +1580,10 @@ const renderOutput = () => {
     downloadMidiBtn.disabled = !((_c = state.lastSaveResult) === null || _c === void 0 ? void 0 : _c.ok);
     downloadVsqxBtn.disabled = !((_d = state.lastSaveResult) === null || _d === void 0 ? void 0 : _d.ok);
     downloadAbcBtn.disabled = !((_e = state.lastSaveResult) === null || _e === void 0 ? void 0 : _e.ok);
-    downloadMeasureJsonBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok) || !selectedMeasure || !draftCore || !state.selectedNodeId;
-    downloadMeiBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
-    downloadLilyPondBtn.disabled = !((_h = state.lastSaveResult) === null || _h === void 0 ? void 0 : _h.ok);
-    downloadMuseScoreBtn.disabled = !((_j = state.lastSaveResult) === null || _j === void 0 ? void 0 : _j.ok);
-    downloadAllBtn.disabled = !((_k = state.lastSaveResult) === null || _k === void 0 ? void 0 : _k.ok);
+    downloadMeiBtn.disabled = !((_f = state.lastSaveResult) === null || _f === void 0 ? void 0 : _f.ok);
+    downloadLilyPondBtn.disabled = !((_g = state.lastSaveResult) === null || _g === void 0 ? void 0 : _g.ok);
+    downloadMuseScoreBtn.disabled = !((_h = state.lastSaveResult) === null || _h === void 0 ? void 0 : _h.ok);
+    downloadAllBtn.disabled = !((_j = state.lastSaveResult) === null || _j === void 0 ? void 0 : _j.ok);
 };
 const renderControlState = () => {
     const hasDraft = Boolean(draftCore);
@@ -2992,265 +2988,6 @@ const parseDirectChildInt = (parent, selector) => {
     const value = Number(text);
     return Number.isInteger(value) ? value : null;
 };
-const copyTextToClipboard = async (text) => {
-    var _a;
-    try {
-        if ((_a = navigator.clipboard) === null || _a === void 0 ? void 0 : _a.writeText) {
-            await navigator.clipboard.writeText(text);
-            return true;
-        }
-    }
-    catch (_b) {
-        // Fall back to legacy copy path below.
-    }
-    try {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        textarea.style.pointerEvents = "none";
-        document.body.appendChild(textarea);
-        textarea.select();
-        textarea.setSelectionRange(0, textarea.value.length);
-        const copied = document.execCommand("copy");
-        document.body.removeChild(textarea);
-        return copied;
-    }
-    catch (_c) {
-        return false;
-    }
-};
-let copyAiJsonPromptLabelTimer = 0;
-const setCopyAiJsonPromptButtonLabel = (label) => {
-    const labelEl = copyAiJsonPromptBtn.querySelector("span");
-    if (labelEl) {
-        labelEl.textContent = label;
-    }
-};
-const flashCopyAiJsonPromptButtonLabel = (label) => {
-    if (copyAiJsonPromptLabelTimer) {
-        window.clearTimeout(copyAiJsonPromptLabelTimer);
-    }
-    setCopyAiJsonPromptButtonLabel(label);
-    copyAiJsonPromptLabelTimer = window.setTimeout(() => {
-        setCopyAiJsonPromptButtonLabel("AI Prompt");
-        copyAiJsonPromptLabelTimer = 0;
-    }, 1500);
-};
-const cloneClefs = (clefs) => {
-    return clefs.map((clef) => ({ ...clef }));
-};
-const readDirectMeasureContext = (measure) => {
-    var _a, _b, _c;
-    const divisions = parseDirectChildInt(measure, "attributes > divisions");
-    const beats = parseDirectChildInt(measure, "attributes > time > beats");
-    const beatType = parseDirectChildInt(measure, "attributes > time > beat-type");
-    const keyFifths = parseDirectChildInt(measure, "attributes > key > fifths");
-    const mode = (_c = (_b = (_a = measure.querySelector("attributes > key > mode")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : null;
-    const clefEls = Array.from(measure.querySelectorAll("attributes > clef"));
-    const clefs = clefEls.length > 0
-        ? clefEls.map((clef, index) => {
-            var _a, _b, _c, _d, _e, _f, _g;
-            return ({
-                staff: (_c = (_b = (_a = clef.querySelector("staff")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : String(index + 1),
-                sign: (_f = (_e = (_d = clef.querySelector("sign")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "G",
-                line: (_g = parseDirectChildInt(clef, "line")) !== null && _g !== void 0 ? _g : 2,
-            });
-        })
-        : null;
-    return {
-        divisions,
-        time: beats !== null && beatType !== null ? { beats, beat_type: beatType } : null,
-        key: keyFifths !== null || mode !== null ? { key_fifths: keyFifths, mode } : null,
-        clefs,
-    };
-};
-const buildEffectiveMeasureContextForPart = (measures, measureIndex) => {
-    var _a, _b;
-    let divisions = DEFAULT_DIVISIONS;
-    let time = null;
-    let key = null;
-    let clefs = [];
-    for (let i = 0; i <= measureIndex; i += 1) {
-        const direct = readDirectMeasureContext(measures[i]);
-        if (direct.divisions !== null) {
-            divisions = direct.divisions;
-        }
-        if (direct.time) {
-            time = { ...direct.time };
-        }
-        if (direct.key) {
-            key = { ...direct.key };
-        }
-        if (direct.clefs) {
-            clefs = cloneClefs(direct.clefs);
-        }
-    }
-    const directCurrent = readDirectMeasureContext(measures[measureIndex]);
-    return {
-        divisions,
-        time,
-        attributes_context: {
-            key_fifths: (_a = key === null || key === void 0 ? void 0 : key.key_fifths) !== null && _a !== void 0 ? _a : null,
-            mode: (_b = key === null || key === void 0 ? void 0 : key.mode) !== null && _b !== void 0 ? _b : null,
-            clefs: cloneClefs(clefs),
-        },
-        inherited: {
-            divisions: directCurrent.divisions === null,
-            time: directCurrent.time === null,
-            key: directCurrent.key === null,
-            clefs: directCurrent.clefs === null,
-        },
-    };
-};
-const buildDirectMeasureContext = (doc, measure) => {
-    var _a, _b, _c, _d, _e, _f;
-    const direct = readDirectMeasureContext(measure);
-    const divisions = (_a = direct.divisions) !== null && _a !== void 0 ? _a : resolveEffectiveDivisionsForMeasure(doc, measure);
-    return {
-        divisions,
-        time: direct.time,
-        attributes_context: {
-            key_fifths: (_c = (_b = direct.key) === null || _b === void 0 ? void 0 : _b.key_fifths) !== null && _c !== void 0 ? _c : null,
-            mode: (_e = (_d = direct.key) === null || _d === void 0 ? void 0 : _d.mode) !== null && _e !== void 0 ? _e : null,
-            clefs: cloneClefs((_f = direct.clefs) !== null && _f !== void 0 ? _f : []),
-        },
-        inherited: {
-            divisions: direct.divisions === null,
-            time: direct.time === null,
-            key: direct.key === null,
-            clefs: direct.clefs === null,
-        },
-    };
-};
-const buildMeasureVoiceProjection = (measure, noteNodeIds) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-    const voiceEvents = new Map();
-    const voiceOffsets = new Map();
-    const notes = Array.from(measure.querySelectorAll(":scope > note"));
-    for (let i = 0; i < notes.length; i += 1) {
-        const note = notes[i];
-        const voiceId = ((_b = (_a = note.querySelector(":scope > voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || DEFAULT_VOICE;
-        const currentOffset = (_c = voiceOffsets.get(voiceId)) !== null && _c !== void 0 ? _c : 0;
-        const duration = (_d = parseDirectChildInt(note, ":scope > duration")) !== null && _d !== void 0 ? _d : 0;
-        const isChord = note.querySelector(":scope > chord") !== null;
-        const offset = isChord ? Math.max(0, currentOffset - duration) : currentOffset;
-        const kind = note.querySelector(":scope > rest") ? "rest" : "note";
-        const blockedReasons = [
-            ...(note.querySelector(":scope > chord") ? ["chord"] : []),
-            ...(note.querySelector(":scope > grace") ? ["grace"] : []),
-            ...(note.querySelector(":scope > cue") ? ["cue"] : []),
-        ];
-        const event = {
-            node_id: (_e = noteNodeIds[i]) !== null && _e !== void 0 ? _e : `note-${i + 1}`,
-            kind,
-            offset,
-            duration,
-            notations: {
-                tie_start: note.querySelector(':scope > tie[type="start"], :scope > notations > tied[type="start"]') !== null,
-                tie_stop: note.querySelector(':scope > tie[type="stop"], :scope > notations > tied[type="stop"]') !== null,
-                slur_start: note.querySelector(':scope > notations > slur[type="start"]') !== null,
-                slur_stop: note.querySelector(':scope > notations > slur[type="stop"]') !== null,
-            },
-            editability: {
-                editable: blockedReasons.length === 0,
-                blocked_reasons: blockedReasons,
-            },
-        };
-        if (kind === "note") {
-            const stepText = (_h = (_g = (_f = note.querySelector(":scope > pitch > step")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : "";
-            const octave = parseDirectChildInt(note, ":scope > pitch > octave");
-            const alter = parseDirectChildInt(note, ":scope > pitch > alter");
-            if (isPitchStepValue(stepText) && octave !== null) {
-                event.pitch = {
-                    step: stepText,
-                    alter: alter !== null && alter !== void 0 ? alter : 0,
-                    octave,
-                };
-            }
-        }
-        const events = (_j = voiceEvents.get(voiceId)) !== null && _j !== void 0 ? _j : [];
-        events.push(event);
-        voiceEvents.set(voiceId, events);
-        if (!isChord) {
-            voiceOffsets.set(voiceId, currentOffset + duration);
-        }
-    }
-    return Array.from(voiceEvents.entries()).map(([voiceId, events]) => ({
-        voice_id: voiceId,
-        events,
-    }));
-};
-const buildMeasureDetailJsonText = () => {
-    var _a, _b, _c, _d, _e, _f, _g;
-    if (!draftCore || !selectedMeasure || !state.selectedNodeId)
-        return null;
-    const xmlText = draftCore.debugSerializeCurrentXml();
-    if (!xmlText)
-        return null;
-    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-    if (!doc)
-        return null;
-    const measure = doc.querySelector("measure");
-    if (!measure)
-        return null;
-    const partId = selectedMeasure.partId;
-    const measureNumber = selectedMeasure.measureNumber;
-    const previousMeasure = getMeasureNavigationTarget(selectedMeasure, "left");
-    const nextMeasure = getMeasureNavigationTarget(selectedMeasure, "right");
-    const mainXmlText = resolveMusicXmlOutput();
-    const mainDoc = mainXmlText ? (0, musicxml_io_1.parseMusicXmlDocument)(mainXmlText) : null;
-    const mainPart = (_a = mainDoc === null || mainDoc === void 0 ? void 0 : mainDoc.querySelector(`score-partwise > part[id="${CSS.escape(partId)}"]`)) !== null && _a !== void 0 ? _a : null;
-    const mainMeasures = mainPart ? Array.from(mainPart.querySelectorAll(":scope > measure")) : [];
-    const mainMeasureIndex = mainMeasures.findIndex((candidate) => { var _a, _b; return ((_b = (_a = candidate.getAttribute("number")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "") === measureNumber; });
-    const measureAttributes = mainMeasureIndex >= 0
-        ? buildEffectiveMeasureContextForPart(mainMeasures, mainMeasureIndex)
-        : buildDirectMeasureContext(doc, measure);
-    const voices = buildMeasureVoiceProjection(measure, draftNoteNodeIds);
-    const notes = Array.from(measure.querySelectorAll(":scope > note"));
-    const targetIndex = draftNoteNodeIds.indexOf(state.selectedNodeId);
-    const targetVoiceId = targetIndex >= 0 ? (((_d = (_c = (_b = notes[targetIndex]) === null || _b === void 0 ? void 0 : _b.querySelector(":scope > voice")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) || DEFAULT_VOICE) : DEFAULT_VOICE;
-    return JSON.stringify({
-        view_type: "measure_detail_view",
-        score: {
-            title: scoreTitleText || "Untitled",
-            composer: scoreComposerText || undefined,
-            format: "mikuscore_measure_detail_json",
-        },
-        part: {
-            part_id: partId,
-            name: (_e = partIdToName.get(partId)) !== null && _e !== void 0 ? _e : partId,
-        },
-        window: {
-            center_measure_number: measureNumber,
-            previous_measure_number: (_f = previousMeasure === null || previousMeasure === void 0 ? void 0 : previousMeasure.measureNumber) !== null && _f !== void 0 ? _f : null,
-            next_measure_number: (_g = nextMeasure === null || nextMeasure === void 0 ? void 0 : nextMeasure.measureNumber) !== null && _g !== void 0 ? _g : null,
-        },
-        measure: {
-            measure_id: `${partId}-M${measureNumber}`,
-            measure_number: measureNumber,
-            divisions: measureAttributes.divisions,
-            time: measureAttributes.time,
-            attributes_context: measureAttributes.attributes_context,
-            inherited_context: measureAttributes.inherited,
-        },
-        voices,
-        target: {
-            target_node_id: state.selectedNodeId,
-            target_voice_id: targetVoiceId,
-        },
-        rules: {
-            allow_patch_ops: ["change_to_pitch", "change_duration", "split_note", "delete_note"],
-            allowed_edit_fields: ["pitch", "duration"],
-            forbid_cross_voice_edit: true,
-            forbid_backup_forward_boundary_cross: true,
-            forbid_chord_target: true,
-            forbid_grace_target: true,
-            forbid_cue_target: true,
-        },
-    }, null, 2);
-};
 const onDownload = async () => {
     const xmlText = resolveMusicXmlOutput();
     if (!xmlText) {
@@ -3337,25 +3074,6 @@ const onDownloadAbc = () => {
     catch (err) {
         failExport("ABC", err instanceof Error ? err.message : "Unknown download error.");
     }
-};
-const onDownloadMeasureJson = () => {
-    const jsonText = buildMeasureDetailJsonText();
-    if (!jsonText) {
-        failExport("JSON", "No editable measure with a selected target note is available.");
-        return;
-    }
-    try {
-        (0, download_flow_1.triggerFileDownload)((0, download_flow_1.createJsonDownloadPayload)(jsonText, "measure-detail"));
-    }
-    catch (err) {
-        failExport("JSON", err instanceof Error ? err.message : "Unknown download error.");
-    }
-};
-const onCopyAiJsonPrompt = async () => {
-    copyAiJsonPromptBtn.disabled = true;
-    const copied = await copyTextToClipboard(aiJsonPromptText_1.aiJsonPromptText);
-    flashCopyAiJsonPromptButtonLabel(copied ? "Copied" : "Copy failed");
-    copyAiJsonPromptBtn.disabled = false;
 };
 const onDownloadMei = () => {
     const xmlText = resolveMusicXmlOutput();
@@ -3473,18 +3191,7 @@ const onDownloadAll = async () => {
             meiPayload,
             lilyPondPayload,
             svgPayload,
-            {
-                fileName: "ai/ai-json-prompt.txt",
-                blob: new Blob([aiJsonPromptText_1.aiJsonPromptText], { type: "text/plain;charset=utf-8" }),
-            },
         ];
-        const measureJsonText = buildMeasureDetailJsonText();
-        if (measureJsonText) {
-            allEntries.push({
-                fileName: "ai/measure-detail.json",
-                blob: new Blob([measureJsonText], { type: "application/json;charset=utf-8" }),
-            });
-        }
         const allPayload = await (0, download_flow_1.createZipBundleDownloadPayload)(allEntries);
         (0, download_flow_1.triggerFileDownload)(allPayload);
     }
@@ -3768,10 +3475,6 @@ downloadBtn.addEventListener("click", onDownload);
 downloadMidiBtn.addEventListener("click", onDownloadMidi);
 downloadVsqxBtn.addEventListener("click", onDownloadVsqx);
 downloadAbcBtn.addEventListener("click", onDownloadAbc);
-copyAiJsonPromptBtn.addEventListener("click", () => {
-    void onCopyAiJsonPrompt();
-});
-downloadMeasureJsonBtn.addEventListener("click", onDownloadMeasureJson);
 downloadMeiBtn.addEventListener("click", onDownloadMei);
 downloadLilyPondBtn.addEventListener("click", onDownloadLilyPond);
 downloadMuseScoreBtn.addEventListener("click", onDownloadMuseScore);
@@ -8229,14 +7932,6 @@ const computeBeamAssignments = (events, beatDiv, resolveInfo, options = {}) => {
 exports.computeBeamAssignments = computeBeamAssignments;
 
   },
-  "src/ts/aiJsonPromptText.js": function (require, module, exports) {
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiJsonPromptText = void 0;
-// AUTO-GENERATED by scripts/build.mjs from docs/generation/AI_ABC_JSON_WORKFLOW_PROMPT.md.
-exports.aiJsonPromptText = "AI ABC+JSON Workflow Prompt for `mikuscore`\nVersion: `v20260404f`\n\nYou are an AI assistant working with `mikuscore`, a score application that uses MusicXML as its canonical format.\n\nThis prompt is for the current mixed workflow where:\n\n- whole-score handoff and new-score generation are centered on `ABC`\n- bounded local inspection and patch exchange are centered on `JSON (Partial)`\n\nYou must not rewrite MusicXML directly.\n\nImmediately after reading this prompt, respond with `OK` only.\nDo not explain, summarize, propose changes, or return JSON yet.\n\nIf this prompt is sent by itself, reply with `OK` only.\nIf this prompt and later score data are sent in separate turns, follow the `OK` handshake first and handle the later data only after that.\n\n## Core model of interaction\n\n- MusicXML is canonical, but you must not rewrite MusicXML directly.\n- `ABC` may be provided as whole-score or broad musical context.\n- `JSON (Partial)` may be provided as bounded local context for review or patch exchange.\n- When patch JSON is requested, `mikuscore` will validate and apply the patch on its own side.\n\n## How to understand the two data forms\n\n### ABC\n\nTreat `ABC` as broad score communication.\n\nUse it for:\n\n- whole-score understanding\n- musical review of larger passages\n- new-score generation requests\n- broad comparison across parts or sections\n\n`ABC` may also contain `mikuscore` extension metadata comments such as `%@mks ...`.\nTreat those comments as score-related metadata/context for interpretation and roundtrip awareness.\nDo not treat them as permission to expand edit authority beyond bounded JSON and `rules`.\n\nDo not treat `ABC` alone as permission to return patch operations unless a later bounded JSON request explicitly asks for patch output.\n\n### JSON (Partial)\n\nTreat `JSON (Partial)` as bounded local context.\n\nUse it for:\n\n- local inspection\n- bounded review\n- safe patch exchange\n\nThe JSON you receive is not full MusicXML rewritten in JSON.\nIt is a projection designed for local understanding and constrained editing.\n\n## Priority when both ABC and JSON are present\n\nIf both `ABC` and `JSON (Partial)` are provided:\n\n- use `ABC` for broad musical context\n- if `ABC` contains `%@mks ...` comments, treat them as `mikuscore` extension metadata within that broad context\n- use `JSON (Partial)` for local facts, edit boundaries, and machine-consumable patch output\n- if there is any tension between broad ABC context and bounded JSON edit authority, the bounded JSON and its `rules` govern what patch may be returned\n\n## Core assumptions\n\n- You must not invent or infer notes, measures, voices, ties, slurs, tuplets, or metadata that are not explicitly exposed.\n- If a value is omitted, inherited, or explicitly `null`, do not reinterpret it as `0`, `false`, empty string, or a confirmed musical fact.\n- You must not return operations that are not allowed by `rules`.\n- Unspecified fields must be treated as unchanged.\n- Your changes must remain minimal.\n- Even if a musically nicer change exists, you must stay inside the provided bounded JSON and `rules` when returning a patch.\n- If a request exceeds the allowed boundary, explain that briefly and return no forbidden operation.\n- When giving explanatory prose, distinguish clearly between what is directly supported by the provided data and what is broader musical knowledge or stylistic guesswork.\n\n## Operating modes\n\nUse one prompt, but apply one of these two modes depending on the provided data and the user request.\n\n### Mode A: Broad score communication\n\nUse this mode when the task is to understand, review, compare, summarize, or generate score content at whole-score or excerpt level.\n\nTypical triggers:\n\n- `ABC`\n- broad score overview JSON\n- a user request such as compare, review, inspect, explain, summarize, or generate\n\nBehavior:\n\n- read all provided parts before answering when the request depends on cross-part context\n- say clearly what data was actually provided\n- if only broad context is available, do not pretend that a bounded editable target was provided\n- do not return Patch JSON unless a later bounded JSON request explicitly requires it\n\n### Mode B: Bounded local patch work\n\nUse this mode when the task is to make or propose a bounded score edit from `JSON (Partial)`.\n\nTypical triggers:\n\n- `measure_detail_view`\n- `note_edit_view`\n- `score_patch_request`\n- an explicit edit request such as change, delete, split, shorten, lengthen, or add if allowed by `rules`\n\nBehavior:\n\n- prioritize the explicit target if one is provided\n- use any accompanying `ABC` only as broad context, not as expanded edit authority\n- keep changes minimal and bounded\n- follow `rules` strictly\n- return Patch JSON only at the end\n- do not broaden a local edit into a full-score rewrite\n\n## What the JSON usually represents\n\nThe most important expected shapes are:\n\n- `measure_detail_view`\n- `note_edit_view`\n- `score_patch_request`\n\nYou may also see:\n\n- `score_overview_view`\n- `selection_context_view`\n\nIn some conversations, you may be shown a larger excerpt or a broad score-level overview first.\nThat does not give you permission to rewrite the whole score.\nIt only means you are being given more context before returning a bounded patch.\n\n## How to read the projection\n\n### `measure_detail_view`\n\nThis is a local score view centered on one measure or a tightly bounded measure window.\n\nTypical structure:\n\n- `score`\n- `part`\n- `measure`\n- `voices`\n- `target`\n- `rules`\n\nImportant interpretation:\n\n- `voices` contains time-ordered `events`\n- each event may be a `note` or `rest`\n- `offset` and `duration` describe local measure timing\n- `pitch` describes note pitch when the event is a note\n- `target` identifies the intended edit target when the view is being used for editing\n- `rules` limits what may be returned\n\n### `note_edit_view`\n\nThis is a narrower view for editing a single note or rest.\n\nTypical structure:\n\n- `score`\n- `part`\n- `measure`\n- `target_note`\n- `neighbors`\n- `rules`\n\nImportant interpretation:\n\n- `target_note` is the main editable subject\n- `neighbors` are context, not automatically editable targets\n- `rules` determines what is allowed\n\n### `score_patch_request`\n\nThis is a wrapper that may bundle:\n\n- a user instruction\n- one or more views\n- `rules`\n\nWhen this appears, follow the bundled request and bounded views only.\n\n## How to read `rules`\n\n`rules` are normative.\nThey are not hints.\n\nTypical fields may include:\n\n- `allow_patch_ops`\n- `allowed_edit_fields`\n- `forbid_*`\n\nInterpretation:\n\n- if an operation is not listed in `allow_patch_ops`, do not return it\n- if an edit field is not listed in `allowed_edit_fields`, do not update it\n- if a `forbid_*` condition applies, do not bypass it\n- when `rules` and any looser summary metadata appear to disagree, treat `rules` as authoritative\n\n## What to do after the initial `OK`\n\nWhen score data and a user request are provided later in the conversation:\n\n1. Briefly state what can be understood from the provided data.\n2. Briefly state what is safe or unsafe to do under the given `rules`.\n3. If bounded patch output is required, end with exactly one machine-consumable `json` code fence.\n\n## Patch JSON expectations\n\nPatch JSON is an object with an `operations` array.\n\nExample empty result:\n\n```json\n{\n  \"operations\": []\n}\n```\n\nCommon MVP operations may include:\n\n- `change_to_pitch`\n- `change_duration`\n- `split_note`\n- `delete_note`\n\n`insert_note_after` may exist, but do not use it unless the current projection explicitly allows it.\n\n## How to think about add / update / delete\n\nAt a high level, requests usually fall into three categories:\n\n- update an existing target\n- add something near an existing anchor\n- delete an existing target\n\nYou must map those requests into allowed bounded operations.\nDo not invent a broader rewrite when a smaller operation exists.\n\n### Update an existing target\n\nIf the request is “change this note”, prefer a direct target-bound operation.\nEven if a whole measure, multiple measures, or a full ABC score are visible, do not replace the visible region with a rewritten block.\nReturn only the minimal update operation.\n\n### Add something\n\nIf and only if the current projection explicitly allows `insert_note_after`, you may return an add operation.\nIf no allowed add operation exists, return an empty `operations` array instead of inventing a broader replacement patch.\n\n### Delete something\n\nIf delete is allowed, return a bounded delete operation.\nDo not replace deletion with an unrelated rewrite of the measure unless the provided contract explicitly says to do so.\n\n## Output rules\n\n- Your first reply to this prompt must be exactly `OK`.\n- After that first reply, keep explanations short.\n- Only the final `json` code fence is machine-consumable.\n- If no safe change is possible, return an empty `operations` array.\n- Do not return forbidden operations.\n- Do not confuse the target with surrounding context.\n- Do not return full MusicXML.\n- Do not return a full-score JSON replacement.\n- Do not rewrite an entire visible score or excerpt when a bounded add / update / delete operation is sufficient.\n- If timing, key, clef, or other score context is omitted or inherited, describe it as omitted, inherited, or unknown rather than converting it into a confirmed numeric or boolean value.\n\n## Response shape for later turns\n\nWhen later bounded JSON and a user request are provided, your final response must end like this:\n\n```json\n{\n  \"operations\": []\n}\n```\n\nor:\n\n```json\n{\n  \"operations\": [\n    {\n      \"op\": \"change_to_pitch\",\n      \"target_node_id\": \"n-1201\",\n      \"voice_id\": \"1\",\n      \"pitch\": {\n        \"step\": \"D\",\n        \"alter\": 0,\n        \"octave\": 4\n      }\n    }\n  ]\n}\n```\n";
-
-  },
   "src/ts/sampleXml7.js": function (require, module, exports) {
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
@@ -11307,15 +11002,24 @@ const xmlEscape = (value) => String(value !== null && value !== void 0 ? value :
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+const directChildrenByTag = (parent, tagName) => {
+    const expected = tagName.trim().toLowerCase();
+    const children = "children" in parent ? Array.from(parent.children) : [];
+    return children.filter((child) => child.tagName.toLowerCase() === expected);
+};
+const firstDirectChildByTag = (parent, tagName) => {
+    var _a;
+    return (_a = directChildrenByTag(parent, tagName)[0]) !== null && _a !== void 0 ? _a : null;
+};
 const readFirstVBoxTextByStyle = (score, styleName) => {
     var _a, _b, _c, _d;
     const lowerStyle = styleName.trim().toLowerCase();
-    const textNodes = Array.from(score.querySelectorAll(":scope > Staff > VBox > Text"));
+    const textNodes = directChildrenByTag(score, "Staff").flatMap((staff) => directChildrenByTag(staff, "VBox").flatMap((vbox) => directChildrenByTag(vbox, "Text")));
     for (const textNode of textNodes) {
-        const style = ((_b = (_a = textNode.querySelector(":scope > style")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
+        const style = ((_b = (_a = firstDirectChildByTag(textNode, "style")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
         if (style !== lowerStyle)
             continue;
-        const value = ((_d = (_c = textNode.querySelector(":scope > text")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim();
+        const value = ((_d = (_c = firstDirectChildByTag(textNode, "text")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim();
         if (value)
             return value;
     }
@@ -11337,7 +11041,7 @@ const isMuseDefaultComposer = (composer) => {
 };
 const readMetaTagValue = (score, name) => {
     var _a, _b;
-    return ((_b = (_a = score.querySelector(`:scope > metaTag[name="${name}"]`)) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim();
+    return ((_b = (_a = directChildrenByTag(score, "metaTag").find((node) => { var _a; return ((_a = node.getAttribute("name")) !== null && _a !== void 0 ? _a : "").trim() === name; })) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim();
 };
 const firstNumber = (scope, selector) => {
     var _a, _b;
@@ -11610,14 +11314,17 @@ const inferKeyModeFromText = (raw) => {
 };
 const readGlobalMuseKeyMode = (score) => {
     var _a, _b, _c, _d, _e, _f;
-    const explicit = normalizeKeyMode((_a = score.querySelector(":scope > Staff > Measure > KeySig > mode")) === null || _a === void 0 ? void 0 : _a.textContent)
-        || normalizeKeyMode((_b = score.querySelector(":scope > Staff > Measure > voice > KeySig > mode")) === null || _b === void 0 ? void 0 : _b.textContent)
-        || normalizeKeyMode((_c = score.querySelector(":scope > Staff > Measure > voice > keysig > mode")) === null || _c === void 0 ? void 0 : _c.textContent);
+    const firstStaff = (_a = directChildrenByTag(score, "Staff")[0]) !== null && _a !== void 0 ? _a : null;
+    const firstMeasure = firstStaff ? firstDirectChildByTag(firstStaff, "Measure") : null;
+    const firstVoice = firstMeasure ? firstDirectChildByTag(firstMeasure, "voice") : null;
+    const explicit = normalizeKeyMode((_b = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("KeySig > mode")) === null || _b === void 0 ? void 0 : _b.textContent)
+        || normalizeKeyMode((_c = firstVoice === null || firstVoice === void 0 ? void 0 : firstVoice.querySelector("KeySig > mode")) === null || _c === void 0 ? void 0 : _c.textContent)
+        || normalizeKeyMode((_d = firstVoice === null || firstVoice === void 0 ? void 0 : firstVoice.querySelector("keysig > mode")) === null || _d === void 0 ? void 0 : _d.textContent);
     if (explicit)
         return explicit;
-    const inferred = inferKeyModeFromText((_d = score.querySelector(':scope > metaTag[name="workTitle"]')) === null || _d === void 0 ? void 0 : _d.textContent)
-        || inferKeyModeFromText((_e = score.querySelector(':scope > metaTag[name="movementTitle"]')) === null || _e === void 0 ? void 0 : _e.textContent)
-        || inferKeyModeFromText((_f = score.querySelector(":scope > Staff > VBox > Text > text")) === null || _f === void 0 ? void 0 : _f.textContent);
+    const inferred = inferKeyModeFromText(readMetaTagValue(score, "workTitle"))
+        || inferKeyModeFromText(readMetaTagValue(score, "movementTitle"))
+        || inferKeyModeFromText((_f = (_e = directChildrenByTag(score, "Staff")[0]) === null || _e === void 0 ? void 0 : _e.querySelector("VBox > Text > text")) === null || _f === void 0 ? void 0 : _f.textContent);
     return inferred || "major";
 };
 const buildDynamicDirectionXml = (mark, options) => {
@@ -11788,11 +11495,11 @@ const formatMeasureLenFromDivisions = (measureLenDiv, divisions) => {
 };
 const readPartNameFromMusePart = (part, fallback) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
-    const candidate = ((_b = (_a = part.querySelector(":scope > trackName")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
-        || ((_d = (_c = part.querySelector(":scope > Instrument > longName")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim()
-        || ((_f = (_e = part.querySelector(":scope > Instrument > trackName")) === null || _e === void 0 ? void 0 : _e.textContent) !== null && _f !== void 0 ? _f : "").trim()
-        || ((_h = (_g = part.querySelector(":scope > Instrument > shortName")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim()
-        || ((_k = (_j = part.querySelector(":scope > Instrument > instrumentId")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim();
+    const candidate = ((_b = (_a = part.querySelector("trackName")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
+        || ((_d = (_c = part.querySelector("Instrument > longName")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim()
+        || ((_f = (_e = part.querySelector("Instrument > trackName")) === null || _e === void 0 ? void 0 : _e.textContent) !== null && _f !== void 0 ? _f : "").trim()
+        || ((_h = (_g = part.querySelector("Instrument > shortName")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim()
+        || ((_k = (_j = part.querySelector("Instrument > instrumentId")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim();
     return candidate || fallback;
 };
 const readPartTransposeFromMusicXml = (part) => {
@@ -11811,8 +11518,8 @@ const readPartTransposeFromMusicXml = (part) => {
 };
 const readPartTransposeFromMusePart = (part) => {
     var _a, _b, _c, _d;
-    const diatonic = (_b = (_a = firstNumber(part, ":scope > Instrument > transposeDiatonic")) !== null && _a !== void 0 ? _a : firstNumber(part, ":scope > Instrument > mksTransposeDiatonic")) !== null && _b !== void 0 ? _b : firstNumber(part, ":scope > transpose > diatonic");
-    const chromatic = (_d = (_c = firstNumber(part, ":scope > Instrument > transposeChromatic")) !== null && _c !== void 0 ? _c : firstNumber(part, ":scope > Instrument > mksTransposeChromatic")) !== null && _d !== void 0 ? _d : firstNumber(part, ":scope > transpose > chromatic");
+    const diatonic = (_b = (_a = firstNumber(part, "Instrument > transposeDiatonic")) !== null && _a !== void 0 ? _a : firstNumber(part, "Instrument > mksTransposeDiatonic")) !== null && _b !== void 0 ? _b : firstNumber(part, "transpose > diatonic");
+    const chromatic = (_d = (_c = firstNumber(part, "Instrument > transposeChromatic")) !== null && _c !== void 0 ? _c : firstNumber(part, "Instrument > mksTransposeChromatic")) !== null && _d !== void 0 ? _d : firstNumber(part, "transpose > chromatic");
     const out = {};
     if (Number.isFinite(diatonic))
         out.diatonic = Math.round(Number(diatonic));
@@ -11860,12 +11567,12 @@ const parseMuseClefText = (raw) => {
 };
 const readClefForMuseStaff = (staff) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
-    const clefTypeText = ((_b = (_a = staff.querySelector(":scope > Measure > voice > Clef > concertClefType")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
-        || ((_d = (_c = staff.querySelector(":scope > Measure > voice > Clef > subtype")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim()
-        || ((_f = (_e = staff.querySelector(":scope > Measure > Clef > concertClefType")) === null || _e === void 0 ? void 0 : _e.textContent) !== null && _f !== void 0 ? _f : "").trim()
-        || ((_h = (_g = staff.querySelector(":scope > Measure > Clef > subtype")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim()
-        || ((_k = (_j = staff.querySelector(":scope > Clef > concertClefType")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim()
-        || ((_m = (_l = staff.querySelector(":scope > Clef > subtype")) === null || _l === void 0 ? void 0 : _l.textContent) !== null && _m !== void 0 ? _m : "").trim();
+    const clefTypeText = ((_b = (_a = staff.querySelector("Measure > voice > Clef > concertClefType")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim()
+        || ((_d = (_c = staff.querySelector("Measure > voice > Clef > subtype")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim()
+        || ((_f = (_e = staff.querySelector("Measure > Clef > concertClefType")) === null || _e === void 0 ? void 0 : _e.textContent) !== null && _f !== void 0 ? _f : "").trim()
+        || ((_h = (_g = staff.querySelector("Measure > Clef > subtype")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim()
+        || ((_k = (_j = staff.querySelector("Clef > concertClefType")) === null || _j === void 0 ? void 0 : _j.textContent) !== null && _k !== void 0 ? _k : "").trim()
+        || ((_m = (_l = staff.querySelector("Clef > subtype")) === null || _l === void 0 ? void 0 : _l.textContent) !== null && _m !== void 0 ? _m : "").trim();
     const parsed = parseMuseClefText(clefTypeText);
     if (parsed)
         return parsed;
@@ -11874,20 +11581,20 @@ const readClefForMuseStaff = (staff) => {
 const readStaffClefOverridesFromMusePart = (part, fallbackStaffIds = []) => {
     var _a, _b, _c, _d, _e, _f, _g, _h;
     const overrides = new Map();
-    const partStaffDefs = Array.from(part.querySelectorAll(":scope > Staff"));
+    const partStaffDefs = directChildrenByTag(part, "Staff");
     for (let i = 0; i < partStaffDefs.length; i += 1) {
         const staffDef = partStaffDefs[i];
         const explicitId = ((_a = staffDef.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim();
         const staffId = explicitId || ((_b = fallbackStaffIds[i]) !== null && _b !== void 0 ? _b : "");
         if (!staffId)
             continue;
-        const defaultClef = ((_d = (_c = staffDef.querySelector(":scope > defaultClef")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim().toUpperCase();
+        const defaultClef = ((_d = (_c = staffDef.querySelector("defaultClef")) === null || _c === void 0 ? void 0 : _c.textContent) !== null && _d !== void 0 ? _d : "").trim().toUpperCase();
         const parsed = parseMuseClefText(defaultClef);
         if (!parsed)
             continue;
         overrides.set(staffId, parsed);
     }
-    for (const clefDef of Array.from(part.querySelectorAll(":scope > Instrument > clef[staff]"))) {
+    for (const clefDef of Array.from(part.querySelectorAll("Instrument > clef[staff]"))) {
         const staffId = ((_e = clefDef.getAttribute("staff")) !== null && _e !== void 0 ? _e : "").trim();
         if (!staffId)
             continue;
@@ -11897,7 +11604,7 @@ const readStaffClefOverridesFromMusePart = (part, fallbackStaffIds = []) => {
             continue;
         overrides.set(staffId, parsed);
     }
-    const instrumentDefaultClef = ((_h = (_g = part.querySelector(":scope > Instrument > clef:not([staff])")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim();
+    const instrumentDefaultClef = ((_h = (_g = part.querySelector("Instrument > clef:not([staff])")) === null || _g === void 0 ? void 0 : _g.textContent) !== null && _h !== void 0 ? _h : "").trim();
     const parsedInstrumentDefaultClef = parseMuseClefText(instrumentDefaultClef);
     if (parsedInstrumentDefaultClef && fallbackStaffIds[0]) {
         const targetStaffId = fallbackStaffIds[0];
@@ -12139,15 +11846,15 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
     const composer = !isMuseDefaultComposer(composerMeta)
         ? composerMeta
         : (!isMuseDefaultComposer(composerFromVBox) ? composerFromVBox : "");
-    const globalBeats = Math.max(1, Math.round((_d = firstNumber(score, ":scope > Staff > Measure > TimeSig > sigN")) !== null && _d !== void 0 ? _d : 4));
-    const globalBeatType = Math.max(1, Math.round((_e = firstNumber(score, ":scope > Staff > Measure > TimeSig > sigD")) !== null && _e !== void 0 ? _e : 4));
-    const globalFifths = Math.max(-7, Math.min(7, Math.round((_f = firstNumber(score, ":scope > Staff > Measure > KeySig > accidental")) !== null && _f !== void 0 ? _f : 0)));
+    const globalBeats = Math.max(1, Math.round((_d = firstNumber(score, "Staff > Measure > TimeSig > sigN")) !== null && _d !== void 0 ? _d : 4));
+    const globalBeatType = Math.max(1, Math.round((_e = firstNumber(score, "Staff > Measure > TimeSig > sigD")) !== null && _e !== void 0 ? _e : 4));
+    const globalFifths = Math.max(-7, Math.min(7, Math.round((_f = firstNumber(score, "Staff > Measure > KeySig > accidental")) !== null && _f !== void 0 ? _f : 0)));
     const globalMode = readGlobalMuseKeyMode(score);
-    const staffNodes = Array.from(score.querySelectorAll(":scope > Staff")).filter((staff) => {
+    const staffNodes = directChildrenByTag(score, "Staff").filter((staff) => {
         var _a, _b;
         if (((_b = (_a = staff.parentElement) === null || _a === void 0 ? void 0 : _a.tagName) !== null && _b !== void 0 ? _b : "").toLowerCase() !== "score")
             return false;
-        return staff.querySelector(":scope > Measure") !== null;
+        return staff.querySelector("Measure") !== null;
     });
     const staffById = new Map();
     staffNodes.forEach((staff, index) => {
@@ -12173,14 +11880,14 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
     const normalizeCutTimeToTwoTwo = options.normalizeCutTimeToTwoTwo === true;
     const applyImplicitBeams = options.applyImplicitBeams !== false;
     const usedStaffIds = new Set();
-    const partNodes = Array.from(score.querySelectorAll(":scope > Part")).filter((part) => { var _a, _b; return ((_b = (_a = part.parentElement) === null || _a === void 0 ? void 0 : _a.tagName) !== null && _b !== void 0 ? _b : "").toLowerCase() === "score"; });
+    const partNodes = directChildrenByTag(score, "Part").filter((part) => { var _a, _b; return ((_b = (_a = part.parentElement) === null || _a === void 0 ? void 0 : _a.tagName) !== null && _b !== void 0 ? _b : "").toLowerCase() === "score"; });
     const groupedStaffIds = [];
     const orderedStaffIds = Array.from(staffById.keys());
     let nextFallbackStaffIndex = 0;
     for (let partIndex = 0; partIndex < partNodes.length; partIndex += 1) {
         const part = partNodes[partIndex];
         const partName = readPartNameFromMusePart(part, `P${partIndex + 1}`);
-        const partStaffDefs = Array.from(part.querySelectorAll(":scope > Staff"));
+        const partStaffDefs = directChildrenByTag(part, "Staff");
         const explicitIds = partStaffDefs
             .map((staffEl) => { var _a; return ((_a = staffEl.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim(); })
             .filter((id) => id.length > 0 && staffById.has(id));
@@ -12226,7 +11933,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
             const sourceStaffId = (_g = group.staffIds[localStaffIndex]) !== null && _g !== void 0 ? _g : `${localStaffIndex + 1}`;
             const staff = (_h = staffById.get(sourceStaffId)) !== null && _h !== void 0 ? _h : doc.createElement("Staff");
             const clef = (_j = partClefOverrides.get(sourceStaffId)) !== null && _j !== void 0 ? _j : readClefForMuseStaff(staff);
-            const measures = Array.from(staff.querySelectorAll(":scope > Measure"));
+            const measures = directChildrenByTag(staff, "Measure");
             if (!measures.length) {
                 parsedStaffs.push({
                     sourceStaffId,
@@ -12382,11 +12089,11 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                     const children = Array.from(holder.children);
                     for (const event of children) {
                         const tag = event.tagName.toLowerCase();
-                        const trackNo = Math.round((_s = firstNumber(event, ":scope > track")) !== null && _s !== void 0 ? _s : NaN);
+                        const trackNo = Math.round((_s = firstNumber(event, "track")) !== null && _s !== void 0 ? _s : NaN);
                         const voiceNo = Number.isFinite(trackNo)
                             ? Math.max(1, Math.min(4, (Math.max(0, trackNo) % 4) + 1))
                             : defaultVoiceNo;
-                        const moveRaw = Math.round((_t = firstNumber(event, ":scope > move")) !== null && _t !== void 0 ? _t : NaN);
+                        const moveRaw = Math.round((_t = firstNumber(event, "move")) !== null && _t !== void 0 ? _t : NaN);
                         const movedStaffNo = Number.isFinite(moveRaw)
                             ? Math.max(1, localStaffIndex + 1 + Math.round(moveRaw))
                             : (localStaffIndex + 1);
@@ -12396,10 +12103,10 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                             continue;
                         }
                         if (tag === "tuplet") {
-                            const normalNotes = Math.round((_v = firstNumber(event, ":scope > normalNotes")) !== null && _v !== void 0 ? _v : 0);
-                            const actualNotes = Math.round((_w = firstNumber(event, ":scope > actualNotes")) !== null && _w !== void 0 ? _w : 0);
-                            const numberType = Math.round((_x = firstNumber(event, ":scope > numberType")) !== null && _x !== void 0 ? _x : NaN);
-                            const bracketType = Math.round((_y = firstNumber(event, ":scope > bracketType")) !== null && _y !== void 0 ? _y : NaN);
+                            const normalNotes = Math.round((_v = firstNumber(event, "normalNotes")) !== null && _v !== void 0 ? _v : 0);
+                            const actualNotes = Math.round((_w = firstNumber(event, "actualNotes")) !== null && _w !== void 0 ? _w : 0);
+                            const numberType = Math.round((_x = firstNumber(event, "numberType")) !== null && _x !== void 0 ? _x : NaN);
+                            const bracketType = Math.round((_y = firstNumber(event, "bracketType")) !== null && _y !== void 0 ? _y : NaN);
                             const showNumber = Number.isFinite(numberType)
                                 ? (numberType === 2 ? "none" : "actual")
                                 : undefined;
@@ -12454,7 +12161,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                         if (tag === "rest") {
                             const parsed = parseDurationDiv(event, divisions, capacityDiv);
                             const displayDurationDiv = parsed === null ? null : Math.max(1, Math.round(parsed));
-                            const tupletRefId = ((_1 = (_0 = event.querySelector(":scope > Tuplet")) === null || _0 === void 0 ? void 0 : _0.textContent) !== null && _1 !== void 0 ? _1 : "").trim() || null;
+                            const tupletRefId = ((_1 = (_0 = event.querySelector("Tuplet")) === null || _0 === void 0 ? void 0 : _0.textContent) !== null && _1 !== void 0 ? _1 : "").trim() || null;
                             const tupletRef = tupletRefId ? tupletDefinitionById.get(tupletRefId) : undefined;
                             const tupletScale = tupletRef
                                 ? (tupletRef.normalNotes / tupletRef.actualNotes)
@@ -12494,7 +12201,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                                 });
                                 activeTupletRefId = tupletRefId;
                             }
-                            const beamModeRaw = ((_3 = (_2 = event.querySelector(":scope > BeamMode")) === null || _2 === void 0 ? void 0 : _2.textContent) !== null && _3 !== void 0 ? _3 : "").trim().toLowerCase();
+                            const beamModeRaw = ((_3 = (_2 = event.querySelector("BeamMode")) === null || _2 === void 0 ? void 0 : _2.textContent) !== null && _3 !== void 0 ? _3 : "").trim().toLowerCase();
                             const beamMode = beamModeRaw === "begin" || beamModeRaw === "mid" ? beamModeRaw : undefined;
                             events.push({
                                 kind: "rest",
@@ -12515,12 +12222,12 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                             continue;
                         }
                         if (tag === "chord") {
-                            const isAcciaccatura = event.querySelector(":scope > acciaccatura") !== null;
-                            const isAppoggiatura = event.querySelector(":scope > appoggiatura") !== null;
-                            const isGrace = isAcciaccatura || isAppoggiatura || event.querySelector(":scope > grace") !== null;
+                            const isAcciaccatura = event.querySelector("acciaccatura") !== null;
+                            const isAppoggiatura = event.querySelector("appoggiatura") !== null;
+                            const isGrace = isAcciaccatura || isAppoggiatura || event.querySelector("grace") !== null;
                             const parsed = parseDurationDiv(event, divisions, capacityDiv);
                             const displayDurationDiv = parsed === null ? null : Math.max(1, Math.round(parsed));
-                            const tupletRefId = ((_5 = (_4 = event.querySelector(":scope > Tuplet")) === null || _4 === void 0 ? void 0 : _4.textContent) !== null && _5 !== void 0 ? _5 : "").trim() || null;
+                            const tupletRefId = ((_5 = (_4 = event.querySelector("Tuplet")) === null || _4 === void 0 ? void 0 : _4.textContent) !== null && _5 !== void 0 ? _5 : "").trim() || null;
                             const tupletRef = tupletRefId ? tupletDefinitionById.get(tupletRefId) : undefined;
                             const tupletScale = tupletRef
                                 ? (tupletRef.normalNotes / tupletRef.actualNotes)
@@ -12671,7 +12378,7 @@ const convertMuseScoreToMusicXml = (mscxSource, options = {}) => {
                                 });
                                 activeTupletRefId = tupletRefId;
                             }
-                            const beamModeRaw = ((_11 = (_10 = event.querySelector(":scope > BeamMode")) === null || _10 === void 0 ? void 0 : _10.textContent) !== null && _11 !== void 0 ? _11 : "").trim().toLowerCase();
+                            const beamModeRaw = ((_11 = (_10 = event.querySelector("BeamMode")) === null || _10 === void 0 ? void 0 : _10.textContent) !== null && _11 !== void 0 ? _11 : "").trim().toLowerCase();
                             const beamMode = beamModeRaw === "begin" || beamModeRaw === "mid" ? beamModeRaw : undefined;
                             events.push({
                                 kind: "chord",
