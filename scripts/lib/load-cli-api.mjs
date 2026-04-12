@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -83,6 +84,67 @@ function compileGraph(rootDir) {
   return tempDir;
 }
 
+function buildGraphFingerprint(rootDir, graph) {
+  const hash = crypto.createHash("sha256");
+  for (const tsId of graph) {
+    const absPath = path.resolve(rootDir, tsId);
+    const stat = fs.statSync(absPath);
+    hash.update(tsId);
+    hash.update("\0");
+    hash.update(String(stat.mtimeMs));
+    hash.update("\0");
+    hash.update(String(stat.size));
+    hash.update("\0");
+  }
+
+  const verovioStat = fs.statSync(path.resolve(rootDir, VEROVIO_JS));
+  hash.update(VEROVIO_JS);
+  hash.update("\0");
+  hash.update(String(verovioStat.mtimeMs));
+  hash.update("\0");
+  hash.update(String(verovioStat.size));
+  hash.update("\0");
+
+  return hash.digest("hex");
+}
+
+function ensureCompiledCache(rootDir) {
+  const graph = collectGraph(rootDir);
+  const fingerprint = buildGraphFingerprint(rootDir, graph);
+  const cacheDir = path.join(os.tmpdir(), "mikuscore-cli-api-cache", fingerprint);
+  const packageJsonPath = path.join(cacheDir, "package.json");
+  const entryPath = path.join(cacheDir, ENTRY_TS.replace(/\.ts$/, ".js"));
+  const verovioCjsPath = path.join(cacheDir, "verovio.cjs");
+
+  if (fs.existsSync(packageJsonPath) && fs.existsSync(entryPath) && fs.existsSync(verovioCjsPath)) {
+    return cacheDir;
+  }
+
+  fs.rmSync(cacheDir, { recursive: true, force: true });
+  fs.mkdirSync(cacheDir, { recursive: true });
+  fs.writeFileSync(packageJsonPath, JSON.stringify({ type: "commonjs" }), "utf8");
+
+  for (const tsId of graph) {
+    const src = readText(rootDir, tsId);
+    const transpiled = ts.transpileModule(src, {
+      fileName: tsId,
+      compilerOptions: {
+        target: ts.ScriptTarget.ES2018,
+        module: ts.ModuleKind.CommonJS,
+        moduleResolution: ts.ModuleResolutionKind.NodeJs,
+        lib: ["DOM", "DOM.Iterable", "ES2018"],
+        esModuleInterop: true,
+      },
+    });
+    const outPath = path.join(cacheDir, tsId.replace(/\.ts$/, ".js"));
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, transpiled.outputText, "utf8");
+  }
+
+  fs.copyFileSync(path.resolve(rootDir, VEROVIO_JS), verovioCjsPath);
+  return cacheDir;
+}
+
 function installWindowGlobals(window) {
   const previous = new Map();
   const keys = [
@@ -123,11 +185,9 @@ function installWindowGlobals(window) {
   };
 }
 
-function installVerovioRuntime(rootDir, tempDir) {
-  const verovioSourcePath = path.resolve(rootDir, VEROVIO_JS);
-  const verovioCjsPath = path.join(tempDir, "verovio.cjs");
-  fs.copyFileSync(verovioSourcePath, verovioCjsPath);
-  const requireFromTemp = createRequire(path.join(tempDir, "package.json"));
+function installVerovioRuntime(cacheDir) {
+  const verovioCjsPath = path.join(cacheDir, "verovio.cjs");
+  const requireFromTemp = createRequire(path.join(cacheDir, "package.json"));
   const verovio = requireFromTemp(verovioCjsPath);
   const previous = globalThis.window?.verovio;
   globalThis.window.verovio = verovio;
@@ -147,12 +207,12 @@ export function loadCliApi(options = {}) {
     url: "http://localhost/",
   });
   const restoreWindowGlobals = installWindowGlobals(dom.window);
-  const tempDir = compileGraph(rootDir);
-  const restoreVerovioRuntime = installVerovioRuntime(rootDir, tempDir);
-  const requireFromTemp = createRequire(path.join(tempDir, "package.json"));
+  const cacheDir = ensureCompiledCache(rootDir);
+  const restoreVerovioRuntime = installVerovioRuntime(cacheDir);
+  const requireFromTemp = createRequire(path.join(cacheDir, "package.json"));
 
   try {
-    const entryPath = path.join(tempDir, ENTRY_TS.replace(/\.ts$/, ".js"));
+    const entryPath = path.join(cacheDir, ENTRY_TS.replace(/\.ts$/, ".js"));
     const apiModule = requireFromTemp(entryPath);
     return {
       api: apiModule.cliApi,
@@ -160,14 +220,12 @@ export function loadCliApi(options = {}) {
         restoreVerovioRuntime();
         restoreWindowGlobals();
         dom.window.close();
-        fs.rmSync(tempDir, { recursive: true, force: true });
       },
     };
   } catch (error) {
     restoreVerovioRuntime();
     restoreWindowGlobals();
     dom.window.close();
-    fs.rmSync(tempDir, { recursive: true, force: true });
     throw error;
   }
 }

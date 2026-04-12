@@ -11014,7 +11014,14 @@ const firstDirectChildByTag = (parent, tagName) => {
 const readFirstVBoxTextByStyle = (score, styleName) => {
     var _a, _b, _c, _d;
     const lowerStyle = styleName.trim().toLowerCase();
-    const textNodes = directChildrenByTag(score, "Staff").flatMap((staff) => directChildrenByTag(staff, "VBox").flatMap((vbox) => directChildrenByTag(vbox, "Text")));
+    const textNodes = [];
+    for (const staff of directChildrenByTag(score, "Staff")) {
+        for (const vbox of directChildrenByTag(staff, "VBox")) {
+            for (const textNode of directChildrenByTag(vbox, "Text")) {
+                textNodes.push(textNode);
+            }
+        }
+    }
     for (const textNode of textNodes) {
         const style = ((_b = (_a = firstDirectChildByTag(textNode, "style")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
         if (style !== lowerStyle)
@@ -21368,7 +21375,10 @@ function splitBodyTextByInlineVoice(text, initialVoiceId) {
     if (buffer.trim()) {
         segments.push({ voiceId: activeVoiceId, text: buffer });
     }
-    return segments;
+    return {
+        segments,
+        finalVoiceId: activeVoiceId,
+    };
 }
 function splitBodyTextByOverlay(text, baseVoiceId) {
     const raw = String(text || "");
@@ -21547,7 +21557,7 @@ function parseForMusicXml(source, settings) {
             return;
         }
         bodyStarted = true;
-        const inlineVoiceSegments = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
+        const { segments: inlineVoiceSegments, finalVoiceId } = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
         for (const segment of inlineVoiceSegments) {
             const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
             for (const overlaySegment of overlaySegments) {
@@ -21569,6 +21579,7 @@ function parseForMusicXml(source, settings) {
                 bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
             }
         }
+        currentVoiceId = String(finalVoiceId || voiceId || "1").trim() || "1";
     }
     for (let i = 0; i < lines.length; i += 1) {
         const lineNo = i + 1;
