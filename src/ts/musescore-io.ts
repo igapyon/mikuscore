@@ -633,10 +633,8 @@ const readPartTransposeFromMusicXml = (part: Element): { diatonic?: number; chro
 
 const readPartTransposeFromMusePart = (part: Element): { diatonic?: number; chromatic?: number } | null => {
   const diatonic = firstNumber(part, "Instrument > transposeDiatonic")
-    ?? firstNumber(part, "Instrument > mksTransposeDiatonic")
     ?? firstNumber(part, "transpose > diatonic");
   const chromatic = firstNumber(part, "Instrument > transposeChromatic")
-    ?? firstNumber(part, "Instrument > mksTransposeChromatic")
     ?? firstNumber(part, "transpose > chromatic");
   const out: { diatonic?: number; chromatic?: number } = {};
   if (Number.isFinite(diatonic)) out.diatonic = Math.round(Number(diatonic));
@@ -3270,7 +3268,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
         return `<clef staff="${staffNo}">${museClef}</clef>`;
       })
       .join("");
-    const instrumentTransposeXml = `${Number.isFinite(partTranspose?.diatonic) ? `<transposeDiatonic>${Math.round(Number(partTranspose?.diatonic))}</transposeDiatonic><mksTransposeDiatonic>${Math.round(Number(partTranspose?.diatonic))}</mksTransposeDiatonic>` : ""}${Number.isFinite(partTranspose?.chromatic) ? `<transposeChromatic>${Math.round(Number(partTranspose?.chromatic))}</transposeChromatic><mksTransposeChromatic>${Math.round(Number(partTranspose?.chromatic))}</mksTransposeChromatic>` : ""}`;
+    const instrumentTransposeXml = `${Number.isFinite(partTranspose?.diatonic) ? `<transposeDiatonic>${Math.round(Number(partTranspose?.diatonic))}</transposeDiatonic>` : ""}${Number.isFinite(partTranspose?.chromatic) ? `<transposeChromatic>${Math.round(Number(partTranspose?.chromatic))}</transposeChromatic>` : ""}`;
     const instrumentNameXml = `<trackName>${xmlEscape(partName)}</trackName><longName>${xmlEscape(partName)}</longName>${partAbbreviation ? `<shortName>${xmlEscape(partAbbreviation)}</shortName>` : ""}`;
     const instrumentXml = `<Instrument>${instrumentNameXml}${instrumentClefXml}${instrumentTransposeXml}</Instrument>`;
     const partStaffDefsXml = staffIds
