@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 export const UPPER_STAFF_HOLD_MIN = 55;
 export const LOWER_STAFF_HOLD_MAX = 64;
 export const STAFF_SPLIT_C4 = 60;
@@ -48,4 +53,3 @@ export const pickStaffForClusterWithHysteresis = (
   }
   return maxClusterKey >= STAFF_SPLIT_C4 ? 1 : 2;
 };
-

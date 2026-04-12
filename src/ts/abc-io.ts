@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @ts-nocheck
 import { computeBeamAssignments } from "./beam-common";
 import {
