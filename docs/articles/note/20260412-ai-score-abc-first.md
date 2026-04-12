@@ -2,7 +2,7 @@
 
 - 掲載先: Note
 - URL: https://note.com/toshikiigaa/n/n5362ea076328
-- タイトル: `[mikuscore] 生成AI に譜面対応させたくて、まず ABC 記譜法に寄っていった話`
+- タイトル: `[mikuscore-skills] 生成AI に譜面対応させたくて、まず ABC 記譜法に寄っていった話`
 - ハッシュタグ: `生成AI`, `ABC記譜法`, `譜面`, `MusicXML`, `MIDI`, `musescore`, `mikuku`, `文字譜`, `mikuscore`
 
 ----------------------------------------------------------------
