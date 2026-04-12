@@ -664,6 +664,24 @@ const readMuseKeyFifths = (
   return Math.max(-7, Math.min(7, Math.round(resolved)));
 };
 
+const normalizeKeyFifthsToMuseRange = (fifths: number): number => {
+  if (!Number.isFinite(fifths)) return 0;
+  let normalized = Math.round(fifths);
+  while (normalized > 7) normalized -= 12;
+  while (normalized < -7) normalized += 12;
+  return normalized;
+};
+
+const resolveMuseExportKeySigXml = (writtenFifths: number, transpose: { diatonic?: number; chromatic?: number } | null): string => {
+  const normalizedWritten = normalizeKeyFifthsToMuseRange(writtenFifths);
+  const chromatic = Number.isFinite(transpose?.chromatic) ? Math.round(Number(transpose?.chromatic)) : null;
+  if (chromatic === null) {
+    return `<KeySig><accidental>${normalizedWritten}</accidental><concertKey>${normalizedWritten}</concertKey></KeySig>`;
+  }
+  const concertKey = normalizeKeyFifthsToMuseRange(normalizedWritten + (7 * chromatic));
+  return `<KeySig><accidental>${normalizedWritten}</accidental><concertKey>${concertKey}</concertKey><transposeKey>${normalizedWritten}</transposeKey></KeySig>`;
+};
+
 const buildTransposeXml = (transpose: { diatonic?: number; chromatic?: number } | null): string => {
   if (!transpose) return "";
   const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
@@ -3387,7 +3405,7 @@ export const exportMusicXmlDomToMuseScore = (doc: Document, options: MuseScoreEx
               voiceXml += `<TimeSig>${cutSubtypeXml}<sigN>${effectiveMeasureBeats}</sigN><sigD>${effectiveMeasureBeatType}</sigD></TimeSig>`;
             }
             if (shouldWriteKey) {
-              voiceXml += `<KeySig><accidental>${measureFifths}</accidental></KeySig>`;
+              voiceXml += resolveMuseExportKeySigXml(measureFifths, partTranspose);
             }
             if (needsDoubleBarlineAtMeasureStart) {
               voiceXml += `<BarLine><subtype>double</subtype></BarLine>`;

@@ -11635,6 +11635,25 @@ const readMuseKeyFifths = (node, options = { transposingPart: false }) => {
         return null;
     return Math.max(-7, Math.min(7, Math.round(resolved)));
 };
+const normalizeKeyFifthsToMuseRange = (fifths) => {
+    if (!Number.isFinite(fifths))
+        return 0;
+    let normalized = Math.round(fifths);
+    while (normalized > 7)
+        normalized -= 12;
+    while (normalized < -7)
+        normalized += 12;
+    return normalized;
+};
+const resolveMuseExportKeySigXml = (writtenFifths, transpose) => {
+    const normalizedWritten = normalizeKeyFifthsToMuseRange(writtenFifths);
+    const chromatic = Number.isFinite(transpose === null || transpose === void 0 ? void 0 : transpose.chromatic) ? Math.round(Number(transpose === null || transpose === void 0 ? void 0 : transpose.chromatic)) : null;
+    if (chromatic === null) {
+        return `<KeySig><accidental>${normalizedWritten}</accidental><concertKey>${normalizedWritten}</concertKey></KeySig>`;
+    }
+    const concertKey = normalizeKeyFifthsToMuseRange(normalizedWritten + (7 * chromatic));
+    return `<KeySig><accidental>${normalizedWritten}</accidental><concertKey>${concertKey}</concertKey><transposeKey>${normalizedWritten}</transposeKey></KeySig>`;
+};
 const buildTransposeXml = (transpose) => {
     if (!transpose)
         return "";
@@ -14215,7 +14234,7 @@ const exportMusicXmlDomToMuseScore = (doc, options = {}) => {
                             voiceXml += `<TimeSig>${cutSubtypeXml}<sigN>${effectiveMeasureBeats}</sigN><sigD>${effectiveMeasureBeatType}</sigD></TimeSig>`;
                         }
                         if (shouldWriteKey) {
-                            voiceXml += `<KeySig><accidental>${measureFifths}</accidental></KeySig>`;
+                            voiceXml += resolveMuseExportKeySigXml(measureFifths, partTranspose);
                         }
                         if (needsDoubleBarlineAtMeasureStart) {
                             voiceXml += `<BarLine><subtype>double</subtype></BarLine>`;

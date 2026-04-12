@@ -798,7 +798,7 @@ describe("musescore-io", () => {
     expect(mscx).toContain("<museScore");
     expect(mscx).toContain("<Staff id=\"1\">");
     expect(mscx).toContain("<TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig>");
-    expect(mscx).toContain("<KeySig><accidental>1</accidental></KeySig>");
+    expect(mscx).toContain("<KeySig><accidental>1</accidental><concertKey>1</concertKey></KeySig>");
     expect(mscx).toContain("<Tempo><tempo>2.000000</tempo></Tempo>");
     expect(mscx).toContain("<Dynamic><subtype>mf</subtype></Dynamic>");
     expect(mscx).toContain("<endRepeat/>");
@@ -2861,6 +2861,7 @@ describe("musescore-io", () => {
     const mscx = exportMusicXmlDomToMuseScore(sourceDoc);
     expect(mscx).toContain("<transposeDiatonic>-2</transposeDiatonic>");
     expect(mscx).toContain("<transposeChromatic>-3</transposeChromatic>");
+    expect(mscx).toContain("<KeySig><accidental>0</accidental><concertKey>3</concertKey><transposeKey>0</transposeKey></KeySig>");
 
     const roundtrip = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
     const outDoc = parseMusicXmlDocument(roundtrip);
