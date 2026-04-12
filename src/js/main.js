@@ -21332,6 +21332,75 @@ const keyFromFifthsMode = (fifths, mode) => {
     }
     return major[idx];
 };
+const fractionToAbcTempoUnit = (fraction) => {
+    const reduced = reduceFraction(fraction.num, fraction.den, { num: 1, den: 4 });
+    return `${reduced.num}/${reduced.den}`;
+};
+const metronomeUnitFractionFromMusicXml = (metronome) => {
+    var _a, _b;
+    if (!metronome)
+        return null;
+    const beatUnit = ((_b = (_a = metronome.querySelector(":scope > beat-unit")) === null || _a === void 0 ? void 0 : _a.textContent) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
+    const dotCount = metronome.querySelectorAll(":scope > beat-unit-dot").length;
+    const baseByUnit = {
+        whole: { num: 1, den: 1 },
+        half: { num: 1, den: 2 },
+        quarter: { num: 1, den: 4 },
+        eighth: { num: 1, den: 8 },
+        "16th": { num: 1, den: 16 },
+        "32nd": { num: 1, den: 32 },
+        "64th": { num: 1, den: 64 },
+    };
+    const base = baseByUnit[beatUnit];
+    if (!base)
+        return null;
+    let total = reduceFraction(base.num, base.den, base);
+    let add = total;
+    for (let i = 0; i < dotCount; i += 1) {
+        add = divideFractions(add, { num: 2, den: 1 }, add);
+        total = reduceFraction((total.num * add.den) + (add.num * total.den), total.den * add.den, total);
+    }
+    return total;
+};
+const readInitialTempoFromMusicXml = (doc) => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const firstPart = doc.querySelector("score-partwise > part");
+    const firstMeasure = firstPart === null || firstPart === void 0 ? void 0 : firstPart.querySelector(":scope > measure");
+    if (!firstMeasure)
+        return null;
+    const leadingDirections = Array.from(firstMeasure.children).filter((child) => {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "direction")
+            return true;
+        if (tag === "attributes" || tag === "print" || tag === "sound" || tag === "bookmark")
+            return true;
+        return false;
+    });
+    const candidates = [];
+    for (const child of leadingDirections) {
+        const tag = child.tagName.toLowerCase();
+        if (tag === "direction") {
+            const metronome = child.querySelector(":scope > direction-type > metronome");
+            const soundTempo = Number((_b = (_a = child.querySelector(":scope > sound")) === null || _a === void 0 ? void 0 : _a.getAttribute("tempo")) !== null && _b !== void 0 ? _b : "");
+            const metronomeTempo = Number((_e = (_d = (_c = metronome === null || metronome === void 0 ? void 0 : metronome.querySelector(":scope > per-minute")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "");
+            if (Number.isFinite(soundTempo) && soundTempo > 0) {
+                candidates.push({ bpm: soundTempo, unit: null });
+            }
+            if (Number.isFinite(metronomeTempo) && metronomeTempo > 0) {
+                candidates.push({ bpm: metronomeTempo, unit: metronomeUnitFractionFromMusicXml(metronome) });
+            }
+            continue;
+        }
+        if (tag === "sound") {
+            const bpm = Number((_f = child.getAttribute("tempo")) !== null && _f !== void 0 ? _f : "");
+            if (Number.isFinite(bpm) && bpm > 0)
+                candidates.push({ bpm, unit: null });
+        }
+    }
+    if (!candidates.length)
+        return null;
+    return (_g = candidates[candidates.length - 1]) !== null && _g !== void 0 ? _g : null;
+};
 const fifthsFromAbcKey = (raw) => {
     const table = {
         C: 0,
@@ -23791,7 +23860,7 @@ if (typeof window !== "undefined") {
     window.AbcCompatParser = exports.AbcCompatParser;
 }
 const exportMusicXmlDomToAbc = (doc) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
     const title = ((_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) ||
         ((_d = (_c = doc.querySelector("movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) ||
         "mikuscore";
@@ -23802,17 +23871,22 @@ const exportMusicXmlDomToAbc = (doc) => {
     const fifths = Number(((_m = (_l = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > key > fifths")) === null || _l === void 0 ? void 0 : _l.textContent) === null || _m === void 0 ? void 0 : _m.trim()) || "0");
     const mode = ((_p = (_o = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > key > mode")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) || "major";
     const key = exports.AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
-    const explicitTempo = Number((_r = (_q = doc.querySelector("sound[tempo]")) === null || _q === void 0 ? void 0 : _q.getAttribute("tempo")) !== null && _r !== void 0 ? _r : "");
-    const metronomeTempo = Number((_u = (_t = (_s = doc.querySelector("direction-type > metronome > per-minute")) === null || _s === void 0 ? void 0 : _s.textContent) === null || _t === void 0 ? void 0 : _t.trim()) !== null && _u !== void 0 ? _u : "");
-    const tempoBpm = Number.isFinite(explicitTempo) && explicitTempo > 0
-        ? explicitTempo
-        : (Number.isFinite(metronomeTempo) && metronomeTempo > 0 ? metronomeTempo : NaN);
+    const initialTempo = readInitialTempoFromMusicXml(doc);
+    const tempoBpm = (_q = initialTempo === null || initialTempo === void 0 ? void 0 : initialTempo.bpm) !== null && _q !== void 0 ? _q : NaN;
+    const abcTempoHeader = (() => {
+        if ((initialTempo === null || initialTempo === void 0 ? void 0 : initialTempo.unit) && Number.isFinite(initialTempo.bpm) && initialTempo.bpm > 0) {
+            return `Q:${fractionToAbcTempoUnit(initialTempo.unit)}=${Math.round(initialTempo.bpm)}`;
+        }
+        if (Number.isFinite(tempoBpm))
+            return `Q:1/4=${Math.round(tempoBpm)}`;
+        return "";
+    })();
     const partNameById = new Map();
     for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-        const id = (_v = scorePart.getAttribute("id")) !== null && _v !== void 0 ? _v : "";
+        const id = (_r = scorePart.getAttribute("id")) !== null && _r !== void 0 ? _r : "";
         if (!id)
             continue;
-        const name = ((_x = (_w = scorePart.querySelector("part-name")) === null || _w === void 0 ? void 0 : _w.textContent) === null || _x === void 0 ? void 0 : _x.trim()) || id;
+        const name = ((_t = (_s = scorePart.querySelector("part-name")) === null || _s === void 0 ? void 0 : _s.textContent) === null || _t === void 0 ? void 0 : _t.trim()) || id;
         partNameById.set(id, name);
     }
     const unitLength = { num: 1, den: 8 };
@@ -23877,7 +23951,7 @@ const exportMusicXmlDomToAbc = (doc) => {
         composer ? `C:${composer}` : "",
         `M:${meterBeats}/${meterBeatType}`,
         "L:1/8",
-        Number.isFinite(tempoBpm) ? `Q:1/4=${Math.round(tempoBpm)}` : "",
+        abcTempoHeader,
         `K:${key}`,
     ].filter(Boolean);
     const bodyLines = [];

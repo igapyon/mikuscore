@@ -159,6 +159,69 @@ const keyFromFifthsMode = (fifths: number, mode: string): string => {
   return major[idx];
 };
 
+const fractionToAbcTempoUnit = (fraction: Fraction): string => {
+  const reduced = reduceFraction(fraction.num, fraction.den, { num: 1, den: 4 });
+  return `${reduced.num}/${reduced.den}`;
+};
+
+const metronomeUnitFractionFromMusicXml = (metronome: Element | null): Fraction | null => {
+  if (!metronome) return null;
+  const beatUnit = (metronome.querySelector(":scope > beat-unit")?.textContent ?? "").trim().toLowerCase();
+  const dotCount = metronome.querySelectorAll(":scope > beat-unit-dot").length;
+  const baseByUnit: Record<string, Fraction> = {
+    whole: { num: 1, den: 1 },
+    half: { num: 1, den: 2 },
+    quarter: { num: 1, den: 4 },
+    eighth: { num: 1, den: 8 },
+    "16th": { num: 1, den: 16 },
+    "32nd": { num: 1, den: 32 },
+    "64th": { num: 1, den: 64 },
+  };
+  const base = baseByUnit[beatUnit];
+  if (!base) return null;
+  let total = reduceFraction(base.num, base.den, base);
+  let add = total;
+  for (let i = 0; i < dotCount; i += 1) {
+    add = divideFractions(add, { num: 2, den: 1 }, add);
+    total = reduceFraction((total.num * add.den) + (add.num * total.den), total.den * add.den, total);
+  }
+  return total;
+};
+
+const readInitialTempoFromMusicXml = (doc: Document): { bpm: number; unit: Fraction | null } | null => {
+  const firstPart = doc.querySelector("score-partwise > part");
+  const firstMeasure = firstPart?.querySelector(":scope > measure");
+  if (!firstMeasure) return null;
+  const leadingDirections = Array.from(firstMeasure.children).filter((child) => {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "direction") return true;
+    if (tag === "attributes" || tag === "print" || tag === "sound" || tag === "bookmark") return true;
+    return false;
+  });
+  const candidates: Array<{ bpm: number; unit: Fraction | null }> = [];
+  for (const child of leadingDirections) {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "direction") {
+      const metronome = child.querySelector(":scope > direction-type > metronome");
+      const soundTempo = Number(child.querySelector(":scope > sound")?.getAttribute("tempo") ?? "");
+      const metronomeTempo = Number(metronome?.querySelector(":scope > per-minute")?.textContent?.trim() ?? "");
+      if (Number.isFinite(soundTempo) && soundTempo > 0) {
+        candidates.push({ bpm: soundTempo, unit: null });
+      }
+      if (Number.isFinite(metronomeTempo) && metronomeTempo > 0) {
+        candidates.push({ bpm: metronomeTempo, unit: metronomeUnitFractionFromMusicXml(metronome) });
+      }
+      continue;
+    }
+    if (tag === "sound") {
+      const bpm = Number(child.getAttribute("tempo") ?? "");
+      if (Number.isFinite(bpm) && bpm > 0) candidates.push({ bpm, unit: null });
+    }
+  }
+  if (!candidates.length) return null;
+  return candidates[candidates.length - 1] ?? null;
+};
+
 const fifthsFromAbcKey = (raw: string): number | null => {
   const table: Record<string, number> = {
     C: 0,
@@ -2830,13 +2893,15 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const fifths = Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() || "0");
   const mode = firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() || "major";
   const key = AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
-  const explicitTempo = Number(doc.querySelector("sound[tempo]")?.getAttribute("tempo") ?? "");
-  const metronomeTempo = Number(
-    doc.querySelector("direction-type > metronome > per-minute")?.textContent?.trim() ?? ""
-  );
-  const tempoBpm = Number.isFinite(explicitTempo) && explicitTempo > 0
-    ? explicitTempo
-    : (Number.isFinite(metronomeTempo) && metronomeTempo > 0 ? metronomeTempo : NaN);
+  const initialTempo = readInitialTempoFromMusicXml(doc);
+  const tempoBpm = initialTempo?.bpm ?? NaN;
+  const abcTempoHeader = (() => {
+    if (initialTempo?.unit && Number.isFinite(initialTempo.bpm) && initialTempo.bpm > 0) {
+      return `Q:${fractionToAbcTempoUnit(initialTempo.unit)}=${Math.round(initialTempo.bpm)}`;
+    }
+    if (Number.isFinite(tempoBpm)) return `Q:1/4=${Math.round(tempoBpm)}`;
+    return "";
+  })();
 
   const partNameById = new Map<string, string>();
   for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
@@ -2893,7 +2958,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
     composer ? `C:${composer}` : "",
     `M:${meterBeats}/${meterBeatType}`,
     "L:1/8",
-    Number.isFinite(tempoBpm) ? `Q:1/4=${Math.round(tempoBpm)}` : "",
+    abcTempoHeader,
     `K:${key}`,
   ].filter(Boolean);
 
