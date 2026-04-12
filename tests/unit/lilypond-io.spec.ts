@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "../../src/ts/lilypond-io";

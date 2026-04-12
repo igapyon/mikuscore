@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { Diagnostic, SaveResult } from "../../core/interfaces";
 import {
   buildMidiBytesForPlayback,

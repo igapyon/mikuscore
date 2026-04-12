@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { RenderDocBundle } from "./musicxml-io";
 import { renderMusicXmlDomToSvg } from "./verovio-out";
 

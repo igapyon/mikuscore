@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { lexAbcAccidental, lexAbcLengthToken, lexAbcNote } from "./abc-lexer";
 
 // Low-level parsed note and pitch data.
