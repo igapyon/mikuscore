@@ -345,7 +345,10 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
     if (buffer.trim()) {
       segments.push({ voiceId: activeVoiceId, text: buffer });
     }
-    return segments;
+    return {
+      segments,
+      finalVoiceId: activeVoiceId,
+    };
   }
 
   function splitBodyTextByOverlay(text, baseVoiceId) {
@@ -537,7 +540,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
         return;
       }
       bodyStarted = true;
-      const inlineVoiceSegments = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
+      const { segments: inlineVoiceSegments, finalVoiceId } = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
       for (const segment of inlineVoiceSegments) {
         const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
         for (const overlaySegment of overlaySegments) {
@@ -559,6 +562,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
           bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
         }
       }
+      currentVoiceId = String(finalVoiceId || voiceId || "1").trim() || "1";
     }
 
     for (let i = 0; i < lines.length; i += 1) {

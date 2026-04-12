@@ -132,9 +132,14 @@ const firstDirectChildByTag = (parent: ParentNode, tagName: string): Element | n
 
 const readFirstVBoxTextByStyle = (score: Element, styleName: string): string => {
   const lowerStyle = styleName.trim().toLowerCase();
-  const textNodes = directChildrenByTag(score, "Staff").flatMap((staff) =>
-    directChildrenByTag(staff, "VBox").flatMap((vbox) => directChildrenByTag(vbox, "Text"))
-  );
+  const textNodes: Element[] = [];
+  for (const staff of directChildrenByTag(score, "Staff")) {
+    for (const vbox of directChildrenByTag(staff, "VBox")) {
+      for (const textNode of directChildrenByTag(vbox, "Text")) {
+        textNodes.push(textNode);
+      }
+    }
+  }
   for (const textNode of textNodes) {
     const style = (firstDirectChildByTag(textNode, "style")?.textContent ?? "").trim().toLowerCase();
     if (style !== lowerStyle) continue;

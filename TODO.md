@@ -12,6 +12,13 @@
     - `scripts/lib/load-cli-api.mjs`
   - Re-evaluate whether Step 2 should keep this loader or move to a build-produced CLI entry.
 
+- [ ] Investigate the root cause of `load-cli-api.mjs` runtime fragility before changing its compilation strategy.
+  - Scope:
+    - `scripts/lib/load-cli-api.mjs`
+  - Current stance:
+    - do not switch to a `tsc` CLI subprocess workaround without a clearer root-cause explanation
+    - prefer understanding why direct runtime TypeScript loading fails in some environments before accepting a different bootstrap path
+
 - [ ] Harden Step 2 MIDI conversion pairs.
   - Current first cut exists for:
     - `mikuscore convert --from midi --to musicxml`
