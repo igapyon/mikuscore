@@ -11608,9 +11608,9 @@ const readPartTransposeFromMusicXml = (part) => {
     return Object.keys(out).length ? out : null;
 };
 const readPartTransposeFromMusePart = (part) => {
-    var _a, _b, _c, _d;
-    const diatonic = (_b = (_a = firstNumber(part, "Instrument > transposeDiatonic")) !== null && _a !== void 0 ? _a : firstNumber(part, "Instrument > mksTransposeDiatonic")) !== null && _b !== void 0 ? _b : firstNumber(part, "transpose > diatonic");
-    const chromatic = (_d = (_c = firstNumber(part, "Instrument > transposeChromatic")) !== null && _c !== void 0 ? _c : firstNumber(part, "Instrument > mksTransposeChromatic")) !== null && _d !== void 0 ? _d : firstNumber(part, "transpose > chromatic");
+    var _a, _b;
+    const diatonic = (_a = firstNumber(part, "Instrument > transposeDiatonic")) !== null && _a !== void 0 ? _a : firstNumber(part, "transpose > diatonic");
+    const chromatic = (_b = firstNumber(part, "Instrument > transposeChromatic")) !== null && _b !== void 0 ? _b : firstNumber(part, "transpose > chromatic");
     const out = {};
     if (Number.isFinite(diatonic))
         out.diatonic = Math.round(Number(diatonic));
@@ -14115,7 +14115,7 @@ const exportMusicXmlDomToMuseScore = (doc, options = {}) => {
             return `<clef staff="${staffNo}">${museClef}</clef>`;
         })
             .join("");
-        const instrumentTransposeXml = `${Number.isFinite(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.diatonic) ? `<transposeDiatonic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.diatonic))}</transposeDiatonic><mksTransposeDiatonic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.diatonic))}</mksTransposeDiatonic>` : ""}${Number.isFinite(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.chromatic) ? `<transposeChromatic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.chromatic))}</transposeChromatic><mksTransposeChromatic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.chromatic))}</mksTransposeChromatic>` : ""}`;
+        const instrumentTransposeXml = `${Number.isFinite(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.diatonic) ? `<transposeDiatonic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.diatonic))}</transposeDiatonic>` : ""}${Number.isFinite(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.chromatic) ? `<transposeChromatic>${Math.round(Number(partTranspose === null || partTranspose === void 0 ? void 0 : partTranspose.chromatic))}</transposeChromatic>` : ""}`;
         const instrumentNameXml = `<trackName>${xmlEscape(partName)}</trackName><longName>${xmlEscape(partName)}</longName>${partAbbreviation ? `<shortName>${xmlEscape(partAbbreviation)}</shortName>` : ""}`;
         const instrumentXml = `<Instrument>${instrumentNameXml}${instrumentClefXml}${instrumentTransposeXml}</Instrument>`;
         const partStaffDefsXml = staffIds
