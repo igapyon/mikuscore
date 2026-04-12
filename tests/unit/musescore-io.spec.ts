@@ -224,6 +224,66 @@ describe("musescore-io", () => {
     expect(doc.querySelector("miscellaneous-field[name=\"mks:src:musescore:version\"]")?.textContent?.trim()).toBe("4.0");
   });
 
+  it("imports MuseScore concertKey when KeySig accidental is absent", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <KeySig><concertKey>-1</concertKey><mode>minor</mode></KeySig>
+          <TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig>
+          <Chord><durationType>quarter</durationType><Note><pitch>60</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    expect(doc.querySelector("part > measure > attributes > key > fifths")?.textContent?.trim()).toBe("-1");
+    expect(doc.querySelector("part > measure > attributes > key > mode")?.textContent?.trim()).toBe("minor");
+  });
+
+  it("prefers MuseScore transposeKey over concertKey for transposing instruments", () => {
+    const mscx = `<?xml version="1.0" encoding="UTF-8"?>
+<museScore version="4.0">
+  <Score>
+    <Division>480</Division>
+    <Part>
+      <trackName>Clarinet in A</trackName>
+      <Instrument>
+        <transposeDiatonic>-2</transposeDiatonic>
+        <transposeChromatic>-3</transposeChromatic>
+      </Instrument>
+      <Staff id="1"/>
+    </Part>
+    <Staff id="1">
+      <Measure>
+        <voice>
+          <KeySig><concertKey>3</concertKey><transposeKey>0</transposeKey><mode>major</mode></KeySig>
+          <TimeSig><sigN>3</sigN><sigD>4</sigD></TimeSig>
+          <Chord><durationType>quarter</durationType><Note><pitch>72</pitch></Note></Chord>
+        </voice>
+      </Measure>
+    </Staff>
+  </Score>
+</museScore>`;
+    const xml = convertMuseScoreToMusicXml(mscx, { sourceMetadata: false, debugMetadata: false });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    expect(doc.querySelector("part > measure > attributes > key > fifths")?.textContent?.trim()).toBe("0");
+    expect(doc.querySelector("part > measure > attributes > key > mode")?.textContent?.trim()).toBe("major");
+    expect(doc.querySelector("part > measure > attributes > transpose > diatonic")?.textContent?.trim()).toBe("-2");
+    expect(doc.querySelector("part > measure > attributes > transpose > chromatic")?.textContent?.trim()).toBe("-3");
+  });
+
   it("imports repeats from MuseScore BarLine subtype variants", () => {
     const mscx = `<?xml version="1.0" encoding="UTF-8"?>
 <museScore version="4.0">
