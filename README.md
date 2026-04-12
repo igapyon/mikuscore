@@ -109,6 +109,8 @@ Practical command split:
   - `docs/spec/SPEC.md`
   - `docs/spec/ARCHITECTURE.md`
   - `docs/spec/DIAGNOSTICS.md`
+  - `docs/spec/LOCAL_WORKFLOW.md`
+  - `docs/spec/BUILD_PROCESS.md`
   - `docs/spec/MUSESCORE_IO.md`
   - `docs/spec/MIDI_IO.md`
   - `docs/spec/ABC_IO.md`
@@ -231,6 +233,8 @@ mikuscore は、MusicXML を中核に据えた **譜面フォーマット変換�
   - `docs/spec/SPEC.md`
   - `docs/spec/ARCHITECTURE.md`
   - `docs/spec/DIAGNOSTICS.md`
+  - `docs/spec/LOCAL_WORKFLOW.md`
+  - `docs/spec/BUILD_PROCESS.md`
   - `docs/spec/MUSESCORE_IO.md`
   - `docs/spec/MIDI_IO.md`
   - `docs/spec/ABC_IO.md`

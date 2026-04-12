@@ -43,11 +43,13 @@
 3. fixture・テスト更新（必要時）
 4. `npm run check:all` 実行
 5. 差分確認
+6. downstream 影響確認
 
 補足:
 
 - 回帰不具合は、可能な限り最小 fixture を `tests/fixtures/` に固定する。
 - 一時的な検証ファイルは恒久管理しない（調査完了後に除去する）。
+- `mikuscore` の更新が shared behavior、format contract、生成物、AI handoff 前提に影響する場合は、`devel` を連携先とする downstream の `mikuscore-skills` および `miku-abc-player` 側でも追従作業が発生しうることを意識する。
 
 ## 4. 品質ゲート方針
 
