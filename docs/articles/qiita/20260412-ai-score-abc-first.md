@@ -1,12 +1,7 @@
 # 掲載先情報
 
 - 掲載先: Qiita
-- 公開記事タイトル: `生成AI に譜面対応させたくて、まず ABC 記譜法に寄っていった話`
 - URL: https://qiita.com/igapyon/items/8444b5f50d63207002c0
-- スクリーンショット挿入: Qiita に直接アップロード方式 / 未確認
-
-## Qiita 掲載用属性情報
-
 - タイトル: `生成AI に譜面対応させたくて、まず ABC 記譜法に寄っていった話`
 - タグ: `生成AI`, `ABC`, `楽譜`, `MusicXML`, `MIDI`
 
@@ -221,6 +216,11 @@ miku-abc-player のスクショ
   - https://github.com/igapyon/mikuscore-skills
 
 ソースコードは GitHub で公開しています。
+
+## 関連情報リンク
+
+- Note: `[mikuscore-skills] 生成AI に譜面対応させたくて、まず ABC 記譜法に寄っていった話`
+  - https://note.com/toshikiigaa/n/n5362ea076328
 
 ## `ABC` 記譜法
 
