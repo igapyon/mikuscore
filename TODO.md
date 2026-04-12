@@ -65,6 +65,10 @@
      */
     ```
 
+- [ ] Make MuseScore export fully 4.0+-native where compatibility fallback is not required.
+  - Keep compatibility fallbacks on import.
+  - Remove custom MuseScore transpose helper tags such as `mksTransposeDiatonic` / `mksTransposeChromatic` from export once related roundtrip/tests are updated.
+
 - [ ] After the current CLI series settles, prune this file again.
   - Remove items that have become fully implemented.
   - Keep only active backlog and intentionally retained long-term notes.
