@@ -44,6 +44,10 @@ The module is responsible for:
 - Time/key/tempo and staff/voice events are mapped into MusicXML measure structure.
 - Tuplet/slur/tie/ottava/trill/dynamic/direction mappings are handled at event level.
 - Unknown/unsupported input MAY generate `MUSESCORE_IMPORT_WARNING`.
+- MuseScore key signature import accepts multiple `KeySig` representations:
+  - For non-transposing parts, importer reads `KeySig > accidental` and also accepts `KeySig > concertKey`.
+  - For transposing parts, importer prefers `KeySig > transposeKey` so that MusicXML `key` remains in written pitch; `concertKey` is not used as the written key when transpose metadata is present.
+  - `KeySig > accidental` remains a compatibility fallback for legacy/alternate MuseScore exports.
 
 ## Repeat handling
 

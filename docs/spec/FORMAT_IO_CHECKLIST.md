@@ -36,6 +36,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - [ ] title
   - [ ] tempo
   - [ ] key/time/transpose
+  - [ ] source-specific key variants that affect written vs concert pitch are documented and tested (e.g. MuseScore `concertKey` / `transposeKey`)
   - [ ] `miscellaneous-field` equivalent (if representable in source format)
   - [ ] format-specific roundtrip hints (if used) are explicitly documented (key format, scope, restore rule)
 - [ ] Unsupported feature handling is explicit:

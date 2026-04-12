@@ -644,6 +644,26 @@ const readPartTransposeFromMusePart = (part: Element): { diatonic?: number; chro
   return Object.keys(out).length ? out : null;
 };
 
+const readMuseKeyFifths = (
+  node: Element,
+  options: { transposingPart: boolean; descendantPrefix?: string } = { transposingPart: false }
+): number | null => {
+  const prefix = options.descendantPrefix ? `${options.descendantPrefix} ` : "";
+  const read = (field: "transposeKey" | "accidental" | "concertKey"): number | null => (
+    firstNumber(node, `${prefix}KeySig > ${field}`)
+    ?? firstNumber(node, `${prefix}voice > KeySig > ${field}`)
+    ?? firstNumber(node, `${prefix}voice > keysig > ${field}`)
+  );
+  const transposeKey = read("transposeKey");
+  const accidental = read("accidental");
+  const concertKey = read("concertKey");
+  const resolved = options.transposingPart
+    ? (transposeKey ?? accidental ?? concertKey)
+    : (accidental ?? concertKey ?? transposeKey);
+  if (resolved === null || !Number.isFinite(resolved)) return null;
+  return Math.max(-7, Math.min(7, Math.round(resolved)));
+};
+
 const buildTransposeXml = (transpose: { diatonic?: number; chromatic?: number } | null): string => {
   if (!transpose) return "";
   const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
@@ -978,10 +998,7 @@ export const convertMuseScoreToMusicXml = (
 
   const globalBeats = Math.max(1, Math.round(firstNumber(score, "Staff > Measure > TimeSig > sigN") ?? 4));
   const globalBeatType = Math.max(1, Math.round(firstNumber(score, "Staff > Measure > TimeSig > sigD") ?? 4));
-  const globalFifths = Math.max(
-    -7,
-    Math.min(7, Math.round(firstNumber(score, "Staff > Measure > KeySig > accidental") ?? 0))
-  );
+  const globalFifths = readMuseKeyFifths(score, { transposingPart: false, descendantPrefix: "Staff > Measure >" }) ?? 0;
   const globalMode = readGlobalMuseKeyMode(score);
 
   const staffNodes = directChildrenByTag(score, "Staff").filter((staff) => {
@@ -1059,6 +1076,7 @@ export const convertMuseScoreToMusicXml = (
     const group = groupedStaffIds[partIndex];
     const partId = `P${partIndex + 1}`;
     const parsedStaffs: ParsedMuseScoreStaff[] = [];
+    const partTranspose = group.partEl ? readPartTransposeFromMusePart(group.partEl) : null;
     const partClefOverrides = group.partEl
       ? readStaffClefOverridesFromMusePart(group.partEl, group.staffIds)
       : new Map<string, { sign: "G" | "F" | "C"; line: number }>();
@@ -1103,7 +1121,8 @@ export const convertMuseScoreToMusicXml = (
       let currentBeats = globalBeats;
       let currentBeatType = globalBeatType;
       let currentTimeSymbol: "cut" | null = null;
-      let currentFifths = globalFifths;
+      let currentFifths = readMuseKeyFifths(staff, { transposingPart: partTranspose !== null, descendantPrefix: "Measure >" })
+        ?? globalFifths;
       let currentMode = globalMode;
       const parsedMeasures: ParsedMuseScoreMeasure[] = [];
       let absoluteDivCursor = 0;
@@ -1146,10 +1165,8 @@ export const convertMuseScoreToMusicXml = (
       const measureLenDiv = parseMeasureLenToDivisions(measure, divisions);
       const capacityDiv = measureLenDiv ?? nominalCapacityDiv;
       const implicit = measureLenDiv !== null && measureLenDiv < nominalCapacityDiv;
-      const fifthsRaw = firstNumber(measure, ":scope > KeySig > accidental")
-        ?? firstNumber(measure, ":scope > voice > KeySig > accidental")
-        ?? firstNumber(measure, ":scope > voice > keysig > accidental");
-      const fifths = fifthsRaw === null ? currentFifths : Math.max(-7, Math.min(7, Math.round(fifthsRaw)));
+      const fifthsRaw = readMuseKeyFifths(measure, { transposingPart: partTranspose !== null });
+      const fifths = fifthsRaw === null ? currentFifths : fifthsRaw;
       const modeRaw = normalizeKeyMode(
         measure.querySelector(":scope > KeySig > mode")?.textContent
         ?? measure.querySelector(":scope > voice > KeySig > mode")?.textContent
@@ -1858,7 +1875,6 @@ export const convertMuseScoreToMusicXml = (
         measures: parsedMeasures,
       });
     }
-    const partTranspose = group.partEl ? readPartTransposeFromMusePart(group.partEl) : null;
     parsedByPart.push({ partId, partName: group.partName, transpose: partTranspose, staffs: parsedStaffs });
   }
 
