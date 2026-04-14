@@ -1412,19 +1412,16 @@ const buildAbcRenderedPartMeasureXml = (
       : buildMeasureNotesXml(notes);
   const repeatStartXml = buildAbcMeasureRepeatStartXml(measureMeta);
   const repeatEndXml = buildAbcMeasureRepeatEndXml(measureMeta);
-  const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
-  const diagMiscXml =
-    partIndex === 0 && measureNo === 1
-      ? buildAbcDiagMiscXml(
-          (diagnostics ?? []).filter(
-            (diag) => !diag.voiceId || diag.voiceId === (part.voiceId || "")
-          )
-        )
-      : "";
-  const sourceMiscXml =
-    sourceMetadata && partIndex === 0 && measureNo === 1
-      ? buildAbcSourceMiscXml(abcSource)
-      : "";
+  const { debugMiscXml, diagMiscXml, sourceMiscXml } = buildAbcRenderedMeasureMiscXml({
+    part,
+    partIndex,
+    measureNo,
+    notes,
+    debugMetadata,
+    sourceMetadata,
+    diagnostics,
+    abcSource,
+  });
   return buildAbcMeasureXml(
     measureNo,
     String(measureMeta?.number || measureNo),
@@ -1438,6 +1435,111 @@ const buildAbcRenderedPartMeasureXml = (
     notesXml,
     repeatEndXml
   );
+};
+
+const buildAbcRenderedMeasureMiscXml = (
+  context: Pick<
+    AbcRenderedPartMeasureContext,
+    "part" | "partIndex" | "measureNo" | "notes" | "debugMetadata" | "sourceMetadata" | "diagnostics" | "abcSource"
+  >
+): {
+  debugMiscXml: string;
+  diagMiscXml: string;
+  sourceMiscXml: string;
+} => {
+  const {
+    part,
+    partIndex,
+    measureNo,
+    notes,
+    debugMetadata,
+    sourceMetadata,
+    diagnostics,
+    abcSource,
+  } = context;
+  return {
+    debugMiscXml: debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "",
+    diagMiscXml:
+      partIndex === 0 && measureNo === 1
+        ? buildAbcDiagMiscXml(
+            (diagnostics ?? []).filter(
+              (diag) => !diag.voiceId || diag.voiceId === (part.voiceId || "")
+            )
+          )
+        : "",
+    sourceMiscXml:
+      sourceMetadata && partIndex === 0 && measureNo === 1
+        ? buildAbcSourceMiscXml(abcSource)
+        : "",
+  };
+};
+
+const createInitialAbcPartRenderState = (
+  defaultFifths: number,
+  beats: number,
+  beatType: number,
+  tempoBpm: number | null
+): AbcPartRenderState => ({
+  currentPartFifths: Math.max(-7, Math.min(7, Math.round(defaultFifths))),
+  currentPartMeter: { beats: Math.round(beats), beatType: Math.round(beatType) },
+  currentPartTempo: tempoBpm,
+});
+
+const buildAbcPartXml = (
+  part: AbcParsedPart,
+  partIndex: number,
+  measureCount: number,
+  defaultFifths: number,
+  beats: number,
+  beatType: number,
+  tempoBpm: number | null,
+  debugMetadata: boolean,
+  sourceMetadata: boolean,
+  diagnostics: AbcParsedResult["diagnostics"] | undefined,
+  abcSource: string,
+  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
+): string => {
+  const measuresXml: string[] = [];
+  let state = createInitialAbcPartRenderState(defaultFifths, beats, beatType, tempoBpm);
+  for (let i = 0; i < measureCount; i += 1) {
+    const measureNo = i + 1;
+    const measureContext = buildAbcPartMeasureRenderContext(part, i, state, beats, beatType);
+    const {
+      notes,
+      measureMeta,
+      hintedFifths,
+      hintedMeter,
+      hintedTempo,
+      nextState,
+      currentMeasureDurationDiv,
+      inferredImplicitPickup,
+    } = measureContext;
+    state = nextState;
+    measuresXml.push(
+      buildAbcRenderedPartMeasureXml({
+        part,
+        partIndex,
+        measureIndex: i,
+        measureNo,
+        notes,
+        measureMeta,
+        hintedFifths,
+        hintedMeter,
+        hintedTempo,
+        currentPartFifths: state.currentPartFifths,
+        currentPartMeter: state.currentPartMeter,
+        currentPartTempo: state.currentPartTempo,
+        currentMeasureDurationDiv,
+        inferredImplicitPickup,
+        debugMetadata,
+        sourceMetadata,
+        diagnostics,
+        abcSource,
+        buildMeasureNotesXml,
+      })
+    );
+  }
+  return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
 };
 
 const buildAbcPartListXml = (resolvedParts: AbcParsedPart[]): string => {
@@ -1471,57 +1573,26 @@ const buildAbcPartBodyXml = (
   buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
 ): string => {
   return resolvedParts
-    .map((part, partIndex) => {
-      const measuresXml: string[] = [];
-      let state: AbcPartRenderState = {
-        currentPartFifths: Math.max(-7, Math.min(7, Math.round(defaultFifths))),
-        currentPartMeter: { beats: Math.round(beats), beatType: Math.round(beatType) },
-        currentPartTempo: tempoBpm,
-      };
-      for (let i = 0; i < measureCount; i += 1) {
-        const measureNo = i + 1;
-        const measureContext = buildAbcPartMeasureRenderContext(part, i, state, beats, beatType);
-        const {
-          notes,
-          measureMeta,
-          hintedFifths,
-          hintedMeter,
-          hintedTempo,
-          nextState,
-          currentMeasureDurationDiv,
-          inferredImplicitPickup,
-        } = measureContext;
-        state = nextState;
-        measuresXml.push(
-          buildAbcRenderedPartMeasureXml({
-            part,
-            partIndex,
-            measureIndex: i,
-            measureNo,
-            notes,
-            measureMeta,
-            hintedFifths,
-            hintedMeter,
-            hintedTempo,
-            currentPartFifths: state.currentPartFifths,
-            currentPartMeter: state.currentPartMeter,
-            currentPartTempo: state.currentPartTempo,
-            currentMeasureDurationDiv,
-            inferredImplicitPickup,
-            debugMetadata,
-            sourceMetadata,
-            diagnostics,
-            abcSource,
-            buildMeasureNotesXml,
-          })
-        );
-      }
-      return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
-    })
+    .map((part, partIndex) =>
+      buildAbcPartXml(
+        part,
+        partIndex,
+        measureCount,
+        defaultFifths,
+        beats,
+        beatType,
+        tempoBpm,
+        debugMetadata,
+        sourceMetadata,
+        diagnostics,
+        abcSource,
+        buildMeasureNotesXml
+      )
+    )
     .join("");
 };
 
-const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
+const buildAbcNoteHarmonyAndWordsDirectionXml = (note: AbcParsedNote): string => {
   const chunks: string[] = [];
   if (!note.chord && Array.isArray(note.chordSymbols) && note.chordSymbols.length > 0) {
     for (const chordSymbol of note.chordSymbols) {
@@ -1539,6 +1610,11 @@ const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
       chunks.push(`<direction><direction-type><words>${xmlEscape(String(annotation))}</words></direction-type></direction>`);
     }
   }
+  return chunks.join("");
+};
+
+const buildAbcNoteControlDirectionXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
   if (!note.chord && note.segno) chunks.push("<direction><direction-type><segno/></direction-type></direction>");
   if (!note.chord && note.coda) chunks.push("<direction><direction-type><coda/></direction-type></direction>");
   if (!note.chord && note.rehearsalMark) {
@@ -1562,6 +1638,64 @@ const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
   return chunks.join("");
 };
 
+const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
+  chunks.push(buildAbcNoteHarmonyAndWordsDirectionXml(note));
+  chunks.push(buildAbcNoteControlDirectionXml(note));
+  return chunks.join("");
+};
+
+const buildAbcNotePitchOrRestXml = (note: AbcParsedNote): string => {
+  if (note.isRest) {
+    return "<rest/>";
+  }
+  const step = /^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C";
+  const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(note.octave as number))) : 4;
+  return [
+    "<pitch>",
+    `<step>${step}</step>`,
+    Number.isFinite(note.alter as number) && Number(note.alter) !== 0
+      ? `<alter>${Math.round(Number(note.alter))}</alter>`
+      : "",
+    `<octave>${octave}</octave>`,
+    "</pitch>",
+  ].join("");
+};
+
+const buildAbcNoteLyricXml = (note: AbcParsedNote): string => {
+  if (!note.lyricText) {
+    return "";
+  }
+  return `<lyric><syllabic>${xmlEscape(String(note.lyricSyllabic || "single"))}</syllabic><text>${xmlEscape(String(note.lyricText))}</text>${note.lyricExtend ? "<extend/>" : ""}</lyric>`;
+};
+
+const buildAbcNoteTimeModificationXml = (note: AbcParsedNote): string => {
+  if (
+    !(
+      note.timeModification &&
+      Number.isFinite(note.timeModification.actual) &&
+      Number.isFinite(note.timeModification.normal) &&
+      Number(note.timeModification.actual) > 0 &&
+      Number(note.timeModification.normal) > 0
+    )
+  ) {
+    return "";
+  }
+  return `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`;
+};
+
+const buildAbcNoteAccidentalXml = (note: AbcParsedNote): string => {
+  if (!note.accidentalText) {
+    return "";
+  }
+  const accidentalAttrs = [note.accidentalEditorial ? 'editorial="yes"' : "", note.accidentalCautionary ? 'cautionary="yes"' : ""]
+    .filter(Boolean)
+    .join(" ");
+  return accidentalAttrs
+    ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
+    : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`;
+};
+
 const buildAbcNoteCoreXml = (
   note: AbcParsedNote,
   noteIndex: number,
@@ -1572,19 +1706,7 @@ const buildAbcNoteCoreXml = (
   chunks.push("<note>");
   if (note.chord) chunks.push("<chord/>");
   if (note.grace) chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
-  if (note.isRest) {
-    chunks.push("<rest/>");
-  } else {
-    const step = /^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C";
-    const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(note.octave as number))) : 4;
-    chunks.push("<pitch>");
-    chunks.push(`<step>${step}</step>`);
-    if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
-      chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
-    }
-    chunks.push(`<octave>${octave}</octave>`);
-    chunks.push("</pitch>");
-  }
+  chunks.push(buildAbcNotePitchOrRestXml(note));
   if (!note.grace) {
     const duration = Math.max(1, Math.round(Number(note.duration) || 1));
     chunks.push(`<duration>${duration}</duration>`);
@@ -1597,64 +1719,18 @@ const buildAbcNoteCoreXml = (
         : Math.max(1, Math.round(Number(note.staff) || 1));
     chunks.push(`<staff>${staffNumber}</staff>`);
   }
-  if (note.lyricText) {
-    chunks.push(
-      `<lyric><syllabic>${xmlEscape(String(note.lyricSyllabic || "single"))}</syllabic><text>${xmlEscape(String(note.lyricText))}</text>${note.lyricExtend ? "<extend/>" : ""}</lyric>`
-    );
-  }
+  chunks.push(buildAbcNoteLyricXml(note));
   chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
   if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
-  if (
-    note.timeModification &&
-    Number.isFinite(note.timeModification.actual) &&
-    Number.isFinite(note.timeModification.normal) &&
-    Number(note.timeModification.actual) > 0 &&
-    Number(note.timeModification.normal) > 0
-  ) {
-    chunks.push(
-      `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`
-    );
-  }
-  if (note.accidentalText) {
-    const accidentalAttrs = [note.accidentalEditorial ? 'editorial="yes"' : "", note.accidentalCautionary ? 'cautionary="yes"' : ""]
-      .filter(Boolean)
-      .join(" ");
-    chunks.push(
-      accidentalAttrs
-        ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
-        : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`
-    );
-  }
+  chunks.push(buildAbcNoteTimeModificationXml(note));
+  chunks.push(buildAbcNoteAccidentalXml(note));
   if (note.tieStart) chunks.push('<tie type="start"/>');
   if (note.tieStop) chunks.push('<tie type="stop"/>');
   return chunks.join("");
 };
 
-const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
-  if (
-    !(
-      note.tieStart || note.tieStop || note.slurStart || note.slurStop || note.trill || note.trillLineStop || note.turnType ||
-      note.delayedTurn || note.mordentType || note.tremoloType || note.glissandoStart || note.glissandoStop ||
-      note.slideStart || note.slideStop || note.schleifer || note.shake || note.arpeggiate || note.staccato ||
-      note.staccatissimo || note.accent || note.tenuto || note.stress || note.unstress || note.fermataType ||
-      note.strongAccent || note.breathMark || note.caesura || note.phraseMark || note.upBow || note.downBow ||
-      note.doubleTongue || note.tripleTongue || note.heel || note.toe ||
-      (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
-      (Array.isArray(note.strings) && note.strings.length > 0) ||
-      (Array.isArray(note.plucks) && note.plucks.length > 0) || note.openString || note.snapPizzicato ||
-      note.harmonic || note.stopped || note.thumbPosition || note.tupletStart || note.tupletStop
-    )
-  ) {
-    return "";
-  }
+const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string => {
   const chunks: string[] = [];
-  chunks.push("<notations>");
-  if (note.tieStart) chunks.push('<tied type="start"/>');
-  if (note.tieStop) chunks.push('<tied type="stop"/>');
-  if (note.slurStart) chunks.push('<slur type="start"/>');
-  if (note.slurStop) chunks.push('<slur type="stop"/>');
-  if (note.tupletStart) chunks.push('<tuplet type="start"/>');
-  if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
   if (note.trill || note.trillLineStop) {
     const trillParts: string[] = [];
     if (note.trill) trillParts.push("<trill-mark/>");
@@ -1686,6 +1762,10 @@ const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
   if (note.schleifer) chunks.push("<ornaments><schleifer/></ornaments>");
   if (note.shake) chunks.push("<ornaments><shake/></ornaments>");
   if (note.arpeggiate) chunks.push("<arpeggiate/>");
+  return chunks.join("");
+};
+
+const buildAbcNoteArticulationsXml = (note: AbcParsedNote): string => {
   const articulationParts: string[] = [];
   if (note.staccato) articulationParts.push("<staccato/>");
   if (note.staccatissimo) articulationParts.push("<staccatissimo/>");
@@ -1697,7 +1777,10 @@ const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
   if (note.breathMark) articulationParts.push("<breath-mark/>");
   if (note.caesura) articulationParts.push("<caesura/>");
   if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
-  if (articulationParts.length > 0) chunks.push(`<articulations>${articulationParts.join("")}</articulations>`);
+  return articulationParts.length > 0 ? `<articulations>${articulationParts.join("")}</articulations>` : "";
+};
+
+const buildAbcNoteTechnicalXml = (note: AbcParsedNote): string => {
   const technicalParts: string[] = [];
   if (note.upBow) technicalParts.push("<up-bow/>");
   if (note.downBow) technicalParts.push("<down-bow/>");
@@ -1713,7 +1796,37 @@ const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
   if (note.harmonic) technicalParts.push("<harmonic/>");
   if (note.stopped) technicalParts.push("<stopped/>");
   if (note.thumbPosition) technicalParts.push("<thumb-position/>");
-  if (technicalParts.length > 0) chunks.push(`<technical>${technicalParts.join("")}</technical>`);
+  return technicalParts.length > 0 ? `<technical>${technicalParts.join("")}</technical>` : "";
+};
+
+const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
+  if (
+    !(
+      note.tieStart || note.tieStop || note.slurStart || note.slurStop || note.trill || note.trillLineStop || note.turnType ||
+      note.delayedTurn || note.mordentType || note.tremoloType || note.glissandoStart || note.glissandoStop ||
+      note.slideStart || note.slideStop || note.schleifer || note.shake || note.arpeggiate || note.staccato ||
+      note.staccatissimo || note.accent || note.tenuto || note.stress || note.unstress || note.fermataType ||
+      note.strongAccent || note.breathMark || note.caesura || note.phraseMark || note.upBow || note.downBow ||
+      note.doubleTongue || note.tripleTongue || note.heel || note.toe ||
+      (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
+      (Array.isArray(note.strings) && note.strings.length > 0) ||
+      (Array.isArray(note.plucks) && note.plucks.length > 0) || note.openString || note.snapPizzicato ||
+      note.harmonic || note.stopped || note.thumbPosition || note.tupletStart || note.tupletStop
+    )
+  ) {
+    return "";
+  }
+  const chunks: string[] = [];
+  chunks.push("<notations>");
+  if (note.tieStart) chunks.push('<tied type="start"/>');
+  if (note.tieStop) chunks.push('<tied type="stop"/>');
+  if (note.slurStart) chunks.push('<slur type="start"/>');
+  if (note.slurStop) chunks.push('<slur type="stop"/>');
+  if (note.tupletStart) chunks.push('<tuplet type="start"/>');
+  if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
+  chunks.push(buildAbcNoteOrnamentsXml(note));
+  chunks.push(buildAbcNoteArticulationsXml(note));
+  chunks.push(buildAbcNoteTechnicalXml(note));
   if (note.fermataType) chunks.push(`<fermata>${note.fermataType === "inverted" ? "inverted" : "normal"}</fermata>`);
   chunks.push("</notations>");
   return chunks.join("");
@@ -1790,6 +1903,20 @@ const buildAbcBeamXmlByNoteIndex = (
   return out;
 };
 
+const buildAbcNoteXml = (
+  note: AbcParsedNote,
+  noteIndex: number,
+  staffOverride: number | null,
+  beamXmlByNoteIndex: Map<number, string>
+): string => {
+  const chunks: string[] = [];
+  chunks.push(buildAbcNoteLeadingDirectionXml(note));
+  chunks.push(buildAbcNoteCoreXml(note, noteIndex, staffOverride, beamXmlByNoteIndex));
+  chunks.push(buildAbcNoteNotationsXml(note));
+  chunks.push("</note>");
+  return chunks.join("");
+};
+
 const buildAbcMeasureNotesXml = (
   notes: AbcParsedNote[],
   measureDurationDiv: number,
@@ -1802,14 +1929,7 @@ const buildAbcMeasureNotesXml = (
   }
   const beamXmlByNoteIndex = buildAbcBeamXmlByNoteIndex(notes, beatDiv);
   return notes
-    .map((note, noteIndex) => {
-      const chunks: string[] = [];
-      chunks.push(buildAbcNoteLeadingDirectionXml(note));
-      chunks.push(buildAbcNoteCoreXml(note, noteIndex, staffOverride, beamXmlByNoteIndex));
-      chunks.push(buildAbcNoteNotationsXml(note));
-      chunks.push("</note>");
-      return chunks.join("");
-    })
+    .map((note, noteIndex) => buildAbcNoteXml(note, noteIndex, staffOverride, beamXmlByNoteIndex))
     .join("");
 };
 
