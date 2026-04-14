@@ -1209,6 +1209,35 @@ V:2 name="Lower"
     expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
   });
 
+  it("ABC->MusicXML maps %%score grouped voices into one multi-staff part", () => {
+    const abc = `X:1
+T:Grand staff from %%score
+M:4/4
+L:1/4
+K:C
+%%score (1 2)
+V:1 name="Upper" clef=treble
+V:2 name="Lower" clef=bass
+[V:1] C D E F |
+[V:2] C, D, E, F, |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part").length).toBe(1);
+    expect(outDoc.querySelector("part > measure > attributes > staves")?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelector('part > measure > attributes > clef[number="1"] > sign')?.textContent?.trim()).toBe("G");
+    expect(outDoc.querySelector('part > measure > attributes > clef[number="2"] > sign')?.textContent?.trim()).toBe("F");
+    expect(outDoc.querySelector("part > measure > backup > duration")?.textContent?.trim()).toBe("3840");
+    expect(Array.from(outDoc.querySelectorAll("part > measure > note > staff")).map((node) => node.textContent?.trim())).toEqual([
+      "1", "1", "1", "1", "2", "2", "2", "2"
+    ]);
+    expect(outDoc.querySelector('part-list > score-part[id="P1"] > part-name')?.textContent?.trim()).toBe("Upper / Lower");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
+  });
+
   it("ABC->MusicXML applies !editorial! to the next explicit accidental", () => {
     const abc = `X:1
 T:Editorial accidental

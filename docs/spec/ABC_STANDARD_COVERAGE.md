@@ -670,7 +670,7 @@ Practical result mode for `ABC-COV-015`:
 | Common clef metadata (`clef=treble`, `clef=bass`, `clef=alto`, `clef=tenor`, `clef=c3`, `clef=c4`) | supported | Common working clef subset is supported on import/export; bare clef shorthand is accepted as compatibility behavior. |
 | Voice transpose property (`transpose=...`) | partial | Import path accepts a bounded chromatic transpose value, but standard `V:` transpose is not yet emitted on export; export currently relies on `%@mks transpose ...` extension metadata for roundtrip restoration. |
 | Extension-assisted voice transpose roundtrip (`%@mks transpose ...`) | ext-only | Voice transpose can be preserved on export/import roundtrip through `mikuscore` extension metadata even where the standard `V:` property is not emitted. |
-| Broader standard voice properties (`staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`, etc.) | unsupported | No current support claim in the standard ABC path; unsupported properties should be skipped with warnings rather than silently treated as supported metadata. |
+| Broader standard voice properties (`staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`, etc.) | unsupported | No current support claim in the standard ABC path; grouped multi-staff import is currently driven by bounded `%%score (...)` handling rather than these `V:` properties, and unsupported properties should still be skipped with warnings. |
 | Full standard voice-property breadth | unsupported | No complete support claim yet. |
 
 #### 7.2 Breaking lines
@@ -868,6 +868,7 @@ These are not final decisions, but they currently look like the strongest candid
     - partial: standard `transpose=...` import
     - ext-only: transpose-preserving roundtrip through `%@mks transpose ...`
     - unsupported: broader standard properties such as `staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`
+    - practical multi-staff import is currently available through bounded `%%score (...)` grouping rather than those `V:` properties
   - regression coverage now exists for:
     - supported `transpose=...` import
     - warnings on unsupported standard `V:` properties
