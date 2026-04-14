@@ -1238,6 +1238,69 @@ V:2 name="Lower" clef=bass
     expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
   });
 
+  it("ABC->MusicXML keeps %%score grouped voices aligned across multiple measures", () => {
+    const abc = `X:1
+T:Grand staff multi-measure from %%score
+M:4/4
+L:1/4
+K:C
+%%score (1 2)
+V:1 name="Upper" clef=treble
+V:2 name="Lower" clef=bass
+[V:1] C D E F | G A B c |
+[V:2] C, D, E, F, | G, A, B, C |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const measures = Array.from(outDoc.querySelectorAll("part > measure"));
+    expect(measures).toHaveLength(2);
+    expect(Array.from(outDoc.querySelectorAll("part > measure > backup > duration")).map((node) => node.textContent?.trim())).toEqual([
+      "3840",
+      "3840",
+    ]);
+    expect(
+      measures.map((measure) =>
+        Array.from(measure.querySelectorAll(":scope > note > staff")).map((node) => node.textContent?.trim())
+      )
+    ).toEqual([
+      ["1", "1", "1", "1", "2", "2", "2", "2"],
+      ["1", "1", "1", "1", "2", "2", "2", "2"],
+    ]);
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
+  });
+
+  it("ABC->MusicXML restores repeat and ending markers on grouped %%score import", () => {
+    const abc = `X:1
+T:Grand staff alternate endings
+M:4/4
+L:1/4
+K:C
+%%score (1 2)
+V:1 name="Upper" clef=treble
+V:2 name="Lower" clef=bass
+[V:1] |: C D E F |1 G A B c :|2 c B A G |
+[V:2] |: C, D, E, F, |1 G, A, B, C :|2 C B, A, G, |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    expect(outDoc.querySelectorAll("part")).toHaveLength(1);
+    expect(outDoc.querySelector("part > measure > attributes > staves")?.textContent?.trim()).toBe("2");
+    expect(outDoc.querySelectorAll("part > measure > backup")).toHaveLength(3);
+    expect(outDoc.querySelector('part > measure[number="1"] > barline[location="left"] > repeat')?.getAttribute("direction")).toBe("forward");
+    expect(outDoc.querySelector('part > measure[number="2"] > barline[location="left"] > ending')?.getAttribute("number")).toBe("1");
+    expect(outDoc.querySelector('part > measure[number="2"] > barline[location="right"] > repeat')?.getAttribute("direction")).toBe("backward");
+    expect(outDoc.querySelector('part > measure[number="2"] > barline[location="right"] > ending')?.getAttribute("number")).toBe("1");
+    expect(outDoc.querySelector('part > measure[number="3"] > barline[location="left"] > ending')?.getAttribute("number")).toBe("2");
+    expect(outDoc.querySelector('part > measure[number="3"] > barline[location="right"] > ending')?.getAttribute("number")).toBe("2");
+    expect(outDoc.querySelector('miscellaneous-field[name="mks:diag:count"]')).toBeNull();
+  });
+
   it("ABC->MusicXML applies !editorial! to the next explicit accidental", () => {
     const abc = `X:1
 T:Editorial accidental

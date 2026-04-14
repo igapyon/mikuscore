@@ -78,6 +78,7 @@
     - `parseForMusicXml(...)` is now much closer to orchestration, with line parsing, layout derivation, body entry dispatch, and post-processing split into helpers
     - pending note-state application and playable-event/body-token dispatch have also been thinned substantially
     - export-side grouped-staff measure rendering, header generation, repeat/ending barline assembly, note serialization, note-level precomputation, measure-note rendering, top-level part rendering, document-shell assembly, and export-context calculation are now also partially helperized
+    - focused characterization coverage now also includes grouped `%%score` multi-measure backup emission and grouped repeat/ending restoration
     - the file is much more segmented than before, but it is still not yet at a split-ready boundary
   - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
     - first make responsibility blocks explicit inside the current file
@@ -96,6 +97,10 @@
     - existing export behavior for multi-staff MusicXML parts
   - Goal:
     - make current bounded behavior explicit before reshaping internals
+  - Current status:
+    - inline `[V:...]` switching and bounded `%%score` grouped import are already covered
+    - grouped-staff characterization now also covers multi-measure `<backup>` emission and grouped repeat/ending restoration
+    - further high-value additions would be grouped-staff lyrics and grouped key/meter/tempo changes
 
 - [ ] Refactoring series 2: isolate score-layout parsing from the rest of ABC import.
   - Split out the logic that currently derives:
@@ -132,11 +137,12 @@
   - Keep output stable while reducing the size of the current monolithic emitter.
   - Current status:
     - this has advanced through helper extraction around normalized voice data, part construction, body event rendering, grouped-staff note emission, measure header generation, repeat/ending barline generation, `buildMeasureNotesXml(...)` decomposition, beam/empty-measure note precomputation, top-level measure-note rendering, and top-level part-list / part-body / document / export-context orchestration
+    - per-part state initialization, per-measure misc assembly, note leading-direction grouping, note core subfragments, and note-notations subgroups are also now helperized
     - grouped-staff MusicXML emission and note serialization are much clearer than before, but the exporter is still not fully separated into stable module-sized boundaries
   - Resume here next time:
-    - continue from the remaining seams inside `buildAbcPartBodyXml(...)` and adjacent export helpers in `src/ts/abc-io.ts`
-    - likely next slice is to reduce the remaining per-part/per-measure orchestration closure footprint further, or decide this series is "good enough" and switch effort to characterization coverage
-    - if pausing the refactor, the most valuable immediate follow-up is focused characterization coverage for bounded `%%score` import/export and grouped-staff MusicXML emission
+    - continue from the remaining seams around export helper ordering / section boundaries in `src/ts/abc-io.ts`, or decide this series is "good enough" and switch effort to characterization coverage
+    - if one more refactor slice is desired, the remaining candidates are mostly helper grouping/ordering rather than large logic blocks
+    - if pausing the refactor, the most valuable immediate follow-up is focused characterization coverage for grouped-staff lyrics and grouped key/meter/tempo changes
 
 - [ ] Refactoring series 5: make grouped-staff emission follow the same model as ordinary part emission.
   - Goal:
