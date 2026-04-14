@@ -768,14 +768,13 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
         }
         continue;
       }
-      const noComment = raw.split("%")[0];
-      const trimmed = noComment.trim();
-
-      const scoreMatch = trimmed.match(/^%%\s*score\s+(.+)$/i);
+      const scoreMatch = rawTrimmed.match(/^%%\s*score\s+(.+)$/i);
       if (scoreMatch) {
         scoreDirective = scoreMatch[1].trim();
         continue;
       }
+      const noComment = raw.split("%")[0];
+      const trimmed = noComment.trim();
       if (/^%%\s*/.test(rawTrimmed)) {
         warnings.push("line " + lineNo + ": Skipped unsupported ABC directive: " + rawTrimmed);
         continue;
@@ -2317,14 +2316,16 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
       throw new Error("No notes or rests were found. (line 1)");
     }
 
-    const orderedVoiceIds = parseScoreVoiceOrder(scoreDirective, declaredVoiceIds);
+    const scoreLayout = parseScoreLayout(scoreDirective, declaredVoiceIds);
+    const orderedVoiceIds = scoreLayout.orderedVoiceIds;
     const measureCapacity = Math.max(
       1,
       Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960)
     );
     const importDiagnostics = [];
     const overfullCompatibilityMode = settings?.overfullCompatibilityMode !== false;
-    const parts = orderedVoiceIds.map((voiceId, index) => {
+    const normalizedVoiceDataById = new Map();
+    for (const voiceId of orderedVoiceIds) {
       const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
       const transpose =
         transposeHintByVoiceId.get(voiceId) ||
@@ -2391,8 +2392,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
           tempoByMeasure[m] = Math.max(20, Math.min(300, Math.round(Number(tempoHint))));
         }
       }
-      return {
-        partId: "P" + String(index + 1),
+      normalizedVoiceDataById.set(voiceId, {
         partName,
         clef: voiceClefById[voiceId] || "",
         transpose,
@@ -2401,7 +2401,60 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
         meterByMeasure,
         tempoByMeasure,
         measureMetaByIndex,
-        measures: normalizedMeasures
+        measures: normalizedMeasures,
+      });
+    }
+    const parts = scoreLayout.groups.map((groupVoiceIds, index) => {
+      const primaryVoiceId = groupVoiceIds[0] || "1";
+      const primary = normalizedVoiceDataById.get(primaryVoiceId) || {
+        partName: "Voice " + primaryVoiceId,
+        clef: "",
+        transpose: null,
+        voiceId: primaryVoiceId,
+        keyByMeasure: {},
+        meterByMeasure: {},
+        tempoByMeasure: {},
+        measureMetaByIndex: {},
+        measures: [[]],
+      };
+      const partName =
+        groupVoiceIds.length <= 1
+          ? primary.partName
+          : (() => {
+              const names = groupVoiceIds
+                .map((voiceId) => normalizedVoiceDataById.get(voiceId)?.partName || ("Voice " + voiceId))
+                .filter((name, idx, arr) => name && arr.indexOf(name) === idx);
+              return names.length <= 1 ? (names[0] || primary.partName) : names.join(" / ");
+            })();
+      const part = {
+        partId: "P" + String(index + 1),
+        partName,
+        clef: primary.clef,
+        transpose: primary.transpose,
+        voiceId: primary.voiceId,
+        keyByMeasure: primary.keyByMeasure,
+        meterByMeasure: primary.meterByMeasure,
+        tempoByMeasure: primary.tempoByMeasure,
+        measureMetaByIndex: primary.measureMetaByIndex,
+        measures: primary.measures,
+      };
+      if (groupVoiceIds.length <= 1) {
+        return part;
+      }
+      return {
+        ...part,
+        staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
+          const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
+          return {
+            staff: staffIndex + 1,
+            voiceId,
+            clef: voiceData.clef,
+            transpose: voiceData.transpose,
+            measures: (voiceData.measures || [[]]).map((measure) =>
+              (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 }))
+            ),
+          };
+        }),
       };
     });
     const measureCount = parts.reduce((acc, part) => Math.max(acc, part.measures.length), 0);
@@ -2434,36 +2487,53 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
     };
   }
 
-  function parseScoreVoiceOrder(raw, declaredVoiceIds) {
+  function parseScoreLayout(raw, declaredVoiceIds) {
     const baseOrder = Array.from(declaredVoiceIds || []);
-    if (!raw) {
-      return baseOrder.length > 0 ? baseOrder : ["1"];
-    }
-
     const ordered = [];
+    const groups = [];
     const seen = new Set();
-    const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
-    let m;
-    while ((m = groupRegex.exec(raw)) !== null) {
-      const chunk = m[1] || m[2] || "";
-      const ids = chunk
-        .split(/\s+/)
-        .map((v) => v.trim())
+    const appendGroup = (ids) => {
+      const normalized = ids
+        .map((v) => String(v || "").trim())
         .filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
-      for (const id of ids) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          ordered.push(id);
-        }
+      if (normalized.length === 0) return;
+      const group = [];
+      for (const id of normalized) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        ordered.push(id);
+        group.push(id);
+      }
+      if (group.length > 0) {
+        groups.push(group);
+      }
+    };
+
+    if (raw) {
+      const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
+      let m;
+      while ((m = groupRegex.exec(raw)) !== null) {
+        const chunk = m[1] || m[2] || "";
+        appendGroup(chunk.split(/\s+/));
       }
     }
+
     for (const id of baseOrder) {
       if (!seen.has(id)) {
         seen.add(id);
         ordered.push(id);
+        groups.push([id]);
       }
     }
-    return ordered.length > 0 ? ordered : ["1"];
+
+    if (ordered.length === 0) {
+      return { orderedVoiceIds: ["1"], groups: [["1"]] };
+    }
+    return { orderedVoiceIds: ordered, groups };
+  }
+
+  function parseScoreVoiceOrder(raw, declaredVoiceIds) {
+    return parseScoreLayout(raw, declaredVoiceIds).orderedVoiceIds;
   }
 
   function parseVoiceDirectiveTail(raw) {
@@ -3789,6 +3859,7 @@ type AbcParsedMeta = {
 type AbcParsedNote = {
   isRest: boolean;
   duration: number;
+  staff?: number;
   type?: string;
   beamMode?: "begin" | "mid";
   step?: string;
@@ -3876,6 +3947,13 @@ type AbcParsedPart = {
   clef?: string;
   transpose?: { chromatic?: number; diatonic?: number } | null;
   voiceId?: string;
+  staffVoices?: Array<{
+    staff: number;
+    voiceId: string;
+    clef?: string;
+    transpose?: { chromatic?: number; diatonic?: number } | null;
+    measures: AbcParsedNote[][];
+  }>;
   keyByMeasure?: Record<number, number>;
   meterByMeasure?: Record<number, { beats: number; beatType: number }>;
   tempoByMeasure?: Record<number, number>;
@@ -4060,6 +4138,252 @@ const buildMusicXmlFromAbcParsed = (
     Number.isFinite(parsed.meta?.tempoBpm as number) && Number(parsed.meta?.tempoBpm) > 0
       ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
       : null;
+  const buildMeasureNotesXml = (notes: AbcParsedNote[], staffOverride: number | null = null): string => {
+    if (!notes.length) {
+      return `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type>${
+        staffOverride !== null ? `<staff>${staffOverride}</staff>` : ""
+      }</note>`;
+    }
+    const beamXmlByNoteIndex = (() => {
+      const out = new Map();
+      const levelFromType = (typeText) => {
+        switch (String(typeText || "").trim().toLowerCase()) {
+          case "eighth":
+            return 1;
+          case "16th":
+            return 2;
+          case "32nd":
+            return 3;
+          case "64th":
+            return 4;
+          default:
+            return 0;
+        }
+      };
+      const byVoice = new Map();
+      for (let i = 0; i < notes.length; i += 1) {
+        const n = notes[i];
+        const voice = normalizeVoiceForMusicXml(n.voice);
+        const bucket = byVoice.get(voice) ?? [];
+        bucket.push({ note: n, noteIndex: i });
+        byVoice.set(voice, bucket);
+      }
+      for (const events of byVoice.values()) {
+        const primary = events.filter((ev) => !ev.note?.chord);
+        if (!primary.length) continue;
+        const assignments = computeBeamAssignments(
+          primary,
+          beatDiv,
+          (ev) => {
+            const type = normalizeTypeForMusicXml(ev.note?.type);
+            return {
+              timed: true,
+              chord: !Boolean(ev.note?.isRest),
+              grace: Boolean(ev.note?.grace),
+              durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
+              levels: levelFromType(type),
+              explicitMode: ev.note?.beamMode,
+            };
+          },
+          { splitAtBeatBoundaryWhenImplicit: true }
+        );
+        for (const [eventIndex, assignment] of assignments.entries()) {
+          if (!assignment || assignment.levels <= 0) continue;
+          let beamXml = "";
+          for (let level = 1; level <= assignment.levels; level += 1) {
+            beamXml += `<beam number="${level}">${assignment.state}</beam>`;
+          }
+          if (!beamXml) continue;
+          const target = primary[eventIndex];
+          if (!target) continue;
+          out.set(target.noteIndex, beamXml);
+        }
+      }
+      return out;
+    })();
+    return notes
+      .map((note, noteIndex) => {
+        const chunks: string[] = [];
+        if (!note.chord && Array.isArray(note.chordSymbols) && note.chordSymbols.length > 0) {
+          for (const chordSymbol of note.chordSymbols) {
+            const harmonyXml = buildHarmonyXmlFromChordSymbol(chordSymbol);
+            if (harmonyXml) {
+              chunks.push(harmonyXml);
+            } else {
+              chunks.push(`<direction><direction-type><words>${xmlEscape(String(chordSymbol))}</words></direction-type></direction>`);
+            }
+          }
+        }
+        if (!note.chord && Array.isArray(note.annotations) && note.annotations.length > 0) {
+          for (const annotation of note.annotations) {
+            if (!annotation) continue;
+            chunks.push(`<direction><direction-type><words>${xmlEscape(String(annotation))}</words></direction-type></direction>`);
+          }
+        }
+        if (!note.chord && note.segno) chunks.push("<direction><direction-type><segno/></direction-type></direction>");
+        if (!note.chord && note.coda) chunks.push("<direction><direction-type><coda/></direction-type></direction>");
+        if (!note.chord && note.rehearsalMark) {
+          chunks.push(`<direction><direction-type><rehearsal>${xmlEscape(String(note.rehearsalMark))}</rehearsal></direction-type></direction>`);
+        }
+        if (!note.chord && note.fine) chunks.push('<direction><sound fine="yes"/></direction>');
+        if (!note.chord && note.daCapo) chunks.push('<direction><sound dacapo="yes"/></direction>');
+        if (!note.chord && note.dalSegno) chunks.push('<direction><sound dalsegno="segno"/></direction>');
+        if (!note.chord && note.toCoda) chunks.push('<direction><sound tocoda="coda"/></direction>');
+        if (!note.chord && note.crescendoStart) chunks.push('<direction><direction-type><wedge type="crescendo"/></direction-type></direction>');
+        if (!note.chord && note.diminuendoStart) chunks.push('<direction><direction-type><wedge type="diminuendo"/></direction-type></direction>');
+        if (!note.chord && (note.crescendoStop || note.diminuendoStop)) {
+          chunks.push('<direction><direction-type><wedge type="stop"/></direction-type></direction>');
+        }
+        if (!note.chord && note.dynamicMark) {
+          chunks.push(`<direction><direction-type><dynamics><${xmlEscape(String(note.dynamicMark))}/></dynamics></direction-type></direction>`);
+        }
+        if (!note.chord && note.sfz) {
+          chunks.push("<direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>");
+        }
+        chunks.push("<note>");
+        if (note.chord) chunks.push("<chord/>");
+        if (note.grace) chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
+        if (note.isRest) {
+          chunks.push("<rest/>");
+        } else {
+          const step = /^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C";
+          const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(note.octave as number))) : 4;
+          chunks.push("<pitch>");
+          chunks.push(`<step>${step}</step>`);
+          if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
+            chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
+          }
+          chunks.push(`<octave>${octave}</octave>`);
+          chunks.push("</pitch>");
+        }
+        if (!note.grace) {
+          const duration = Math.max(1, Math.round(Number(note.duration) || 1));
+          chunks.push(`<duration>${duration}</duration>`);
+        }
+        chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
+        if (staffOverride !== null || Number.isFinite(note.staff as number)) {
+          const staffNumber =
+            staffOverride !== null
+              ? staffOverride
+              : Math.max(1, Math.round(Number(note.staff) || 1));
+          chunks.push(`<staff>${staffNumber}</staff>`);
+        }
+        if (note.lyricText) {
+          chunks.push(
+            `<lyric><syllabic>${xmlEscape(String(note.lyricSyllabic || "single"))}</syllabic><text>${xmlEscape(String(note.lyricText))}</text>${note.lyricExtend ? "<extend/>" : ""}</lyric>`
+          );
+        }
+        chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+        if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
+        if (
+          note.timeModification &&
+          Number.isFinite(note.timeModification.actual) &&
+          Number.isFinite(note.timeModification.normal) &&
+          Number(note.timeModification.actual) > 0 &&
+          Number(note.timeModification.normal) > 0
+        ) {
+          chunks.push(
+            `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`
+          );
+        }
+        if (note.accidentalText) {
+          const accidentalAttrs = [note.accidentalEditorial ? 'editorial="yes"' : "", note.accidentalCautionary ? 'cautionary="yes"' : ""]
+            .filter(Boolean)
+            .join(" ");
+          chunks.push(
+            accidentalAttrs
+              ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
+              : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`
+          );
+        }
+        if (note.tieStart) chunks.push('<tie type="start"/>');
+        if (note.tieStop) chunks.push('<tie type="stop"/>');
+        if (
+          note.tieStart || note.tieStop || note.slurStart || note.slurStop || note.trill || note.trillLineStop || note.turnType ||
+          note.delayedTurn || note.mordentType || note.tremoloType || note.glissandoStart || note.glissandoStop ||
+          note.slideStart || note.slideStop || note.schleifer || note.shake || note.arpeggiate || note.staccato ||
+          note.staccatissimo || note.accent || note.tenuto || note.stress || note.unstress || note.fermataType ||
+          note.strongAccent || note.breathMark || note.caesura || note.phraseMark || note.upBow || note.downBow ||
+          note.doubleTongue || note.tripleTongue || note.heel || note.toe ||
+          (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
+          (Array.isArray(note.strings) && note.strings.length > 0) ||
+          (Array.isArray(note.plucks) && note.plucks.length > 0) || note.openString || note.snapPizzicato ||
+          note.harmonic || note.stopped || note.thumbPosition || note.tupletStart || note.tupletStop
+        ) {
+          chunks.push("<notations>");
+          if (note.tieStart) chunks.push('<tied type="start"/>');
+          if (note.tieStop) chunks.push('<tied type="stop"/>');
+          if (note.slurStart) chunks.push('<slur type="start"/>');
+          if (note.slurStop) chunks.push('<slur type="stop"/>');
+          if (note.tupletStart) chunks.push('<tuplet type="start"/>');
+          if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
+          if (note.trill || note.trillLineStop) {
+            const trillParts: string[] = [];
+            if (note.trill) trillParts.push("<trill-mark/>");
+            if (note.trillLineStop) {
+              trillParts.push('<wavy-line type="stop"/>');
+            } else if (note.trillLineStart) {
+              trillParts.push('<wavy-line type="start"/>');
+            }
+            if (note.trillAccidentalText) trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
+            chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
+          }
+          if (note.turnType) {
+            const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
+            const slashAttr = note.turnSlash ? ' slash="yes"' : "";
+            chunks.push(`<ornaments><${tag}${slashAttr}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
+          }
+          if (note.mordentType) {
+            const tag = note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent";
+            chunks.push(`<ornaments><${tag}/></ornaments>`);
+          }
+          if (note.tremoloType) {
+            const marks = Math.max(1, Math.min(8, Math.round(Number(note.tremoloMarks) || 1)));
+            chunks.push(`<ornaments><tremolo type="${xmlEscape(String(note.tremoloType))}">${marks}</tremolo></ornaments>`);
+          }
+          if (note.glissandoStart) chunks.push('<glissando type="start" number="1">wavy</glissando>');
+          if (note.glissandoStop) chunks.push('<glissando type="stop" number="1">wavy</glissando>');
+          if (note.slideStart) chunks.push('<slide type="start" number="1"/>');
+          if (note.slideStop) chunks.push('<slide type="stop" number="1"/>');
+          if (note.schleifer) chunks.push("<ornaments><schleifer/></ornaments>");
+          if (note.shake) chunks.push("<ornaments><shake/></ornaments>");
+          if (note.arpeggiate) chunks.push("<arpeggiate/>");
+          const articulationParts: string[] = [];
+          if (note.staccato) articulationParts.push("<staccato/>");
+          if (note.staccatissimo) articulationParts.push("<staccatissimo/>");
+          if (note.accent) articulationParts.push("<accent/>");
+          if (note.tenuto) articulationParts.push("<tenuto/>");
+          if (note.stress) articulationParts.push("<stress/>");
+          if (note.unstress) articulationParts.push("<unstress/>");
+          if (note.strongAccent) articulationParts.push("<strong-accent/>");
+          if (note.breathMark) articulationParts.push("<breath-mark/>");
+          if (note.caesura) articulationParts.push("<caesura/>");
+          if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
+          if (articulationParts.length > 0) chunks.push(`<articulations>${articulationParts.join("")}</articulations>`);
+          const technicalParts: string[] = [];
+          if (note.upBow) technicalParts.push("<up-bow/>");
+          if (note.downBow) technicalParts.push("<down-bow/>");
+          if (note.doubleTongue) technicalParts.push("<double-tongue/>");
+          if (note.tripleTongue) technicalParts.push("<triple-tongue/>");
+          if (note.heel) technicalParts.push("<heel/>");
+          if (note.toe) technicalParts.push("<toe/>");
+          if (Array.isArray(note.fingerings) && note.fingerings.length > 0) for (const fingering of note.fingerings) if (fingering) technicalParts.push(`<fingering>${xmlEscape(String(fingering))}</fingering>`);
+          if (Array.isArray(note.strings) && note.strings.length > 0) for (const stringText of note.strings) if (stringText) technicalParts.push(`<string>${xmlEscape(String(stringText))}</string>`);
+          if (Array.isArray(note.plucks) && note.plucks.length > 0) for (const pluckText of note.plucks) if (pluckText) technicalParts.push(`<pluck>${xmlEscape(String(pluckText))}</pluck>`);
+          if (note.openString) technicalParts.push("<open-string/>");
+          if (note.snapPizzicato) technicalParts.push("<snap-pizzicato/>");
+          if (note.harmonic) technicalParts.push("<harmonic/>");
+          if (note.stopped) technicalParts.push("<stopped/>");
+          if (note.thumbPosition) technicalParts.push("<thumb-position/>");
+          if (technicalParts.length > 0) chunks.push(`<technical>${technicalParts.join("")}</technical>`);
+          if (note.fermataType) chunks.push(`<fermata>${note.fermataType === "inverted" ? "inverted" : "normal"}</fermata>`);
+          chunks.push("</notations>");
+        }
+        chunks.push("</note>");
+        return chunks.join("");
+      })
+      .join("");
+  };
 
   const partListXml = resolvedParts
     .map((part, index) => {
@@ -4122,6 +4446,9 @@ const buildMusicXmlFromAbcParsed = (
                 "<divisions>960</divisions>",
                 `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
                 `<time><beats>${Math.round(currentPartMeter.beats)}</beats><beat-type>${Math.round(currentPartMeter.beatType)}</beat-type></time>`,
+                Array.isArray(part.staffVoices) && part.staffVoices.length > 1
+                  ? `<staves>${part.staffVoices.length}</staves>`
+                  : "",
                 part.transpose && (Number.isFinite(part.transpose.chromatic) || Number.isFinite(part.transpose.diatonic))
                   ? [
                       "<transpose>",
@@ -4134,7 +4461,14 @@ const buildMusicXmlFromAbcParsed = (
                       "</transpose>",
                     ].join("")
                   : "",
-                clefXmlFromAbcClef(part.clef),
+                Array.isArray(part.staffVoices) && part.staffVoices.length > 1
+                  ? part.staffVoices
+                      .map((staffVoice) => {
+                        const clefXml = clefXmlFromAbcClef(staffVoice.clef || "");
+                        return clefXml.replace("<clef>", `<clef number="${staffVoice.staff}">`);
+                      })
+                      .join("")
+                  : clefXmlFromAbcClef(part.clef),
                 "</attributes>",
                 currentPartTempo !== null && partIndex === 0
                   ? `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${currentPartTempo}</per-minute></metronome></direction-type><sound tempo="${currentPartTempo}"/></direction>`
@@ -4153,346 +4487,17 @@ const buildMusicXmlFromAbcParsed = (
           i > 0 && hintedTempo !== null && partIndex === 0
             ? `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${hintedTempo}</per-minute></metronome></direction-type><sound tempo="${hintedTempo}"/></direction>`
             : "";
-
         const notesXml =
-          notes.length > 0
-            ? (() => {
-                const beamXmlByNoteIndex = (() => {
-                  const out = new Map();
-                  const levelFromType = (typeText) => {
-                    switch (String(typeText || "").trim().toLowerCase()) {
-                      case "eighth":
-                        return 1;
-                      case "16th":
-                        return 2;
-                      case "32nd":
-                        return 3;
-                      case "64th":
-                        return 4;
-                      default:
-                        return 0;
-                    }
-                  };
-                  const byVoice = new Map();
-                  for (let i = 0; i < notes.length; i += 1) {
-                    const n = notes[i];
-                    const voice = normalizeVoiceForMusicXml(n.voice);
-                    const bucket = byVoice.get(voice) ?? [];
-                    bucket.push({ note: n, noteIndex: i });
-                    byVoice.set(voice, bucket);
-                  }
-                  for (const events of byVoice.values()) {
-                    const primary = events.filter((ev) => !ev.note?.chord);
-                    if (!primary.length) continue;
-                    const assignments = computeBeamAssignments(
-                      primary,
-                      beatDiv,
-                      (ev) => {
-                        const type = normalizeTypeForMusicXml(ev.note?.type);
-                        return {
-                          timed: true,
-                          chord: !Boolean(ev.note?.isRest),
-                          grace: Boolean(ev.note?.grace),
-                          durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
-                          levels: levelFromType(type),
-                          explicitMode: ev.note?.beamMode,
-                        };
-                      },
-                      { splitAtBeatBoundaryWhenImplicit: true }
-                    );
-                    for (const [eventIndex, assignment] of assignments.entries()) {
-                      if (!assignment || assignment.levels <= 0) continue;
-                      let beamXml = "";
-                      for (let level = 1; level <= assignment.levels; level += 1) {
-                        beamXml += `<beam number="${level}">${assignment.state}</beam>`;
-                      }
-                      if (!beamXml) continue;
-                      const target = primary[eventIndex];
-                      if (!target) continue;
-                      out.set(target.noteIndex, beamXml);
-                    }
-                  }
-                  return out;
-                })();
-                return notes
-                  .map((note, noteIndex) => {
-                  const chunks: string[] = [];
-                  if (!note.chord && Array.isArray(note.chordSymbols) && note.chordSymbols.length > 0) {
-                    for (const chordSymbol of note.chordSymbols) {
-                      const harmonyXml = buildHarmonyXmlFromChordSymbol(chordSymbol);
-                      if (harmonyXml) {
-                        chunks.push(harmonyXml);
-                      } else {
-                        chunks.push(
-                          `<direction><direction-type><words>${xmlEscape(String(chordSymbol))}</words></direction-type></direction>`
-                        );
-                      }
-                    }
-                  }
-                  if (!note.chord && Array.isArray(note.annotations) && note.annotations.length > 0) {
-                    for (const annotation of note.annotations) {
-                      if (!annotation) continue;
-                      chunks.push(
-                        `<direction><direction-type><words>${xmlEscape(String(annotation))}</words></direction-type></direction>`
-                      );
-                    }
-                  }
-                  if (!note.chord && note.segno) {
-                    chunks.push("<direction><direction-type><segno/></direction-type></direction>");
-                  }
-                  if (!note.chord && note.coda) {
-                    chunks.push("<direction><direction-type><coda/></direction-type></direction>");
-                  }
-                  if (!note.chord && note.rehearsalMark) {
-                    chunks.push(`<direction><direction-type><rehearsal>${xmlEscape(String(note.rehearsalMark))}</rehearsal></direction-type></direction>`);
-                  }
-                  if (!note.chord && note.fine) {
-                    chunks.push('<direction><sound fine="yes"/></direction>');
-                  }
-                  if (!note.chord && note.daCapo) {
-                    chunks.push('<direction><sound dacapo="yes"/></direction>');
-                  }
-                  if (!note.chord && note.dalSegno) {
-                    chunks.push('<direction><sound dalsegno="segno"/></direction>');
-                  }
-                  if (!note.chord && note.toCoda) {
-                    chunks.push('<direction><sound tocoda="coda"/></direction>');
-                  }
-                  if (!note.chord && note.crescendoStart) {
-                    chunks.push('<direction><direction-type><wedge type="crescendo"/></direction-type></direction>');
-                  }
-                  if (!note.chord && note.diminuendoStart) {
-                    chunks.push('<direction><direction-type><wedge type="diminuendo"/></direction-type></direction>');
-                  }
-                  if (!note.chord && (note.crescendoStop || note.diminuendoStop)) {
-                    chunks.push('<direction><direction-type><wedge type="stop"/></direction-type></direction>');
-                  }
-                  if (!note.chord && note.dynamicMark) {
-                    chunks.push(`<direction><direction-type><dynamics><${xmlEscape(String(note.dynamicMark))}/></dynamics></direction-type></direction>`);
-                  }
-                  if (!note.chord && note.sfz) {
-                    chunks.push("<direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>");
-                  }
-                  chunks.push("<note>");
-                  if (note.chord) chunks.push("<chord/>");
-                  if (note.grace) {
-                    chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
-                  }
-                  if (note.isRest) {
-                    chunks.push("<rest/>");
-                  } else {
-                    const step = /^[A-G]$/.test(String(note.step || "").toUpperCase())
-                      ? String(note.step).toUpperCase()
-                      : "C";
-                    const octave = Number.isFinite(note.octave)
-                      ? Math.max(0, Math.min(9, Math.round(note.octave as number)))
-                      : 4;
-                    chunks.push("<pitch>");
-                    chunks.push(`<step>${step}</step>`);
-                    if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
-                      chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
-                    }
-                    chunks.push(`<octave>${octave}</octave>`);
-                    chunks.push("</pitch>");
-                  }
-                  if (!note.grace) {
-                    const duration = Math.max(1, Math.round(Number(note.duration) || 1));
-                    chunks.push(`<duration>${duration}</duration>`);
-                  }
-                  chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
-                  if (note.lyricText) {
-                    chunks.push(
-                      `<lyric><syllabic>${xmlEscape(String(note.lyricSyllabic || "single"))}</syllabic><text>${xmlEscape(String(note.lyricText))}</text>${
-                        note.lyricExtend ? "<extend/>" : ""
-                      }</lyric>`
-                    );
-                  }
-                  chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
-                  if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) {
-                    chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
-                  }
-                  if (
-                    note.timeModification &&
-                    Number.isFinite(note.timeModification.actual) &&
-                    Number.isFinite(note.timeModification.normal) &&
-                    Number(note.timeModification.actual) > 0 &&
-                    Number(note.timeModification.normal) > 0
-                  ) {
-                    chunks.push(
-                      `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`
-                    );
-                  }
-                  if (note.accidentalText) {
-                    const accidentalAttrs = [
-                      note.accidentalEditorial ? 'editorial="yes"' : "",
-                      note.accidentalCautionary ? 'cautionary="yes"' : "",
-                    ].filter(Boolean).join(" ");
-                    chunks.push(
-                      accidentalAttrs
-                        ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
-                        : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`,
-                    );
-                  }
-                  if (note.tieStart) chunks.push('<tie type="start"/>');
-                  if (note.tieStop) chunks.push('<tie type="stop"/>');
-                  if (
-                    note.tieStart ||
-                    note.tieStop ||
-                    note.slurStart ||
-                    note.slurStop ||
-                    note.trill ||
-                    note.trillLineStop ||
-                    note.turnType ||
-                    note.delayedTurn ||
-                    note.mordentType ||
-                    note.tremoloType ||
-                    note.glissandoStart ||
-                    note.glissandoStop ||
-                    note.slideStart ||
-                    note.slideStop ||
-                    note.schleifer ||
-                    note.shake ||
-                    note.arpeggiate ||
-                    note.staccato ||
-                    note.staccatissimo ||
-                    note.accent ||
-                    note.tenuto ||
-                    note.stress ||
-                    note.unstress ||
-                    note.fermataType ||
-                    note.strongAccent ||
-                    note.breathMark ||
-                    note.caesura ||
-                    note.phraseMark ||
-                    note.upBow ||
-                    note.downBow ||
-                    note.doubleTongue ||
-                    note.tripleTongue ||
-                    note.heel ||
-                    note.toe ||
-                    (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
-                    (Array.isArray(note.strings) && note.strings.length > 0) ||
-                    (Array.isArray(note.plucks) && note.plucks.length > 0) ||
-                    note.openString ||
-                    note.snapPizzicato ||
-                    note.harmonic ||
-                    note.stopped ||
-                    note.thumbPosition ||
-                    note.tupletStart ||
-                    note.tupletStop
-                  ) {
-                    chunks.push("<notations>");
-                    if (note.tieStart) chunks.push('<tied type="start"/>');
-                    if (note.tieStop) chunks.push('<tied type="stop"/>');
-                    if (note.slurStart) chunks.push('<slur type="start"/>');
-                    if (note.slurStop) chunks.push('<slur type="stop"/>');
-                    if (note.tupletStart) chunks.push('<tuplet type="start"/>');
-                    if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
-                    if (note.trill || note.trillLineStop) {
-                      const trillParts: string[] = [];
-                    if (note.trill) {
-                      trillParts.push("<trill-mark/>");
-                    }
-                    if (note.trillLineStop) {
-                      trillParts.push('<wavy-line type="stop"/>');
-                    } else if (note.trillLineStart) {
-                      trillParts.push('<wavy-line type="start"/>');
-                    }
-                      if (note.trillAccidentalText) {
-                        trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
-                      }
-                      chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
-                    }
-                    if (note.turnType) {
-                      const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
-                      const slashAttr = note.turnSlash ? ' slash="yes"' : "";
-                      chunks.push(`<ornaments><${tag}${slashAttr}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
-                    }
-                    if (note.mordentType) {
-                      const tag = note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent";
-                      chunks.push(`<ornaments><${tag}/></ornaments>`);
-                    }
-                    if (note.tremoloType) {
-                      const marks = Math.max(1, Math.min(8, Math.round(Number(note.tremoloMarks) || 1)));
-                      chunks.push(`<ornaments><tremolo type="${xmlEscape(String(note.tremoloType))}">${marks}</tremolo></ornaments>`);
-                    }
-                    if (note.glissandoStart) {
-                      chunks.push('<glissando type="start" number="1">wavy</glissando>');
-                    }
-                    if (note.glissandoStop) {
-                      chunks.push('<glissando type="stop" number="1">wavy</glissando>');
-                    }
-                    if (note.slideStart) {
-                      chunks.push('<slide type="start" number="1"/>');
-                    }
-                    if (note.slideStop) {
-                      chunks.push('<slide type="stop" number="1"/>');
-                    }
-                    if (note.schleifer) {
-                      chunks.push("<ornaments><schleifer/></ornaments>");
-                    }
-                    if (note.shake) {
-                      chunks.push("<ornaments><shake/></ornaments>");
-                    }
-                    if (note.arpeggiate) {
-                      chunks.push("<arpeggiate/>");
-                    }
-                    const articulationParts: string[] = [];
-                    if (note.staccato) articulationParts.push("<staccato/>");
-                    if (note.staccatissimo) articulationParts.push("<staccatissimo/>");
-                    if (note.accent) articulationParts.push("<accent/>");
-                    if (note.tenuto) articulationParts.push("<tenuto/>");
-                    if (note.stress) articulationParts.push("<stress/>");
-                    if (note.unstress) articulationParts.push("<unstress/>");
-                    if (note.strongAccent) articulationParts.push("<strong-accent/>");
-                    if (note.breathMark) articulationParts.push("<breath-mark/>");
-                    if (note.caesura) articulationParts.push("<caesura/>");
-                    if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
-                    if (articulationParts.length > 0) {
-                      chunks.push(`<articulations>${articulationParts.join("")}</articulations>`);
-                    }
-                    const technicalParts: string[] = [];
-                    if (note.upBow) technicalParts.push("<up-bow/>");
-                    if (note.downBow) technicalParts.push("<down-bow/>");
-                    if (note.doubleTongue) technicalParts.push("<double-tongue/>");
-                    if (note.tripleTongue) technicalParts.push("<triple-tongue/>");
-                    if (note.heel) technicalParts.push("<heel/>");
-                    if (note.toe) technicalParts.push("<toe/>");
-                    if (Array.isArray(note.fingerings) && note.fingerings.length > 0) {
-                      for (const fingering of note.fingerings) {
-                        if (fingering) technicalParts.push(`<fingering>${xmlEscape(String(fingering))}</fingering>`);
-                      }
-                    }
-                    if (Array.isArray(note.strings) && note.strings.length > 0) {
-                      for (const stringText of note.strings) {
-                        if (stringText) technicalParts.push(`<string>${xmlEscape(String(stringText))}</string>`);
-                      }
-                    }
-                    if (Array.isArray(note.plucks) && note.plucks.length > 0) {
-                      for (const pluckText of note.plucks) {
-                        if (pluckText) technicalParts.push(`<pluck>${xmlEscape(String(pluckText))}</pluck>`);
-                      }
-                    }
-                    if (note.openString) technicalParts.push("<open-string/>");
-                    if (note.snapPizzicato) technicalParts.push("<snap-pizzicato/>");
-                    if (note.harmonic) technicalParts.push("<harmonic/>");
-                    if (note.stopped) technicalParts.push("<stopped/>");
-                    if (note.thumbPosition) technicalParts.push("<thumb-position/>");
-                    if (technicalParts.length > 0) {
-                      chunks.push(`<technical>${technicalParts.join("")}</technical>`);
-                    }
-                    if (note.fermataType) {
-                      const fermataText = note.fermataType === "inverted" ? "inverted" : "normal";
-                      chunks.push(`<fermata>${fermataText}</fermata>`);
-                    }
-                    chunks.push("</notations>");
-                  }
-                  chunks.push("</note>");
-                  return chunks.join("");
+          Array.isArray(part.staffVoices) && part.staffVoices.length > 1
+            ? part.staffVoices
+                .map((staffVoice, staffIndex) => {
+                  const staffNotes = staffVoice.measures?.[i] ?? [];
+                  const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
+                  if (staffIndex <= 0) return xml;
+                  return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
                 })
-                .join("");
-              })()
-            : `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type></note>`;
+                .join("")
+            : buildMeasureNotesXml(notes);
 
         const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
         const implicitAttr = measureMeta?.implicit || inferredImplicitPickup ? ' implicit="yes"' : "";

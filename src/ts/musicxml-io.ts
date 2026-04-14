@@ -11,6 +11,8 @@ export type RenderDocBundle = {
   noteCount: number;
 };
 
+// Parse / serialize
+
 export const parseMusicXmlDocument = (xml: string): Document | null => {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   return doc.querySelector("parsererror") ? null : doc;
@@ -36,6 +38,8 @@ export const prettyPrintMusicXmlText = (xml: string): string => {
   }
   return lines.join("\n");
 };
+
+// Normalization / fixup
 
 const ensureTupletNotation = (
   note: Element,
@@ -68,7 +72,7 @@ const ensureTupletNotation = (
 };
 
 const hasChordTag = (note: Element): boolean => note.querySelector(":scope > chord") !== null;
-const laneKeyForNote = (note: Element): string => {
+const noteLaneKey = (note: Element): string => {
   const voice = note.querySelector(":scope > voice")?.textContent?.trim() ?? "1";
   const staff = note.querySelector(":scope > staff")?.textContent?.trim() ?? "1";
   return `${voice}::${staff}`;
@@ -82,54 +86,71 @@ const tupletSignatureForNote = (note: Element): string | null => {
   return `${Math.round(actual)}/${Math.round(normal)}`;
 };
 
+const applyTupletNotationGroup = (
+  notes: Element[] | undefined,
+  nextTupletNoByLane: Map<string, number>,
+  lane: string
+): void => {
+  if (!notes || notes.length < 2) return;
+  const number = nextTupletNoByLane.get(lane) ?? 1;
+  nextTupletNoByLane.set(lane, number + 1);
+  ensureTupletNotation(notes[0], "start", number, true);
+  ensureTupletNotation(notes[notes.length - 1], "stop", number, false);
+};
+
+const enrichTupletNotationsInMeasure = (measure: Element): void => {
+  const children = Array.from(measure.children);
+  const activeByLane = new Map<string, { sig: string; notes: Element[] }>();
+  const nextTupletNoByLane = new Map<string, number>();
+  const flushLane = (lane: string): void => {
+    const group = activeByLane.get(lane);
+    activeByLane.delete(lane);
+    applyTupletNotationGroup(group?.notes, nextTupletNoByLane, lane);
+  };
+  const flushAll = (): void => {
+    for (const lane of Array.from(activeByLane.keys())) flushLane(lane);
+  };
+
+  for (const child of children) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      flushAll();
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const note = child as Element;
+    if (hasChordTag(note)) continue;
+    const lane = noteLaneKey(note);
+    const sig = tupletSignatureForNote(note);
+    const current = activeByLane.get(lane);
+    if (!sig) {
+      flushLane(lane);
+      continue;
+    }
+    if (!current || current.sig !== sig) {
+      flushLane(lane);
+      activeByLane.set(lane, { sig, notes: [note] });
+    } else {
+      current.notes.push(note);
+    }
+  }
+  flushAll();
+};
+
 const enrichTupletNotationsInDocument = (doc: Document): void => {
   for (const measure of Array.from(doc.querySelectorAll("part > measure"))) {
-    const children = Array.from(measure.children);
-    const activeByLane = new Map<string, { sig: string; notes: Element[] }>();
-    const nextTupletNoByLane = new Map<string, number>();
-    const flushLane = (lane: string): void => {
-      const group = activeByLane.get(lane);
-      activeByLane.delete(lane);
-      if (!group || group.notes.length < 2) return;
-      const number = nextTupletNoByLane.get(lane) ?? 1;
-      nextTupletNoByLane.set(lane, number + 1);
-      ensureTupletNotation(group.notes[0], "start", number, true);
-      ensureTupletNotation(group.notes[group.notes.length - 1], "stop", number, false);
-    };
-    const flushAll = (): void => {
-      for (const lane of Array.from(activeByLane.keys())) flushLane(lane);
-    };
-
-    for (const child of children) {
-      if (child.tagName === "backup" || child.tagName === "forward") {
-        flushAll();
-        continue;
-      }
-      if (child.tagName !== "note") continue;
-      const note = child as Element;
-      if (hasChordTag(note)) continue;
-      const lane = laneKeyForNote(note);
-      const sig = tupletSignatureForNote(note);
-      const current = activeByLane.get(lane);
-      if (!sig) {
-        flushLane(lane);
-        continue;
-      }
-      if (!current || current.sig !== sig) {
-        flushLane(lane);
-        activeByLane.set(lane, { sig, notes: [note] });
-      } else {
-        current.notes.push(note);
-      }
-    }
-    flushAll();
+    enrichTupletNotationsInMeasure(measure as Element);
   }
 };
 
-const normalizePartListAndPartIds = (doc: Document): void => {
-  const root = doc.querySelector("score-partwise");
-  if (!root) return;
-  const parts = Array.from(root.querySelectorAll(":scope > part"));
+const getScorePartwiseRoot = (doc: Document): Element | null => {
+  return doc.querySelector("score-partwise");
+};
+
+const getTopLevelParts = (root: Element): Element[] => {
+  return Array.from(root.querySelectorAll(":scope > part"));
+};
+
+const normalizeTopLevelPartIds = (parts: Element[]): void => {
   if (parts.length === 0) return;
 
   const usedIds = new Set<string>();
@@ -151,56 +172,82 @@ const normalizePartListAndPartIds = (doc: Document): void => {
     }
     usedIds.add(current);
   }
+};
 
+const ensurePartListElement = (root: Element, firstPart: Element | null): Element | null => {
   let partList = root.querySelector(":scope > part-list");
   if (!partList) {
-    partList = doc.createElement("part-list");
-    root.insertBefore(partList, parts[0]);
+    if (!firstPart) return null;
+    partList = root.ownerDocument.createElement("part-list");
+    root.insertBefore(partList, firstPart);
   }
+  return partList;
+};
 
+const collectScorePartEntriesById = (partList: Element): Map<string, Element> => {
   const scorePartById = new Map<string, Element>();
   for (const scorePart of Array.from(partList.querySelectorAll(":scope > score-part"))) {
     const id = (scorePart.getAttribute("id") ?? "").trim();
     if (!id || scorePartById.has(id)) continue;
     scorePartById.set(id, scorePart);
   }
+  return scorePartById;
+};
 
+const ensurePartNameElement = (scorePart: Element): void => {
+  if (scorePart.querySelector(":scope > part-name")) return;
+  const partName = scorePart.ownerDocument.createElement("part-name");
+  partName.textContent = "Music";
+  scorePart.appendChild(partName);
+};
+
+const ensureScorePartEntriesForParts = (partList: Element, parts: Element[]): void => {
+  const scorePartById = collectScorePartEntriesById(partList);
   for (const part of parts) {
     const id = (part.getAttribute("id") ?? "").trim();
     if (!id) continue;
     const existing = scorePartById.get(id);
     if (existing) {
-      if (!existing.querySelector(":scope > part-name")) {
-        const partName = doc.createElement("part-name");
-        partName.textContent = "Music";
-        existing.appendChild(partName);
-      }
+      ensurePartNameElement(existing);
       continue;
     }
-    const scorePart = doc.createElement("score-part");
+    const scorePart = partList.ownerDocument.createElement("score-part");
     scorePart.setAttribute("id", id);
-    const partName = doc.createElement("part-name");
-    partName.textContent = "Music";
-    scorePart.appendChild(partName);
+    ensurePartNameElement(scorePart);
     partList.appendChild(scorePart);
     scorePartById.set(id, scorePart);
   }
 };
 
+const normalizePartListAndPartIds = (doc: Document): void => {
+  const root = getScorePartwiseRoot(doc);
+  if (!root) return;
+  const parts = getTopLevelParts(root);
+  if (parts.length === 0) return;
+  normalizeTopLevelPartIds(parts);
+  const partList = ensurePartListElement(root, parts[0] ?? null);
+  if (!partList) return;
+  ensureScorePartEntriesForParts(partList, parts);
+};
+
+const ensureFinalBarlineInPart = (part: Element): void => {
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  const lastMeasure = measures[measures.length - 1];
+  if (!lastMeasure) return;
+  const rightBarline = lastMeasure.querySelector(':scope > barline[location="right"]');
+  if (rightBarline) return;
+  const barline = part.ownerDocument.createElement("barline");
+  barline.setAttribute("location", "right");
+  const barStyle = part.ownerDocument.createElement("bar-style");
+  barStyle.textContent = "light-heavy";
+  barline.appendChild(barStyle);
+  lastMeasure.appendChild(barline);
+};
+
 const ensureFinalBarlineInEachPart = (doc: Document): void => {
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   for (const part of parts) {
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    const lastMeasure = measures[measures.length - 1];
-    if (!lastMeasure) continue;
-    const rightBarline = lastMeasure.querySelector(':scope > barline[location="right"]');
-    if (rightBarline) continue;
-    const barline = doc.createElement("barline");
-    barline.setAttribute("location", "right");
-    const barStyle = doc.createElement("bar-style");
-    barStyle.textContent = "light-heavy";
-    barline.appendChild(barStyle);
-    lastMeasure.appendChild(barline);
+    ensureFinalBarlineInPart(part as Element);
   }
 };
 
@@ -223,12 +270,6 @@ const beamLevelsFromType = (typeText: string): number => {
   }
 };
 
-const laneKeyForTimelineNote = (note: Element): string => {
-  const voice = note.querySelector(":scope > voice")?.textContent?.trim() || "1";
-  const staff = note.querySelector(":scope > staff")?.textContent?.trim() || "1";
-  return `${voice}::${staff}`;
-};
-
 const appendBeamElement = (note: Element, number: number, state: "begin" | "continue" | "end"): void => {
   const beam = note.ownerDocument.createElement("beam");
   beam.setAttribute("number", String(number));
@@ -247,125 +288,168 @@ type BeamTimelineEntry = {
   levels: number;
 };
 
-const enrichImplicitBeamsInDocument = (doc: Document): void => {
-  for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
-    let currentDivisions = 480;
-    let currentBeats = 4;
-    let currentBeatType = 4;
+type BeamMeasureState = {
+  divisions: number;
+  beats: number;
+  beatType: number;
+};
 
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const divisionsText = measure.querySelector(":scope > attributes > divisions")?.textContent?.trim();
-      const divisions = Number.parseInt(divisionsText || "", 10);
-      if (Number.isFinite(divisions) && divisions > 0) currentDivisions = divisions;
+const updateBeamMeasureState = (measure: Element, current: BeamMeasureState): BeamMeasureState => {
+  let next = { ...current };
+  const divisionsText = measure.querySelector(":scope > attributes > divisions")?.textContent?.trim();
+  const divisions = Number.parseInt(divisionsText || "", 10);
+  if (Number.isFinite(divisions) && divisions > 0) next.divisions = divisions;
 
-      const beatsText = measure.querySelector(":scope > attributes > time > beats")?.textContent?.trim();
-      const beats = Number.parseInt(beatsText || "", 10);
-      if (Number.isFinite(beats) && beats > 0) currentBeats = beats;
+  const beatsText = measure.querySelector(":scope > attributes > time > beats")?.textContent?.trim();
+  const beats = Number.parseInt(beatsText || "", 10);
+  if (Number.isFinite(beats) && beats > 0) next.beats = beats;
 
-      const beatTypeText = measure.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim();
-      const beatType = Number.parseInt(beatTypeText || "", 10);
-      if (Number.isFinite(beatType) && beatType > 0) currentBeatType = beatType;
+  const beatTypeText = measure.querySelector(":scope > attributes > time > beat-type")?.textContent?.trim();
+  const beatType = Number.parseInt(beatTypeText || "", 10);
+  if (Number.isFinite(beatType) && beatType > 0) next.beatType = beatType;
+  return next;
+};
 
-      const beatDiv = Math.max(1, Math.round((currentDivisions * 4) / Math.max(1, currentBeatType)));
-      const laneHasExistingBeam = new Set<string>();
-      const lanes = new Set<string>();
-      for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
-        if (note.querySelector(":scope > chord")) continue;
-        const lane = laneKeyForTimelineNote(note);
-        lanes.add(lane);
-        if (note.querySelector(":scope > beam")) laneHasExistingBeam.add(lane);
-      }
+const collectBeamLanesInMeasure = (measure: Element): {
+  lanes: Set<string>;
+  laneHasExistingBeam: Set<string>;
+} => {
+  const laneHasExistingBeam = new Set<string>();
+  const lanes = new Set<string>();
+  for (const note of Array.from(measure.querySelectorAll(":scope > note"))) {
+    if (note.querySelector(":scope > chord")) continue;
+    const lane = noteLaneKey(note);
+    lanes.add(lane);
+    if (note.querySelector(":scope > beam")) laneHasExistingBeam.add(lane);
+  }
+  return { lanes, laneHasExistingBeam };
+};
 
-      if (!lanes.size) continue;
-      const children = Array.from(measure.children);
-      for (const lane of lanes) {
-        if (laneHasExistingBeam.has(lane)) continue;
-        const timeline: BeamTimelineEntry[] = [];
-        const noteIndexByTimelineIndex = new Map<number, Element>();
-        for (const child of children) {
-          if (child.tagName === "backup") {
-            timeline.push({
-              note: null,
-              timed: false,
-              chord: false,
-              grace: false,
-              durationDiv: 0,
-              levels: 0,
-            });
-            continue;
-          }
-          if (child.tagName === "forward") {
-            const duration = Number.parseInt(child.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
-            timeline.push({
-              note: null,
-              timed: true,
-              chord: false,
-              grace: false,
-              durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
-              levels: 0,
-            });
-            continue;
-          }
-          if (child.tagName !== "note") continue;
-          const note = child as Element;
-          if (note.querySelector(":scope > chord")) continue;
-          if (laneKeyForTimelineNote(note) !== lane) continue;
-          const duration = Number.parseInt(note.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
-          const typeText = note.querySelector(":scope > type")?.textContent?.trim() || "";
-          const entry: BeamTimelineEntry = {
-            note,
-            timed: true,
-            chord: !note.querySelector(":scope > rest"),
-            grace: note.querySelector(":scope > grace") !== null,
-            durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
-            levels: beamLevelsFromType(typeText),
-          };
-          const idx = timeline.length;
-          timeline.push(entry);
-          noteIndexByTimelineIndex.set(idx, note);
-        }
+const buildBeamTimelineForLane = (
+  measure: Element,
+  lane: string
+): { timeline: BeamTimelineEntry[]; noteIndexByTimelineIndex: Map<number, Element> } => {
+  const timeline: BeamTimelineEntry[] = [];
+  const noteIndexByTimelineIndex = new Map<number, Element>();
+  for (const child of Array.from(measure.children)) {
+    if (child.tagName === "backup") {
+      timeline.push({ note: null, timed: false, chord: false, grace: false, durationDiv: 0, levels: 0 });
+      continue;
+    }
+    if (child.tagName === "forward") {
+      const duration = Number.parseInt(child.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
+      timeline.push({
+        note: null,
+        timed: true,
+        chord: false,
+        grace: false,
+        durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+        levels: 0,
+      });
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const note = child as Element;
+    if (note.querySelector(":scope > chord")) continue;
+    if (noteLaneKey(note) !== lane) continue;
+    const duration = Number.parseInt(note.querySelector(":scope > duration")?.textContent?.trim() || "0", 10);
+    const typeText = note.querySelector(":scope > type")?.textContent?.trim() || "";
+    const entry: BeamTimelineEntry = {
+      note,
+      timed: true,
+      chord: !note.querySelector(":scope > rest"),
+      grace: note.querySelector(":scope > grace") !== null,
+      durationDiv: Number.isFinite(duration) ? Math.max(0, duration) : 0,
+      levels: beamLevelsFromType(typeText),
+    };
+    const idx = timeline.length;
+    timeline.push(entry);
+    noteIndexByTimelineIndex.set(idx, note);
+  }
+  return { timeline, noteIndexByTimelineIndex };
+};
 
-        if (timeline.length < 2) continue;
-        const assignments = computeBeamAssignments(
-          timeline,
-          beatDiv,
-          (event) => ({
-            timed: event.timed,
-            chord: event.chord,
-            grace: event.grace,
-            durationDiv: event.durationDiv,
-            levels: event.levels,
-          }),
-          { splitAtBeatBoundaryWhenImplicit: true }
-        );
-        for (const [idx, assignment] of assignments.entries()) {
-          const note = noteIndexByTimelineIndex.get(idx);
-          if (!note || assignment.levels <= 0) continue;
-          if (note.querySelector(":scope > beam")) continue;
-          for (let level = 1; level <= assignment.levels; level += 1) {
-            appendBeamElement(note, level, assignment.state);
-          }
-        }
-      }
+const applyImplicitBeamsToLaneTimeline = (
+  timeline: BeamTimelineEntry[],
+  noteIndexByTimelineIndex: Map<number, Element>,
+  beatDiv: number
+): void => {
+  if (timeline.length < 2) return;
+  const assignments = computeBeamAssignments(
+    timeline,
+    beatDiv,
+    (event) => ({
+      timed: event.timed,
+      chord: event.chord,
+      grace: event.grace,
+      durationDiv: event.durationDiv,
+      levels: event.levels,
+    }),
+    { splitAtBeatBoundaryWhenImplicit: true }
+  );
+  for (const [idx, assignment] of assignments.entries()) {
+    const note = noteIndexByTimelineIndex.get(idx);
+    if (!note || assignment.levels <= 0) continue;
+    if (note.querySelector(":scope > beam")) continue;
+    for (let level = 1; level <= assignment.levels; level += 1) {
+      appendBeamElement(note, level, assignment.state);
     }
   }
+};
+
+const enrichImplicitBeamsInMeasure = (measure: Element, state: BeamMeasureState): BeamMeasureState => {
+  const nextState = updateBeamMeasureState(measure, state);
+  const beatDiv = Math.max(1, Math.round((nextState.divisions * 4) / Math.max(1, nextState.beatType)));
+  const { lanes, laneHasExistingBeam } = collectBeamLanesInMeasure(measure);
+  if (!lanes.size) return nextState;
+  for (const lane of lanes) {
+    if (laneHasExistingBeam.has(lane)) continue;
+    const { timeline, noteIndexByTimelineIndex } = buildBeamTimelineForLane(measure, lane);
+    applyImplicitBeamsToLaneTimeline(timeline, noteIndexByTimelineIndex, beatDiv);
+  }
+  return nextState;
+};
+
+const enrichImplicitBeamsInPart = (part: Element): void => {
+  let state: BeamMeasureState = { divisions: 480, beats: 4, beatType: 4 };
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    state = enrichImplicitBeamsInMeasure(measure as Element, state);
+  }
+};
+
+const enrichImplicitBeamsInDocument = (doc: Document): void => {
+  for (const part of Array.from(doc.querySelectorAll("score-partwise > part"))) {
+    enrichImplicitBeamsInPart(part as Element);
+  }
+};
+
+const normalizeImportedMusicXmlDocument = (doc: Document): Document => {
+  normalizePartListAndPartIds(doc);
+  enrichTupletNotationsInDocument(doc);
+  ensureFinalBarlineInEachPart(doc);
+  return doc;
+};
+
+const applyImplicitBeamsToMusicXmlDocument = (doc: Document): Document => {
+  enrichImplicitBeamsInDocument(doc);
+  return doc;
 };
 
 export const normalizeImportedMusicXmlText = (xml: string): string => {
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
-  normalizePartListAndPartIds(doc);
-  enrichTupletNotationsInDocument(doc);
-  ensureFinalBarlineInEachPart(doc);
+  normalizeImportedMusicXmlDocument(doc);
   return prettyPrintMusicXmlText(serializeMusicXmlDocument(doc));
 };
 
 export const applyImplicitBeamsToMusicXmlText = (xml: string): string => {
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
-  enrichImplicitBeamsInDocument(doc);
+  applyImplicitBeamsToMusicXmlDocument(doc);
   return serializeMusicXmlDocument(doc);
 };
+
+// Render / measure-editor helpers
 
 const cloneXmlDocument = (doc: Document): Document => {
   const cloned = document.implementation.createDocument("", "", null);
@@ -393,6 +477,66 @@ const findMeasureByNumber = (part: Element, measureNumber: string): Element | nu
     if ((measure.getAttribute("number") ?? "") === measureNumber) return measure;
   }
   return null;
+};
+
+const collectEffectiveMeasureAttributes = (part: Element, targetMeasure: Element): Element | null => {
+  let divisions: Element | null = null;
+  let key: Element | null = null;
+  let time: Element | null = null;
+  let staves: Element | null = null;
+  const clefByNo = new Map<string, Element>();
+
+  for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+    const attrs = measure.querySelector(":scope > attributes");
+    if (attrs) {
+      const nextDivisions = attrs.querySelector(":scope > divisions");
+      if (nextDivisions) divisions = nextDivisions.cloneNode(true) as Element;
+      const nextKey = attrs.querySelector(":scope > key");
+      if (nextKey) key = nextKey.cloneNode(true) as Element;
+      const nextTime = attrs.querySelector(":scope > time");
+      if (nextTime) time = nextTime.cloneNode(true) as Element;
+      const nextStaves = attrs.querySelector(":scope > staves");
+      if (nextStaves) staves = nextStaves.cloneNode(true) as Element;
+      for (const clef of Array.from(attrs.querySelectorAll(":scope > clef"))) {
+        const no = clef.getAttribute("number") ?? "1";
+        clefByNo.set(no, clef.cloneNode(true) as Element);
+      }
+    }
+    if (measure === targetMeasure) break;
+  }
+
+  const doc = targetMeasure.ownerDocument;
+  const effective = doc.createElement("attributes");
+  if (divisions) effective.appendChild(divisions);
+  if (key) effective.appendChild(key);
+  if (time) effective.appendChild(time);
+  if (staves) effective.appendChild(staves);
+  for (const no of Array.from(clefByNo.keys()).sort()) {
+    const clef = clefByNo.get(no);
+    if (clef) effective.appendChild(clef);
+  }
+  return effective.childElementCount > 0 ? effective : null;
+};
+
+const mergeMissingEffectiveAttributes = (targetAttributes: Element, effectiveAttributes: Element): void => {
+  const ensureSingle = (selector: string): void => {
+    if (targetAttributes.querySelector(`:scope > ${selector}`)) return;
+    const src = effectiveAttributes.querySelector(`:scope > ${selector}`);
+    if (src) targetAttributes.appendChild(src.cloneNode(true));
+  };
+  ensureSingle("divisions");
+  ensureSingle("key");
+  ensureSingle("time");
+  ensureSingle("staves");
+
+  const existingClefNos = new Set(
+    Array.from(targetAttributes.querySelectorAll(":scope > clef")).map((c) => c.getAttribute("number") ?? "1")
+  );
+  for (const clef of Array.from(effectiveAttributes.querySelectorAll(":scope > clef"))) {
+    const no = clef.getAttribute("number") ?? "1";
+    if (existingClefNos.has(no)) continue;
+    targetAttributes.appendChild(clef.cloneNode(true));
+  }
 };
 
 export const buildRenderDocWithNodeIds = (
@@ -433,70 +577,14 @@ export const extractMeasureEditorDocument = (
   const srcMeasure = findMeasureByNumber(srcPart, measureNumber);
   if (!srcMeasure) return null;
 
-  const collectEffectiveAttributes = (part: Element, targetMeasure: Element): Element | null => {
-    let divisions: Element | null = null;
-    let key: Element | null = null;
-    let time: Element | null = null;
-    let staves: Element | null = null;
-    const clefByNo = new Map<string, Element>();
-
-    for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
-      const attrs = measure.querySelector(":scope > attributes");
-      if (attrs) {
-        const nextDivisions = attrs.querySelector(":scope > divisions");
-        if (nextDivisions) divisions = nextDivisions.cloneNode(true) as Element;
-        const nextKey = attrs.querySelector(":scope > key");
-        if (nextKey) key = nextKey.cloneNode(true) as Element;
-        const nextTime = attrs.querySelector(":scope > time");
-        if (nextTime) time = nextTime.cloneNode(true) as Element;
-        const nextStaves = attrs.querySelector(":scope > staves");
-        if (nextStaves) staves = nextStaves.cloneNode(true) as Element;
-        for (const clef of Array.from(attrs.querySelectorAll(":scope > clef"))) {
-          const no = clef.getAttribute("number") ?? "1";
-          clefByNo.set(no, clef.cloneNode(true) as Element);
-        }
-      }
-      if (measure === targetMeasure) break;
-    }
-
-    const doc = targetMeasure.ownerDocument;
-    const effective = doc.createElement("attributes");
-    if (divisions) effective.appendChild(divisions);
-    if (key) effective.appendChild(key);
-    if (time) effective.appendChild(time);
-    if (staves) effective.appendChild(staves);
-    for (const no of Array.from(clefByNo.keys()).sort()) {
-      const clef = clefByNo.get(no);
-      if (clef) effective.appendChild(clef);
-    }
-    return effective.childElementCount > 0 ? effective : null;
-  };
-
   const patchedMeasure = srcMeasure.cloneNode(true) as Element;
-  const effectiveAttrs = collectEffectiveAttributes(srcPart, srcMeasure);
+  const effectiveAttrs = collectEffectiveMeasureAttributes(srcPart, srcMeasure);
   if (effectiveAttrs) {
     const existing = patchedMeasure.querySelector(":scope > attributes");
     if (!existing) {
       patchedMeasure.insertBefore(effectiveAttrs, patchedMeasure.firstChild);
     } else {
-      const ensureSingle = (selector: string): void => {
-        if (existing.querySelector(`:scope > ${selector}`)) return;
-        const src = effectiveAttrs.querySelector(`:scope > ${selector}`);
-        if (src) existing.appendChild(src.cloneNode(true));
-      };
-      ensureSingle("divisions");
-      ensureSingle("key");
-      ensureSingle("time");
-      ensureSingle("staves");
-
-      const existingClefNos = new Set(
-        Array.from(existing.querySelectorAll(":scope > clef")).map((c) => c.getAttribute("number") ?? "1")
-      );
-      for (const clef of Array.from(effectiveAttrs.querySelectorAll(":scope > clef"))) {
-        const no = clef.getAttribute("number") ?? "1";
-        if (existingClefNos.has(no)) continue;
-        existing.appendChild(clef.cloneNode(true));
-      }
+      mergeMissingEffectiveAttributes(existing, effectiveAttrs);
     }
   }
 

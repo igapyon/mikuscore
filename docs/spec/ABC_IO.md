@@ -173,7 +173,7 @@ This means:
 
 #### 2. Compatibility behavior
 
-- optional `%%score` voice ordering directive
+- optional `%%score` voice ordering / staff-grouping directive
 - unsupported `%%...` directives are skipped with warnings rather than silently treated as supported semantics
 - partial/legacy patterns accepted for practical compatibility
 - de facto ecosystem conventions commonly accepted by `abcjs` / `abcm2ps` may be supported when the intended musical meaning is clear and implementation behavior can be specified
@@ -185,6 +185,13 @@ This means:
 - overlay marker `&` is imported by splitting one ABC body stream into synthetic overlay voices
 - current overlay limitation: these synthetic overlay voices become separate MusicXML parts rather than one part with multiple synchronized voices
 - standalone octave marks may be tolerated in unsupported positions
+
+Current `%%score` handling is intentionally bounded:
+
+- plain ordered ids continue to control voice order
+- parenthesized groups such as `%%score (1 2)` are imported as one MusicXML part with multiple staves
+- this currently targets practical multi-staff grouping, not full ABC staff-layout parity
+- `brace` / `bracket` / `staves` and related broader `V:` property semantics remain outside the supported standard subset
 
 #### 3. `mikuscore` extension metadata
 
