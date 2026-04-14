@@ -54,12 +54,31 @@
 - [ ] Re-evaluate `core/` boundaries only if reuse pressure becomes real.
   - Do not move conversion facade code into `core/` without a concrete need.
 
+## Build
+
+- [ ] Shorten and stabilize `npm run build:full`.
+  - Current observation:
+    - `typecheck` and `build:dist` are relatively small, but `test:build:full` dominates total time
+    - `tests/unit/playback-flow.spec.ts` currently shows a 5-second timeout failure in the full path
+    - heavy suites currently include `playback-flow`, `lilypond-io`, and `midi-roundtrip-golden`
+  - Next work:
+    - profile `test:build:full` more deliberately and identify the longest suites/tests
+    - decide whether more suites should move between `test:build`, `test:slow`, and `test:build:full`
+    - investigate whether the `playback-flow` timeout is an actual regression, a flaky test, or a timeout-budget issue
+    - consider Vitest worker/timeout settings only after the heavy-suite split is reasonably settled
+
 ## ABC
 
 - [ ] Refactor `src/ts/abc-io.ts` before continuing larger ABC layout expansion.
   - Current concern:
     - recent `%%score` / grouped-staff work was implemented as a bounded first cut
     - behavior now works for the targeted case, but the code shape is still too incremental
+  - Current status:
+    - the first in-file staged cleanup is well underway
+    - `parseForMusicXml(...)` is now much closer to orchestration, with line parsing, layout derivation, body entry dispatch, and post-processing split into helpers
+    - pending note-state application and playable-event/body-token dispatch have also been thinned substantially
+    - export-side grouped-staff measure rendering, header generation, repeat/ending barline assembly, note serialization, note-level precomputation, measure-note rendering, top-level part rendering, document-shell assembly, and export-context calculation are now also partially helperized
+    - the file is much more segmented than before, but it is still not yet at a split-ready boundary
   - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
     - first make responsibility blocks explicit inside the current file
     - then extract small document/part/measure helpers with stable behavior
@@ -85,6 +104,14 @@
     - grouped-staff layout decisions
   - Target result:
     - a small layout-oriented helper/module with narrow inputs/outputs
+  - First slice:
+    - identify the current boundary between ABC document parsing and score-layout derivation
+    - extract only the layout-reading path first, without changing current grouped import behavior
+  - Current status:
+    - the initial slice is already started in-file via `parseAbcScoreLayout(...)`, `parseAbcScoreVoiceOrder(...)`, and related voice-registry/body-entry helpers
+    - document parsing and layout derivation are clearer than before
+    - normalized voice data, primary voice resolution, grouped part naming, and `staffVoices` construction are also now more explicit
+    - grouped-staff layout decisions are still partially entangled with later part construction, so this series is progressing but not complete
 
 - [ ] Refactoring series 3: introduce a clearer intermediate layout model for ABC import.
   - Replace or normalize the current `voice -> optional grouped staff` flow into an explicit model for:
@@ -93,6 +120,8 @@
     - staves
     - voices / lanes
   - Do this before adding broader multi-staff semantics.
+  - Constraint:
+    - avoid expanding ABC layout semantics during this step; keep the current bounded behavior and make the model clearer first
 
 - [ ] Refactoring series 4: split MusicXML emission into smaller helpers with stable boundaries.
   - Separate:
@@ -101,6 +130,13 @@
     - note serialization
     - grouped-staff measure emission with `<backup>`
   - Keep output stable while reducing the size of the current monolithic emitter.
+  - Current status:
+    - this has advanced through helper extraction around normalized voice data, part construction, body event rendering, grouped-staff note emission, measure header generation, repeat/ending barline generation, `buildMeasureNotesXml(...)` decomposition, beam/empty-measure note precomputation, top-level measure-note rendering, and top-level part-list / part-body / document / export-context orchestration
+    - grouped-staff MusicXML emission and note serialization are much clearer than before, but the exporter is still not fully separated into stable module-sized boundaries
+  - Resume here next time:
+    - continue from the remaining seams inside `buildAbcPartBodyXml(...)` and adjacent export helpers in `src/ts/abc-io.ts`
+    - likely next slice is to reduce the remaining per-part/per-measure orchestration closure footprint further, or decide this series is "good enough" and switch effort to characterization coverage
+    - if pausing the refactor, the most valuable immediate follow-up is focused characterization coverage for bounded `%%score` import/export and grouped-staff MusicXML emission
 
 - [ ] Refactoring series 5: make grouped-staff emission follow the same model as ordinary part emission.
   - Goal:
@@ -195,6 +231,10 @@
   - Current concern:
     - import, export, and many format-specific helpers are concentrated in one large file
     - future behavior changes will get harder to reason about if the file keeps growing in place
+  - Current status:
+    - the first in-file staged refactor pass has been completed
+    - MuseScore export now has clearer metadata / part scaffold / measure context / staff state / voice rendering seams
+    - import-side and export-side responsibility blocks are more explicit than before, but they still live in one file
   - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
     - first make responsibility blocks explicit inside the current file
     - then extract stable import/export/helper seams before any module split
@@ -217,6 +257,9 @@
     - MuseScore -> MusicXML import module
     - MusicXML -> MuseScore export module
     - shared utilities for duration, pitch, and XML fragments
+  - Current status:
+    - export-side seams are now much clearer inside `src/ts/musescore-io.ts`
+    - do not split files yet until the remaining shared helper boundaries are simpler
 
 - [ ] MuseScore refactoring series 3: isolate direction / spanner / notation translation logic.
   - Candidate areas:
@@ -231,6 +274,9 @@
   - Re-evaluate whether current parsed event and measure structures are the best boundary for both import and export work.
   - Aim:
     - make staff / voice / timing handling easier to reuse and test
+  - Current status:
+    - export-side measure context and staff state are now more explicit
+    - note/event child dispatch has been decomposed, but import/export still do not share a common internal lane model yet
 
 - [ ] MuseScore refactoring series 5: prune transitional helpers after the split lands.
   - Remove duplication that only existed to support the migration.
