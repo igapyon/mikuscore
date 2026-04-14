@@ -22,19 +22,19 @@ Scope note:
   - `Export`
 
 ### Brand Tooltip `(i)` (`About mikuscore`)
-- Browser-based local score editor.
-- Preserves existing MusicXML structure while editing.
-- Supports loading MusicXML/ABC, score preview, note editing, playback, and export/download (`MusicXML`/`ABC`/`MIDI`) in one screen.
-- Intentionally small feature set for practical, fast editing, especially on smartphones.
+- Browser-based MusicXML-first score converter.
+- Uses MusicXML as the central interchange format for moving score data between formats.
+- Supports loading score data, previewing structure, checking diagnostics, playback, and export/download in one screen.
+- Intentionally focused on conversion, inspection, and handoff rather than deep notation editing.
 - Smartphone-centered, but usable on PCs as well.
 - Workflow guidance:
   - `1) Choose input and load`
-  - `2) Select from score preview`
-  - `3) Edit notes`
-  - `4) Verify by playback and export/download`
+  - `2) Inspect the score and diagnostics`
+  - `3) Verify by playback if needed`
+  - `4) Export or hand off in another format`
 - Positioning guidance:
-  - Use dedicated notation software for large-scale/complex work.
-  - Use mikuscore for quick input or focused partial tasks.
+  - Use dedicated notation software for large-scale or complex notation editing.
+  - Use mikuscore for conversion-oriented tasks.
 
 ## Tabs / Interaction
 - Clicking a top tab opens the corresponding panel.

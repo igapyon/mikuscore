@@ -13,6 +13,7 @@ It complements:
 - Full-score handoff to a generative model uses `ABC`.
 - New score generation by a generative model uses `ABC`.
 - A dedicated AI-facing JSON patch/projection interface is not part of the current product contract.
+- AI interaction is one bridge use case for mikuscore, not the sole or primary product identity.
 
 ## Why this policy is simpler now
 
@@ -22,7 +23,8 @@ It complements:
 - practical readability for generative models
 - a smaller current-scope contract
 
-For the current product shape, `ABC` is the only documented AI-facing interchange layer.
+For the current product shape, `ABC` is the documented AI-facing interchange layer.
+This sits inside the broader product role of moving score data between tools and formats while keeping MusicXML canonical.
 
 ## Current constraint
 

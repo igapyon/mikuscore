@@ -27,5 +27,6 @@
 
 ## Scope Note
 
-These principles define behavior goals for conversion and lightweight editing.
+These principles define behavior goals for conversion, inspection, and handoff workflows.
+They do not define mikuscore as a general-purpose notation editor.
 Detailed normative rules remain in `docs/spec/*`.
