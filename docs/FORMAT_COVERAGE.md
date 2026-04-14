@@ -5,6 +5,7 @@
 - Priority order: MusicXML fidelity > conversion breadth.
 - "Supported" means available in product flows, not full notation parity.
 - Supported formats may still change behavior as compatibility and parity work progress.
+- mikuscore is a converter, not a promise of lossless editing parity across all formats.
 
 ## Current Coverage
 
@@ -23,6 +24,7 @@
 - Some notation semantics are format-specific and cannot be preserved 1:1.
 - Enharmonic spelling, articulation detail, repeat semantics, and layout constructs can differ by source format.
 - When exact preservation is not possible, diagnostics and metadata should provide traceability.
+- For notation editing beyond conversion-oriented inspection, use a dedicated notation editor.
 - Quick playback in mikuscore is a lightweight feature and may not work reliably on large scores (long duration, many parts, dense events).
 - For reliable playback of large scores, export MIDI and use an external MIDI-capable playback app.
 
