@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -176,7 +181,7 @@ const diffMultiset = (a: Map<string, number>, b: Map<string, number>): string[] 
 
 describe("Local roundtrip: MozartTrio musicxml <-> mscx", () => {
   it("keeps pickup (measure 0) duration/rest semantics", () => {
-    const sourcePath = resolve(process.cwd(), "tests", "fixtures-local", "MozartTrio.musicxml");
+    const sourcePath = resolve(process.cwd(), "tests", "local-data", "MozartTrio.musicxml");
     if (!existsSync(sourcePath)) {
       expect(true).toBe(true);
       return;
@@ -202,7 +207,7 @@ describe("Local roundtrip: MozartTrio musicxml <-> mscx", () => {
   });
 
   it("keeps whole-score absolute-beat note parity", () => {
-    const sourcePath = resolve(process.cwd(), "tests", "fixtures-local", "MozartTrio.musicxml");
+    const sourcePath = resolve(process.cwd(), "tests", "local-data", "MozartTrio.musicxml");
     if (!existsSync(sourcePath)) {
       expect(true).toBe(true);
       return;

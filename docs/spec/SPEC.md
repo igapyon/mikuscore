@@ -1,6 +1,13 @@
 # Browser-based MusicXML Score Editor
 ## Core Specification (MVP)
 
+Scope note:
+
+- This file is the top-level MVP core spec (principles and invariants).
+- Detailed command behavior is defined in `docs/spec/COMMAND_CATALOG.md`.
+- Diagnostic catalog is defined in `docs/spec/DIAGNOSTICS.md`.
+- Architecture boundaries are defined in `docs/spec/ARCHITECTURE.md`.
+
 ---
 
 # 1. Design Principles

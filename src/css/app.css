@@ -7,13 +7,153 @@ body {
   font-family: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic", sans-serif;
 }
 
+:root {
+  --md-danger: #b3261e;
+  --md-sys-color-background: #f6f4f8;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-on-secondary: #00332c;
+  --md-sys-color-on-surface: #1c1b1f;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-outline: #c8c5d0;
+  --md-sys-color-primary: #6200ee;
+  --md-sys-color-secondary: #03dac6;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-variant: #f4f1f7;
+}
+
+.md-page {
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-surface);
+}
+
 .md-hidden {
   display: none !important;
 }
 
 .md-shell {
   width: 100%;
-  max-width: none;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.md-card {
+  background: var(--md-sys-color-surface);
+  border-radius: 18px;
+  border: 1px solid #e9e3f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 16px 30px rgba(0, 0, 0, 0.06);
+  padding: 28px;
+}
+
+.md-headline {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.md-section {
+  margin-top: 28px;
+}
+
+.md-section-title {
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.md-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+}
+
+.md-textarea {
+  display: block;
+  width: 100%;
+  min-height: 6.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  box-sizing: border-box;
+}
+
+.md-textarea:focus {
+  outline: none;
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 3px rgba(98, 0, 238, 0.2);
+}
+
+.md-button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.md-button:hover {
+  box-shadow: 0 4px 10px rgba(98, 0, 238, 0.35);
+}
+
+.md-button:active {
+  opacity: 0.7;
+}
+
+.md-button:disabled {
+  background: #e6e1ee;
+  color: #9a94a7;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.md-button--primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: 0 3px 8px rgba(98, 0, 238, 0.28);
+}
+
+.md-button--primary:hover {
+  background: #4f00c9;
+}
+
+.md-button--tonal {
+  background: #f0edf5;
+  color: #3f3b46;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.md-button--tonal:hover {
+  background: #e6e1ee;
+}
+
+.md-button--surface {
+  background: var(--md-sys-color-surface-variant);
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  color: #3f3b46;
+}
+
+.md-radio input {
+  accent-color: var(--md-sys-color-primary);
 }
 
 .ms-app {
@@ -37,6 +177,23 @@ body {
   align-items: center;
   gap: 0.6rem;
   margin: 0;
+}
+
+/* Keep uninitialized tooltip hosts from expanding the hero/section layout. */
+lht-help-tooltip:not([data-initialized="true"]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.35rem;
+  block-size: 1.35rem;
+  overflow: hidden;
+  flex: 0 0 1.35rem;
+  color: transparent;
+  white-space: nowrap;
+}
+
+lht-help-tooltip:not([data-initialized="true"]) * {
+  display: none !important;
 }
 
 .ms-hero-link {
@@ -254,6 +411,35 @@ body {
   color: #5a4b79;
 }
 
+.ms-edit-subtabs {
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.5rem;
+  border-top: 1px solid #e6e1ee;
+  padding-top: 0.6rem;
+}
+
+.ms-edit-subtab-btn {
+  border: 1px solid #d8cfeb;
+  border-radius: 999px;
+  background: #f4f0fb;
+  color: #564d67;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.45rem 0.8rem;
+}
+
+.ms-edit-subtab-btn.is-active {
+  border-color: rgba(98, 0, 238, 0.45);
+  color: #4d2aa5;
+  background: rgba(98, 0, 238, 0.12);
+}
+
+.ms-edit-subtab-panel {
+  min-width: 0;
+}
+
 .ms-step-no {
   display: inline-flex;
   align-items: center;
@@ -317,53 +503,61 @@ body {
   margin-bottom: 0.45rem;
 }
 
-.ms-file-name {
-  display: inline-block;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 0.9rem;
-}
-
-.ms-file-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.ms-file-select-button {
-  background: #6200ee;
-  color: #ffffff;
-  border: 1px solid #4f00c6;
-  box-shadow: 0 2px 6px rgba(98, 0, 238, 0.35);
-}
-
-.ms-file-select-button:hover {
-  background: #5400d6;
-}
-
 .ms-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 0.55rem;
   margin-top: 0.8rem;
 }
 
 .ms-actions .md-button {
   width: auto;
+  min-height: 54px;
+  padding: 0.85rem 1.55rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ms-actions .ms-sample-button {
+  min-height: 46px;
+  padding: 0.65rem 1.35rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.ms-actions lht-file-select .lht-file-select {
+  align-items: flex-start;
+}
+
+.ms-actions lht-file-select .lht-file-select__file-name {
+  min-height: 1.35rem;
+  line-height: 1.35rem;
+}
+
+#zipEntrySelectBlock {
+  margin-top: 0.5rem;
 }
 
 .ms-preview-actions {
   margin-bottom: 0.7rem;
 }
 
-#exportPlayBtn {
+.ms-output-actions-secondary {
+  margin-top: 0.55rem;
+}
+
+#downloadMidiBtn:not(:disabled) {
   background: var(--md-sys-color-secondary);
   color: var(--md-sys-color-on-secondary);
   border-color: color-mix(in srgb, var(--md-sys-color-secondary) 80%, #000 20%);
 }
 
-#exportPlayBtn:hover {
+#downloadMidiBtn:not(:disabled):hover {
   background: color-mix(in srgb, var(--md-sys-color-secondary) 88%, #000 12%);
 }
 
@@ -613,6 +807,11 @@ body {
   min-width: 180px;
 }
 
+.ms-settings-card .ms-field lht-select-help {
+  flex: 0 1 300px;
+  min-width: 180px;
+}
+
 .ms-check-field {
   margin-top: 0.45rem;
   display: flex;
@@ -646,6 +845,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
+}
+
+.ms-switch-field .md-switch-label > span:not(.md-switch):empty {
+  display: none;
 }
 
 /* Keep duration selector on its own row for compact editing flow */
@@ -811,6 +1014,52 @@ body {
   stroke: #ff0000 !important;
 }
 
+.ms-measure-xml {
+  margin-top: 0.75rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ms-measure-xml-title {
+  margin: 0;
+  padding: 0.55rem 0.7rem 0.25rem;
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+}
+
+.ms-measure-xml-viewer + .ms-measure-xml-title {
+  padding-top: 0.35rem;
+}
+
+.ms-measure-xml-label {
+  margin: 0 0.7rem 0.35rem;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.ms-measure-xml-viewer {
+  width: calc(100% - 1.4rem);
+  margin: 0 0.7rem 0.7rem;
+  min-height: 180px;
+  max-height: 42vh;
+  resize: vertical;
+  border: 1px solid #c8c5d0;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--md-sys-color-on-surface);
+  background: #ffffff;
+}
+
+.ms-measure-xml-viewer:focus {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 1px;
+}
+
 .ms-debug-score .ms-measure-selected {
   fill: #ff0000 !important;
   stroke: #ff0000 !important;
@@ -819,6 +1068,16 @@ body {
 .ms-debug-score .ms-measure-selected * {
   fill: #ff0000 !important;
   stroke: #ff0000 !important;
+}
+
+.ms-debug-score .ms-measure-playing {
+  fill: #e83e8c !important;
+  stroke: #b01f63 !important;
+}
+
+.ms-debug-score .ms-measure-playing * {
+  fill: #e83e8c !important;
+  stroke: #b01f63 !important;
 }
 
 .ms-dev {
@@ -885,6 +1144,10 @@ body {
     flex: 1 1 100%;
   }
 
+  .ms-settings-card .ms-field lht-select-help {
+    flex: 1 1 100%;
+  }
+
   .ms-app {
     margin: 8px auto;
   }
@@ -921,11 +1184,6 @@ body {
 
   .ms-radio-group {
     gap: 0.65rem;
-  }
-
-  .ms-file-name {
-    display: block;
-    overflow-wrap: anywhere;
   }
 
   .ms-debug-wrap,

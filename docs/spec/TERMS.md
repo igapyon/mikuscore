@@ -4,6 +4,20 @@
 
 Normative terms and MVP scope boundaries.
 
+Scope note:
+
+- This file is a glossary/scope index.
+- Normative behavior details are defined in:
+  - `docs/spec/SPEC.md`
+  - `docs/spec/COMMAND_CATALOG.md`
+  - `docs/spec/DIAGNOSTICS.md`
+
+## Language Policy
+
+- English text is the normative source unless explicitly noted otherwise.
+- Japanese sections are abridged translations for readability.
+- Exception: for undecided points or in-progress notes, Japanese-only entries MAY be used temporarily.
+
 ## Normative Keywords
 
 - `MUST`: required
@@ -18,7 +32,7 @@ Normative terms and MVP scope boundaries.
 - `Dirty`: successful content-changing edit has occurred.
 - `No-op save`: `dirty === false`, returns original XML text unchanged.
 
-## MVP In Scope
+## MVP In Scope (Summary)
 
 - DOM-preserving load/edit/save.
 - Commands whose voice matches the target note voice.
@@ -27,7 +41,7 @@ Normative terms and MVP scope boundaries.
 - Split-note command (`split_note`).
 - Rest-to-note conversion via `change_to_pitch`.
 
-## MVP Out of Scope
+## MVP Out of Scope (Summary)
 
 - Full automatic notation repair across arbitrary contexts.
 - Cross-voice/global structural reflow.

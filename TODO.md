@@ -1,689 +1,371 @@
 # TODO
 
-## English
-### Current Status (2026-02)
+## CLI
 
-#### Done
-- [x] Implemented core `ScoreCore` load/dispatch/save and key validations.
-- [x] Prepared unit and property test baseline.
-- [x] Reorganized UI flow for edit/check/export.
-- [x] Promoted Verovio rendering to official path.
-- [x] Implemented note click selection.
-- [x] Improved SVG click -> `nodeId` resolution (`elementsFromPoint` fallback).
-- [x] Implemented `change_to_pitch`.
-- [x] Implemented `split_note`.
-- [x] Implemented rest-to-note conversion.
-- [x] Added playback path with `midi-writer.js`.
-- [x] Fixed transpose behavior including Clarinet in A.
-- [x] Improved iPhone Safari audio start stability (`pointerdown`/`touchstart` unlock, `AudioContext` resume flow, `webkitAudioContext` fallback).
-- [x] Fixed ABC tuplet timing drift in playback-related roundtrip paths.
-- [x] Added `%@mks` roundtrip support for measure metadata (`number` / `implicit` / `repeat` / `times`) and `transpose` (`chromatic` / `diatonic`).
-- [x] Improved ABC accidental export rules (suppress redundant naturals, preserve required naturals per key/measure context).
+- [ ] Document `convert`-first CLI naming consistently in all current-facing docs.
+  - Recheck `README.md`, `docs/spec/CLI_STEP1.md`, and future notes after the command surface stabilizes.
+  - Keep `import/export` as internal facade wording only, not CLI wording.
 
-#### Known Issues
-- [ ] Verovio warning `slur ... could not be ended` may appear from input MusicXML; loading currently continues.
-- [ ] Click mapping expects note-head/real note area click; staff/empty click can return `MVP_TARGET_NOT_FOUND`.
-- [ ] Tuplet-like duration presets are currently restricted to measures/voices where compatible tuplet context already exists.
+- [ ] Decide whether to keep the current local TypeScript-on-demand loader as the long-term CLI bootstrap.
+  - Current path:
+    - `scripts/mikuscore-cli.mjs`
+    - `scripts/lib/load-cli-api.mjs`
+  - Re-evaluate whether Step 2 should keep this loader or move to a build-produced CLI entry.
 
-### Next Priorities
-#### P1: Editing stability
-- [ ] Improve selected-note highlight visibility.
-- [ ] Unify failure message policy (UI + console wording).
-- [ ] Add at least one E2E click-mapping test.
+- [ ] Investigate the root cause of `load-cli-api.mjs` runtime fragility before changing its compilation strategy.
+  - Scope:
+    - `scripts/lib/load-cli-api.mjs`
+  - Current stance:
+    - do not switch to a `tsc` CLI subprocess workaround without a clearer root-cause explanation
+    - prefer understanding why direct runtime TypeScript loading fails in some environments before accepting a different bootstrap path
 
-#### P2: Spec and tests sync
-- [ ] Add save-XML/re-render consistency checks in `docs/spec`.
-- [ ] Document and test selection retention rules across re-render.
-- [ ] Add ABC roundtrip golden tests (`MusicXML -> ABC -> MusicXML`) for representative orchestral/piano scores.
-- [ ] Define acceptable roundtrip delta policy for ABC path (what may change vs must be preserved).
-- [ ] Add optional `%@mks ...` metadata compaction:
-  - On `MusicXML -> ABC`, suppress consecutive `%@mks` comment lines when values are unchanged from the previous measure.
-  - On `ABC -> MusicXML`, if `%@mks` metadata is omitted, inherit the previous measure's metadata for reconstruction.
-- [ ] Reduce MuseScore MIDI parity gap (`moonlight` baseline, 2026-02-25):
-  - `safe (cand(midi)) practical diff = 307`
-  - `musescore_parity (cand(parity)) practical diff = 172`
-  - `playback practical diff = 183` (reference only; different path from export)
-  - `musescore_parity raw-on practical diff = 172` (was `378`; stabilized by FIFO note pairing on MIDI import)
-  - `onset-strict + durationRatio[1/2..2] (cand(parity)) = 167` (reference metric for MIDI->MusicXML practical restoration)
-  - Add focused fixes so export parity (`safe`/`musescore_parity`) improves without semantic regressions.
-- [ ] MIDI -> MusicXML improvement pack (next 6 items):
-  - 1. Auto-select quantize grid (`1/8`,`1/16`,`1/32`) from note timing evidence (started).
-  - 2. Add section-aware quantize fallback (allow local grid override by measure window).
-  - 3. Strengthen same-tick same-pitch retrigger pairing policy with explicit mode switch and diagnostics.
-  - 4. Improve voice/staff reconstruction using register continuity and overlap minimization.
-  - 5. Keep onset-strict comparator as primary metric and duration-ratio metric as secondary gate in spot runs.
-  - 6. Add import preset profiles (`safe` / `musescore_parity`) for MIDI->MusicXML and document default intent.
-- [ ] Add MIDI import UI controls for quantize behavior:
-  - expose `quantizeGrid` selector (`auto` / `1/8` / `1/16` / `1/32`)
-  - add `tripletAwareQuantize` toggle and define default behavior
-- [ ] Investigate MuseScore OSS MIDI export implementation files and map transferable diff points for mikuscore:
-  - Identify concrete source files/functions for `MSCX/MSCZ -> MIDI` in MuseScore.
-  - Compare note event ordering, tie/retrigger handling, and quantization/rounding policies against mikuscore.
-  - Extract only implementable deltas and track expected parity impact per delta.
-- [ ] Cross-format rollout gaps for MuseScore minimal tests:
-  - [x] LilyPond: articulation (`staccato` / `accent`) roundtrip-equivalent tests and preservation path.
-  - [x] LilyPond: grace-note minimal roundtrip-equivalent test.
-  - [x] LilyPond: tuplet start/stop and written-type equivalent checks.
-  - [x] LilyPond: trill/octave-shift equivalent policy tests (preserve/degrade explicit).
-  - [x] MEI: grace-note minimal roundtrip-equivalent test.
-  - [x] MEI: tuplet start/stop and written-type equivalent checks.
-  - [x] MEI: section-boundary double bar + explicit same-meter time equivalent test and metadata preservation.
-  - [x] MEI: articulation (`staccato` / `accent`) minimal roundtrip-equivalent test and preservation path.
+- [ ] Harden Step 2 MIDI conversion pairs.
+  - Current first cut exists for:
+    - `mikuscore convert --from midi --to musicxml`
+    - `mikuscore convert --from musicxml --to midi`
+  - Next checks:
+    - decide whether CLI needs MIDI export options such as profile / metadata toggles
 
-#### P3: Feature expansion
-- [ ] Investigation: add `lightweight playback mode` for dense-note scores (classified as design consideration):
-  - limit max simultaneous voices (e.g., 32-48) to avoid browser audio-node saturation.
-  - optionally drop/merge ultra-short or duplicate-nearby notes for stability-first playback.
-  - allow omitting ornaments/grace in lightweight mode with explicit UI toggle and policy.
-  - define quality vs stability presets and default behavior for large scores.
-- [ ] Decide whether to reintroduce `insert_note_after` in UI.
-- [ ] Reconfirm in-session `xml:id` strategy and operation rules.
-- [ ] Add chord editing support in core/editor commands (currently chord targets are read/play only in MVP).
-- [ ] Add WAV export support (aligned with current quick-playback synth path).
-- [ ] Add measure-level copy/paste feature.
-- [ ] Add note-level copy/paste feature.
-- [ ] Add functionality to create/add parts (staff/part insertion with basic setup flow).
-- [ ] Verify and strengthen measure-level editing functionality.
-- [ ] Fix unintended pinch-in (gesture zoom) behavior during score editing on touch devices.
-- [ ] Add support for mid-song double barlines.
-- [ ] Add support for multiple simultaneous notes at the same timing (same onset polyphony/chords where applicable).
-- [ ] Investigate and fix the issue where triplet notation cannot be selected in the UI.
-- [ ] Add functionality to merge/consolidate rests for cleanup.
-- [ ] Add cross-measure tie handling in core/editor (logic independent from UI visibility).
-- [ ] Define and implement UI rule for tie editing that may require showing the next measure (always preview or on-demand reveal).
-- [ ] Add slur/tie create, edit, and delete operations in editor/core with validation and undo-safe behavior.
-- [ ] Add articulation input support (at least staccato and tenuto) in editor/core and preserve them across import/export.
-- [ ] Expand articulation support beyond staccato/tenuto (e.g., accent, marcato) with clear per-format preserve/degrade rules.
-- [ ] Add dynamics marking input support (`pp` to `ff`, including intermediate levels) and preserve semantics across import/export.
-- [ ] Rework MIDI velocity mapping for symbolic dynamics without numeric value (`pp`/`p`/`mp`/`mf`/`f`/`ff` etc.):
-  - Avoid near-inaudible defaults at low dynamics (`pp` currently too quiet in some outputs).
-  - Define floor/ceiling and curve (or table) so perceived loudness remains musical.
-  - Add regression tests for dynamics-to-velocity mapping (including playback audibility checks where possible).
-- [ ] Add band score workflow support (common band instrumentation templates, part handling, and layout defaults).
-- [ ] Define measure clipboard payload as MusicXML `<measure>...</measure>` fragment (app-internal clipboard first).
-- [ ] Implement measure copy/paste in core first (validation/compatibility), then connect UI and optional system clipboard API.
-- [x] Expand ABC compatibility for ornaments (`trill`, `turn`, grace variants) with explicit preserve/degrade rules.
-- [x] Start CFFP (Cross-Format Focus Parity) with a minimal `trill` fixture (`MusicXML -> all supported formats -> MusicXML`).
-- [x] Expand CFFP series with focused minimal fixtures:
-  - [x] `octave-shift (8va/8vb)` cross-format policy test.
-  - [x] `slur` cross-format policy test.
-  - [x] `tie` cross-format policy test.
-  - [x] `staccato` cross-format policy test.
-  - [x] `accent` cross-format policy test.
-  - [x] `grace` cross-format policy test.
-  - [x] `tuplet` cross-format policy test.
-  - [x] `accidental spelling` cross-format policy test.
-  - [x] `accidental reset rule` cross-format policy test (same-measure carry and next-measure reset).
-  - [x] `courtesy accidental` cross-format policy test (display-only accidental handling policy).
-  - [x] `key change mid-score` cross-format policy test.
-  - [x] `time signature change` cross-format policy test.
-  - [x] `double barline mid-score` cross-format policy test.
-  - [x] `repeat/ending barline metadata` cross-format policy test.
-  - [x] `beam continuity` cross-format policy test (across rest / split by beat policy).
-  - [x] `multi-voice + backup` cross-format policy test (same-staff lane reconstruction).
-  - [x] `grand-staff voice/staff mapping` cross-format policy test.
-  - [x] `pickup implicit measure` cross-format policy test (`implicit=yes` and measure numbering).
-  - [x] `trill variants` cross-format policy test (`trill-mark` + `wavy-line` start/stop + accidental-mark).
-  - [x] `turn` cross-format policy test.
-  - [x] `turn variants` cross-format policy test (`inverted-turn` + `delayed-turn`).
-  - [x] `mordent variants` cross-format policy test (`mordent` + `inverted-mordent`).
-  - [x] `ornament accidental-mark` cross-format policy test.
-  - [x] `schleifer` cross-format policy test.
-  - [x] `shake` cross-format policy test.
-  - [x] `dynamics basic (pp/ff)` cross-format policy test.
-  - [x] `dynamics accented (mf/sfz)` cross-format policy test.
-  - [x] `dynamics wedge (crescendo/diminuendo)` cross-format policy test.
-  - [x] `fermata` cross-format policy test.
-  - [x] `arpeggiate` cross-format policy test.
-  - [x] `breath-mark / caesura` cross-format policy test.
-  - [x] `glissando start/stop` cross-format policy test.
-  - [x] `transpose` cross-format policy test (per-part / per-measure hint behavior).
-  - [x] `tempo map` cross-format policy test (single tempo + change event).
-  - [x] Document CFFP preserve/degrade matrix per format (`musescore/midi/vsqx/abc/mei/lilypond`).
-  - [x] `slide start/stop` cross-format policy test.
-  - [x] `tremolo` cross-format policy test (`single` / `start-stop`).
-  - [x] `triplet bracket/placement` display-info cross-format policy test.
-  - [x] `CFFP-TECHNIQUE-TEXT` cross-format policy test (`direction-type/words`: `pizz.` / `arco` / `con sord.`).
-  - [x] `CFFP-ARTICULATION-EXT` cross-format policy test (`tenuto` / `staccatissimo` / `marcato`).
-  - [x] `CFFP-NOTEHEAD` cross-format policy test (`notehead`: `cross` / `diamond` ...).
-  - [x] `CFFP-STEM-BEAM-DIR` cross-format policy test (`stem` direction + beam direction info).
-  - [x] `CFFP-VOICE-STAFF-SWAP` cross-format policy test (voice crossing staves within a measure).
-  - [x] `CFFP-OTTAVA-NUMBERING` cross-format policy test (`octave-shift` with multiple `number` lines).
-  - [x] `CFFP-MEASURE-STYLE` cross-format policy test (`measure-style`: `slash` / `multiple-rest`).
-  - [x] `CFFP-PRINT-LAYOUT-MIN` cross-format policy test (`print` minimal layout: system/page break).
-  - [x] `CFFP-CLEF-MIDMEASURE` cross-format policy test (mid-measure clef change).
-  - [x] `CFFP-KEY-MODE` cross-format policy test (`key/mode`: major/minor).
-  - [x] `CFFP-MIDMEASURE-REPEAT` cross-format policy test (mid-measure repeat semantics/marking).
-  - [x] `CFFP-LYRIC-BASIC` cross-format policy test (1 syllable + melisma).
-  - [x] `CFFP-PERCUSSION-UNPITCHED` cross-format policy test (`unpitched` + `display-step` / `display-octave`).
-  - [x] `CFFP-PERCUSSION-NOTEHEAD` cross-format policy test (percussion noteheads: `x` / `triangle` / `diamond`).
-  - [x] `CFFP-PERCUSSION-INSTRUMENT-ID` cross-format policy test (`instrument id` mapping and retention).
-  - [x] `CFFP-PERCUSSION-VOICE-LAYER` cross-format policy test (drumset lane/voice separation in one staff).
-  - [x] `CFFP-PERCUSSION-STAFF-LINE` cross-format policy test (1-line vs 5-line percussion staff policy).
-  - [x] `CFFP-TRANSPOSING-INSTRUMENT` cross-format policy test (e.g., Clarinet in A `transpose` + concert/written pitch intent).
-  - [x] `CFFP-LEFT-HAND-PIZZICATO` cross-format policy test.
-  - [x] `CFFP-BOWING-DIRECTION` cross-format policy test (`up-bow` / `down-bow`).
-  - [x] `CFFP-HARMONIC-NATURAL-ARTIFICIAL` cross-format policy test (`harmonic` natural/artificial).
-  - [x] `CFFP-OPEN-STRING` cross-format policy test (`technical/open-string`).
-  - [x] `CFFP-STOPPED` cross-format policy test (`technical/stopped`).
-  - [x] `CFFP-SNAP-PIZZICATO` cross-format policy test (`technical/snap-pizzicato`, Bartok pizz.).
-  - [x] `CFFP-FINGERING` cross-format policy test (`technical/fingering`: 1-4 and substitution patterns).
-  - [x] `CFFP-STRING` cross-format policy test (`technical/string`: I/II/III/IV).
-  - [x] `CFFP-DOUBLE-TRIPLE-TONGUE` cross-format policy test (`double-tongue` / `triple-tongue`).
-  - [x] `CFFP-HEEL-TOE` cross-format policy test (`technical/heel` / `technical/toe`).
-  - [x] `CFFP-PLUCK-TEXT` cross-format policy test (pluck text: `p`, `i`, `m`, `a`).
-  - [x] `CFFP-BREATH-VARIANTS` cross-format policy test (breath-mark variants: comma/tick/upbow-like differences).
-  - [x] `CFFP-BREATH-PLACEMENT` cross-format policy test (`placement`/`default-x`/`default-y` retention on breath marks).
-  - [x] `CFFP-CAESURA-STYLE` cross-format policy test (caesura style variants retention).
-  - [x] `CFFP-TIMEWISE-BACKUP-FORWARD` cross-format policy test (`backup` / `forward` complex time progression).
-  - [x] `CFFP-CROSS-STAFF-BEAM` cross-format policy test (cross-staff beam).
-  - [x] `CFFP-CHORD-SYMBOL-ALTER` cross-format policy test (`harmony` tension/alter: `#11`, `b9`, ...).
-  - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` cross-format policy test (cross-measure tie with same-pitch linkage).
-  - [x] `CFFP-MULTI-REST-COUNT` cross-format policy test (multiple-rest count retention).
-  - [x] `CFFP-REPEAT-JUMP-SOUND` cross-format policy test (`sound`: `fine` / `tocoda` / `coda` / `segno`).
-  - [x] `CFFP-CUE-GRACE-MIX` cross-format policy test (cue note + grace note mix).
-  - [x] `CFFP-ACCIDENTAL-COURTESY-MODE` cross-format policy test (courtesy accidental display-control variants).
-  - [x] `CFFP-LYRICS-MULTI-VERSE` cross-format policy test (multiple lyric verses: `number=1,2`).
-  - [x] `CFFP-TEXT-ENCODING` cross-format policy test (non-ASCII: Japanese lyrics / symbol-rich words).
-  - [x] `rehearsal mark` text-preservation cross-format policy test.
-  - [x] `segno/coda` symbol cross-format policy test.
-  - [x] `da capo / dal segno` jump words + sound-attributes cross-format policy test.
-  - [x] `pedal start/stop` cross-format policy test.
-  - [x] `harmony chord symbol` cross-format policy test (`root` / `bass` / `kind`).
-  - [x] `ending type` cross-format policy test (`start` / `stop` / `discontinue`).
-  - [ ] CFFP preserve-policy promotion backlog (format supports feature, implementation still degrades):
-    - [ ] Promote `CFFP-TIE` for `lilypond` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-DYNAMICS-WEDGE` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-GLISSANDO` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-PEDAL` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [x] Promote `CFFP-SEGNO-CODA` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-REHEARSAL-MARK` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-HARMONY-CHORDSYMBOL` for `musescore` and `mei` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-CHORD-SYMBOL-ALTER` for `musescore` and `mei` from `allowed-degrade` to `must-preserve`.
-    - [x] Promote `CFFP-NOTE-TIES-CROSS-MEASURE` for `musescore` from `allowed-degrade` to `must-preserve`.
-    - [ ] Promote `CFFP-NOTE-TIES-CROSS-MEASURE` for `lilypond` from `allowed-degrade` to `must-preserve`.
-  - [x] CFFP practical priority queue:
-    - [x] `breath-mark / caesura`
-    - [x] `glissando`
-    - [x] `pedal`
-    - [x] `segno/coda`
-    - [x] `harmony chord symbol`
-- [ ] Add ABC import compatibility mode for overfull legacy exports and surface warning summary in UI.
-- [x] Add LilyPond octave-shift (`8va` / `8vb`) roundtrip preservation (currently degrade-policy).
-- [x] Add LilyPond (`.ly`) import/export support.
-- [ ] Expand LilyPond unit tests (coverage is still insufficient):
-  - Add focused unit tests for `\relative` octave behavior (single note/chord/mixed explicit marks).
-  - Add unit tests for multi-staff parsing edge cases (`<< >>`, `\new Staff`, `\new Voice`, variable expansion).
-  - Add unit tests for command-argument non-note tokens (`\key`, `\time`, `\clef`, header/layout blocks) to prevent false note parsing.
-  - Add regression unit tests from recent incidents (overcount notes, octave shift mismatch, missing events in dense measures).
-- [ ] LilyPond v2.24 notation audit follow-up (index + child/grandchild pages):
-  - [ ] Fix relative-octave decision to follow LilyPond rule (letter-name interval based, not semitone-distance based).
-  - [ ] Fix post-chord relative anchor to use the first note of chord as the reference for subsequent relative notes.
-  - [ ] Support isolated durations in note stream (e.g. `4`, `16`) so forms like `a'2~ 4~ 16` parse correctly.
-  - [ ] Preserve/parse tie marker `~` in native LilyPond import instead of stripping it in direct parser.
-  - [ ] Add native `\tuplet` parsing path (reduce duration drift when `%@mks` hints are absent).
-  - Parse native ties (`~`) and preserve tie semantics on import (currently dropped in direct parser).
-  - Parse native slurs / phrasing slurs (`(` `)` / `\(` `\)`) instead of relying on `%@mks` hints.
-  - Parse native dynamics (`\p`, `\f`, `\mf`, `\sfz`, `\<`, `\>`, `\!`) on import.
-  - [x] Parse native trill commands (`\trill`, `\startTrillSpan`/`\stopTrillSpan`) on import.
-  - [x] Parse native glissando command (`\glissando`) on import.
-  - Parse native repeat constructs (`\repeat volta`, `\alternative`, segno/al-fine variants) on import.
-  - Parse lyric constructs (`\lyricmode`, `\addlyrics`, `\lyricsto`) on import.
-  - Parse keyboard staff-change commands (`\change Staff`, `\autoChange`) on import.
-  - [x] Parse piano pedal commands (`\sustainOn`/`\sustainOff`, `\sostenutoOn`/`Off`, `\unaCorda`, `\treCorde`) on import.
-  - [x] Parse `\upbow` / `\downbow` on import.
-  - [x] Parse harmonics / `\snappizzicato` on import (minimal native mapping).
-- [ ] Apply shared clef/staff policy (`core/staffClefPolicy.ts`) to LilyPond import path:
-  - [x] Use `chooseSingleClefByKeys` when `\clef` is omitted (single-block / `\new Staff` fallback).
-  - [x] Use `shouldUseGrandStaffByRange` for single-block imports that should auto-split to upper/lower staffs.
-  - [x] Apply hysteresis-based staff assignment when auto-splitting to upper/lower staffs.
-- [ ] Add MEI (Music Encoding Initiative) import/export support.
-- [ ] Strengthen MEI test strategy beyond unit level (unit-only is likely insufficient):
-  - Add MEI roundtrip golden tests (`MusicXML -> MEI -> MusicXML`) with semantic comparators.
-  - Add MEI spot/parity tests on larger real-world fixtures (e.g., piano multi-voice / ornaments / repeats).
-  - Define MEI preserve/degrade acceptance gates and fail CI when regressions exceed thresholds.
-  - Verify implementation conformance against official MEI references and track gaps in TODO:
-    - https://music-encoding.org/
-    - https://music-encoding.org/guidelines/v5/content/
-    - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
-  - [ ] Local-fixture-dependent MEI unit tests (`tests/fixtures-local/**`) are temporary:
-    - keep auto-skip behavior when fixtures are missing;
-    - once CFFP/spot parity coverage is sufficient, consolidate and remove redundant local-fixture tests.
-  - MEI v5 spec-gap follow-up candidates (format has representation, current `mei-io` still partial):
-    - [ ] Transposing instruments (`trans.diat` / `trans.semi`) end-to-end conformance:
-      - [x] Import: map MEI transposition metadata to MusicXML `<transpose>` per staff/part. (minimal `staffDef/scoreDef` attrs)
-      - [x] Export: preserve/reconstruct transposition metadata back to MEI `staffDef`/`scoreDef`. (minimal `staffDef trans.diat/trans.semi`)
-      - Add focused tests (e.g., Clarinet in A / Eb Clarinet) for written vs concert pitch intent.
-    - [ ] Alto clef visibility regression (Viola):
-      - Investigate cases where MEI `clef.shape="C"` + `clef.line="3"` is not rendered as MusicXML `<clef><sign>C</sign><line>3</line></clef>`.
-      - Cover both forms: `staffDef` attributes and `staffDef > clef` child element.
-      - Add fixture-based regression test from real viola score and keep it in CI.
-    - [ ] Slur/Tie as MEI control events (`<slur>`, `<tie>`) and/or note-level tie/slur attributes.
-      - [x] Import minimal staff-level `<slur startid/endid>` into MusicXML `notations/slur` (same-layer id refs).
-      - [x] Import minimal staff-level `<tie startid/endid>` into MusicXML `tie` + `notations/tied` (same-layer id refs).
-      - [x] Import minimal layer-level `<slur>/<tie startid/endid>` (same-layer id refs).
-      - [x] Import minimal note-level `@tie` / `@slur` attributes into MusicXML `tie+tied` / `notations/slur`.
-      - [x] Export minimal MusicXML note `tie/slur` into MEI note attributes `@tie` / `@slur`.
-    - [ ] Dynamics and wedges (`<dynam>`, `<hairpin>`).
-      - [x] Minimal `<dynam>` import to MusicXML direction (`dynamics` or `words`, supports `tstamp` offset).
-      - [x] Minimal export of MusicXML `direction(dynamics/wedge)` to MEI `<dynam>` / `<hairpin>` (same-measure pairing).
-    - [ ] Ornaments/control events (`<trill>`, `<turn>`, `<mordent>`, `<fermata>`).
-      - [x] Minimal export of MusicXML note ornaments/fermata to MEI control events (`<trill>`, `<turn>`, `<mordent>`, `<fermata>`).
-    - [ ] Glissando/slide (`<gliss>`).
-      - [x] Minimal export of MusicXML note `notations(glissando/slide)` to MEI `<gliss>` / `<slide>` via same-measure pairing.
-      - [x] Minimal `<slide>` import (`startid/endid` and `tstamp/tstamp2` -> MusicXML `notations/slide` start/stop).
-    - [ ] Pedal and octave-shift (`<pedal>`, `<octave>`).
-      - [x] Minimal export of MusicXML `direction(pedal/octave-shift)` to MEI `<pedal>` / `<octave>` (same-measure pairing).
-    - [ ] Breath/Caesura (`<breath>`, `<caesura>`).
-      - [x] Minimal export of MusicXML note articulations (`breath-mark` / `caesura`) to MEI `<breath>` / `<caesura>`.
-    - [ ] Repeat/jump control marks (`<repeatMark>`, segno/coda/fine mapping).
-      - [x] Minimal export of MusicXML segno/coda/fine (direction symbols/words) to MEI `<repeatMark>`.
-    - [ ] Harmony/chord symbols (`<harm>`) including altered tensions.
-    - [ ] Tuplet span support for cross-measure cases (`<tupletSpan>`).
-  - MEI parity deep-check findings (2026-02-27):
-    - [x] Fix note-drop on complex real fixture (`paganini`) in `MusicXML -> MEI -> MusicXML`:
-      - currently observed pitch+timing misses: m138 (`D7`), m140 (`C7`), m153 (`C#4`, short value).
-      - likely related to overfull/clamp or dense-layer event handling in `mei-io` import path.
-    - [x] Normalize accidental-zero representation policy (`alter=0` vs omitted alter) to reduce non-semantic diff noise.
-  - [ ] MEI reliability reset (assume current implementation is not trustworthy until proven):
-    - [ ] Phase 0 (safety gate): prohibit silent data loss and add strict-mode failure on overfull/clamped import.
-    - [ ] Phase 1 (parity baseline): establish external-MEI fixture set and pitch/octave/onset/duration parity checks.
-      - [x] Import `accid.ges` / `accid-ges` as sounding alter fallback when visual `accid` is omitted (keep display accidental unchanged).
-    - [ ] Phase 2 (spec elements): implement core control events and rhythmic containers in native MEI mapping.
-    - [ ] Phase 3 (cross-hierarchy timing): implement `tstamp`/`startid`/`endid`/`plist` resolution and cross-measure spans.
-    - [ ] Phase 4 (compat policy): define v5 compatibility contract, downgrade rules, and CI acceptance thresholds.
-    - [ ] Replace silent note-drop behavior (`OVERFULL_CLAMPED`) with strict mode + explicit failure option; no data-loss by default.
-      - [x] Added `failOnOverfullDrop` option to throw on actual event drop (`convertMeiToMusicXml`).
-    - [ ] Add external-MEI ingestion tests (non-mikuscore-generated MEI samples) for pitch/octave/onset/duration parity.
-      - [x] Minimal external-style MEI unit case added (dur/dots/chord without `mks:*`) for pitch+duration baseline.
-      - [x] Official MEI v5 sample source URLs recorded in fixture docs:
-        - `tests/fixtures-local/mei-official/beam-grace/SOURCE.md`
-      - [x] `meiCorpus` import selection support (`meiCorpusIndex`) + index/out-of-range tests added.
-    - [ ] Support MEI control events (spec-based) in import/export instead of relying on `mks:*` metadata:
-      - `<slur>`, `<tie>`, `<hairpin>`, `<dynam>`, `<gliss>`, `<pedal>`, `<octave>`, `<repeatMark>`.
-      - [x] Tie control-event accidental carry: when tied stop omits accidental/alter, inherit pitch alter from tie start (same layer timeline).
-    - [ ] Support structural rhythmic containers from MEI CMN:
-      - `<beam>`, `<beamSpan>`, `<tuplet>`, `<tupletSpan>`, `<graceGrp>`.
-      - [x] import 側で `<beam>` / `<tuplet>` / `<graceGrp>` の最小展開を追加し、子ノートを取りこぼさないようにした。
-      - [x] Map MEI `@breaksec` (secondary beam breaks) into MusicXML multi-level beam/hook encoding with regression test (official Listing 142 fixture).
-      - [x] Add `beamSpan` import handling (`startid` / `endid` / `plist`) and regression tests.
-      - [ ] `beamSpan` / `hairpin` / `dynam` / `fermata` / `gliss` の視覚比較は Verovio が未描画/無視するケースがあるため、画像差分のみを合否基準にしない（構造アサート優先）。
-    - [ ] Support timing anchors from `att.controlEvent` (`tstamp`, `startid`, `endid`, `plist`) for cross-hierarchy events.
-      - [x] Minimal `tstamp/tstamp2` import for staff-level `<slur>` / `<tie>` (same layer, numeric beat position).
-      - [x] Minimal `plist` import for single-target control events (e.g. `<trill plist="#id ...">`).
-      - [x] Minimal `plist` import for span-like events start resolution (e.g. `<slur>/<tie>/<gliss>/<slide>/<tupletSpan>` start side).
-    - [ ] Handle score changes beyond first `scoreDef`:
-      - [x] Mid-score `staffDef` overrides (key/clef/transpose) are now applied per target staff in import.
-      - mid-score meter/key/clef/staffDef changes (do not assume single global `scoreDef`).
-    - [ ] Upgrade export target from fixed `meiversion=\"4.0.1\"` to v5-compatible policy and document compatibility contract.
-      - [x] Export default `meiversion` switched to `5.1`, with explicit override option (`MeiExportOptions.meiVersion`) for compatibility.
-    - [ ] Reduce dependency on `annot type=\"musicxml-misc-field\"` for core semantics (keep as auxiliary only).
-- [ ] Add MuseScore (`.mscz` / `.mscx`) import/export support.
-- [ ] Add VSQX import/export support.
-- [ ] Add lyrics support (import/edit/export with format-specific preserve/degrade rules).
-- [ ] Improve functionality and reliability of import/export across supported formats (options, diagnostics, and roundtrip quality).
-- [ ] Fix invalid data generation when exporting piano scores to ABC and add regression tests.
-- [ ] Add input file size limit checks before import/load and provide clear UI errors when the limit is exceeded.
-- [ ] MuseScore staged import roadmap:
-  - [ ] Phase 1 (now): `.mscx` / `.mscz` load path, basic note/rest/chord import, and `diag` + `src:musescore:*` raw metadata preservation.
-  - [ ] Phase 2: playback-rich metadata import (tempo map, repeat/jump semantics, dynamics/play-tech where mappable) with explicit `diag` for dropped items.
-  - [ ] Phase 3: layout fidelity import (system/page breaks, spacing hints) as optional metadata and selective restoration.
-  - [ ] Phase 4: notation extensions (ornaments, tuplet variants, articulations, technique text) with preserve/degrade policy per item.
-- [ ] Prevent exporting overfull measures to external formats (at minimum MEI/ABC); normalize or split at export time so invalid data is not emitted.
-- [ ] Add a mandatory shared pre-export capacity check for all formats; if overfull is detected, emit `diag` and abort export.
+- [ ] Implement Step 3 conversion/render pairs.
+  - Current first cut exists for:
+    - `mikuscore convert --from musescore --to musicxml`
+    - `mikuscore convert --from musicxml --to musescore`
+    - `mikuscore render svg`
+  - Next checks:
+    - add explicit CLI support decision/work for compressed `.mscz`
+    - decide whether CLI should handle compressed `.mscz` directly or remain `.mscx`-text only
+    - decide whether render options such as scale / page size should become CLI flags
 
-### Resume Checklist
-1. `npm run build`
-2. Hard reload `mikuscore.html`
-3. Confirm note click selection on score panel
-4. Run `change_to_pitch` / `change_duration` / `split_note` -> save -> confirm re-render
+- [ ] Expand CLI tests together with each new conversion pair.
+  - Cover file input, `stdin`, `--out`, and representative failure cases.
+  - Keep `stdout` for payload and `stderr` for diagnostics only.
 
----
+## Facade
 
-## 日本語
-### 現在地（2026-02 時点）
+- [ ] Keep the non-UI CLI facade small and format-oriented.
+  - Current Step 1 functions:
+    - `importAbcToMusicXml(...)`
+    - `exportMusicXmlToAbc(...)`
+  - Planned next functions:
+    - `importMuseScoreToMusicXml(...)`
+    - `exportMusicXmlToMuseScore(...)`
+    - `renderMusicXmlToSvg(...)`
 
-#### 完了済み
-- [x] Core（`ScoreCore`）の load / dispatch / save と主要バリデーションを実装済み。
-- [x] 単体テスト + property test の基盤を整備済み。
-- [x] UI の編集・確認・出力導線を再配置済み。
-- [x] Verovio レンダリングを正式採用済み。
-- [x] ノートクリック選択を実装済み。
-- [x] SVG 上クリック -> `nodeId` 解決を改善済み（`elementsFromPoint` フォールバック）。
-- [x] `change_to_pitch` を実装済み。
-- [x] `split_note` を実装済み。
-- [x] 休符の音符化（rest -> pitched note）を実装済み。
-- [x] `midi-writer.js` を使った再生経路を導入済み。
-- [x] Clarinet in A 含む `transpose` 反映を修正済み。
-- [x] iPhone Safari での音出し安定性を改善済み（`pointerdown`/`touchstart` 先行アンロック、`AudioContext` resume 経路、`webkitAudioContext` フォールバック）。
-- [x] ABC の連符（tuplet）往復時に発生していた再生タイミングずれを修正済み。
-- [x] `%@mks` の小節メタ（`number` / `implicit` / `repeat` / `times`）と `transpose`（`chromatic` / `diatonic`）の往復保持を実装済み。
-- [x] ABC 出力の臨時記号ルールを改善済み（不要なナチュラル抑制、必要なナチュラルは保持）。
+- [ ] Re-evaluate `core/` boundaries only if reuse pressure becomes real.
+  - Do not move conversion facade code into `core/` without a concrete need.
 
-#### 既知事項
-- [ ] Verovio 警告 `slur ... could not be ended` は入力 MusicXML 由来で表示されることがある。現状は読み込み継続。
-- [ ] クリック選択は音符クリック前提。五線や空白クリックは `MVP_TARGET_NOT_FOUND` になりうる。
-- [ ] 音価ドロップダウンの 3 連系は、現状「同小節/同 voice に既存 tuplet がある場合のみ許可」の暫定制約。
+## Build
 
-### 次にやること
-#### P1: 編集体験の安定化
-- [ ] 選択ノートの視覚ハイライトを強化。
-- [ ] 失敗時メッセージを統一（UI表示と console 文面）。
-- [ ] クリックマッピングの E2E テストを追加（最低 1 ケース）。
+- [ ] Shorten and stabilize `npm run build:full`.
+  - Current observation:
+    - `typecheck` and `build:dist` are relatively small, but `test:build:full` dominates total time
+    - `tests/unit/playback-flow.spec.ts` currently shows a 5-second timeout failure in the full path
+    - heavy suites currently include `playback-flow`, `lilypond-io`, and `midi-roundtrip-golden`
+  - Next work:
+    - profile `test:build:full` more deliberately and identify the longest suites/tests
+    - decide whether more suites should move between `test:build`, `test:slow`, and `test:build:full`
+    - investigate whether the `playback-flow` timeout is an actual regression, a flaky test, or a timeout-budget issue
+    - consider Vitest worker/timeout settings only after the heavy-suite split is reasonably settled
 
-#### P2: 仕様とテストの同期
-- [ ] 保存 XML と再レンダリング結果の整合チェック手順を `docs/spec` に追記。
-- [ ] レンダリング更新時の選択維持ルールを明文化しテスト化。
-- [ ] 代表的なオーケストラ譜/ピアノ譜で `MusicXML -> ABC -> MusicXML` のゴールデン往復テストを追加。
-- [ ] ABC経由での往復差分ポリシー（許容差分/非許容差分）を明文化。
-- [ ] `%@mks ...` メタコメントの省略最適化を追加。
-  - `MusicXML -> ABC` では、前小節と同一内容が連続する場合、後続の `%@mks` コメント行を省略可能にする。
-  - `ABC -> MusicXML` では、省略により不足した `%@mks` 情報を前小節の値で継承して復元する。
-- [ ] MuseScore MIDI パリティ差分の縮小（`moonlight` 実測, 2026-02-25）。
-  - `safe (cand(midi)) practical diff = 307`
-  - `musescore_parity (cand(parity)) practical diff = 172`
-  - `playback practical diff = 183`（参考値。export とは別経路）
-  - `musescore_parity raw-on practical diff = 172`（以前 `378`。MIDI import の FIFO ペアリングで安定化）
-  - `onset厳格 + duration比率[1/2..2] (cand(parity)) = 167`（MIDI->MusicXML 復元品質の参照値）
-  - 意味保存回帰を起こさない範囲で、export 側（`safe`/`musescore_parity`）の差分を段階的に削減する。
-- [ ] MIDI -> MusicXML 改善パック（次の6項目）。
-  - 1. 音価グリッド（`1/8`,`1/16`,`1/32`）をノート時刻の証拠から自動選択する（着手済み）。
-  - 2. 小節単位で量子化を切り替えられる区間フォールバックを追加する。
-  - 3. 同tick同pitchの再発音ペアリングをモード化し、診断と合わせて強化する。
-  - 4. 音域連続性と重なり最小化に基づく voice/staff 再構成を改善する。
-  - 5. spot 比較で onset 厳格一致を主指標、duration 比率許容を副指標として固定する。
-  - 6. MIDI->MusicXML に `safe` / `musescore_parity` の入力プリセットを追加し、既定意図を明文化する。
-- [ ] MIDI import の量子化設定を UI から指定可能にする。
-  - `quantizeGrid` セレクタ（`auto` / `1/8` / `1/16` / `1/32`）を追加する。
-  - `tripletAwareQuantize` トグルを追加し、既定値の方針を定義する。
-- [ ] MuseScore OSS の MIDI export 実装ファイルを調査し、mikuscore に取り込める差分観点を一覧化する。
-  - MuseScore 側の `MSCX/MSCZ -> MIDI` の具体ファイル/関数を特定する。
-  - ノートイベント順序、tie/retrigger、量子化/丸め規則を mikuscore と比較する。
-  - 実装可能な差分のみを抽出し、差分ごとの期待パリティ改善量を管理する。
-- [ ] MuseScore 最小テストの横展開ギャップ整理:
-  - [x] LilyPond: アーティキュレーション（`staccato` / `accent`）の同等テストと保持経路。
-  - [x] LilyPond: 前打音（grace）最小ケースの同等テスト。
-  - [x] LilyPond: 連符（tuplet start/stop・表記音価）同等テスト。
-  - [x] LilyPond: `trill` / `octave-shift` の同等ポリシーテスト（保持/劣化を明示）。
-  - [x] MEI: 前打音（grace）最小ケースの同等テスト。
-  - [x] MEI: 連符（tuplet start/stop・表記音価）同等テスト。
-  - [x] MEI: セクション境界ダブルバー + 同拍子再明示の同等テストとメタ保持。
-  - [x] MEI: アーティキュレーション（`staccato` / `accent`）最小同等テストと保持経路。
+## ABC
 
-#### P3: 仕様拡張
-- [ ] 検討事項: ノート密度が高い譜面向けに `軽量再生モード` を追加する。
-  - ブラウザの音声ノード飽和を避けるため、同時発音数の上限（例: 32-48）を設ける。
-  - 安定再生優先として、極短音や近接重複音の間引き/マージを任意適用できるようにする。
-  - 軽量モードでは装飾音（trill/grace 等）を省略可能にし、UIトグルと方針を明示する。
-  - 大規模譜面向けに「音質優先/安定優先」プリセットと既定値を定義する。
-- [ ] `insert_note_after` の UI 再導入可否を仕様確定。
-- [ ] セッション内 `xml:id` 付与戦略を再確認（永続化しない方針の運用ルール化）。
-- [ ] 和音編集（chord）対応を core/editor コマンドに追加（現状はMVPで「読み込み/再生は可・直接編集は不可」）。
-- [ ] WAV 出力対応を追加（現行の簡易再生シンセ経路に沿う形）。
-- [ ] 小節単位のコピー/ペースト機能を追加。
-- [ ] 音符単位のコピー/ペースト機能を追加。
-- [ ] パートを追加する機能を追加（スタッフ/パート挿入と基本セットアップ導線）。
-- [ ] 小節ごとの編集機能の確認・強化。
-- [ ] タッチ端末で編集中に意図せずピンチイン（ジェスチャーズーム）が発生する不具合を修正。
-- [ ] 曲途中の二重線に対応。
-- [ ] 同じタイミングでの複数音（同時発音/必要に応じて和音）に対応。
-- [ ] UIで3連譜を選べない事象を解析し、修正対応する。
-- [ ] 休符を合体・整理する機能を追加。
-- [ ] 小節跨ぎタイの処理を core/editor に追加（UI表示有無に依存しないロジック）。
-- [ ] タイ編集時の UI 仕様を定義して実装（次小節の常時プレビューまたは操作時表示）。
-- [ ] スラー/タイの入力・編集・削除機能を editor/core に追加（妥当性チェックと Undo 安全性を含む）。
-- [ ] アーティキュレーション入力対応を追加（最低限スタッカート/テヌート）し、入出力で保持できるようにする。
-- [ ] スタッカート/テヌート以外のアーティキュレーション（例: アクセント、マルカート）対応を拡張し、形式ごとの保持/劣化ルールを定義する。
-- [ ] 強弱記号（`pp`-`ff` と中間段階）の記入機能を追加し、入出力で意味を保持できるようにする。
-- [ ] 数値なし強弱記号（`pp`/`p`/`mp`/`mf`/`f`/`ff` など）を MIDI 化したときの velocity 設計を見直す。
-  - `pp` が聞こえなくなるような過小値を避ける（低強弱の最小音量を再定義）。
-  - floor/ceiling とカーブ（またはテーブル）を定義し、知覚上の音量差が音楽的になるようにする。
-  - 強弱記号→velocity の回帰テストを追加する（可能なら可聴性観点のチェックも含む）。
-- [ ] バンド譜面への対応を追加（一般的な編成テンプレート、パート管理、レイアウト初期値を含む）。
-- [ ] 小節クリップボードのペイロードを MusicXML の `<measure>...</measure>` 断片として定義（まずはアプリ内クリップボード）。
-- [ ] 実装順を「core先行（整合チェック含む） -> UI接続 -> 必要ならシステム Clipboard API 連携」に固定。
-- [x] ABCの装飾記号（`trill`/`turn`/前打音バリエーション）の互換対応を拡張し、保持/劣化ルールを規定。
-- [x] CFFP（Cross-Format Focus Parity）を `trill` の最小断片で開始（`MusicXML -> 対応全形式 -> MusicXML`）。
-- [x] CFFP シリーズを最小断片で横展開する:
-  - [x] `octave-shift (8va/8vb)` の横断ポリシーテスト。
-  - [x] `slur` の横断ポリシーテスト。
-  - [x] `tie` の横断ポリシーテスト。
-  - [x] `staccato` の横断ポリシーテスト。
-  - [x] `accent` の横断ポリシーテスト。
-  - [x] `grace` の横断ポリシーテスト。
-  - [x] `tuplet` の横断ポリシーテスト。
-  - [x] `臨時記号スペリング` の横断ポリシーテスト。
-  - [x] `臨時記号の持ち越し/小節リセット規則` の横断ポリシーテスト。
-  - [x] `注意的臨時記号（courtesy accidental）` の横断ポリシーテスト（表示専用情報の扱い）。
-  - [x] `途中転調` の横断ポリシーテスト。
-  - [x] `途中拍子変更` の横断ポリシーテスト。
-  - [x] `曲途中の二重線` の横断ポリシーテスト。
-  - [x] `反復記号/エンディング線を伴う小節線メタ` の横断ポリシーテスト。
-  - [x] `ビーム連結` の横断ポリシーテスト（休符またぎ / 拍境界分割ポリシー）。
-  - [x] `複数voice + backup` の横断ポリシーテスト（同一五線レーン復元）。
-  - [x] `大譜表の staff/voice 対応` の横断ポリシーテスト。
-  - [x] `弱起（implicit小節）` の横断ポリシーテスト（`implicit=yes` と小節番号）。
-  - [x] `トリル派生` の横断ポリシーテスト（`trill-mark` + `wavy-line` start/stop + accidental-mark）。
-  - [x] `turn` の横断ポリシーテスト。
-  - [x] `turn派生` の横断ポリシーテスト（`inverted-turn` + `delayed-turn`）。
-  - [x] `mordent派生` の横断ポリシーテスト（`mordent` + `inverted-mordent`）。
-  - [x] `ornament accidental-mark` の横断ポリシーテスト。
-  - [x] `schleifer` の横断ポリシーテスト。
-  - [x] `shake` の横断ポリシーテスト。
-  - [x] `dynamics basic (pp/ff)` の横断ポリシーテスト。
-  - [x] `dynamics accented (mf/sfz)` の横断ポリシーテスト。
-  - [x] `dynamics wedge (crescendo/diminuendo)` の横断ポリシーテスト。
-  - [x] `fermata` の横断ポリシーテスト。
-  - [x] `arpeggiate` の横断ポリシーテスト。
-  - [x] `breath-mark / caesura` の横断ポリシーテスト。
-  - [x] `glissando start/stop` の横断ポリシーテスト。
-  - [x] `transpose` の横断ポリシーテスト（パート単位/小節単位ヒント）。
-  - [x] `テンポマップ` の横断ポリシーテスト（単一テンポ + 途中変更）。
-  - [x] 形式別（`musescore/midi/vsqx/abc/mei/lilypond`）の保持/劣化マトリクスを文書化。
-  - [x] `slide start/stop` の横断ポリシーテスト。
-  - [x] `tremolo` の横断ポリシーテスト（`single` / `start-stop`）。
-  - [x] `triplet bracket/placement` 表示情報の横断ポリシーテスト。
-  - [x] `CFFP-TECHNIQUE-TEXT` の横断ポリシーテスト（`direction-type/words`: `pizz.` / `arco` / `con sord.`）。
-  - [x] `CFFP-ARTICULATION-EXT` の横断ポリシーテスト（`tenuto` / `staccatissimo` / `marcato`）。
-  - [x] `CFFP-NOTEHEAD` の横断ポリシーテスト（`notehead`: `cross` / `diamond` など）。
-  - [x] `CFFP-STEM-BEAM-DIR` の横断ポリシーテスト（`stem` 方向 + beam 方向情報）。
-  - [x] `CFFP-VOICE-STAFF-SWAP` の横断ポリシーテスト（小節内で voice が staff をまたぐ）。
-  - [x] `CFFP-OTTAVA-NUMBERING` の横断ポリシーテスト（`octave-shift` の `number` 複数系）。
-  - [x] `CFFP-MEASURE-STYLE` の横断ポリシーテスト（`measure-style`: `slash` / `multiple-rest`）。
-  - [x] `CFFP-PRINT-LAYOUT-MIN` の横断ポリシーテスト（`print` の最小レイアウト: system/page break）。
-  - [x] `CFFP-CLEF-MIDMEASURE` の横断ポリシーテスト（小節途中 clef change）。
-  - [x] `CFFP-KEY-MODE` の横断ポリシーテスト（`key/mode`: major/minor）。
-  - [x] `CFFP-MIDMEASURE-REPEAT` の横断ポリシーテスト（小節途中の repeat セマンティクス/記号）。
-  - [x] `CFFP-LYRIC-BASIC` の横断ポリシーテスト（1音節 + melisma）。
-  - [x] `CFFP-PERCUSSION-UNPITCHED` の横断ポリシーテスト（`unpitched` + `display-step` / `display-octave`）。
-  - [x] `CFFP-PERCUSSION-NOTEHEAD` の横断ポリシーテスト（打楽器 notehead: `x` / `triangle` / `diamond`）。
-  - [x] `CFFP-PERCUSSION-INSTRUMENT-ID` の横断ポリシーテスト（`instrument id` の対応と保持）。
-  - [x] `CFFP-PERCUSSION-VOICE-LAYER` の横断ポリシーテスト（同一スタッフ内のドラムレーン/voice 分離）。
-  - [x] `CFFP-PERCUSSION-STAFF-LINE` の横断ポリシーテスト（1線/5線の打楽器五線ポリシー）。
-  - [x] `CFFP-TRANSPOSING-INSTRUMENT` の横断ポリシーテスト（例: Clarinet in A の `transpose` と実音/記譜音の意図）。
-  - [x] `CFFP-LEFT-HAND-PIZZICATO` の横断ポリシーテスト。
-  - [x] `CFFP-BOWING-DIRECTION` の横断ポリシーテスト（`up-bow` / `down-bow`）。
-  - [x] `CFFP-HARMONIC-NATURAL-ARTIFICIAL` の横断ポリシーテスト（`harmonic` の natural/artificial）。
-  - [x] `CFFP-OPEN-STRING` の横断ポリシーテスト（`technical/open-string`）。
-  - [x] `CFFP-STOPPED` の横断ポリシーテスト（`technical/stopped`）。
-  - [x] `CFFP-SNAP-PIZZICATO` の横断ポリシーテスト（`technical/snap-pizzicato`、バルトーク・ピチカート）。
-  - [x] `CFFP-FINGERING` の横断ポリシーテスト（`technical/fingering`: 1-4 と置換指）。
-  - [x] `CFFP-STRING` の横断ポリシーテスト（`technical/string`: I/II/III/IV）。
-  - [x] `CFFP-DOUBLE-TRIPLE-TONGUE` の横断ポリシーテスト（`double-tongue` / `triple-tongue`）。
-  - [x] `CFFP-HEEL-TOE` の横断ポリシーテスト（`technical/heel` / `technical/toe`）。
-  - [x] `CFFP-PLUCK-TEXT` の横断ポリシーテスト（プラック文字: `p` / `i` / `m` / `a`）。
-  - [x] `CFFP-BREATH-VARIANTS` の横断ポリシーテスト（comma/tick/upbow-like など breath-mark 変種）。
-  - [x] `CFFP-BREATH-PLACEMENT` の横断ポリシーテスト（breath-mark の `placement` / `default-x` / `default-y` 保持）。
-  - [x] `CFFP-CAESURA-STYLE` の横断ポリシーテスト（caesura の style 差保持）。
-  - [x] `CFFP-TIMEWISE-BACKUP-FORWARD` の横断ポリシーテスト（`backup` / `forward` を使う複雑時間進行）。
-  - [x] `CFFP-CROSS-STAFF-BEAM` の横断ポリシーテスト（cross-staff beam）。
-  - [x] `CFFP-CHORD-SYMBOL-ALTER` の横断ポリシーテスト（`harmony` のテンション/alter: `#11`, `b9` など）。
-  - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` の横断ポリシーテスト（小節跨ぎ tie + 同音連結）。
-  - [x] `CFFP-MULTI-REST-COUNT` の横断ポリシーテスト（multiple rest の小節数保持）。
-  - [x] `CFFP-REPEAT-JUMP-SOUND` の横断ポリシーテスト（`sound` の `fine` / `tocoda` / `coda` / `segno`）。
-  - [x] `CFFP-CUE-GRACE-MIX` の横断ポリシーテスト（cue note と grace note の混在）。
-  - [x] `CFFP-ACCIDENTAL-COURTESY-MODE` の横断ポリシーテスト（courtesy accidental の表示制御差）。
-  - [x] `CFFP-LYRICS-MULTI-VERSE` の横断ポリシーテスト（複数 verse: `lyric number=1,2`）。
-  - [x] `CFFP-TEXT-ENCODING` の横断ポリシーテスト（非ASCII: 日本語歌詞・記号付き words）。
-  - [x] `rehearsal mark` 文字保持の横断ポリシーテスト。
-  - [x] `segno/coda` 記号の横断ポリシーテスト。
-  - [x] `da capo / dal segno`（jump words + sound属性）の横断ポリシーテスト。
-  - [x] `pedal start/stop` の横断ポリシーテスト。
-  - [x] `harmony chord symbol` の横断ポリシーテスト（`root` / `bass` / `kind`）。
-  - [x] `ending type` の横断ポリシーテスト（`start` / `stop` / `discontinue`）。
-  - [ ] CFFP 保持ポリシー格上げバックログ（フォーマット仕様上は対応可能だが実装が劣化扱い）:
-    - [ ] `CFFP-TIE` の `lilypond` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-DYNAMICS-WEDGE` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-GLISSANDO` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-PEDAL` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [x] `CFFP-SEGNO-CODA` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-REHEARSAL-MARK` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-HARMONY-CHORDSYMBOL` の `musescore` / `mei` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-CHORD-SYMBOL-ALTER` の `musescore` / `mei` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [x] `CFFP-NOTE-TIES-CROSS-MEASURE` の `musescore` を `allowed-degrade` から `must-preserve` へ格上げ。
-    - [ ] `CFFP-NOTE-TIES-CROSS-MEASURE` の `lilypond` を `allowed-degrade` から `must-preserve` へ格上げ。
-  - [x] CFFP 実用優先キュー:
-    - [x] `breath-mark / caesura`
-    - [x] `glissando`
-    - [x] `pedal`
-    - [x] `segno/coda`
-    - [x] `harmony chord symbol`
-- [ ] 旧ABC由来の小節過充填に対する互換モードを整備し、UIに警告サマリを表示。
-- [x] LilyPond の octave-shift（`8va` / `8vb`）往復保持を実装する（現状は劣化ポリシー）。
-- [x] LilyPond（`.ly`）の入出力対応を追加。
-- [ ] LilyPond の単体テストを拡充する（現状はまだ不足）:
-  - `\relative` のオクターブ挙動（単音/和音/明示オクターブ記号混在）を追加。
-  - 多段譜解析の境界ケース（`<< >>` / `\new Staff` / `\new Voice` / 変数展開）を追加。
-  - `\key` / `\time` / `\clef` / header/layout など「音符でないトークン」の誤認識防止テストを追加。
-  - 直近不具合（音符過剰生成・オクターブずれ・密集小節での欠落）を回帰テスト化する。
-- [ ] LilyPond v2.24 記法監査（index + 子/孫ページ）に基づく追従TODO:
-  - [ ] relative のオクターブ判定を LilyPond 仕様に合わせる（半音距離ではなく音名間隔ベース）。
-  - [ ] 和音直後の relative 基準音を「和音先頭音」に修正する（現状は末尾音基準になりうる）。
-  - [ ] 単独音価トークン（例: `4`, `16`）を解析し、`a'2~ 4~ 16` のような記法を正しく取り込む。
-  - [ ] direct parser で `~` を除去せず、tie をネイティブ解析・保持する。
-  - [ ] `%@mks` 非依存で `\tuplet` をネイティブ解析する経路を追加する。
-  - tie 記法（`~`）をネイティブ解析し、取り込み時に tie セマンティクスを保持する（現状は direct parser で脱落）。
-  - slur / phrasing slur（`(` `)` / `\(` `\)`）を `%@mks` 依存ではなくネイティブ解析する。
-  - dynamics（`\p`, `\f`, `\mf`, `\sfz`, `\<`, `\>`, `\!`）をネイティブ解析する。
-  - [x] trill（`\trill`, `\startTrillSpan`/`\stopTrillSpan`）をネイティブ解析する。
-  - [x] glissando（`\glissando`）をネイティブ解析する。
-  - repeat 構文（`\repeat volta`, `\alternative`, segno/al-fine 系）をネイティブ解析する。
-  - lyrics 構文（`\lyricmode`, `\addlyrics`, `\lyricsto`）をネイティブ解析する。
-  - 鍵盤系の staff 変更（`\change Staff`, `\autoChange`）を取り込む。
-  - [x] ピアノペダル記法（`\sustainOn`/`\sustainOff`, `\sostenutoOn`/`Off`, `\unaCorda`, `\treCorde`）を取り込む。
-  - [x] `\upbow` / `\downbow` を取り込む。
-  - [x] harmonics / `\snappizzicato` を取り込む（最小ネイティブマッピング）。
-- [ ] LilyPond 取り込み経路に共通の clef/staff 判定（`core/staffClefPolicy.ts`）を適用する。
-  - [x] `\clef` 未指定時のフォールバックに `chooseSingleClefByKeys` を適用する（単一ブロック / `\new Staff`）。
-  - [x] 単一ブロック取り込み時に `shouldUseGrandStaffByRange` を使い、大譜表相当（上下staff）への自動分割を適用する。
-  - [x] 大譜表相当へ自動分割する場合はヒステリシス方式の staff 割当を適用する。
-- [ ] 独自 clef 判定ロジックの共通化方針を策定し、可能な経路で `core/staffClefPolicy.ts` を利用する。
-  - [ ] 対象整理: どの入出力（ABC/MEI/LilyPond/MIDI など）が独自 clef 判定を持つかを棚卸しする。
-  - [ ] 適用方針: 既存挙動互換を保ちつつ `shouldUseGrandStaffByRange` / `chooseSingleClefByKeys` への置換可否を判定する。
-  - [ ] 検証: 既存 fixture + CFFP で回帰を確認し、必要なら format 別に opt-in フラグを用意する。
-- [ ] MEI（Music Encoding Initiative）の入出力対応を追加。
-- [ ] MEI のテスト戦略を単体レベル以上に強化する（unit だけでは不足の可能性）:
-  - `MusicXML -> MEI -> MusicXML` の roundtrip golden テストを追加する。
-  - 実運用に近い大きめ fixture（多声・装飾・リピート等）で spot/parity テストを追加する。
-  - preserve/degrade の許容基準を定義し、閾値超過で CI を失敗させる。
-  - MEI 公式リファレンスに照らして実装適合を確認し、差分は TODO で管理する:
-    - https://music-encoding.org/
-    - https://music-encoding.org/guidelines/v5/content/
-    - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
-  - [ ] `tests/fixtures-local/**` に依存する MEI 単体テストは暫定運用とする:
-    - fixture 不在時は自動 skip を維持する。
-    - CFFP/spot parity の網羅が十分になったら、重複する local-fixture テストを整理・削除する。
-  - MEI v5 仕様差分フォロー候補（仕様上は表現可能だが `mei-io` 実装が未完/部分対応）:
-    - [ ] Slur/Tie を MEI 制御イベント（`<slur>`, `<tie>`）または note属性として往復保持する。
-      - [x] staff内 `<slur startid/endid>` の最小取り込み（同一layer id参照）を実装。
-      - [x] staff内 `<tie startid/endid>` の最小取り込み（同一layer id参照）を実装。
-      - [x] layer内 `<slur>/<tie startid/endid>` の最小取り込み（同一layer id参照）を実装。
-      - [x] note属性 `@tie` / `@slur` の最小取り込み（`tie+tied` / `notations/slur`）を実装。
-      - [x] MusicXML note `tie/slur` から MEI note属性 `@tie` / `@slur` への最小出力を実装。
-    - [ ] 強弱とクレッシェンド/デクレッシェンド（`<dynam>`, `<hairpin>`）を保持する。
-      - [x] `<dynam>` の最小取り込み（MusicXML direction/dynamics・自由テキスト words・`tstamp` offset）を実装。
-      - [x] `<hairpin>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `wedge start/stop`）を実装。
-      - [x] MusicXML `direction(dynamics/wedge)` から MEI `<dynam>` / `<hairpin>` への最小出力（同一小節内 pairing）を実装。
-    - [ ] 装飾・制御イベント（`<trill>`, `<turn>`, `<mordent>`, `<fermata>`）を保持する。
-      - [x] `<trill>` / `<fermata>` の最小取り込み（control event -> note notations）を実装。
-      - [x] `<turn>` / `<mordent>` の最小取り込み（control event -> ornaments）を実装。
-      - [x] MusicXML note の ornament/fermata から MEI 制御イベント（`<trill>`, `<turn>`, `<mordent>`, `<fermata>`）への最小出力を実装。
-    - [ ] グリッサンド/スライド（`<gliss>`）を保持する。
-      - [x] `<gliss>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/glissando` start/stop）を実装。
-      - [x] `<slide>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/slide` start/stop）を実装。
-      - [x] MusicXML note `notations(glissando/slide)` から MEI `<gliss>` / `<slide>` への最小出力（同一小節内 pairing）を実装。
-    - [ ] ペダル/オクターブ記号（`<pedal>`, `<octave>`）を保持する。
-      - [x] `<pedal>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `direction/pedal` start/stop）を実装。
-      - [x] `<octave>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `direction/octave-shift`）を実装。
-      - [x] MusicXML `direction(pedal/octave-shift)` から MEI `<pedal>` / `<octave>` への最小出力（同一小節内 pairing）を実装。
-    - [ ] ブレス/カエスーラ（`<breath>`, `<caesura>`）を保持する。
-      - [x] `<breath>` / `<caesura>` の最小取り込み（control event -> articulations）を実装。
-      - [x] MusicXML note の `breath-mark` / `caesura` から MEI `<breath>` / `<caesura>` への最小出力を実装。
-    - [ ] 反復・ジャンプ記号（`<repeatMark>`、segno/coda/fine 対応）を保持する。
-      - [x] `<repeatMark>` の最小取り込み（segno/coda/fine と基本 jump words を MusicXML direction へ）を実装。
-      - [x] MusicXML segno/coda/fine（direction 記号/words）から MEI `<repeatMark>` への最小出力を実装。
-    - [ ] コードネーム（`<harm>`）とテンションalterを保持する。
-      - [x] `<harm>` の最小取り込み（chord text から MusicXML `harmony` の root/bass/kind/degree を推定）を実装。
-    - [ ] 小節跨ぎ連符向け `tupletSpan`（`<tupletSpan>`）を扱う。
-      - [x] `<tupletSpan>` の最小取り込み（`startid/endid` と `tstamp/tstamp2` から MusicXML `notations/tuplet` start/stop）を実装。
-  - MEI parity 詳細確認メモ（2026-02-27）:
-    - [x] 実運用fixture（`paganini`）で `MusicXML -> MEI -> MusicXML` 時に音符欠落を修正する:
-      - 観測済みの pitch+timing 欠落: m138（`D7`）、m140（`C7`）、m153（`C#4` 短音価）。
-      - `mei-io` import 側の overfull/clamp または dense-layer 処理が原因候補。
-    - [x] `alter=0` と `alter省略` の表現差を正規化し、非意味差分ノイズを低減する。
-  - [ ] MEI 実装の信頼性リセット（現状は「信用しない前提」で監査）:
-    - [ ] フェーズ0（安全策）: 黙殺欠落を禁止し、overfull/clamp は strict で明示失敗にする。
-    - [ ] フェーズ1（parity基線）: 外部MEI fixture 群を整備し、音高/オクターブ/発音タイミングの同値検証を常設する。
-      - [x] `accid.ges` / `accid-ges` を visual `accid` 省略時の音高alterフォールバックとして取り込み（表示accidentalは据え置き）。
-      - [x] `key.sig` の暗黙臨時記号（accid省略時）を import pitch alter に反映する最小対応と unit 追加。
-      - [x] `staffDef@key.sig` を `scoreDef@key.sig` より優先して取り込み、調号表示/音高反映に使う修正と unit 追加。
-      - [x] staff が初小節不在でも「そのstaffの最初に出現する小節」で初期 `<attributes>`（divisions/key/time/clef）を出力する修正と unit 追加。
-    - [ ] フェーズ2（仕様要素）: MEI 標準の制御イベント/リズム構造要素をネイティブ対応する。
-    - [ ] フェーズ3（階層横断時刻）: `tstamp`/`startid`/`endid`/`plist` の解決と小節跨ぎspanを実装する。
-    - [ ] フェーズ4（互換方針）: v5互換契約・劣化ルール・CI受け入れ閾値を定義する。
-    - [ ] `OVERFULL_CLAMPED` による黙殺欠落をやめ、strictモードでは明示エラー化する（デフォルトでデータ欠落させない）。
-      - [x] `convertMeiToMusicXml` に `failOnOverfullDrop` を追加し、実ドロップ時は例外化可能にした。
-    - [ ] mikuscore生成物ではない外部MEIを入力にした parity テストを追加し、音高/オクターブ/発音タイミングを検証する。
-      - [x] `mks:*` なしの外部MEI最小ケース（dur/dots/chord）を unit に追加し、音高+音価基線を検証。
-      - [x] `meiCorpus` の読み取り対象指定（`meiCorpusIndex`）と範囲外エラーを unit で追加。
-    - [ ] `mks:*` メタ依存ではなく、MEI仕様の制御イベントを import/export で扱う:
-      - `<slur>`, `<tie>`, `<hairpin>`, `<dynam>`, `<gliss>`, `<pedal>`, `<octave>`, `<repeatMark>`。
-      - [x] export 側で MusicXML `notations(tie/slur)` から MEI 制御イベント `<tie>` / `<slur>`（`tstamp/tstamp2`）の最小出力を追加。
-      - [x] tie 制御イベントで stop 側に accid/alter が無い場合、start 側の alter を引き継ぐ最小対応を追加（同一layer時系列）。
-    - [ ] MEI CMN のリズム構造コンテナを扱う:
-      - `<beam>`, `<beamSpan>`, `<tuplet>`, `<tupletSpan>`, `<graceGrp>`。
-      - [x] import 側で `<mRest>` / `<mSpace>` / `<space>` を timing-preserving rest として解釈する最小対応と unit 追加。
-      - [x] export 側で全小節休符（MusicXML）を `<mRest>` として出力する最小対応と unit 追加。
-      - [x] export 側で non-printing rest（`print-object="no"`）を `<space>` / `<mSpace>` に対応させる最小対応と unit 追加。
-      - [x] `<mRest>/<mSpace>` の `dur/dots` を拍子長から推定して、import後の `type/dot` と `duration` の整合を改善。
-      - [x] export 側で連続 grace note を `<graceGrp>` にグルーピングする回帰テストを追加。
-    - [ ] `att.controlEvent` 系の時点指定（`tstamp`, `startid`, `endid`, `plist`）で階層横断イベントを正しく解釈する。
-      - [x] 数値 `tstamp/tstamp2` の最小取り込み（staff内 `<slur>` / `<tie>`、同一layer）を追加。
-      - [x] `plist` の最小取り込み（単一点制御イベント、例: `<trill plist="#id ...">`）を追加。
-      - [x] `plist` の最小取り込み（span系の開始点解決、例: `<slur>/<tie>/<gliss>/<slide>/<tupletSpan>`）を追加。
-      - [x] 同一staff内で layer をまたぐ `startid/endid` 参照を ID→tick 共有で解決する最小対応（hairpin 回帰テスト追加）。
-    - [ ] 先頭 `scoreDef` 固定前提をやめ、中間の拍子/調号/clef/staffDef変更を扱う。
-      - [x] 中間 `staffDef` による staff別 key/clef/transpose 上書きを import で反映。
-      - [x] import 側で中間 `scoreDef` の拍子・調号・clef 変更を反映（measure属性へ出力）する最小対応とunit追加。
-    - [ ] 出力 `meiversion=\"4.0.1\"` 固定を見直し、v5互換方針と互換契約を明文化する。
-      - [x] 出力の既定 `meiversion` を `5.1` に変更し、互換目的で明示上書き（`MeiExportOptions.meiVersion`）を追加。
-    - [ ] `annot type=\"musicxml-misc-field\"` への意味情報退避を補助用途に限定し、コア意味は標準MEI要素で保持する。
-- [ ] MuseScore形式（`.mscz` / `.mscx`）の入出力対応を追加。
-- [ ] VSQX 形式の入出力対応を追加。
-- [ ] 歌詞（lyrics）の対応を追加（取り込み/編集/出力と、形式ごとの保持/劣化ルール定義を含む）。
-- [ ] 各種入出力フォーマットの機能性を向上（オプション、診断、往復品質を含む）。
-- [ ] ピアノ譜を ABC 出力した際に不正データになる問題を修正し、回帰テストを追加する。
-- [ ] 読み込み前に入力ファイルサイズ上限チェックを追加し、上限超過時は明確な UI エラーを表示する。
-- [ ] MuseScore 段階対応ロードマップ:
-  - [ ] フェーズ1（現状）: `.mscx` / `.mscz` の読込経路、基本音符/休符/和音の取り込み、`diag` と `src:musescore:*` で生データ退避。
-  - [ ] フェーズ2: 再生系メタ（テンポ、リピート/ジャンプ、強弱・奏法のうち対応可能なもの）を優先対応し、欠落は `diag` 明示。
-  - [ ] フェーズ3: レイアウト系（改行、ページ、間隔ヒント）をオプションメタとして保持・必要に応じて復元。
-  - [ ] フェーズ4: 記譜拡張（装飾、連符バリエーション、アーティキュレーション、奏法テキスト）を保持/劣化ポリシー付きで拡充。
-- [ ] 外部形式（最低でも MEI/ABC）への出力時に overfull 小節を生成しない。エクスポート時に正規化または分割して不正データを出さない。
-- [ ] 全エクスポート形式の直前に共通の容量チェックを必須化し、overfull 検知時は `diag` を出してエクスポートを中止する。
+- [ ] Refactor `src/ts/abc-io.ts` before continuing larger ABC layout expansion.
+  - Current concern:
+    - recent `%%score` / grouped-staff work was implemented as a bounded first cut
+    - behavior now works for the targeted case, but the code shape is still too incremental
+  - Current status:
+    - the first in-file staged cleanup is well underway
+    - `parseForMusicXml(...)` is now much closer to orchestration, with line parsing, layout derivation, body entry dispatch, and post-processing split into helpers
+    - pending note-state application and playable-event/body-token dispatch have also been thinned substantially
+    - export-side grouped-staff measure rendering, header generation, repeat/ending barline assembly, note serialization, note-level precomputation, measure-note rendering, top-level part rendering, document-shell assembly, and export-context calculation are now also partially helperized
+    - focused characterization coverage now also includes grouped `%%score` multi-measure backup emission and grouped repeat/ending restoration
+    - the file is much more segmented than before, but it is still not yet at a split-ready boundary
+  - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
+    - first make responsibility blocks explicit inside the current file
+    - then extract small document/part/measure helpers with stable behavior
+    - only after the internal seams are clear, re-evaluate file splits
+  - Refactor goals:
+    - separate ABC parse / compatibility / intermediate-model / MusicXML-render responsibilities more clearly
+    - reduce the amount of layout-specific branching embedded directly in MusicXML emission
+    - avoid continuing to grow the current `optional field on existing structure` pattern without a cleaner model
 
-### 次回の再開手順
-1. `npm run build`
-2. `mikuscore.html` をハードリロードして動作確認
-3. 譜面でノートクリック -> 選択状態更新を確認
-4. `change_to_pitch` / `change_duration` / `split_note` 実行 -> 保存 -> 再レンダリングで反映確認
+- [ ] Refactoring series 1: freeze current ABC behavior with characterization coverage before moving code.
+  - Expand focused tests around:
+    - `%%score` grouped import
+    - plain multi-voice import without grouping
+    - inline `[V:...]` switching
+    - existing export behavior for multi-staff MusicXML parts
+  - Goal:
+    - make current bounded behavior explicit before reshaping internals
+  - Current status:
+    - inline `[V:...]` switching and bounded `%%score` grouped import are already covered
+    - grouped-staff characterization now also covers multi-measure `<backup>` emission and grouped repeat/ending restoration
+    - further high-value additions would be grouped-staff lyrics and grouped key/meter/tempo changes
+
+- [ ] Refactoring series 2: isolate score-layout parsing from the rest of ABC import.
+  - Split out the logic that currently derives:
+    - declared voice ids
+    - `%%score` ordering/grouping
+    - grouped-staff layout decisions
+  - Target result:
+    - a small layout-oriented helper/module with narrow inputs/outputs
+  - First slice:
+    - identify the current boundary between ABC document parsing and score-layout derivation
+    - extract only the layout-reading path first, without changing current grouped import behavior
+  - Current status:
+    - the initial slice is already started in-file via `parseAbcScoreLayout(...)`, `parseAbcScoreVoiceOrder(...)`, and related voice-registry/body-entry helpers
+    - document parsing and layout derivation are clearer than before
+    - normalized voice data, primary voice resolution, grouped part naming, and `staffVoices` construction are also now more explicit
+    - grouped-staff layout decisions are still partially entangled with later part construction, so this series is progressing but not complete
+
+- [ ] Refactoring series 3: introduce a clearer intermediate layout model for ABC import.
+  - Replace or normalize the current `voice -> optional grouped staff` flow into an explicit model for:
+    - score order
+    - grouped parts
+    - staves
+    - voices / lanes
+  - Do this before adding broader multi-staff semantics.
+  - Constraint:
+    - avoid expanding ABC layout semantics during this step; keep the current bounded behavior and make the model clearer first
+
+- [ ] Refactoring series 4: split MusicXML emission into smaller helpers with stable boundaries.
+  - Separate:
+    - part-list generation
+    - per-measure attribute generation
+    - note serialization
+    - grouped-staff measure emission with `<backup>`
+  - Keep output stable while reducing the size of the current monolithic emitter.
+  - Current status:
+    - this has advanced through helper extraction around normalized voice data, part construction, body event rendering, grouped-staff note emission, measure header generation, repeat/ending barline generation, `buildMeasureNotesXml(...)` decomposition, beam/empty-measure note precomputation, top-level measure-note rendering, and top-level part-list / part-body / document / export-context orchestration
+    - per-part state initialization, per-measure misc assembly, note leading-direction grouping, note core subfragments, and note-notations subgroups are also now helperized
+    - grouped-staff MusicXML emission and note serialization are much clearer than before, but the exporter is still not fully separated into stable module-sized boundaries
+  - Resume here next time:
+    - continue from the remaining seams around export helper ordering / section boundaries in `src/ts/abc-io.ts`, or decide this series is "good enough" and switch effort to characterization coverage
+    - if one more refactor slice is desired, the remaining candidates are mostly helper grouping/ordering rather than large logic blocks
+    - if pausing the refactor, the most valuable immediate follow-up is focused characterization coverage for grouped-staff lyrics and grouped key/meter/tempo changes
+
+- [ ] Refactoring series 5: make grouped-staff emission follow the same model as ordinary part emission.
+  - Goal:
+    - grouped staff should not feel like a special-case appendage
+    - single-part and grouped-part rendering should share a normal pipeline as much as possible
+  - Re-evaluate whether `staffVoices` remains the right structure after series 3 and 4.
+
+- [ ] Refactoring series 6: move policy decisions out of ad hoc implementation details.
+  - Decide and document separately:
+    - grouped part naming policy
+    - import-only vs export policy for bounded `%%score (...)`
+    - relationship between bounded `%%score` support and still-unsupported `V:` properties
+  - Avoid burying those decisions only in serializer code.
+
+- [ ] Refactoring series 7: prune and simplify `src/ts/abc-io.ts` after the new structure lands.
+  - Remove transitional helpers and compatibility glue that were only needed during the migration.
+  - Re-check whether some code should remain in `abc-io.ts` or move into narrower files.
+
+- [ ] Refactoring series 8: only after the structural cleanup, resume larger ABC layout expansion.
+  - Candidate follow-ups after the refactor series:
+    - broader `%%score` patterns
+    - clearer export behavior for grouped staves
+    - any future decision on `brace` / `bracket` / `staves`
+  - Do not expand semantics first and refactor later again.
+
+- [ ] Design a clearer ABC internal layout model before expanding multi-staff support further.
+  - Re-evaluate whether the current `AbcParsedPart` shape should be replaced or normalized into something closer to:
+    - score layout groups
+    - parts
+    - staves
+    - voices / lanes
+  - Aim:
+    - make `single part`, `multi-part`, and bounded `multi-staff` import paths look like normal cases of one model instead of ad hoc branches
+
+- [ ] Extract or reorganize MusicXML emission helpers in `src/ts/abc-io.ts`.
+  - Candidate split points:
+    - part-list generation
+    - measure attribute generation
+    - note serialization
+    - grouped-staff / backup emission
+  - Keep behavior unchanged while making later ABC layout work easier to reason about.
+
+- [ ] Finish bounded grand-staff import support around `%%score`.
+  - Current first cut exists for:
+    - `%%score (1 2)` grouped voices importing as `1 part + multiple staves`
+    - emitting `<staves>`, staff-numbered clefs, per-note `<staff>`, and `<backup>` between grouped staves
+    - regression coverage for the minimal grouped-two-staff case
+  - Keep current scope clear:
+    - this is bounded `%%score (...)` grouping support
+    - this is not yet full ABC multi-staff layout parity
+    - broader `V:` properties such as `staves`, `brace`, and `bracket` remain unsupported
+
+- [ ] Audit `%%score` parsing against common practical patterns before expanding semantics.
+  - Check:
+    - multiple grouped blocks such as `%%score (1 2) (3 4)`
+    - mixed grouped + ungrouped order such as `%%score (1 2) 3`
+    - repeated / malformed ids and current fallback behavior
+  - Add focused tests for accepted and intentionally rejected forms.
+
+- [ ] Decide the bounded naming policy for grouped-part import from ABC.
+  - Current first cut joins grouped voice names as `Upper / Lower`.
+  - Re-evaluate whether grouped import should:
+    - keep the first voice name only
+    - join names
+    - prefer an explicit future grouping label if one is introduced
+
+- [ ] Strengthen grouped-staff MusicXML emission for non-trivial measures.
+  - Verify and test:
+    - underfull / overfull handling per grouped staff
+    - lyrics on grouped staves
+    - tempo / key / meter changes while grouped
+    - tuplets / beams / ornaments with grouped staff output
+    - pickup measures and repeat-ending metadata in grouped parts
+
+- [ ] Revisit ABC export policy for multi-staff MusicXML parts.
+  - Current export still splits MusicXML lanes into separate `V:` sections.
+  - Decide whether MusicXML multi-staff parts should:
+    - remain exported as separate `V:` lanes only
+    - emit bounded `%%score (...)` grouping on export
+    - later emit additional grouping hints while still avoiding unsupported `V:` properties
+
+- [ ] Decide whether bounded `%%score` grouping should remain compatibility-only or be promoted in spec wording.
+  - Align:
+    - `docs/spec/ABC_IO.md`
+    - `docs/spec/ABC_STANDARD_COVERAGE.md`
+    - `README.md`
+  - Keep the wording precise about what is and is not supported.
+
+## MuseScore
+
+- [ ] Refactor `src/ts/musescore-io.ts` before further expanding MuseScore format coverage.
+  - Current concern:
+    - import, export, and many format-specific helpers are concentrated in one large file
+    - future behavior changes will get harder to reason about if the file keeps growing in place
+  - Current status:
+    - the first in-file staged refactor pass has been completed
+    - MuseScore export now has clearer metadata / part scaffold / measure context / staff state / voice rendering seams
+    - import-side and export-side responsibility blocks are more explicit than before, but they still live in one file
+  - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
+    - first make responsibility blocks explicit inside the current file
+    - then extract stable import/export/helper seams before any module split
+    - keep public entry points stable while reshaping internals
+  - Refactor goals:
+    - separate MuseScore import, MuseScore export, and shared helper responsibilities more clearly
+    - reduce the amount of deeply interleaved notation/duration/direction logic in one module
+
+- [ ] MuseScore refactoring series 1: freeze current behavior with characterization coverage around fragile areas.
+  - Focus especially on:
+    - multi-staff parts
+    - tuplets / beams / slurs / trills
+    - tempo and direction mapping
+    - transpose / key / clef handling
+  - Goal:
+    - make structural cleanup safer before moving code
+
+- [ ] MuseScore refactoring series 2: split import-side parsing helpers from export-side generation helpers.
+  - Candidate split:
+    - MuseScore -> MusicXML import module
+    - MusicXML -> MuseScore export module
+    - shared utilities for duration, pitch, and XML fragments
+  - Current status:
+    - export-side seams are now much clearer inside `src/ts/musescore-io.ts`
+    - do not split files yet until the remaining shared helper boundaries are simpler
+
+- [ ] MuseScore refactoring series 3: isolate direction / spanner / notation translation logic.
+  - Candidate areas:
+    - dynamics and text directions
+    - tuplets
+    - slurs / trills / ottava and related spanners
+    - articulations / technical markings
+  - Aim:
+    - reduce the need to touch one giant code path for every notation feature
+
+- [ ] MuseScore refactoring series 4: normalize internal measure / lane data flow.
+  - Re-evaluate whether current parsed event and measure structures are the best boundary for both import and export work.
+  - Aim:
+    - make staff / voice / timing handling easier to reuse and test
+  - Current status:
+    - export-side measure context and staff state are now more explicit
+    - note/event child dispatch has been decomposed, but import/export still do not share a common internal lane model yet
+
+- [ ] MuseScore refactoring series 5: prune transitional helpers after the split lands.
+  - Remove duplication that only existed to support the migration.
+  - Re-check file boundaries after the first pass instead of locking them too early.
+
+## MusicXML
+
+- [ ] Keep `src/ts/musicxml-io.ts` under light refactoring review.
+  - Current stance:
+    - this file is much smaller than `abc-io.ts` and `musescore-io.ts`
+    - it does not currently look like the highest-priority large refactor target
+  - Still worth watching:
+    - helper growth
+    - normalization responsibilities
+    - render-doc / beam / part-list fixup responsibilities accumulating in one place
+
+- [ ] MusicXML refactoring series 1: clarify module boundaries before adding more utility behavior.
+  - Separate mentally and, if needed, physically:
+    - parse / serialize helpers
+    - normalization/fixup helpers
+    - render-oriented helpers
+  - Goal:
+    - avoid slow drift into another oversized mixed-responsibility file
+
+- [ ] MusicXML first-pass refactoring plan: start here before touching larger I/O modules.
+  - Step 1:
+    - mark the current responsibility blocks clearly inside `src/ts/musicxml-io.ts`
+    - identify which helpers are parse/serialize, normalization/fixup, and render-related
+  - Step 2:
+    - extract normalization/fixup helpers into clearer internal sections without changing behavior
+  - Step 3:
+    - only after the internal sections are clearer, decide whether any helpers should move to separate files
+  - Rationale:
+    - use `musicxml-io.ts` as the lowest-risk refactoring warm-up before `abc-io.ts` or `musescore-io.ts`
+
+- [ ] MusicXML first-pass refactoring task A: stabilize the current helper grouping in `src/ts/musicxml-io.ts`.
+  - Create an explicit grouping for:
+    - parse / serialize
+    - document normalization
+    - render-doc preparation
+  - Keep behavior unchanged.
+
+- [ ] MusicXML first-pass refactoring task B: extract normalization helpers in the safest order.
+  - Recommended order:
+    - tuplet enrichment
+    - part-list / part-id normalization
+    - final barline insertion
+    - beam-related normalization
+  - Run existing tests after each extraction step.
+
+- [ ] MusicXML first-pass refactoring task C: re-evaluate file splits after helper extraction.
+  - Only split files if the boundary becomes obviously cleaner after task A and B.
+  - Avoid splitting too early while responsibilities are still being discovered.
+
+- [ ] MusicXML refactoring series 2: extract normalization/fixup helpers only when reuse or complexity justifies it.
+  - Candidate areas:
+    - tuplet enrichment
+    - part-list / part-id normalization
+    - final barline insertion
+    - beam-related normalization
+  - Do this conservatively; do not create abstraction noise without payoff.
+
+- [ ] MusicXML refactoring series 3: re-evaluate after ABC and MuseScore refactors settle.
+  - Once larger I/O modules are cleaner, revisit whether `musicxml-io.ts` still feels appropriately scoped.
+  - Do not over-rotate on this module before the higher-pressure files are addressed.
+
+## Cleanup
+
+- [ ] Add the standard file header to source files as needed.
+  - Target header:
+    ```text
+    /*
+     * Copyright 2026 Toshiki Iga
+     * SPDX-License-Identifier: Apache-2.0
+     */
+    ```
+
+- [ ] Make MuseScore export fully 4.0+-native where compatibility fallback is not required.
+  - Keep compatibility fallbacks on import.
+  - Remove any remaining import-side fallback for former custom MuseScore transpose helper tags after related roundtrip/tests are updated.
+  - Raise exported `museScore/@version` from `4.0` only after the emitted XML is confirmed to match the expected newer 4.x save-format behavior closely enough (e.g. `4.60`).
+  - Define a clearer general policy for MuseScore files that carry multiple co-located tempo representations (e.g. visible tempo text plus hidden metronome/playback tempo), instead of relying only on the current first-measure/last-candidate heuristic.
+
+- [ ] After the current CLI series settles, prune this file again.
+  - Remove items that have become fully implemented.
+  - Keep only active backlog and intentionally retained long-term notes.

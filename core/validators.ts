@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { CoreCommand, Diagnostic, VoiceId, Warning } from "./interfaces";
 import { getMeasureTimingForVoice } from "./timeIndex";
 import {

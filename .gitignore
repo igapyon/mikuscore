@@ -1,6 +1,10 @@
 node_modules/
 coverage/
 .DS_Store
-tests/fixtures-local/
+tests/local-data/*
+!tests/local-data/.gitkeep
 tests/artifacts/roundtrip/
 tests/roundtrip/musescore/cases.local.json
+.tsbuildinfo
+.mikuscore-build/
+workplace/*

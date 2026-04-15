@@ -1,6 +1,12 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
+  buildMidiBytesForPlayback,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiControlEventsFromMusicXmlDoc,
   collectMidiKeySignatureEventsFromMusicXmlDoc,
@@ -78,6 +84,144 @@ const buildSmfFormat1 = (tracks: number[][], ticksPerQuarter = 480): Uint8Array 
     chunks.push(...trackHeader, ...track);
   }
   return Uint8Array.from([...header, ...chunks]);
+};
+
+const readU16Be = (bytes: Uint8Array, offset: number): number =>
+  ((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0);
+
+const readU32Be = (bytes: Uint8Array, offset: number): number =>
+  (((bytes[offset] ?? 0) << 24) | ((bytes[offset + 1] ?? 0) << 16) | ((bytes[offset + 2] ?? 0) << 8) | (bytes[offset + 3] ?? 0)) >>> 0;
+
+const readVlqAt = (bytes: Uint8Array, offset: number): { value: number; next: number } | null => {
+  let value = 0;
+  let cursor = offset;
+  for (let i = 0; i < 4; i += 1) {
+    const b = bytes[cursor];
+    if (b === undefined) return null;
+    value = (value << 7) | (b & 0x7f);
+    cursor += 1;
+    if ((b & 0x80) === 0) return { value, next: cursor };
+  }
+  return null;
+};
+
+const collectTimeSignatureMetaFromMidi = (midi: Uint8Array): Array<{ tick: number; beats: number; beatType: number }> => {
+  if (String.fromCharCode(...Array.from(midi.slice(0, 4))) !== "MThd") return [];
+  const headerLen = readU32Be(midi, 4);
+  const trackCount = readU16Be(midi, 10);
+  let offset = 8 + headerLen;
+  const out: Array<{ tick: number; beats: number; beatType: number }> = [];
+
+  for (let t = 0; t < trackCount; t += 1) {
+    if (String.fromCharCode(...Array.from(midi.slice(offset, offset + 4))) !== "MTrk") break;
+    const trackLen = readU32Be(midi, offset + 4);
+    const track = midi.slice(offset + 8, offset + 8 + trackLen);
+    offset += 8 + trackLen;
+    let cursor = 0;
+    let absTick = 0;
+    let runningStatus: number | null = null;
+    while (cursor < track.length) {
+      const delta = readVlqAt(track, cursor);
+      if (!delta) break;
+      absTick += delta.value;
+      cursor = delta.next;
+      const first = track[cursor];
+      if (first === undefined) break;
+      let status = first;
+      if (status < 0x80) {
+        if (runningStatus === null) break;
+        status = runningStatus;
+      } else {
+        cursor += 1;
+        if (status < 0xf0) runningStatus = status;
+        else runningStatus = null;
+      }
+      if (status === 0xff) {
+        const metaType = track[cursor];
+        cursor += 1;
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next;
+        if (metaType === 0x58 && len.value >= 2) {
+          const beats = track[cursor] ?? 4;
+          const dd = track[cursor + 1] ?? 2;
+          out.push({ tick: absTick, beats, beatType: Math.pow(2, dd) });
+        }
+        cursor += len.value;
+        continue;
+      }
+      if (status === 0xf0 || status === 0xf7) {
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next + len.value;
+        continue;
+      }
+      const msg = status & 0xf0;
+      const dataLen = msg === 0xc0 || msg === 0xd0 ? 1 : 2;
+      if (first < 0x80) {
+        cursor += dataLen;
+      } else {
+        cursor += dataLen;
+      }
+    }
+  }
+  return out.sort((a, b) => a.tick - b.tick);
+};
+
+const collectTextMetaFromMidi = (midi: Uint8Array): string[] => {
+  if (String.fromCharCode(...Array.from(midi.slice(0, 4))) !== "MThd") return [];
+  const headerLen = readU32Be(midi, 4);
+  const trackCount = readU16Be(midi, 10);
+  let offset = 8 + headerLen;
+  const out: string[] = [];
+
+  for (let t = 0; t < trackCount; t += 1) {
+    if (String.fromCharCode(...Array.from(midi.slice(offset, offset + 4))) !== "MTrk") break;
+    const trackLen = readU32Be(midi, offset + 4);
+    const track = midi.slice(offset + 8, offset + 8 + trackLen);
+    offset += 8 + trackLen;
+    let cursor = 0;
+    let runningStatus: number | null = null;
+    while (cursor < track.length) {
+      const delta = readVlqAt(track, cursor);
+      if (!delta) break;
+      cursor = delta.next;
+      const first = track[cursor];
+      if (first === undefined) break;
+      let status = first;
+      if (status < 0x80) {
+        if (runningStatus === null) break;
+        status = runningStatus;
+      } else {
+        cursor += 1;
+        if (status < 0xf0) runningStatus = status;
+        else runningStatus = null;
+      }
+      if (status === 0xff) {
+        const metaType = track[cursor];
+        cursor += 1;
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next;
+        if ((metaType === 0x01 || metaType === 0x03) && len.value > 0) {
+          const payload = track.slice(cursor, cursor + len.value);
+          out.push(String.fromCharCode(...Array.from(payload)));
+        }
+        cursor += len.value;
+        continue;
+      }
+      if (status === 0xf0 || status === 0xf7) {
+        const len = readVlqAt(track, cursor);
+        if (!len) break;
+        cursor = len.next + len.value;
+        continue;
+      }
+      const msg = status & 0xf0;
+      const dataLen = msg === 0xc0 || msg === 0xd0 ? 1 : 2;
+      cursor += dataLen;
+    }
+  }
+  return out;
 };
 
 describe("midi-io MIDI nuance regressions", () => {
@@ -301,6 +445,46 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(c4Events[0]?.durTicks).toBeGreaterThanOrEqual(256);
   });
 
+  it("merges tied notes even when continuation note omits voice (fallback by channel/pitch)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>2</voice><type>quarter</type>
+        <tie type="start"/><notations><tied type="start"/></notations>
+      </note>
+      <backup><duration>480</duration></backup>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <tie type="stop"/><notations><tied type="stop"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const c4Events = midiMode.events
+      .filter((e) => e.midiNumber === 60)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(c4Events.length).toBe(1);
+    expect(c4Events[0]?.startTicks).toBe(0);
+    expect(c4Events[0]?.durTicks).toBeGreaterThanOrEqual(256);
+  });
+
   it("keeps slurred notes longer than detached notes in MIDI mode", () => {
     const baseXml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
@@ -338,6 +522,248 @@ describe("midi-io MIDI nuance regressions", () => {
     expect(slurred.length).toBe(2);
     expect(slurred[0]?.durTicks ?? 0).toBeGreaterThan(plain[0]?.durTicks ?? 0);
     expect(slurred[1]?.durTicks ?? 0).toBeGreaterThan(plain[1]?.durTicks ?? 0);
+  });
+
+  it("does not retrigger repeated same-pitch note inside slur in MIDI mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const f5Events = midiMode.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(1);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[0]?.durTicks ?? 0).toBeGreaterThan(128);
+  });
+
+  it("does not retrigger repeated same-pitch note inside slur in playback-like mode with tie processing", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(1);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[0]?.durTicks ?? 0).toBeGreaterThan(120);
+  });
+
+  it("keeps retrigger when repeated same-pitch note is slur-start boundary", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const d4Midi = midiMode.events.filter((e) => e.midiNumber === 62).sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4Midi.length).toBe(2);
+    expect(d4Midi[0]?.startTicks).toBe(0);
+    expect(d4Midi[1]?.startTicks ?? 0).toBeGreaterThan(0);
+
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const d4Playback = playbackLike.events
+      .filter((e) => e.midiNumber === 62)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4Playback.length).toBe(2);
+    expect(d4Playback[1]?.startTicks ?? 0).toBeGreaterThan(0);
+  });
+
+  it("does not extend slur-stop note into following same pitch", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>2</beats><beat-type>4</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+      </note>
+      <note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const midiMode = buildPlaybackEventsFromMusicXmlDoc(doc, 128, { mode: "midi" });
+    const d4 = midiMode.events.filter((e) => e.midiNumber === 62).sort((a, b) => a.startTicks - b.startTicks);
+    expect(d4.length).toBe(3);
+    expect(d4[1]?.startTicks).toBe(128);
+    expect((d4[1]?.durTicks ?? 0) + (d4[1]?.startTicks ?? 0)).toBeLessThanOrEqual(d4[2]?.startTicks ?? 0);
+  });
+
+  it("keeps retrigger for repeated same-pitch slur when staccato is present in playback-like mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><articulations><staccato/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(2);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[1]?.startTicks ?? 0).toBeGreaterThan(0);
+  });
+
+  it("keeps retrigger for repeated same-pitch slur when tenuto is present in playback-like mode", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <time><beats>1</beats><beat-type>1</beat-type></time>
+      </attributes>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><articulations><tenuto/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>5</octave></pitch>
+        <duration>120</duration><voice>1</voice><type>16th</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseDoc(xml);
+    const playbackLike = buildPlaybackEventsFromMusicXmlDoc(doc, 128, {
+      mode: "playback",
+      includeTieInPlaybackLikeMode: true,
+    });
+    const f5Events = playbackLike.events
+      .filter((e) => e.midiNumber === 77)
+      .sort((a, b) => a.startTicks - b.startTicks);
+    expect(f5Events.length).toBe(2);
+    expect(f5Events[0]?.startTicks).toBe(0);
+    expect(f5Events[1]?.startTicks ?? 0).toBeGreaterThan(0);
   });
 
   it("keeps timeline stable for underfull + implicit + regular-underfull sequence", () => {
@@ -636,6 +1062,48 @@ describe("midi-io MIDI import MVP", () => {
     expect(notes.some((note) => note.querySelector("type")?.textContent === "quarter")).toBe(true);
   });
 
+  it("does not infer staccato from repeated half-duty detached MIDI notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(120), 0x80, 60, 0,
+      ...vlq(120), 0x90, 62, 96,
+      ...vlq(120), 0x80, 62, 0,
+      ...vlq(120), 0x90, 64, 96,
+      ...vlq(120), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/16" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    const pitchedNotes = notes.filter((note) => note.querySelector("pitch") !== null);
+    const rests = notes.filter((note) => note.querySelector("rest") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(3);
+    expect(rests.length).toBeGreaterThan(0);
+    expect(pitchedNotes[0]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[1]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[2]?.querySelector("notations > articulations > staccato")).toBeNull();
+  });
+
+  it("does not infer staccato from repeated quarter-duty detached MIDI notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0x90, 60, 96,
+      ...vlq(60), 0x80, 60, 0,
+      ...vlq(180), 0x90, 62, 96,
+      ...vlq(60), 0x80, 62, 0,
+      ...vlq(180), 0x90, 64, 96,
+      ...vlq(60), 0x80, 64, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi, { quantizeGrid: "1/32" });
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"));
+    const pitchedNotes = notes.filter((note) => note.querySelector("pitch") !== null);
+    expect(pitchedNotes.length).toBeGreaterThanOrEqual(3);
+    expect(pitchedNotes[0]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[1]?.querySelector("notations > articulations > staccato")).toBeNull();
+    expect(pitchedNotes[2]?.querySelector("notations > articulations > staccato")).toBeNull();
+  });
+
   it("applies beam tags to grouped short notes and breaks beams across rests", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 60, 96,
@@ -768,7 +1236,7 @@ describe("midi-io MIDI import MVP", () => {
     );
     expect(drumPart).toBeDefined();
     expect(result.warnings.some((warning) => warning.code === "MIDI_DRUM_CHANNEL_SEPARATED")).toBe(true);
-    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "MIDI_DRUM_CHANNEL_SEPARATED"
     );
   });
@@ -926,6 +1394,30 @@ describe("midi-io MIDI import MVP", () => {
     expect(firstMeasureVoice1Duration).toBeLessThan(secondMeasureVoice1Duration);
   });
 
+  it("restores pickup measure from mks:pickup-ticks text metadata when FF58 prelude is absent", () => {
+    const midi = buildSmfFormat0([
+      ...metaTextEvent(0, "mks:pickup-ticks:240"),
+      ...vlq(0), 0xff, 0x58, 0x04, 0x06, 0x03, 0x18, 0x08, // 6/8 at tick 0 only
+      ...vlq(0), 0x90, 76, 96,
+      ...vlq(120), 0x80, 76, 0,
+      ...vlq(0), 0x90, 75, 96,
+      ...vlq(120), 0x80, 75, 0, // pickup phrase (240 ticks total)
+      ...vlq(0), 0x90, 76, 96,
+      ...vlq(120), 0x80, 76, 0,
+      ...vlq(0), 0x90, 71, 96,
+      ...vlq(120), 0x80, 71, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const firstMeasure = doc.querySelector("part > measure[number=\"0\"]");
+    expect(firstMeasure?.getAttribute("implicit")).toBe("yes");
+    const beats = doc.querySelector("part > measure[number=\"0\"] > attributes > time > beats")?.textContent?.trim();
+    const beatType = doc.querySelector("part > measure[number=\"0\"] > attributes > time > beat-type")?.textContent?.trim();
+    expect(beats).toBe("6");
+    expect(beatType).toBe("8");
+  });
+
   it("infers MusicXML key when MIDI key signature meta event is missing", () => {
     const midi = buildSmfFormat0([
       ...vlq(0), 0x90, 62, 96, // D
@@ -958,6 +1450,27 @@ describe("midi-io MIDI import MVP", () => {
     const doc = parseDoc(result.xml);
     const accidental = doc.querySelector("part > measure > note > accidental")?.textContent?.trim();
     expect(accidental).toBe("natural");
+  });
+
+  it("prefers C# over Db for lower chromatic neighbor between repeated D notes", () => {
+    const midi = buildSmfFormat0([
+      ...vlq(0), 0xff, 0x59, 0x02, 0xff, 0x00, // key signature: -1 (F major / D minor)
+      ...vlq(0), 0x90, 62, 90,
+      ...vlq(480), 0x80, 62, 0,
+      ...vlq(0), 0x90, 61, 90,
+      ...vlq(480), 0x80, 61, 0,
+      ...vlq(0), 0x90, 62, 90,
+      ...vlq(480), 0x80, 62, 0,
+    ]);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    const notes = Array.from(doc.querySelectorAll("part > measure > note"))
+      .filter((note) => note.querySelector("pitch") !== null);
+    expect(notes.length).toBeGreaterThanOrEqual(3);
+    const middle = notes[1];
+    expect(middle?.querySelector("pitch > step")?.textContent?.trim()).toBe("C");
+    expect(middle?.querySelector("pitch > alter")?.textContent?.trim()).toBe("1");
   });
 
   it("keeps upper-staff hysteresis around split boundary in grand staff mode", () => {
@@ -1092,11 +1605,11 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     const metaFields = Array.from(
-      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
+      doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta"]')
     );
     expect(metaFields.length).toBeGreaterThan(0);
     const firstPayload = metaFields.find((node) =>
-      /^mks:midi-meta-\d{4}$/.test(node.getAttribute("name") ?? "")
+      /^mks:dbg:midi:meta:\d{4}$/.test(node.getAttribute("name") ?? "")
     )?.textContent;
     expect(firstPayload ?? "").toContain("key=0x3C");
     expect(firstPayload ?? "").toContain("vel=0x60");
@@ -1111,16 +1624,16 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-encoding"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:midi:raw-encoding"]')
         ?.textContent
     ).toBe("hex-v1");
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="src:midi:raw-0001"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:midi:raw-0001"]')
         ?.textContent
     ).toMatch(/^[0-9A-F]+$/);
   });
 
-  it("reads mikuscore SysEx metadata into mks:midi-sysex miscellaneous fields", () => {
+  it("reads mikuscore SysEx metadata into mks:meta:midi:sysex miscellaneous fields", () => {
     const payloadText =
       "mks|v=1|m=0001|i=0001|n=0001|d=" +
       encodeURIComponent("schema=mks-sysex-v1\napp=mikuscore\nsource=musicxml");
@@ -1145,12 +1658,12 @@ describe("midi-io MIDI import MVP", () => {
     const doc = parseDoc(result.xml);
     expect(
       doc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:schema"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:meta:midi:sysex:schema"]'
       )?.textContent
     ).toBe("mks-sysex-v1");
     expect(
       doc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-sysex:app"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:meta:midi:sysex:app"]'
       )?.textContent
     ).toBe("mikuscore");
   });
@@ -1184,7 +1697,7 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     const doc = parseDoc(result.xml);
     expect(
-      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta"]')
+      doc.querySelector('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta"]')
     ).toBeNull();
   });
 
@@ -1199,8 +1712,8 @@ describe("midi-io MIDI import MVP", () => {
     expect(result.ok).toBe(true);
     expect(result.warnings.some((warning) => warning.code === "MIDI_POLYPHONY_VOICE_ASSIGNED")).toBe(true);
     const doc = parseDoc(result.xml);
-    expect(doc.querySelector('miscellaneous-field[name="diag:count"]')?.textContent).toBe("1");
-    expect(doc.querySelector('miscellaneous-field[name="diag:0001"]')?.textContent).toContain(
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:count"]')?.textContent).toBe("1");
+    expect(doc.querySelector('miscellaneous-field[name="mks:diag:0001"]')?.textContent).toContain(
       "code=MIDI_POLYPHONY_VOICE_ASSIGNED"
     );
   });
@@ -1253,6 +1766,110 @@ describe("midi-io MIDI import MVP", () => {
     expect(timeEvents[0]).toEqual({ startTicks: 0, beats: 3, beatType: 4 });
     expect(timeEvents[1]?.beats).toBe(6);
     expect(timeEvents[1]?.beatType).toBe(8);
+  });
+
+  it("emits MuseScore-style FF58 pickup prelude when pickupTicks metadata is provided", () => {
+    const midi = buildMidiBytesForPlayback(
+      [{ midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "P1" }],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 6, beatType: 8 }],
+      [{ startTicks: 0, fifths: -1, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        metadata: {
+          pickupTicks: 240,
+        },
+      }
+    );
+    const timeSigs = collectTimeSignatureMetaFromMidi(midi);
+    expect(timeSigs.length).toBeGreaterThanOrEqual(2);
+    expect(timeSigs[0]).toEqual({ tick: 0, beats: 1, beatType: 8 });
+    expect(timeSigs[1]).toEqual({ tick: 240, beats: 6, beatType: 8 });
+  });
+
+  it("does not emit mks text metadata when emitMksTextMeta is false", () => {
+    const midi = buildMidiBytesForPlayback(
+      [{ midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "P1" }],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 6, beatType: 8 }],
+      [{ startTicks: 0, fifths: -1, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Title",
+          composer: "Composer",
+          pickupTicks: 240,
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts.some((text) => text.startsWith("mks:"))).toBe(false);
+    const timeSigs = collectTimeSignatureMetaFromMidi(midi);
+    expect(timeSigs.length).toBeGreaterThanOrEqual(2);
+    expect(timeSigs[0]).toEqual({ tick: 0, beats: 1, beatType: 8 });
+    expect(timeSigs[1]).toEqual({ tick: 240, beats: 6, beatType: 8 });
+  });
+
+  it("always emits standard title text meta even when mks text metadata is disabled", () => {
+    const midi = buildMidiBytesForPlayback(
+      [{ midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "P1" }],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 4, beatType: 4 }],
+      [{ startTicks: 0, fifths: 0, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Sample Title",
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts).toContain("title:Sample Title");
+    expect(texts.some((text) => text.startsWith("mks:"))).toBe(false);
+  });
+
+  it("emits raw-writer track-name meta (FF03) for note tracks", () => {
+    const midi = buildMidiBytesForPlayback(
+      [
+        { midiNumber: 69, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P1", trackName: "Violin 1" },
+        { midiNumber: 67, startTicks: 0, durTicks: 240, channel: 1, velocity: 90, trackId: "P2", trackName: "Violin 2" },
+      ],
+      120,
+      "electric_piano_2",
+      new Map<string, number>(),
+      [],
+      [{ startTicks: 0, bpm: 120 }],
+      [{ startTicks: 0, beats: 4, beatType: 4 }],
+      [{ startTicks: 0, fifths: 0, mode: "major" }],
+      {
+        ticksPerQuarter: 480,
+        rawWriter: true,
+        emitMksTextMeta: false,
+        metadata: {
+          title: "Sample Title",
+        },
+      }
+    );
+    const texts = collectTextMetaFromMidi(midi);
+    expect(texts).toContain("Violin 1");
+    expect(texts).toContain("Violin 2");
   });
 
   it("keeps stable triplet-eighth timing in MusicXML playback extraction", () => {
@@ -1383,5 +2000,100 @@ describe("midi-io MIDI import MVP", () => {
       "Roundtrip Composer"
     );
     expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Violin Solo");
+  });
+
+  it("prefers standard MIDI meta title/composer over mks text meta", () => {
+    const track0 = [
+      ...metaTextEvent(0, "title:Concert Overture", 0x01),
+      ...metaTextEvent(0, "composer:Standard Composer", 0x01),
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:title:Roundtrip%20Title"),
+      ...metaTextEvent(0, "mks:composer:Roundtrip%20Composer"),
+      ...vlq(0),
+      0xff,
+      0x51,
+      0x03,
+      0x07,
+      0xa1,
+      0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0),
+      0x90,
+      60,
+      100,
+      ...vlq(480),
+      0x80,
+      60,
+      0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("work > work-title")?.textContent?.trim()).toBe("Concert Overture");
+    expect(doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim()).toBe(
+      "Standard Composer"
+    );
+  });
+
+  it("prefers explicit track-name over mks part-name-track when naming parts", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Solo Violin", 0x03),
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(480), 0x80, 60, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part-list > score-part > part-name")?.textContent?.trim()).toBe("Solo Violin");
+  });
+
+  it("uses alto clef when imported MIDI part-name includes Viola/Vla", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0), 0x90, 60, 100,
+      ...vlq(480), 0x80, 60, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
+  });
+
+  it("keeps single-staff C3 clef for Viola even with wide MIDI pitch range", () => {
+    const track0 = [
+      ...metaTextEvent(0, "mks:meta-version:1"),
+      ...metaTextEvent(0, "mks:part-name-track:1:Viola"),
+      ...vlq(0), 0xff, 0x51, 0x03, 0x07, 0xa1, 0x20,
+    ];
+    const track1 = [
+      ...metaTextEvent(0, "Track 1", 0x03),
+      ...vlq(0), 0x90, 48, 100,
+      ...vlq(480), 0x80, 48, 0,
+      ...vlq(0), 0x90, 76, 100,
+      ...vlq(480), 0x80, 76, 0,
+    ];
+    const midi = buildSmfFormat1([track0, track1], 480);
+    const result = convertMidiToMusicXml(midi);
+    expect(result.ok).toBe(true);
+    const doc = parseDoc(result.xml);
+    expect(doc.querySelector("part > measure > attributes > staves")).toBeNull();
+    expect(doc.querySelector("part > measure > attributes > clef > sign")?.textContent?.trim()).toBe("C");
+    expect(doc.querySelector("part > measure > attributes > clef > line")?.textContent?.trim()).toBe("3");
   });
 });

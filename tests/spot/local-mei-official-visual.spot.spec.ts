@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
@@ -102,7 +107,7 @@ const assertStructuralSemantics = (fixtureId: string, musicXml: string): void =>
 };
 
 describe("local mei official visual compare", () => {
-  const localFixtureRoot = resolve(process.cwd(), "tests", "fixtures-local", "mei-official");
+  const localFixtureRoot = resolve(process.cwd(), "tests", "local-data", "mei-official");
   const requiredFixturePaths = [
     resolve(localFixtureRoot, "beam-grace", "source-listing-132-snippet.mei"),
     resolve(localFixtureRoot, "beam-secondary", "source-listing-142-snippet.mei"),
@@ -209,7 +214,7 @@ describe("local mei official visual compare", () => {
     ] as const;
 
     for (const fixture of fixtures) {
-      const fixtureDir = resolve(root, "tests/fixtures-local/mei-official", fixture.id);
+      const fixtureDir = resolve(root, "tests/local-data/mei-official", fixture.id);
       const outDir = resolve(root, "tests/tmp/mei-official", fixture.id);
       mkdirSync(outDir, { recursive: true });
 

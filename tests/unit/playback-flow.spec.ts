@@ -1,6 +1,18 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createBasicWaveSynthEngine, type SynthSchedule } from "../../src/ts/playback-flow";
+import {
+  buildMeasureTimelineForPart,
+  compactSynthScheduleForPlayback,
+  createBasicWaveSynthEngine,
+  startPlayback,
+  type SynthSchedule,
+} from "../../src/ts/playback-flow";
+import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
 type MutableWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
 
@@ -196,5 +208,262 @@ describe("playback-flow midi-like scheduling", () => {
 
     expect(oscillators).toHaveLength(1);
     expect(oscillators[0].stop).toHaveBeenCalledWith(expect.closeTo(0.51, 6));
+  });
+
+  it("reports playback tick progress when scheduling starts", async () => {
+    const { context } = createInspectableAudioContext();
+    mutableWindow.AudioContext = vi.fn(function MockAudioContext() {
+      return context as unknown as AudioContext;
+    }) as unknown as typeof AudioContext;
+    mutableWindow.webkitAudioContext = undefined;
+    const engine = createBasicWaveSynthEngine({ ticksPerQuarter: 128 });
+    const onTickUpdate = vi.fn();
+
+    await engine.playSchedule(
+      {
+        tempo: 120,
+        events: [{ midiNumber: 69, start: 0, ticks: 64, channel: 1 }],
+      },
+      "sine",
+      onTickUpdate
+    );
+
+    expect(onTickUpdate).toHaveBeenCalledWith(0);
+  });
+
+  it("compacts dense schedules by capping notes per onset and overall event budget", () => {
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: Array.from({ length: 120 }, (_, onset) =>
+        Array.from({ length: 60 }, (_, pitch) => ({
+          midiNumber: 30 + (pitch % 60),
+          start: onset * 10,
+          ticks: pitch < 10 ? 1 : 64 + (pitch % 3),
+          channel: 1,
+          trackId: `t${pitch}`,
+        }))
+      ).flat(),
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+
+    expect(compacted.summary.applied).toBe(true);
+    expect(compacted.summary.originalEventCount).toBe(7200);
+    expect(compacted.summary.finalEventCount).toBeLessThanOrEqual(4096);
+    expect(compacted.summary.droppedUltraShortCount).toBe(1200);
+    expect(compacted.summary.droppedDenseOnsetCount).toBe(240);
+    expect(compacted.summary.droppedBudgetCount).toBeGreaterThan(0);
+    const countsByOnset = new Map<number, number>();
+    for (const event of compacted.schedule.events) {
+      countsByOnset.set(event.start, (countsByOnset.get(event.start) ?? 0) + 1);
+      expect(event.ticks).toBeGreaterThanOrEqual(2);
+    }
+    expect(Math.max(...countsByOnset.values())).toBeLessThanOrEqual(48);
+  });
+
+  it("uses compacted schedules before creating oscillators for dense playback", async () => {
+    const { context, oscillators } = createInspectableAudioContext();
+    mutableWindow.AudioContext = vi.fn(function MockAudioContext() {
+      return context as unknown as AudioContext;
+    }) as unknown as typeof AudioContext;
+    mutableWindow.webkitAudioContext = undefined;
+    const engine = createBasicWaveSynthEngine({ ticksPerQuarter: 128 });
+
+    const denseSchedule: SynthSchedule = {
+      tempo: 120,
+      events: Array.from({ length: 60 }, (_, onset) =>
+        Array.from({ length: 50 }, (_, pitch) => ({
+          midiNumber: 40 + (pitch % 40),
+          start: onset * 8,
+          ticks: 48,
+          channel: 1,
+          trackId: `part-${pitch}`,
+        }))
+      ).flat(),
+    };
+
+    await engine.playSchedule(denseSchedule, "sine");
+
+    expect(oscillators.length).toBe(2880);
+  });
+
+  it("keeps small same-onset chords intact even when dense playback compaction applies", () => {
+    const denseEvents = Array.from({ length: 90 }, (_, onset) =>
+      Array.from({ length: 48 }, (_, pitch) => ({
+        midiNumber: 20 + pitch,
+        start: onset * 12,
+        ticks: 48,
+        channel: 1,
+        trackId: `dense-${onset}-${pitch}`,
+      }))
+    ).flat();
+    const smallChordStarts = [9999, 10011, 10023];
+    const smallChordEvents = smallChordStarts.map((start, index) => ({
+      midiNumber: 72 + index,
+      start,
+      ticks: 48,
+      channel: 1,
+      trackId: `small-${index}`,
+    }));
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: [...denseEvents, ...smallChordEvents],
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+
+    expect(compacted.summary.applied).toBe(true);
+    for (const start of smallChordStarts) {
+      const keptAtStart = compacted.schedule.events.filter((event) => event.start === start);
+      expect(keptAtStart).toHaveLength(1);
+    }
+  });
+
+  it("prefers keeping outer voices and non-octave duplicates inside a dense onset", () => {
+    const wideOctaveCluster = Array.from({ length: 10 }, (_, octave) => ({
+      midiNumber: 24 + octave * 12,
+      start: 0,
+      ticks: 48,
+      channel: 1,
+      trackId: `oct-${octave}`,
+    }));
+    const uniqueUpper = Array.from({ length: 40 }, (_, i) => ({
+      midiNumber: 61 + i,
+      start: 0,
+      ticks: 48,
+      channel: 1,
+      trackId: `uniq-${i}`,
+    }));
+    const filler = Array.from({ length: 2100 }, (_, i) => ({
+      midiNumber: 30 + (i % 24),
+      start: 100 + i * 2,
+      ticks: 48,
+      channel: 1,
+      trackId: `fill-${i}`,
+    }));
+    const schedule: SynthSchedule = {
+      tempo: 120,
+      events: [...wideOctaveCluster, ...uniqueUpper, ...filler],
+    };
+
+    const compacted = compactSynthScheduleForPlayback(schedule, 128);
+    const keptAtZero = compacted.schedule.events.filter((event) => event.start === 0);
+    const keptMidis = keptAtZero.map((event) => event.midiNumber);
+
+    expect(keptAtZero).toHaveLength(48);
+    expect(keptMidis).toContain(24);
+    expect(keptMidis).toContain(132);
+    expect(keptMidis).toContain(61);
+    expect(keptMidis).toContain(100);
+    expect(keptMidis).not.toContain(36);
+    expect(keptMidis).not.toContain(48);
+  });
+
+  it("builds measure timeline with pickup-aware first bar lengths", () => {
+    const xml = `
+      <score-partwise version="4.0">
+        <part-list>
+          <score-part id="P1"><part-name>P1</part-name></score-part>
+          <score-part id="P2"><part-name>P2</part-name></score-part>
+        </part-list>
+        <part id="P1">
+          <measure number="0">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type></note>
+          </measure>
+          <measure number="1">
+            <note><pitch><step>D</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+        <part id="P2">
+          <measure number="0">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>quarter</type></note>
+          </measure>
+          <measure number="1">
+            <note><pitch><step>F</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+      </score-partwise>
+    `;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const timeline = buildMeasureTimelineForPart(doc, "P1", 480);
+
+    expect(timeline).toHaveLength(2);
+    expect(timeline[0]?.startTick).toBe(0);
+    expect(timeline[0]?.endTick).toBe(480);
+    expect(timeline[1]?.startTick).toBe(480);
+  });
+
+  it("maps playback location to the selected measure when playback starts mid-score", async () => {
+    const xml = `
+      <score-partwise version="4.0">
+        <part-list>
+          <score-part id="P1"><part-name>P1</part-name></score-part>
+        </part-list>
+        <part id="P1">
+          <measure number="1">
+            <attributes>
+              <divisions>4</divisions>
+              <time><beats>4</beats><beat-type>4</beat-type></time>
+            </attributes>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+          <measure number="2">
+            <note><pitch><step>D</step><octave>4</octave></pitch><duration>16</duration><voice>1</voice><type>whole</type></note>
+          </measure>
+        </part>
+      </score-partwise>
+    `;
+    const setActivePlaybackLocation = vi.fn();
+    const engine = {
+      stop: vi.fn(),
+      playSchedule: vi.fn(async (_schedule, _waveform, onTickUpdate) => {
+        onTickUpdate?.(0);
+      }),
+    } as unknown as ReturnType<typeof createBasicWaveSynthEngine>;
+    const options = {
+      engine,
+      ticksPerQuarter: 480,
+      editableVoice: "1",
+      getPlaybackWaveform: () => "sine" as OscillatorType,
+      getUseMidiLikePlayback: () => false,
+      getGraceTimingMode: () => "steal-current" as const,
+      getMetricAccentEnabled: () => false,
+      getMetricAccentProfile: () => "classic" as const,
+      debugLog: false,
+      getIsPlaying: () => false,
+      setIsPlaying: vi.fn(),
+      setPlaybackText: vi.fn(),
+      setActivePlaybackLocation,
+      renderControlState: vi.fn(),
+      renderAll: vi.fn(),
+      logDiagnostics: vi.fn(),
+      dumpOverfullContext: vi.fn(),
+      onFullSaveResult: vi.fn(),
+      onMeasureSaveDiagnostics: vi.fn(),
+    };
+    const core = {
+      save: () => ({ ok: true, xml, diagnostics: [], warnings: [], dirtyChanged: false, changedNodeIds: [], affectedMeasureNumbers: [] }),
+      debugSerializeCurrentXml: () => xml,
+    };
+
+    await startPlayback(options, {
+      isLoaded: true,
+      core,
+      startFromMeasure: { partId: "P1", measureNumber: "2" },
+    });
+
+    expect(setActivePlaybackLocation).toHaveBeenCalledWith({ partId: "P1", measureNumber: "2" });
+    expect(setActivePlaybackLocation.mock.calls.at(-1)?.[0]).toEqual({ partId: "P1", measureNumber: "2" });
   });
 });

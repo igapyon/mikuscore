@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import {
   computeBeamAssignments,
 } from "./beam-common";
@@ -179,6 +184,66 @@ const clampVelocity = (velocity: number): number => {
   return Math.max(1, Math.min(127, Math.round(velocity)));
 };
 
+const buildMuseScoreStylePickupTimeSignaturePrelude = (
+  events: MidiTimeSignatureEvent[],
+  ticksPerQuarter: number,
+  pickupTicks: number
+): MidiTimeSignatureEvent[] => {
+  const normalizedPickupTicks = Math.max(0, Math.round(pickupTicks));
+  if (normalizedPickupTicks <= 0) return events;
+  if (!events.length) return events;
+  const baseAtZero = events.find((event) => Math.max(0, Math.round(event.startTicks)) === 0);
+  if (!baseAtZero) return events;
+  const baseBeatType = Math.max(1, Math.round(baseAtZero.beatType));
+  const baseBeats = Math.max(1, Math.round(baseAtZero.beats));
+  const fullMeasureTicks = Math.max(
+    1,
+    Math.round((Math.max(1, Math.round(ticksPerQuarter)) * 4 * baseBeats) / baseBeatType)
+  );
+  if (normalizedPickupTicks >= fullMeasureTicks) return events;
+  const pickupBeatsFloat = (normalizedPickupTicks * baseBeatType) / (Math.max(1, ticksPerQuarter) * 4);
+  const pickupBeats = Math.round(pickupBeatsFloat);
+  if (!Number.isFinite(pickupBeatsFloat) || Math.abs(pickupBeatsFloat - pickupBeats) > 1e-6) return events;
+  if (pickupBeats < 1 || pickupBeats >= baseBeats) return events;
+  const alreadyPrelude =
+    events.some(
+      (event) =>
+        Math.max(0, Math.round(event.startTicks)) === 0 &&
+        Math.max(1, Math.round(event.beats)) === pickupBeats &&
+        Math.max(1, Math.round(event.beatType)) === baseBeatType
+    ) &&
+    events.some(
+      (event) =>
+        Math.max(0, Math.round(event.startTicks)) === normalizedPickupTicks &&
+        Math.max(1, Math.round(event.beats)) === baseBeats &&
+        Math.max(1, Math.round(event.beatType)) === baseBeatType
+    );
+  if (alreadyPrelude) return events;
+
+  const remapped: MidiTimeSignatureEvent[] = [
+    { startTicks: 0, beats: pickupBeats, beatType: baseBeatType },
+    { startTicks: normalizedPickupTicks, beats: baseBeats, beatType: baseBeatType },
+  ];
+  for (const event of events) {
+    const tick = Math.max(0, Math.round(event.startTicks));
+    if (tick === 0) continue;
+    if (
+      tick === normalizedPickupTicks &&
+      Math.max(1, Math.round(event.beats)) === baseBeats &&
+      Math.max(1, Math.round(event.beatType)) === baseBeatType
+    ) {
+      continue;
+    }
+    remapped.push({
+      startTicks: tick,
+      beats: Math.max(1, Math.round(event.beats)),
+      beatType: Math.max(1, Math.round(event.beatType)),
+    });
+  }
+  remapped.sort((a, b) => a.startTicks - b.startTicks);
+  return remapped;
+};
+
 const mod12 = (value: number): number => {
   const rounded = Math.round(value);
   return ((rounded % 12) + 12) % 12;
@@ -319,6 +384,8 @@ type SmfParseSummary = {
   notes: SmfImportedNote[];
   channels: Set<number>;
   trackName: string | null;
+  standardTitleCandidates: string[];
+  standardComposerCandidates: string[];
   programByTrackChannel: Map<TrackChannelKey, number>;
   controllerEvents: Array<{ tick: number; channel: number; controllerNumber: number; controllerValue: number }>;
   timeSignatureEvents: Array<{ tick: number; beats: number; beatType: number }>;
@@ -333,6 +400,7 @@ type MksMidiTextMetadata = {
   title?: string;
   movementTitle?: string;
   composer?: string;
+  pickupTicks?: number;
   partNameByTrackIndex: Map<number, string>;
 };
 
@@ -341,6 +409,28 @@ type MksSysExChunk = {
   chunkIndex: number;
   totalChunks: number;
   data: string;
+};
+
+const isGenericMidiTrackName = (value: string): boolean => {
+  const text = value.trim();
+  if (!text) return true;
+  return /^(track|trk)\s*\d+(\s*ch(?:annel)?\s*\d+)?$/i.test(text);
+};
+
+const parseStandardTitleFromMetaText = (value: string): string => {
+  const text = value.trim();
+  if (!text) return "";
+  const prefixed = text.match(/^(title|piece|movement)\s*[:=]\s*(.+)$/i);
+  if (prefixed && prefixed[2]) return prefixed[2].trim();
+  return "";
+};
+
+const parseStandardComposerFromMetaText = (value: string): string => {
+  const text = value.trim();
+  if (!text) return "";
+  const prefixed = text.match(/^(composer|comp)\s*[:=]\s*(.+)$/i);
+  if (prefixed && prefixed[2]) return prefixed[2].trim();
+  return "";
 };
 
 const normalizeMetricAccentProfile = (value: unknown): MetricAccentProfile => {
@@ -387,6 +477,10 @@ const getNoteArticulationAdjustments = (noteNode: Element): {
     }
   }
   return { velocityDelta, durationRatio, hasTenuto };
+};
+
+const hasExplicitArticulation = (noteNode: Element): boolean => {
+  return noteNode.querySelector("notations > articulations > *") !== null;
 };
 
 const getTieFlags = (noteNode: Element): { start: boolean; stop: boolean } => {
@@ -913,6 +1007,13 @@ const parseMksMidiTextMetadata = (lines: string[]): MksMidiTextMetadata => {
       if (!metadata.composer) metadata.composer = safeDecodeURIComponent(line.slice("mks:composer:".length));
       continue;
     }
+    if (line.startsWith("mks:pickup-ticks:")) {
+      if (metadata.pickupTicks === undefined) {
+        const parsed = Number.parseInt(line.slice("mks:pickup-ticks:".length), 10);
+        if (Number.isFinite(parsed) && parsed > 0) metadata.pickupTicks = parsed;
+      }
+      continue;
+    }
     if (line.startsWith("mks:part-name-track:")) {
       const payload = line.slice("mks:part-name-track:".length);
       const sep = payload.indexOf(":");
@@ -1075,6 +1176,8 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
   const notes: SmfImportedNote[] = [];
   const channels = new Set<number>();
   let trackName: string | null = null;
+  const standardTitleCandidates: string[] = [];
+  const standardComposerCandidates: string[] = [];
   const programByTrackChannel = new Map<TrackChannelKey, number>();
   const controllerEvents: Array<{
     tick: number;
@@ -1159,7 +1262,7 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
           const bpm = clampTempo(60000000 / microsPerQuarter);
           tempoEvents.push({ tick: absTick, bpm });
         }
-      } else if (metaType === 0x01 || metaType === 0x03) {
+      } else if (metaType === 0x01 || metaType === 0x02 || metaType === 0x03) {
         const payloadBytes = trackData.slice(payloadStart, payloadEnd);
         const text = decodeMetaTextBytes(payloadBytes).trim();
         if (metaType === 0x03 && text && !trackName) {
@@ -1167,6 +1270,17 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
         }
         if (text.startsWith("mks:")) {
           mksTextMetaLines.push(text);
+        } else if (text) {
+          if (metaType === 0x01) {
+            const parsedTitle = parseStandardTitleFromMetaText(text);
+            if (parsedTitle) standardTitleCandidates.push(parsedTitle);
+            const parsedComposer = parseStandardComposerFromMetaText(text);
+            if (parsedComposer) standardComposerCandidates.push(parsedComposer);
+          }
+          if (metaType === 0x02) {
+            const parsedComposer = parseStandardComposerFromMetaText(text);
+            if (parsedComposer) standardComposerCandidates.push(parsedComposer);
+          }
         }
       }
       cursor = payloadEnd;
@@ -1280,6 +1394,8 @@ const parseTrackSummary = (trackData: Uint8Array, trackIndex: number): SmfParseS
     notes,
     channels,
     trackName,
+    standardTitleCandidates,
+    standardComposerCandidates,
     programByTrackChannel,
     controllerEvents,
     timeSignatureEvents,
@@ -1415,6 +1531,46 @@ const midiToPitchComponentsByKey = (
   ];
   const mapped = (useFlatSpelling ? flatTable : sharpTable)[semitone] ?? { step: "C", alter: 0 };
   return { step: mapped.step, alter: mapped.alter, octave };
+};
+
+const pickClosestMidiInGroup = (group: ImportedVoiceNoteSegment[], targetMidi: number): number | null => {
+  if (!group.length) return null;
+  let best = group[0]?.midi ?? null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const note of group) {
+    const distance = Math.abs(note.midi - targetMidi);
+    if (distance < bestDistance) {
+      best = note.midi;
+      bestDistance = distance;
+    }
+  }
+  return best;
+};
+
+const chooseMidiPitchComponentsWithContext = (
+  segment: ImportedVoiceNoteSegment,
+  keyFifths: number,
+  prevGroup: ImportedVoiceNoteSegment[] | null,
+  nextGroup: ImportedVoiceNoteSegment[] | null
+): { step: string; alter: number; octave: number } => {
+  const semitone = ((Math.round(segment.midi) % 12) + 12) % 12;
+  const enharmonicSemitones = new Set<number>([1, 3, 6, 8, 10]);
+  if (!enharmonicSemitones.has(semitone)) {
+    return midiToPitchComponentsByKey(segment.midi, keyFifths);
+  }
+  const prevMidi = prevGroup ? pickClosestMidiInGroup(prevGroup, segment.midi) : null;
+  const nextMidi = nextGroup ? pickClosestMidiInGroup(nextGroup, segment.midi) : null;
+  const touchesUpperSemitone = prevMidi === segment.midi + 1 || nextMidi === segment.midi + 1;
+  const touchesLowerSemitone = prevMidi === segment.midi - 1 || nextMidi === segment.midi - 1;
+  if (touchesUpperSemitone && !touchesLowerSemitone) {
+    // Prefer sharp spelling for lower chromatic neighbors (e.g. D-C#-D).
+    return midiToPitchComponentsByKey(segment.midi, Math.max(0, keyFifths));
+  }
+  if (touchesLowerSemitone && !touchesUpperSemitone) {
+    // Prefer flat spelling for upper chromatic neighbors (e.g. C-Db-C).
+    return midiToPitchComponentsByKey(segment.midi, Math.min(0, keyFifths));
+  }
+  return midiToPitchComponentsByKey(segment.midi, keyFifths);
 };
 
 const accidentalTextFromAlter = (alter: number): string | null => {
@@ -1747,12 +1903,15 @@ const beamLevelFromNotationType = (type: DurationNotation["type"]): number => {
   }
 };
 
-const buildTieXml = (tieStart: boolean, tieStop: boolean): string => {
-  if (!tieStart && !tieStop) return "";
+const buildTieXml = (tieStart: boolean, tieStop: boolean, withStaccato = false): string => {
+  if (!tieStart && !tieStop && !withStaccato) return "";
   let xml = "";
   if (tieStop) xml += '<tie type="stop"/>';
   if (tieStart) xml += '<tie type="start"/>';
   xml += "<notations>";
+  if (withStaccato) {
+    xml += "<articulations><staccato/></articulations>";
+  }
   if (tieStop) xml += '<tied type="stop"/>';
   if (tieStart) xml += '<tied type="start"/>';
   xml += "</notations>";
@@ -1806,7 +1965,7 @@ const buildMeasureMidiMetaMiscXml = (measureSegments: ImportedVoiceNoteSegment[]
         : a.startDiv - b.startDiv
     );
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:midi-meta-count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:dbg:midi:meta:count">${toHex(sorted.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < sorted.length; i += 1) {
     const seg = sorted[i];
     const payload = [
@@ -1822,7 +1981,7 @@ const buildMeasureMidiMetaMiscXml = (measureSegments: ImportedVoiceNoteSegment[]
       `tk0=${toHex(seg.startTick, 6)}`,
       `tk1=${toHex(seg.endTick, 6)}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:midi-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:dbg:midi:meta:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1842,13 +2001,13 @@ const buildMidiSourceMiscXml = (midiBytes: Uint8Array): string => {
   }
   const truncated = chunks.join("").length < hex.length;
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="src:midi:raw-encoding">hex-v1</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-bytes">${bytes.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-hex-length">${hex.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-chunks">${chunks.length}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:midi:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-encoding">hex-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-bytes">${bytes.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-hex-length">${hex.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-chunks">${chunks.length}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:midi:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
-    xml += `<miscellaneous-field name="src:midi:raw-${String(i + 1).padStart(4, "0")}">${chunks[i]}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:src:midi:raw-${String(i + 1).padStart(4, "0")}">${chunks[i]}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1875,9 +2034,9 @@ const buildMidiSysExMiscXml = (payloads: string[]): string => {
     map.set(key, value);
   }
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:midi-sysex-count">${toHex(lines.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:meta:midi:sysex:count">${toHex(lines.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < lines.length; i += 1) {
-    xml += `<miscellaneous-field name="mks:midi-sysex-${String(i + 1).padStart(4, "0")}">${xmlEscape(
+    xml += `<miscellaneous-field name="mks:meta:midi:sysex:${String(i + 1).padStart(4, "0")}">${xmlEscape(
       lines[i]
     )}</miscellaneous-field>`;
   }
@@ -1899,7 +2058,7 @@ const buildMidiSysExMiscXml = (payloads: string[]): string => {
   for (const key of preferred) {
     const value = map.get(key);
     if (!value) continue;
-    xml += `<miscellaneous-field name="mks:midi-sysex:${key}">${xmlEscape(value)}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:meta:midi:sysex:${key}">${xmlEscape(value)}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1909,7 +2068,7 @@ const buildMidiDiagMiscXml = (warnings: MidiImportDiagnostic[]): string => {
   if (!warnings.length) return "";
   const maxEntries = Math.min(256, warnings.length);
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const warning = warnings[i];
     const payload = [
@@ -1918,7 +2077,7 @@ const buildMidiDiagMiscXml = (warnings: MidiImportDiagnostic[]): string => {
       "fmt=midi",
       `message=${xmlEscape(warning.message)}`,
     ].join(";");
-    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -1951,6 +2110,10 @@ const buildMeasureVoiceXml = (
     groupsByStart.set(segment.startDiv, bucket);
   }
   const starts = Array.from(groupsByStart.keys()).sort((a, b) => a - b);
+  const groupIndexByStart = new Map<number, number>();
+  for (let i = 0; i < starts.length; i += 1) {
+    groupIndexByStart.set(starts[i], i);
+  }
   const keyAlterMap = keySignatureAlterByStep(keyFifths);
   const accidentalByStepOctave = new Map<string, number>();
 
@@ -1960,15 +2123,44 @@ const buildMeasureVoiceXml = (
     typeXml: string;
     tieStart: boolean;
     tieStop: boolean;
+    inferredStaccato: boolean;
     group: ImportedVoiceNoteSegment[];
   };
   const preparedNoteChunks: PreparedNoteChunk[] = [];
   const noteTimelineByChunkIndex = new Map<number, number>();
   const beamTimeline: Array<{ kind: "note" | "rest"; durDiv: number; levels: number; chunkIndex?: number }> = [];
 
-  let cursorForTimeline = 0;
-  for (const start of starts) {
+  type GroupAtStart = {
+    startDiv: number;
+    sourceDurDiv: number;
+    inferredStaccato: boolean;
+    group: ImportedVoiceNoteSegment[];
+  };
+  const groups: GroupAtStart[] = starts.map((start) => {
     const group = (groupsByStart.get(start) ?? []).slice().sort((a, b) => a.midi - b.midi);
+    const sourceDurDiv = Math.max(...group.map((segment) => segment.durDiv));
+    return {
+      startDiv: start,
+      sourceDurDiv,
+      inferredStaccato: false,
+      group,
+    };
+  });
+  const groupByStart = new Map<number, ImportedVoiceNoteSegment[]>(groups.map((group) => [group.startDiv, group.group]));
+  const pitchBySegment = new Map<ImportedVoiceNoteSegment, { step: string; alter: number; octave: number }>();
+  for (const segment of voiceSegments) {
+    const groupIndex = groupIndexByStart.get(segment.startDiv) ?? -1;
+    const prevGroup = groupIndex > 0 ? (groupByStart.get(starts[groupIndex - 1]) ?? null) : null;
+    const nextGroup = groupIndex >= 0 && groupIndex < starts.length - 1
+      ? (groupByStart.get(starts[groupIndex + 1]) ?? null)
+      : null;
+    pitchBySegment.set(segment, chooseMidiPitchComponentsWithContext(segment, keyFifths, prevGroup, nextGroup));
+  }
+
+  let cursorForTimeline = 0;
+  for (const entry of groups) {
+    const start = entry.startDiv;
+    const group = entry.group;
     if (start > cursorForTimeline) {
       const restDur = start - cursorForTimeline;
       const restChunks = splitDurationNotations(restDur, divisions);
@@ -1984,7 +2176,7 @@ const buildMeasureVoiceXml = (
         beamTimeline.push({ kind: "rest", durDiv: restDur, levels: 0 });
       }
     }
-    const groupDur = Math.max(...group.map((segment) => segment.durDiv));
+    const groupDur = Math.max(1, Math.round(entry.sourceDurDiv));
     const notationChunks = splitDurationNotations(groupDur, divisions);
     const fallbackChunk = notationChunks.length
       ? null
@@ -2015,6 +2207,7 @@ const buildMeasureVoiceXml = (
         typeXml: buildTypeXmlFromNotation(chunk),
         tieStart,
         tieStop,
+        inferredStaccato: entry.inferredStaccato && notationChunks.length === 1 && chunkIndex === 0,
         group,
       });
       chunkStartDiv += chunk.durDiv;
@@ -2074,10 +2267,10 @@ const buildMeasureVoiceXml = (
         if (i > 0) xml += "<chord/>";
         xml += `<unpitched><display-step>${display.step}</display-step><display-octave>${display.octave}</display-octave></unpitched>`;
         xml += `<duration>${prepared.durDiv}</duration>${prepared.typeXml}<voice>${voice}</voice>${i === 0 ? beamXml : ""}<staff>${outputStaff}</staff><notehead>x</notehead>`;
-        xml += buildTieXml(prepared.tieStart, prepared.tieStop);
+        xml += buildTieXml(prepared.tieStart, prepared.tieStop, !isDrum && prepared.inferredStaccato && i === 0);
         xml += "</note>";
       } else {
-        const pitch = midiToPitchComponentsByKey(segment.midi, keyFifths);
+        const pitch = pitchBySegment.get(segment) ?? midiToPitchComponentsByKey(segment.midi, keyFifths);
         const stepOctaveKey = `${pitch.step}${pitch.octave}`;
         const defaultAlter = accidentalByStepOctave.has(stepOctaveKey)
           ? accidentalByStepOctave.get(stepOctaveKey) ?? 0
@@ -2091,7 +2284,7 @@ const buildMeasureVoiceXml = (
           xml += `<accidental>${accidentalText}</accidental>`;
         }
         xml += `<duration>${prepared.durDiv}</duration>${prepared.typeXml}<voice>${voice}</voice>${i === 0 ? beamXml : ""}<staff>${outputStaff}</staff>`;
-        xml += buildTieXml(prepared.tieStart, prepared.tieStop);
+        xml += buildTieXml(prepared.tieStart, prepared.tieStop, prepared.inferredStaccato && i === 0);
         xml += "</note>";
         accidentalByStepOctave.set(stepOctaveKey, pitch.alter);
       }
@@ -2107,6 +2300,7 @@ const buildMeasureVoiceXml = (
 
 const buildPartMusicXml = (params: {
   partId: string;
+  partName?: string;
   divisions: number;
   beats: number;
   beatType: number;
@@ -2125,6 +2319,7 @@ const buildPartMusicXml = (params: {
 }): string => {
   const {
     partId,
+    partName = "",
     divisions,
     beats,
     beatType,
@@ -2160,7 +2355,9 @@ const buildPartMusicXml = (params: {
   const warningMetadataXml = buildMidiDiagMiscXml(warnings);
   const melodicKeys = notes.map((note) => note.midi);
   const singleClefSign = chooseSingleClefByKeys(melodicKeys);
-  const initialGrandStaff = !isDrum && shouldUseGrandStaffByRange(melodicKeys);
+  const normalizedPartName = partName.trim().toLowerCase();
+  const prefersAltoClef = /(^|[^a-z])(viola|vla\.?)([^a-z]|$)/i.test(normalizedPartName);
+  const initialGrandStaff = !isDrum && !prefersAltoClef && shouldUseGrandStaffByRange(melodicKeys);
   const voiceSegmentsByMeasure = new Map<number, ImportedVoiceNoteSegment[]>();
   let splitSegments = splitClustersToMeasureSegments({
     clusters,
@@ -2248,8 +2445,9 @@ const buildPartMusicXml = (params: {
             }
           }
         } else {
-          const line = singleClefSign === "F" ? 4 : 2;
-          partXml += `<clef><sign>${singleClefSign}</sign><line>${line}</line></clef>`;
+          const clefSign = prefersAltoClef ? "C" : singleClefSign;
+          const line = clefSign === "F" ? 4 : clefSign === "C" ? 3 : 2;
+          partXml += `<clef><sign>${clefSign}</sign><line>${line}</line></clef>`;
         }
       }
       partXml += "</attributes>";
@@ -2405,7 +2603,7 @@ const buildImportSkeletonMusicXml = (params: {
       name: (() => {
         const mksName = mksTextMetadata?.partNameByTrackIndex.get(group.trackIndex)?.trim() ?? "";
         const trackName = trackNameByIndex.get(group.trackIndex)?.trim() ?? "";
-        const preferred = mksName || trackName;
+        const preferred = !isGenericMidiTrackName(trackName) ? trackName : (mksName || trackName);
         if (preferred) {
           const channelCount = channelCountByTrackIndex.get(group.trackIndex) ?? 1;
           return channelCount > 1 ? `${preferred} Ch ${group.channel}` : preferred;
@@ -2462,6 +2660,7 @@ const buildImportSkeletonMusicXml = (params: {
     .map((part, partIndex) =>
       buildPartMusicXml({
         partId: part.partId,
+        partName: part.name,
         divisions,
         beats,
         beatType,
@@ -2712,7 +2911,8 @@ const buildRawMidiBytesForPlayback = (
     embedMksSysEx: boolean;
     sysexChunkTexts: string[];
     retriggerPolicy: RawMidiRetriggerPolicy;
-    mksTextMetaLines: string[];
+    textMetaLines: string[];
+    metaTrackName: string;
   }
 ): Uint8Array => {
   const tracksById = new Map<string, PlaybackEvent[]>();
@@ -2726,6 +2926,11 @@ const buildRawMidiBytesForPlayback = (
   const trackChunks: number[][] = [];
 
   const tempoEvents: RawTrackEvent[] = [];
+  {
+    const trackNameBytes = buildTextMetaEventData(0, options.metaTrackName, 0x03);
+    const body = trackNameBytes.slice(numberToVariableLength(0).length);
+    tempoEvents.push({ tick: 0, order: -1, bytes: body });
+  }
   type MetaTimelineEntry =
     | ({ kind: "tempo" } & MidiTempoEvent)
     | ({ kind: "time" } & MidiTimeSignatureEvent)
@@ -2775,7 +2980,7 @@ const buildRawMidiBytesForPlayback = (
       tempoEvents.push({ tick: 0, order: 3, bytes: body });
     }
   }
-  for (const line of options.mksTextMetaLines) {
+  for (const line of options.textMetaLines) {
     const textBytes = buildTextMetaEventData(0, line, 0x01);
     const body = textBytes.slice(numberToVariableLength(0).length);
     tempoEvents.push({ tick: 0, order: 4, bytes: body });
@@ -2791,6 +2996,12 @@ const buildRawMidiBytesForPlayback = (
       .sort((a, b) => (a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks));
     if (!trackEvents.length) continue;
     const noteEvents: RawTrackEvent[] = [];
+    const rawTrackName = trackEvents[0]?.trackName?.trim() || trackId || "Track";
+    {
+      const trackNameBytes = buildTextMetaEventData(0, rawTrackName, 0x03);
+      const body = trackNameBytes.slice(numberToVariableLength(0).length);
+      noteEvents.push({ tick: 0, order: -1, bytes: body });
+    }
 
     const channels = Array.from(
       new Set(trackEvents.map((event) => Math.max(1, Math.min(16, Math.round(event.channel || 1)))))
@@ -2853,6 +3064,12 @@ const buildRawMidiBytesForPlayback = (
       );
     if (!channelEvents.length) continue;
     const ccEvents: RawTrackEvent[] = [];
+    {
+      const baseName = channelEvents[0]?.trackName?.trim() || "Track";
+      const trackNameBytes = buildTextMetaEventData(0, `${baseName} Pedal`, 0x03);
+      const body = trackNameBytes.slice(numberToVariableLength(0).length);
+      ccEvents.push({ tick: 0, order: -1, bytes: body });
+    }
     for (const controlEvent of channelEvents) {
       const channel = normalizeMidiChannel(controlEvent.channel);
       const controllerNumber = Math.max(0, Math.min(127, Math.round(controlEvent.controllerNumber)));
@@ -3026,7 +3243,8 @@ const resolveMeasureAdvanceDiv = (
   currentDivisions: number,
   currentBeats: number,
   currentBeatType: number,
-  nextMeasureIsImplicit = false
+  nextMeasureIsImplicit = false,
+  firstMeasureUnderfullAsPickup = false
 ): number => {
   const safeDivisions = Math.max(1, Math.round(currentDivisions));
   const safeBeats = Math.max(1, Math.round(currentBeats));
@@ -3037,12 +3255,82 @@ const resolveMeasureAdvanceDiv = (
   if (isImplicit) {
     return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
   }
+  let hasPreviousMeasure = false;
+  for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
+    const prevName = (prev.localName || prev.tagName || "").toLowerCase();
+    if (prevName === "measure") {
+      hasPreviousMeasure = true;
+      break;
+    }
+  }
+  const isFirstMeasureInPart = !hasPreviousMeasure;
+  // MuseScore may export pickup first bars without implicit="yes".
+  // Restrict this fallback to explicit caller opt-in to avoid changing ordinary underfull bars.
+  if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    return measureMaxDiv;
+  }
   // Some scores split one logical bar into [regular underfull] + [implicit pickup].
   // In that case, padding the regular bar to full capacity causes an extra silent beat.
   if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
     return measureMaxDiv;
   }
   return Math.max(capacityDiv, measureMaxDiv);
+};
+
+const measureCapacityDivFromContext = (divisions: number, beats: number, beatType: number): number => {
+  const safeDivisions = Math.max(1, Math.round(divisions));
+  const safeBeats = Math.max(1, Math.round(beats));
+  const safeBeatType = Math.max(1, Math.round(beatType));
+  return Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+};
+
+const estimateMeasureContentSpanDiv = (measure: Element): number => {
+  let cursorDiv = 0;
+  let measureMaxDiv = 0;
+  const lastStartByVoice = new Map<string, number>();
+  for (const child of Array.from(measure.children)) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      const dur = getFirstNumber(child, "duration");
+      if (!dur || dur <= 0) continue;
+      if (child.tagName === "backup") {
+        cursorDiv = Math.max(0, cursorDiv - dur);
+      } else {
+        cursorDiv += dur;
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+      }
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const durationDiv = getFirstNumber(child, "duration");
+    if (!durationDiv || durationDiv <= 0) continue;
+    const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
+    const isChord = Boolean(child.querySelector("chord"));
+    const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
+    if (!isChord) {
+      lastStartByVoice.set(voice, startDiv);
+      cursorDiv += durationDiv;
+    }
+    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+  }
+  return measureMaxDiv;
+};
+
+const shouldTreatFirstUnderfullAsPickup = (doc: Document): boolean => {
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  if (parts.length < 2) return false;
+  for (const part of parts) {
+    const firstMeasure = part.querySelector(":scope > measure");
+    if (!firstMeasure) return false;
+    const divisions = getFirstNumber(firstMeasure, "attributes > divisions") ?? 1;
+    const beats = getFirstNumber(firstMeasure, "attributes > time > beats") ?? 4;
+    const beatType = getFirstNumber(firstMeasure, "attributes > time > beat-type") ?? 4;
+    const capacityDiv = measureCapacityDivFromContext(divisions, beats, beatType);
+    const contentDiv = estimateMeasureContentSpanDiv(firstMeasure);
+    if (!(contentDiv > 0 && contentDiv < capacityDiv)) {
+      return false;
+    }
+  }
+  return true;
 };
 
 const isImplicitMeasure = (measure: Element | null | undefined): boolean => {
@@ -3056,6 +3344,7 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiControlEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return [];
 
@@ -3186,7 +3475,8 @@ export const collectMidiControlEventsFromMusicXmlDoc = (
         currentDivisions,
         currentBeats,
         currentBeatType,
-        isImplicitMeasure(nextMeasure)
+        isImplicitMeasure(nextMeasure),
+        firstUnderfullAsPickup
       );
     }
   });
@@ -3199,6 +3489,7 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiTempoEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, bpm: 120 }];
 
@@ -3234,6 +3525,24 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
         } else {
           cursorDiv += dur;
           measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+        }
+        continue;
+      }
+
+      if (child.tagName === "sound") {
+        // MuseScore can emit hidden tempo as a standalone <sound tempo="..."/> at measure level.
+        const rawTempo = Number(child.getAttribute("tempo") ?? "");
+        if (Number.isFinite(rawTempo) && rawTempo > 0) {
+          const eventDiv = Math.max(0, timelineDiv + cursorDiv);
+          const eventTick = Math.max(
+            0,
+            Math.round((eventDiv / Math.max(1, currentDivisions)) * normalizedTicksPerQuarter)
+          );
+          const normalizedTempo = clampTempo(rawTempo);
+          if (normalizedTempo !== currentTempo) {
+            events.push({ startTicks: eventTick, bpm: normalizedTempo });
+            currentTempo = normalizedTempo;
+          }
         }
         continue;
       }
@@ -3278,7 +3587,8 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
       currentDivisions,
       currentBeats,
       currentBeatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
   }
 
@@ -3294,11 +3604,73 @@ export const collectMidiTempoEventsFromMusicXmlDoc = (
   return sortedTicks.map((tick) => ({ startTicks: tick, bpm: byTick.get(tick) ?? 120 }));
 };
 
+export const collectLeadingPickupTicksFromMusicXmlDoc = (
+  doc: Document,
+  ticksPerQuarter: number
+): number => {
+  const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstPart = doc.querySelector("score-partwise > part");
+  if (!firstPart) return 0;
+  const firstMeasure = firstPart.querySelector(":scope > measure");
+  if (!firstMeasure) return 0;
+  const secondMeasure = firstPart.querySelectorAll(":scope > measure")[1] ?? null;
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
+
+  let currentDivisions = getFirstNumber(firstMeasure, "attributes > divisions") ?? 1;
+  let currentBeats = getFirstNumber(firstMeasure, "attributes > time > beats") ?? 4;
+  let currentBeatType = getFirstNumber(firstMeasure, "attributes > time > beat-type") ?? 4;
+  currentDivisions = Math.max(1, Math.round(currentDivisions));
+  currentBeats = Math.max(1, Math.round(currentBeats));
+  currentBeatType = Math.max(1, Math.round(currentBeatType));
+
+  let cursorDiv = 0;
+  let measureMaxDiv = 0;
+  const lastStartByVoice = new Map<string, number>();
+  for (const child of Array.from(firstMeasure.children)) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      const dur = getFirstNumber(child, "duration");
+      if (!dur || dur <= 0) continue;
+      if (child.tagName === "backup") {
+        cursorDiv = Math.max(0, cursorDiv - dur);
+      } else {
+        cursorDiv += dur;
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+      }
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const durationDiv = getFirstNumber(child, "duration");
+    if (!durationDiv || durationDiv <= 0) continue;
+    const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
+    const isChord = Boolean(child.querySelector("chord"));
+    const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
+    if (!isChord) {
+      lastStartByVoice.set(voice, startDiv);
+      cursorDiv += durationDiv;
+    }
+    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+  }
+
+  const advanceDiv = resolveMeasureAdvanceDiv(
+    firstMeasure,
+    measureMaxDiv,
+    currentDivisions,
+    currentBeats,
+    currentBeatType,
+    isImplicitMeasure(secondMeasure),
+    firstUnderfullAsPickup
+  );
+  const fullMeasureDiv = Math.max(1, Math.round((currentDivisions * 4 * currentBeats) / currentBeatType));
+  if (advanceDiv <= 0 || advanceDiv >= fullMeasureDiv) return 0;
+  return Math.max(1, Math.round((advanceDiv / currentDivisions) * normalizedTicksPerQuarter));
+};
+
 export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
   doc: Document,
   ticksPerQuarter: number
 ): MidiTimeSignatureEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, beats: 4, beatType: 4 }];
 
@@ -3355,7 +3727,8 @@ export const collectMidiTimeSignatureEventsFromMusicXmlDoc = (
       currentDivisions,
       currentBeats,
       currentBeatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
     tickCursor += Math.max(
       1,
@@ -3383,6 +3756,7 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
   ticksPerQuarter: number
 ): MidiKeySignatureEvent[] => {
   const normalizedTicksPerQuarter = normalizeTicksPerQuarter(ticksPerQuarter);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const firstPart = doc.querySelector("score-partwise > part");
   if (!firstPart) return [{ startTicks: 0, fifths: 0, mode: "major" }];
 
@@ -3449,7 +3823,8 @@ export const collectMidiKeySignatureEventsFromMusicXmlDoc = (
       currentDivisions,
       beats,
       beatType,
-      isImplicitMeasure(nextMeasure)
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
     );
     tickCursor += Math.max(
       1,
@@ -3483,6 +3858,7 @@ export const buildMidiBytesForPlayback = (
   keySignatureEvents: MidiKeySignatureEvent[] = [],
   options: {
     embedMksSysEx?: boolean;
+    emitMksTextMeta?: boolean;
     ticksPerQuarter?: number;
     diagnostics?: string[];
     normalizeForParity?: boolean;
@@ -3492,6 +3868,7 @@ export const buildMidiBytesForPlayback = (
       title?: string;
       movementTitle?: string;
       composer?: string;
+      pickupTicks?: number;
     };
   } = {}
 ): Uint8Array => {
@@ -3517,21 +3894,28 @@ export const buildMidiBytesForPlayback = (
 
   const midiTracks: unknown[] = [];
   const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
-  const mksTextMetaLines: string[] = ["mks:meta-version:1"];
+  const emitMksTextMeta = options.emitMksTextMeta !== false;
+  const mksTextMetaLines: string[] = emitMksTextMeta ? ["mks:meta-version:1"] : [];
   const metaTitle = String(options.metadata?.title ?? "").trim();
   const metaMovementTitle = String(options.metadata?.movementTitle ?? "").trim();
   const metaComposer = String(options.metadata?.composer ?? "").trim();
-  if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
-  if (metaMovementTitle) {
-    mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
-  }
-  if (metaComposer) mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
-  for (let index = 0; index < sortedTrackIds.length; index += 1) {
-    const trackId = sortedTrackIds[index];
-    const trackEvents = tracksById.get(trackId) ?? [];
-    const trackName = trackEvents[0]?.trackName?.trim() ?? "";
-    if (!trackName) continue;
-    mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+  const metaTrackTitle = (metaTitle || metaMovementTitle || "Untitled").replace(/\s+/g, " ").trim() || "Untitled";
+  const standardTextMetaLines: string[] = [`title:${metaTrackTitle}`];
+  const metaPickupTicks = Math.max(0, Math.round(options.metadata?.pickupTicks ?? 0));
+  if (emitMksTextMeta) {
+    if (metaTitle) mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
+    if (metaMovementTitle) {
+      mksTextMetaLines.push(`mks:movement-title:${encodeURIComponent(metaMovementTitle)}`);
+    }
+    if (metaComposer) mksTextMetaLines.push(`mks:composer:${encodeURIComponent(metaComposer)}`);
+    if (metaPickupTicks > 0) mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
+    for (let index = 0; index < sortedTrackIds.length; index += 1) {
+      const trackId = sortedTrackIds[index];
+      const trackEvents = tracksById.get(trackId) ?? [];
+      const trackName = trackEvents[0]?.trackName?.trim() ?? "";
+      if (!trackName) continue;
+      mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
+    }
   }
   const normalizedTempoEvents = (tempoEvents.length ? tempoEvents : [{ startTicks: 0, bpm: tempo }])
     .map((event) => ({
@@ -3570,6 +3954,11 @@ export const buildMidiBytesForPlayback = (
   if (!dedupedTimeSignatureEvents.length || dedupedTimeSignatureEvents[0].startTicks !== 0) {
     dedupedTimeSignatureEvents.unshift({ startTicks: 0, beats: 4, beatType: 4 });
   }
+  const exportedTimeSignatureEvents = buildMuseScoreStylePickupTimeSignaturePrelude(
+    dedupedTimeSignatureEvents,
+    writerTicksPerQuarter,
+    metaPickupTicks
+  );
   const dedupedKeySignatureEvents: MidiKeySignatureEvent[] = [];
   for (const event of keySignatureEvents
     .map((e) => ({
@@ -3626,7 +4015,7 @@ export const buildMidiBytesForPlayback = (
     eventCount: sourceEvents.length,
     trackCount: tracksById.size,
     tempoEventCount: dedupedTempoEvents.length,
-    timeSignatureEventCount: dedupedTimeSignatureEvents.length,
+    timeSignatureEventCount: exportedTimeSignatureEvents.length,
     keySignatureEventCount: dedupedKeySignatureEvents.length,
     controlEventCount: controlEvents.length,
     channelCount,
@@ -3640,7 +4029,7 @@ export const buildMidiBytesForPlayback = (
       trackProgramOverrides,
       controlEvents,
       dedupedTempoEvents,
-      dedupedTimeSignatureEvents,
+      exportedTimeSignatureEvents,
       dedupedKeySignatureEvents,
       writerTicksPerQuarter,
       normalizedProgramPreset,
@@ -3648,21 +4037,22 @@ export const buildMidiBytesForPlayback = (
         embedMksSysEx,
         sysexChunkTexts: sysexChunks,
         retriggerPolicy: options.rawRetriggerPolicy ?? "off_before_on",
-        mksTextMetaLines,
+        textMetaLines: [...standardTextMetaLines, ...mksTextMetaLines],
+        metaTrackName: metaTrackTitle,
       }
     );
   }
   const midiWriterRuntime = midiWriter as MidiWriterRuntime;
   const tempoTrack = new midiWriterRuntime.Track();
-  tempoTrack.addTrackName("Tempo Map");
-  tempoTrack.addInstrumentName("Tempo Map");
+  tempoTrack.addTrackName(metaTrackTitle);
+  tempoTrack.addInstrumentName(metaTrackTitle);
   const metaTimeline: Array<
     | ({ kind: "tempo" } & MidiTempoEvent)
     | ({ kind: "time" } & MidiTimeSignatureEvent)
     | ({ kind: "key" } & MidiKeySignatureEvent)
   > = [];
   metaTimeline.push(...dedupedTempoEvents.map((e) => ({ kind: "tempo" as const, ...e })));
-  metaTimeline.push(...dedupedTimeSignatureEvents.map((e) => ({ kind: "time" as const, ...e })));
+  metaTimeline.push(...exportedTimeSignatureEvents.map((e) => ({ kind: "time" as const, ...e })));
   metaTimeline.push(...dedupedKeySignatureEvents.map((e) => ({ kind: "key" as const, ...e })));
   const kindPriority: Record<"time" | "key" | "tempo", number> = { time: 0, key: 1, tempo: 2 };
   metaTimeline.sort((a, b) =>
@@ -3690,7 +4080,7 @@ export const buildMidiBytesForPlayback = (
       tempoTrack.addEvent({ data: buildMksSysexEventData(0, chunk) });
     }
   }
-  for (const line of mksTextMetaLines) {
+  for (const line of [...standardTextMetaLines, ...mksTextMetaLines]) {
     tempoTrack.addEvent({ data: buildTextMetaEventData(0, line, 0x01) });
   }
   midiTracks.push(tempoTrack);
@@ -3828,6 +4218,9 @@ export const convertMidiToMusicXml = (
   const tempoMetaEvents: Array<{ tick: number; bpm: number }> = [];
   const mksSysExPayloads: string[] = [];
   const mksTextMetaLines: string[] = [];
+  const standardTitleCandidates: string[] = [];
+  const standardComposerCandidates: string[] = [];
+  let singleTrackTitleCandidate = "";
   const trackNameByIndex = new Map<number, string>();
 
   for (let i = 0; i < header.trackCount; i += 1) {
@@ -3855,10 +4248,21 @@ export const convertMidiToMusicXml = (
     }
     const trackData = midiBytes.slice(offset + 8, offset + 8 + trackLength);
     const summary = parseTrackSummary(trackData, i);
+    if (
+      header.trackCount === 1 &&
+      i === 0 &&
+      !singleTrackTitleCandidate &&
+      summary.trackName &&
+      !isGenericMidiTrackName(summary.trackName)
+    ) {
+      singleTrackTitleCandidate = summary.trackName.trim();
+    }
     if (summary.trackName) {
       trackNameByIndex.set(i, summary.trackName);
     }
     collectedNotes.push(...summary.notes);
+    standardTitleCandidates.push(...summary.standardTitleCandidates);
+    standardComposerCandidates.push(...summary.standardComposerCandidates);
     controllerEvents.push(
       ...summary.controllerEvents.map((event) => ({ ...event, trackIndex: i }))
     );
@@ -3877,7 +4281,13 @@ export const convertMidiToMusicXml = (
     offset += 8 + trackLength;
   }
   const parsedMksTextMetadata = parseMksMidiTextMetadata(mksTextMetaLines);
+  const standardTitle =
+    standardTitleCandidates.find((entry) => String(entry || "").trim().length > 0)?.trim() ??
+    singleTrackTitleCandidate;
+  const standardComposer =
+    standardComposerCandidates.find((entry) => String(entry || "").trim().length > 0)?.trim() ?? "";
   const title =
+    standardTitle ||
     parsedMksTextMetadata.title?.trim() ||
     String(options.title ?? "").trim() ||
     "Imported MIDI";
@@ -3926,6 +4336,14 @@ export const convertMidiToMusicXml = (
   };
   const beats = Math.max(1, Math.round(firstTimeSignature.beats));
   const beatType = Math.max(1, Math.round(firstTimeSignature.beatType));
+  const measureTicks = Math.max(1, Math.round((header.ticksPerQuarter * 4 * beats) / beatType));
+  const metadataPickupTicks = Math.max(
+    0,
+    Math.min(measureTicks - 1, Math.round(parsedMksTextMetadata.pickupTicks ?? 0))
+  );
+  const resolvedPickupTicks = normalizedTimeSignature.pickupTicks > 0
+    ? normalizedTimeSignature.pickupTicks
+    : metadataPickupTicks;
   const keyFifths = Math.max(-7, Math.min(7, Math.round(firstKeySignature.fifths)));
   const keyMode: "major" | "minor" = firstKeySignature.mode === "minor" ? "minor" : "major";
   if (!keySignatureEvents.length && inferredKeySignature) {
@@ -3967,7 +4385,7 @@ export const convertMidiToMusicXml = (
   const xml = buildImportSkeletonMusicXml({
     title,
     movementTitle: parsedMksTextMetadata.movementTitle,
-    composer: parsedMksTextMetadata.composer,
+    composer: standardComposer || parsedMksTextMetadata.composer,
     quantizeGrid,
     divisionsOverride: quantized.divisions,
     ticksPerQuarter: header.ticksPerQuarter,
@@ -3976,7 +4394,7 @@ export const convertMidiToMusicXml = (
     keyFifths,
     keyMode,
     tempoEvents,
-    pickupTicks: normalizedTimeSignature.pickupTicks,
+    pickupTicks: resolvedPickupTicks,
     partGroups,
     notesByTrackChannel,
     programByTrackChannel,
@@ -4016,10 +4434,12 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
   const includeGraceProcessing = applyMidiNuance || options.includeGraceInPlaybackLikeMode === true;
   const includeOrnamentExpansion = applyMidiNuance || options.includeOrnamentInPlaybackLikeMode === true;
   const includeTieProcessing = applyMidiNuance || options.includeTieInPlaybackLikeMode === true;
+  const includeSlurProcessing = applyMidiNuance || includeTieProcessing;
   const applyDefaultDetache = applyMidiNuance || options.applyDefaultDetacheInPlaybackLikeMode === true;
   const graceTimingMode = options.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
   const metricAccentEnabled = options.metricAccentEnabled === true;
   const metricAccentProfile = normalizeMetricAccentProfile(options.metricAccentProfile);
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
   const partNodes = Array.from(doc.querySelectorAll("score-partwise > part"));
   if (partNodes.length === 0) return { tempo: 120, events: [] };
 
@@ -4059,10 +4479,24 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
     let currentVelocity = 80;
     let timelineDiv = 0;
     const tieChainByKey = new Map<string, PlaybackEvent>();
+    const resolveFallbackTieChainKey = (voice: string, midiChannel: number, midiNumber: number): string | null => {
+      const suffix = `|${midiChannel}|${midiNumber}`;
+      const exact = `${voice}${suffix}`;
+      if (tieChainByKey.has(exact)) return exact;
+      let candidate: string | null = null;
+      for (const key of tieChainByKey.keys()) {
+        if (!key.endsWith(suffix)) continue;
+        if (candidate !== null) return null; // ambiguous
+        candidate = key;
+      }
+      return candidate;
+    };
     const activeWedgeByNumber = new Map<string, WedgeKind>();
     const pendingGraceByVoice = new Map<string, Array<{ midiNumber: number; velocity: number; weight: number }>>();
     const activeSlurByVoice = new Map<string, Set<string>>();
     const voiceTimeShiftTicks = new Map<string, number>();
+    const lastEventByVoiceChannelPitch = new Map<string, PlaybackEvent>();
+    const lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch = new Map<string, boolean>();
 
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
     for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
@@ -4218,9 +4652,16 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             if (soundingMidi < 0 || soundingMidi > 127) {
               continue;
             }
+            const parsedArticulation = getNoteArticulationAdjustments(child);
             const articulation = applyMidiNuance
-              ? getNoteArticulationAdjustments(child)
+              ? parsedArticulation
               : { velocityDelta: 0, durationRatio: 1, hasTenuto: false };
+            const hasAnyExplicitArticulation = hasExplicitArticulation(child);
+            const allowsRepeatedSlurMergeForCurrent =
+              !hasAnyExplicitArticulation &&
+              parsedArticulation.durationRatio >= 1 &&
+              !parsedArticulation.hasTenuto &&
+              parsedArticulation.velocityDelta === 0;
             const metricAccentDelta =
               applyMidiNuance && metricAccentEnabled
                 ? getMetricAccentVelocityDelta(
@@ -4243,11 +4684,21 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             );
             const slurNumbers = applyMidiNuance
               ? getSlurNumbers(child)
+              : includeSlurProcessing
+              ? getSlurNumbers(child)
               : { starts: [] as string[], stops: [] as string[] };
             const activeSlurSet = activeSlurByVoice.get(voice) ?? new Set<string>();
             const noteUnderSlur =
-              applyMidiNuance &&
+              includeSlurProcessing &&
               (activeSlurSet.size > 0 || slurNumbers.starts.length > 0 || slurNumbers.stops.length > 0);
+            const hasForwardSlurConnection =
+              includeSlurProcessing &&
+              (slurNumbers.starts.length > 0 || activeSlurSet.size > slurNumbers.stops.length);
+            const isInsideOngoingSlurOnly =
+              includeSlurProcessing &&
+              activeSlurSet.size > 0 &&
+              slurNumbers.starts.length === 0 &&
+              slurNumbers.stops.length === 0;
             const tieFlags = includeTieProcessing ? getTieFlags(child) : { start: false, stop: false };
             const shouldApplyDefaultDetache =
               applyDefaultDetache &&
@@ -4277,7 +4728,7 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
               continue;
             }
             const legatoOverlapTicks =
-              applyMidiNuance && !isChord && (noteUnderSlur || articulation.hasTenuto)
+              applyMidiNuance && !isChord && (hasForwardSlurConnection || articulation.hasTenuto)
                 ? Math.max(1, Math.round(normalizedTicksPerQuarter / 32))
                 : 0;
             const temporalAdjustments =
@@ -4373,27 +4824,73 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
             }
             const primaryEvent = generatedEvents[0];
             if (!primaryEvent) continue;
+            const voiceChannelPitchKey = `${voice}|${channel}|${soundingMidi}`;
+            const priorSamePitchEvent = lastEventByVoiceChannelPitch.get(voiceChannelPitchKey) ?? null;
+            const shouldMergeRepeatedSlurSamePitch =
+              includeSlurProcessing &&
+              !isChord &&
+              !isGrace &&
+              !tieFlags.start &&
+              !tieFlags.stop &&
+              isInsideOngoingSlurOnly &&
+              generatedEvents.length === 1 &&
+              priorSamePitchEvent !== null &&
+              allowsRepeatedSlurMergeForCurrent &&
+              Boolean(lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.get(voiceChannelPitchKey)) &&
+              priorSamePitchEvent.startTicks < startTicks &&
+              priorSamePitchEvent.startTicks + priorSamePitchEvent.durTicks >= startTicks;
 
             for (const wedgeKind of activeWedgeByNumber.values()) {
               currentVelocity = clampVelocity(currentVelocity + (wedgeKind === "crescendo" ? 4 : -4));
             }
-            if (includeTieProcessing) {
-              const tieKey = `${voice}|${channel}|${soundingMidi}`;
+            if (shouldMergeRepeatedSlurSamePitch && priorSamePitchEvent) {
+              const priorEndTick = priorSamePitchEvent.startTicks + priorSamePitchEvent.durTicks;
+              const currentEndTick = primaryEvent.startTicks + primaryEvent.durTicks;
+              priorSamePitchEvent.durTicks = Math.max(1, Math.max(priorEndTick, currentEndTick) - priorSamePitchEvent.startTicks);
+              priorSamePitchEvent.velocity = Math.max(priorSamePitchEvent.velocity, velocity);
+              lastEventByVoiceChannelPitch.set(voiceChannelPitchKey, priorSamePitchEvent);
+            } else if (includeTieProcessing) {
+              const tieKey = voiceChannelPitchKey;
               if (tieFlags.stop) {
-                const chained = tieChainByKey.get(tieKey);
+                const chainedKey = resolveFallbackTieChainKey(voice, channel, soundingMidi);
+                const chained = chainedKey ? tieChainByKey.get(chainedKey) : null;
                 if (chained) {
                   chained.durTicks += primaryEvent.durTicks;
                   chained.velocity = Math.max(chained.velocity, velocity);
+                  lastEventByVoiceChannelPitch.set(chainedKey ?? tieKey, chained);
+                  lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(
+                    chainedKey ?? tieKey,
+                    allowsRepeatedSlurMergeForCurrent
+                  );
                 } else {
                   events.push(primaryEvent);
+                  lastEventByVoiceChannelPitch.set(tieKey, primaryEvent);
+                  lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(
+                    tieKey,
+                    allowsRepeatedSlurMergeForCurrent
+                  );
                 }
                 if (!tieFlags.start) {
-                  tieChainByKey.delete(tieKey);
+                  if (chainedKey) tieChainByKey.delete(chainedKey);
                 } else {
-                  tieChainByKey.set(tieKey, chained ?? primaryEvent);
+                  const chainedOrPrimary = chained ?? primaryEvent;
+                  tieChainByKey.set(chainedKey ?? tieKey, chainedOrPrimary);
+                  lastEventByVoiceChannelPitch.set(chainedKey ?? tieKey, chainedOrPrimary);
+                  lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(
+                    chainedKey ?? tieKey,
+                    allowsRepeatedSlurMergeForCurrent
+                  );
                 }
               } else {
                 events.push(...generatedEvents);
+                for (const generated of generatedEvents) {
+                  const generatedKey = `${voice}|${channel}|${generated.midiNumber}`;
+                  lastEventByVoiceChannelPitch.set(generatedKey, generated);
+                  lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(
+                    generatedKey,
+                    allowsRepeatedSlurMergeForCurrent
+                  );
+                }
                 if (tieFlags.start) {
                   tieChainByKey.set(tieKey, primaryEvent);
                 } else {
@@ -4402,8 +4899,16 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
               }
             } else {
               events.push(...generatedEvents);
+              for (const generated of generatedEvents) {
+                const generatedKey = `${voice}|${channel}|${generated.midiNumber}`;
+                lastEventByVoiceChannelPitch.set(generatedKey, generated);
+                lastEventAllowsRepeatedSlurMergeByVoiceChannelPitch.set(
+                  generatedKey,
+                  allowsRepeatedSlurMergeForCurrent
+                );
+              }
             }
-            if (applyMidiNuance) {
+            if (includeSlurProcessing || applyMidiNuance) {
               const nextSlurSet = new Set(activeSlurSet);
               for (const slurStart of slurNumbers.starts) nextSlurSet.add(slurStart);
               for (const slurStop of slurNumbers.stops) nextSlurSet.delete(slurStop);
@@ -4412,6 +4917,8 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
               } else {
                 activeSlurByVoice.delete(voice);
               }
+            }
+            if (applyMidiNuance) {
               if (!isChord && temporalAdjustments.postPauseTicks > 0) {
                 const shiftedTicks = (voiceTimeShiftTicks.get(voice) ?? 0) + temporalAdjustments.postPauseTicks;
                 voiceTimeShiftTicks.set(voice, shiftedTicks);
@@ -4434,7 +4941,8 @@ export const buildPlaybackEventsFromMusicXmlDoc = (
         currentDivisions,
         currentBeats,
         currentBeatType,
-        isImplicitMeasure(nextMeasure)
+        isImplicitMeasure(nextMeasure),
+        firstUnderfullAsPickup
       );
     }
   });

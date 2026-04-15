@@ -1,5 +1,21 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @ts-nocheck
 import { computeBeamAssignments } from "./beam-common";
+import {
+  parseAbcBodyEntryAt,
+  parseAbcBracketTokenAt,
+  parseAbcBrokenRhythmAt,
+  parseAbcDelimitedSpanAt,
+  parseAbcBareRepeatEndingMarkerAt,
+  parseAbcBarlineTokenAt,
+  parseAbcGraceGroupAt,
+  parseAbcPlayableEventAt,
+  parseAbcSingleCharShorthandAt,
+} from "./abc-parser";
 import { chooseSingleClefByKeys } from "../../core/staffClefPolicy";
 
 export type Fraction = { num: number; den: number };
@@ -50,15 +66,48 @@ const parseFractionText = (text: string, fallback: Fraction = DEFAULT_UNIT): Fra
   return reduceFraction(num, den, fallback);
 };
 
+const isAbcjsWrapperLine = (text: string): boolean =>
+  /^\[\s*\/?\s*abcjs(?:-[A-Za-z0-9_-]+)?(?:\s+[^\]]*)?\]$/i.test(String(text || "").trim());
+
+const estimateAbcMeasureContentDiv = (notes: any[]): number => {
+  const byVoice = new Map<string, number>();
+  const lastStartByVoice = new Map<string, number>();
+  for (const note of Array.isArray(notes) ? notes : []) {
+    if (!note || note.grace) continue;
+    const voice = String(note.voice || "1");
+    const durationDiv = Math.max(0, Math.round(Number(note.duration) || 0));
+    if (durationDiv <= 0) continue;
+    const current = byVoice.get(voice) ?? 0;
+    if (note.chord) {
+      const startDiv = lastStartByVoice.get(voice) ?? current;
+      byVoice.set(voice, Math.max(current, startDiv + durationDiv));
+      continue;
+    }
+    lastStartByVoice.set(voice, current);
+    byVoice.set(voice, current + durationDiv);
+  }
+  let maxDiv = 0;
+  for (const value of byVoice.values()) {
+    maxDiv = Math.max(maxDiv, value);
+  }
+  return maxDiv;
+};
+
 const parseAbcLengthToken = (token: string, lineNo: number): Fraction => {
   if (!token) {
     return { num: 1, den: 1 };
+  }
+  if (/^\/+$/.test(token)) {
+    return { num: 1, den: 2 ** token.length };
   }
   if (token === "/") {
     return { num: 1, den: 2 };
   }
   if (/^\d+$/.test(token)) {
     return { num: Number(token), den: 1 };
+  }
+  if (/^\d+\/$/.test(token)) {
+    return { num: Number(token.slice(0, -1)), den: 2 };
   }
   if (/^\/\d+$/.test(token)) {
     return { num: 1, den: Number(token.slice(1)) };
@@ -108,6 +157,2242 @@ const keyFromFifthsMode = (fifths: number, mode: string): string => {
     return minor[idx];
   }
   return major[idx];
+};
+
+const fractionToAbcTempoUnit = (fraction: Fraction): string => {
+  const reduced = reduceFraction(fraction.num, fraction.den, { num: 1, den: 4 });
+  return `${reduced.num}/${reduced.den}`;
+};
+
+const metronomeUnitFractionFromMusicXml = (metronome: Element | null): Fraction | null => {
+  if (!metronome) return null;
+  const beatUnit = (metronome.querySelector(":scope > beat-unit")?.textContent ?? "").trim().toLowerCase();
+  const dotCount = metronome.querySelectorAll(":scope > beat-unit-dot").length;
+  const baseByUnit: Record<string, Fraction> = {
+    whole: { num: 1, den: 1 },
+    half: { num: 1, den: 2 },
+    quarter: { num: 1, den: 4 },
+    eighth: { num: 1, den: 8 },
+    "16th": { num: 1, den: 16 },
+    "32nd": { num: 1, den: 32 },
+    "64th": { num: 1, den: 64 },
+  };
+  const base = baseByUnit[beatUnit];
+  if (!base) return null;
+  let total = reduceFraction(base.num, base.den, base);
+  let add = total;
+  for (let i = 0; i < dotCount; i += 1) {
+    add = divideFractions(add, { num: 2, den: 1 }, add);
+    total = reduceFraction((total.num * add.den) + (add.num * total.den), total.den * add.den, total);
+  }
+  return total;
+};
+
+const readInitialTempoFromMusicXml = (doc: Document): { bpm: number; unit: Fraction | null } | null => {
+  const firstPart = doc.querySelector("score-partwise > part");
+  const firstMeasure = firstPart?.querySelector(":scope > measure");
+  if (!firstMeasure) return null;
+  const leadingDirections = Array.from(firstMeasure.children).filter((child) => {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "direction") return true;
+    if (tag === "attributes" || tag === "print" || tag === "sound" || tag === "bookmark") return true;
+    return false;
+  });
+  const candidates: Array<{ bpm: number; unit: Fraction | null }> = [];
+  for (const child of leadingDirections) {
+    const tag = child.tagName.toLowerCase();
+    if (tag === "direction") {
+      const metronome = child.querySelector(":scope > direction-type > metronome");
+      const soundTempo = Number(child.querySelector(":scope > sound")?.getAttribute("tempo") ?? "");
+      const metronomeTempo = Number(metronome?.querySelector(":scope > per-minute")?.textContent?.trim() ?? "");
+      if (Number.isFinite(soundTempo) && soundTempo > 0) {
+        candidates.push({ bpm: soundTempo, unit: null });
+      }
+      if (Number.isFinite(metronomeTempo) && metronomeTempo > 0) {
+        candidates.push({ bpm: metronomeTempo, unit: metronomeUnitFractionFromMusicXml(metronome) });
+      }
+      continue;
+    }
+    if (tag === "sound") {
+      const bpm = Number(child.getAttribute("tempo") ?? "");
+      if (Number.isFinite(bpm) && bpm > 0) candidates.push({ bpm, unit: null });
+    }
+  }
+  if (!candidates.length) return null;
+  return candidates[candidates.length - 1] ?? null;
+};
+
+type AbcScoreLayout = {
+  orderedVoiceIds: string[];
+  groups: string[][];
+};
+
+type AbcImportVoiceRegistry = {
+  declaredVoiceIds: string[];
+  voiceNameById: Record<string, string>;
+  voiceClefById: Record<string, string>;
+  voiceTransposeById: Record<string, { chromatic?: number; diatonic?: number } | null | undefined>;
+};
+
+type AbcImportBodyEntry = {
+  text: string;
+  lineNo: number;
+  voiceId: string;
+};
+
+type AbcImportLineState = {
+  currentVoiceId: string;
+  scoreDirective: string;
+  bodyStarted: boolean;
+  pendingUnsupportedContinuedFieldName: string;
+};
+
+type AbcMetaParams = Record<string, string>;
+
+type AbcMeasureMeta = {
+  number: string;
+  implicit: boolean;
+  repeatStart: boolean;
+  repeatEnd: boolean;
+  repeatTimes: number | null;
+  endingStart: string;
+  endingStop: string;
+  endingStopType: "" | "stop" | "discontinue";
+};
+
+type AbcNormalizedVoiceData = {
+  partName: string;
+  clef: string;
+  transpose: { chromatic?: number; diatonic?: number } | null;
+  voiceId: string;
+  keyByMeasure: Record<number, number>;
+  meterByMeasure: Record<number, { beats: number; beatType: number }>;
+  tempoByMeasure: Record<number, number>;
+  measureMetaByIndex: Record<number, AbcMeasureMeta>;
+  measures: AbcParsedNote[][];
+};
+
+type AbcImportLineProcessorContext = {
+  lineState: AbcImportLineState;
+  warnings: string[];
+  headers: Record<string, string>;
+  lyricEntriesByVoice: Record<string, Array<{ text: string; lineNo: number }>>;
+  supportedStandaloneBodyFieldNames: Set<string>;
+  voiceRegistry: AbcImportVoiceRegistry;
+  userDefinedDecorationBySymbol: Record<string, string>;
+  trillWidthHintByKey: Map<string, string>;
+  keyHintFifthsByKey: Map<string, number>;
+  measureMetaByKey: Map<string, AbcMeasureMeta>;
+  transposeHintByVoiceId: Map<string, { chromatic?: number; diatonic?: number }>;
+  pushBodyText: (rawBodyText: string, lineNo: number, voiceId: string) => void;
+  parseVoiceDirectiveTail: (raw: string) => {
+    name: string;
+    clef: string;
+    transpose: { chromatic?: number; diatonic?: number } | null;
+    bodyText: string;
+    skippedText: string;
+    unsupportedKeys: string[];
+  };
+  parseUserDefinedDecoration: (raw: string) => { symbol: string; decoration: string } | null;
+  expandUserDefinedDecorationSymbols: (text: string, symbolMap: Record<string, string>) => string;
+};
+
+type AbcLyricEntry = {
+  text: string;
+  lineNo: number;
+};
+
+type AbcVoiceStores = {
+  measuresByVoice: Record<string, AbcParsedNote[][]>;
+  notationMeasureMetaByVoice: Record<string, Record<number, AbcMeasureMeta>>;
+  activeEndingByVoice: Record<string, string>;
+  currentKeyFifthsByVoice: Record<string, number>;
+  meterByMeasureByVoice: Record<string, Record<number, { beats: number; beatType: number }>>;
+  tempoByMeasureByVoice: Record<string, Record<number, number>>;
+};
+
+type AbcBodyFieldContext = {
+  warnings: string[];
+  voiceStores: AbcVoiceStores;
+  entryVoiceId: string;
+  currentMeasureNo: number;
+  keyHintFifthsByKey: Map<string, number>;
+  activeKeyFifths: number;
+  activeUnitLength: Fraction;
+  activeMeter: { beats: number; beatType: number };
+  activeTempoBpm: number | null;
+  measureAccidentals: Record<string, number>;
+};
+
+type AbcParsedBodyEntryToken = Exclude<ReturnType<typeof parseAbcBodyEntryAt>, null>;
+
+type AbcBarlineEntryContext = {
+  text: string;
+  idx: number;
+  currentMeasureNo: number;
+  currentMeasureLength: number;
+  measuresLength: number;
+  activeEndingMarker: string;
+  markRepeatEnd: () => void;
+  markRepeatStart: () => void;
+  stopActiveEndingAtMeasure: (measureNo: number) => void;
+  advanceToNextMeasure: () => void;
+  clearMeasureAccidentals: () => void;
+  clearLastNote: () => void;
+  resetBeamContext: () => void;
+  startEndingAtCurrentMeasure: (marker: string, nextIdx: number) => boolean;
+};
+
+type AbcNonPlayableBodyEntryContext = {
+  text: string;
+  idx: number;
+  warnBody: (message: string) => void;
+  applyBodyField: (fieldName: string, fieldValue: string) => boolean;
+  handleBarlineToken: (barlineToken: AbcParsedBodyEntryToken["barlineToken"]) => boolean;
+};
+
+type AbcPlayableEventTiming = {
+  absoluteLength: Fraction;
+  dur: number;
+  activeTuplet: { actual: number; normal: number; remaining: number } | null;
+  nextIdx: number;
+};
+
+type AbcPlayableEventResolution = {
+  invalidLengthMessage: string;
+  octaveWarningMessage: string;
+  firstNoteOptions: { applyTieStop?: boolean };
+  commitOptions: { applyChordTieStop?: boolean };
+};
+
+type AbcPlayableEventContext = {
+  timing: AbcPlayableEventTiming;
+  resolution: AbcPlayableEventResolution;
+  buildPlayableEventFromPitches: (
+    pitchSources: Array<{
+      pitchChar: string;
+      accidentalText: string;
+      octaveShift: number;
+      explicitNatural?: boolean;
+      accidentalKind?: "editorial" | "courtesy" | "";
+    }>,
+    timing: AbcPlayableEventTiming,
+    options?: {
+      octaveWarningMessage?: string;
+      firstNoteOptions?: { applyTieStop?: boolean };
+    }
+  ) => any[];
+  commitPlayableEvent: (notes: any[], options?: { applyChordTieStop?: boolean }) => boolean;
+  clearLastEventState: (options?: { clearPendingTie?: boolean }) => void;
+  warnBody: (message: string) => void;
+};
+
+type AbcPlayablePitchSource = {
+  pitchChar: string;
+  accidentalText: string;
+  octaveShift: number;
+  explicitNatural?: boolean;
+  accidentalKind?: "editorial" | "courtesy" | "";
+};
+
+type AbcPlayableEventBuildContext = {
+  pitchSources: AbcPlayablePitchSource[];
+  timing: AbcPlayableEventTiming;
+  octaveWarningMessage: string;
+  firstNoteOptions: { applyTieStop?: boolean };
+  buildPlayableNoteForBody: (
+    pitchSource: AbcPlayablePitchSource,
+    absoluteLength: Fraction,
+    dur: number,
+    octaveWarningMessage: string
+  ) => any | null;
+  finalizePlayableEventStart: (
+    note: any,
+    dur: number,
+    activeTuplet: { actual: number; normal: number; remaining: number } | null,
+    options?: { applyTieStop?: boolean }
+  ) => void;
+};
+
+type AbcSimpleBodyTokenHandlerContext = {
+  char: string;
+  handleBrokenRhythmBodyToken: (bodyToken: any) => boolean;
+  handleDecorationBodyToken: (bodyToken: any, char: string) => boolean;
+  handleParenBodyToken: (bodyToken: any) => boolean;
+  handleQuotedStringBodyToken: (bodyToken: any) => boolean;
+  handleSingleCharShorthandBodyToken: (bodyToken: any, char: string) => boolean;
+  handleSlurStopBodyToken: (bodyToken: any) => boolean;
+  handleTieBodyToken: (bodyToken: any) => boolean;
+};
+
+type AbcBracketBodyTokenContext = {
+  text: string;
+  idx: number;
+  handleInlineFieldBracketToken: (bracketToken: any) => boolean;
+  handleRepeatEndingBracketToken: (bracketToken: any) => boolean;
+  handlePlayableEvent: (playableEvent: any, options?: { fallbackToNextChar?: boolean }) => boolean;
+};
+
+type AbcGraceGroupContext = {
+  char: string;
+  text: string;
+  idx: number;
+  lineNo: number;
+  activeUnitLength: Fraction;
+  activeKeySignatureAccidentals: Record<string, number>;
+  measureAccidentals: Record<string, number>;
+  entryVoiceId: string;
+  warnings: string[];
+  warnBody: (message: string) => void;
+  appendGraceNotes: (graceNotes: any[]) => void;
+};
+
+type AbcBodyFallbackContext = {
+  char: string;
+  bodyEntry: any;
+  handleClosingNotation: (char: string) => boolean;
+  handleUnsupportedPunctuation: (char: string) => boolean;
+  throwBodyParseError: () => never;
+};
+
+type AbcPendingPlayableNoteContext = {
+  note: any;
+  options: {
+    applySlurStart?: boolean;
+    applyTieStop?: boolean;
+    trillHint?: string;
+  };
+  applyPendingOrnamentState: (
+    note: any,
+    options?: { applySlurStart?: boolean; trillHint?: string }
+  ) => void;
+  applyPendingArticulationState: (note: any) => void;
+  applyPendingDirectionState: (note: any) => void;
+  applyPendingTechnicalState: (note: any) => void;
+  hasPendingTieToNext: () => boolean;
+  clearPendingTieToNext: () => void;
+  warnBody: (message: string) => void;
+};
+
+type AbcPendingNoteValueContext = {
+  note: any;
+  isPending: boolean;
+  apply: () => void;
+  clear: () => void;
+};
+
+type AbcPendingNoteOptionalValueContext = {
+  note: any;
+  value: any;
+  isEmpty: (value: any) => boolean;
+  apply: (value: any) => void;
+  clear: () => void;
+};
+
+type AbcPendingNoteArrayContext = {
+  note: any;
+  values: any[];
+  apply: (values: any[]) => void;
+  clear: () => void;
+};
+
+const parseAbcScoreLayout = (raw: string, declaredVoiceIds: string[]): AbcScoreLayout => {
+  const baseOrder = Array.from(declaredVoiceIds || []);
+  const ordered: string[] = [];
+  const groups: string[][] = [];
+  const seen = new Set<string>();
+  const appendGroup = (ids: string[]): void => {
+    const normalized = ids
+      .map((v) => String(v || "").trim())
+      .filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
+    if (normalized.length === 0) return;
+    const group: string[] = [];
+    for (const id of normalized) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+      group.push(id);
+    }
+    if (group.length > 0) {
+      groups.push(group);
+    }
+  };
+
+  if (raw) {
+    const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = groupRegex.exec(raw)) !== null) {
+      const chunk = m[1] || m[2] || "";
+      appendGroup(chunk.split(/\s+/));
+    }
+  }
+
+  for (const id of baseOrder) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      ordered.push(id);
+      groups.push([id]);
+    }
+  }
+
+  if (ordered.length === 0) {
+    return { orderedVoiceIds: ["1"], groups: [["1"]] };
+  }
+  return { orderedVoiceIds: ordered, groups };
+};
+
+const parseAbcScoreVoiceOrder = (raw: string, declaredVoiceIds: string[]): string[] => {
+  return parseAbcScoreLayout(raw, declaredVoiceIds).orderedVoiceIds;
+};
+
+const ensureAbcDeclaredVoice = (
+  registry: AbcImportVoiceRegistry,
+  voiceId: string
+): void => {
+  if (!registry.declaredVoiceIds.includes(voiceId)) {
+    registry.declaredVoiceIds.push(voiceId);
+  }
+};
+
+const appendAbcBodyTextEntries = (
+  rawBodyText: string,
+  lineNo: number,
+  voiceId: string,
+  registry: AbcImportVoiceRegistry,
+  bodyEntries: AbcImportBodyEntry[],
+  splitBodyTextByInlineVoice: (text: string, initialVoiceId?: string) => { segments: Array<{ voiceId: string; text: string }>; finalVoiceId: string },
+  splitBodyTextByOverlay: (text: string, baseVoiceId?: string) => Array<{ voiceId: string; text: string; overlayIndex: number }>
+): { appended: boolean; finalVoiceId: string } => {
+  const normalizedBodyText = String(rawBodyText || "").replace(/\\\s*$/, "");
+  if (!normalizedBodyText.trim()) {
+    return { appended: false, finalVoiceId: String(voiceId || "1").trim() || "1" };
+  }
+  const { segments: inlineVoiceSegments, finalVoiceId } = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
+  for (const segment of inlineVoiceSegments) {
+    const overlaySegments = splitBodyTextByOverlay(segment.text, segment.voiceId);
+    for (const overlaySegment of overlaySegments) {
+      ensureAbcDeclaredVoice(registry, overlaySegment.voiceId);
+      if (overlaySegment.overlayIndex > 0) {
+        const overlayLabel = `overlay ${overlaySegment.overlayIndex + 1}`;
+        registry.voiceNameById[overlaySegment.voiceId] = registry.voiceNameById[segment.voiceId]
+          ? `${registry.voiceNameById[segment.voiceId]} ${overlayLabel}`
+          : `Voice ${segment.voiceId} ${overlayLabel}`;
+        if (registry.voiceClefById[segment.voiceId] && !registry.voiceClefById[overlaySegment.voiceId]) {
+          registry.voiceClefById[overlaySegment.voiceId] = registry.voiceClefById[segment.voiceId];
+        }
+        if (registry.voiceTransposeById[segment.voiceId] && !registry.voiceTransposeById[overlaySegment.voiceId]) {
+          registry.voiceTransposeById[overlaySegment.voiceId] = { ...registry.voiceTransposeById[segment.voiceId] };
+        }
+      }
+      bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
+    }
+  }
+  return { appended: true, finalVoiceId: String(finalVoiceId || voiceId || "1").trim() || "1" };
+};
+
+const applyAbcVoiceDirective = (
+  value: string,
+  lineNo: number,
+  lineState: AbcImportLineState,
+  voiceRegistry: AbcImportVoiceRegistry,
+  warnings: string[],
+  userDefinedDecorationBySymbol: Record<string, string>,
+  parseVoiceDirectiveTail: (raw: string) => {
+    name: string;
+    clef: string;
+    transpose: { chromatic?: number; diatonic?: number } | null;
+    bodyText: string;
+    skippedText: string;
+    unsupportedKeys: string[];
+  },
+  expandUserDefinedDecorationSymbols: (text: string, symbolMap: Record<string, string>) => string,
+  pushBodyText: (rawBodyText: string, lineNo: number, voiceId: string) => void
+): void => {
+  const m = value.match(/^(\S+)\s*(.*)$/);
+  if (!m) return;
+  lineState.currentVoiceId = m[1];
+  ensureAbcDeclaredVoice(voiceRegistry, lineState.currentVoiceId);
+  const rest = m[2].trim();
+  const parsedVoice = parseVoiceDirectiveTail(rest);
+  if (parsedVoice.name) {
+    voiceRegistry.voiceNameById[lineState.currentVoiceId] = parsedVoice.name;
+  }
+  if (parsedVoice.clef) {
+    voiceRegistry.voiceClefById[lineState.currentVoiceId] = parsedVoice.clef;
+  }
+  if (parsedVoice.transpose) {
+    voiceRegistry.voiceTransposeById[lineState.currentVoiceId] = parsedVoice.transpose;
+  }
+  if (parsedVoice.skippedText) {
+    warnings.push(
+      "line " +
+        lineNo +
+        ": Skipped unsupported V: directive tail token: " +
+        parsedVoice.skippedText
+    );
+  }
+  for (const unsupportedKey of parsedVoice.unsupportedKeys || []) {
+    warnings.push(
+      "line " +
+        lineNo +
+        ": Skipped unsupported V: property: " +
+        unsupportedKey
+    );
+  }
+  if (parsedVoice.bodyText) {
+    const expandedBodyText = expandUserDefinedDecorationSymbols(parsedVoice.bodyText, userDefinedDecorationBySymbol);
+    pushBodyText(expandedBodyText, lineNo, lineState.currentVoiceId);
+  }
+};
+
+const handleAbcHeaderFieldLine = (
+  key: string,
+  value: string,
+  valueHasContinuation: boolean,
+  lineNo: number,
+  lineState: AbcImportLineState,
+  headers: Record<string, string>,
+  lyricEntriesByVoice: Record<string, Array<{ text: string; lineNo: number }>>,
+  supportedStandaloneBodyFieldNames: Set<string>,
+  voiceRegistry: AbcImportVoiceRegistry,
+  warnings: string[],
+  userDefinedDecorationBySymbol: Record<string, string>,
+  parseVoiceDirectiveTail: (raw: string) => {
+    name: string;
+    clef: string;
+    transpose: { chromatic?: number; diatonic?: number } | null;
+    bodyText: string;
+    skippedText: string;
+    unsupportedKeys: string[];
+  },
+  parseUserDefinedDecoration: (raw: string) => { symbol: string; decoration: string } | null,
+  expandUserDefinedDecorationSymbols: (text: string, symbolMap: Record<string, string>) => string,
+  pushBodyText: (rawBodyText: string, lineNo: number, voiceId: string) => void
+): boolean => {
+  if (key === "w") {
+    if (!Object.prototype.hasOwnProperty.call(lyricEntriesByVoice, lineState.currentVoiceId)) {
+      lyricEntriesByVoice[lineState.currentVoiceId] = [];
+    }
+    lyricEntriesByVoice[lineState.currentVoiceId].push({ text: value, lineNo });
+    return true;
+  }
+  if (lineState.bodyStarted && supportedStandaloneBodyFieldNames.has(key)) {
+    pushBodyText(`[${key}:${value}]`, lineNo, lineState.currentVoiceId);
+    lineState.bodyStarted = true;
+    return true;
+  }
+  if (key === "V") {
+    applyAbcVoiceDirective(
+      value,
+      lineNo,
+      lineState,
+      voiceRegistry,
+      warnings,
+      userDefinedDecorationBySymbol,
+      parseVoiceDirectiveTail,
+      expandUserDefinedDecorationSymbols,
+      pushBodyText
+    );
+    if (!lineState.bodyStarted && valueHasContinuation) {
+      warnings.push("line " + lineNo + ": Unsupported continued field after V:; following continuation text will be skipped.");
+      lineState.pendingUnsupportedContinuedFieldName = "V:";
+    }
+    return true;
+  }
+  if (lineState.bodyStarted) {
+    warnings.push("line " + lineNo + ": Skipped unsupported standalone body field: " + key + ":" + value);
+    return true;
+  }
+  if (key === "U") {
+    const parsedUserDefinedDecoration = parseUserDefinedDecoration(value);
+    if (parsedUserDefinedDecoration) {
+      userDefinedDecorationBySymbol[parsedUserDefinedDecoration.symbol] = parsedUserDefinedDecoration.decoration;
+    }
+    return true;
+  }
+  headers[key] = value;
+  if (!lineState.bodyStarted && valueHasContinuation) {
+    warnings.push("line " + lineNo + ": Unsupported continued field after " + key + ":; following continuation text will be skipped.");
+    lineState.pendingUnsupportedContinuedFieldName = key + ":";
+  }
+  return true;
+};
+
+const parseAbcMetaParams = (raw: string): AbcMetaParams => {
+  const params: AbcMetaParams = {};
+  const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
+  let kv: RegExpExecArray | null;
+  while ((kv = kvRegex.exec(raw)) !== null) {
+    params[String(kv[1]).toLowerCase()] = String(kv[2]);
+  }
+  return params;
+};
+
+const applyAbcTrillMeta = (
+  params: AbcMetaParams,
+  trillWidthHintByKey: Map<string, string>
+): boolean => {
+  const voiceId = String(params.voice || "").trim();
+  const measureNo = Number.parseInt(String(params.measure || ""), 10);
+  const eventNo = Number.parseInt(String(params.event || ""), 10);
+  const upper = String(params.upper || "").trim();
+  if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(eventNo) && eventNo > 0 && upper) {
+    trillWidthHintByKey.set(`${voiceId}#${measureNo}#${eventNo}`, upper);
+    return true;
+  }
+  return false;
+};
+
+const applyAbcKeyMeta = (
+  params: AbcMetaParams,
+  keyHintFifthsByKey: Map<string, number>
+): boolean => {
+  const voiceId = String(params.voice || "").trim();
+  const measureNo = Number.parseInt(String(params.measure || ""), 10);
+  const fifths = Number.parseInt(String(params.fifths || ""), 10);
+  if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(fifths)) {
+    const key = `${voiceId}#${measureNo}`;
+    if (!keyHintFifthsByKey.has(key)) {
+      keyHintFifthsByKey.set(key, Math.max(-7, Math.min(7, Math.round(fifths))));
+    }
+    return true;
+  }
+  return false;
+};
+
+const applyAbcMeasureMeta = (
+  params: AbcMetaParams,
+  measureMetaByKey: Map<string, {
+    number: string;
+    implicit: boolean;
+    repeatStart: boolean;
+    repeatEnd: boolean;
+    repeatTimes: number | null;
+    endingStart: string;
+    endingStop: string;
+    endingStopType: "" | "stop" | "discontinue";
+  }>
+): boolean => {
+  const voiceId = String(params.voice || "").trim();
+  const measureNo = Number.parseInt(String(params.measure || ""), 10);
+  if (!(voiceId && Number.isFinite(measureNo) && measureNo > 0)) return false;
+  const measureNumberText = String(params.number || "").trim();
+  const implicitRaw = String(params.implicit || "").trim().toLowerCase();
+  const repeatRaw = String(params.repeat || "").trim().toLowerCase();
+  const leftRepeatRaw = String(params["left-repeat"] || "").trim().toLowerCase();
+  const rightRepeatRaw = String(params["right-repeat"] || "").trim().toLowerCase();
+  const repeatTimesRaw = Number.parseInt(String(params.times || ""), 10);
+  const endingStart = String(params["ending-start"] || "").trim();
+  const endingStop = String(params["ending-stop"] || "").trim();
+  const endingStopTypeRaw = String(params["ending-type"] || "").trim().toLowerCase();
+  measureMetaByKey.set(`${voiceId}#${measureNo}`, {
+    number: measureNumberText || String(measureNo),
+    implicit: implicitRaw === "1" || implicitRaw === "true" || implicitRaw === "yes",
+    repeatStart:
+      leftRepeatRaw === "1" || leftRepeatRaw === "true" || leftRepeatRaw === "yes" || repeatRaw === "forward",
+    repeatEnd:
+      rightRepeatRaw === "1" || rightRepeatRaw === "true" || rightRepeatRaw === "yes" || repeatRaw === "backward",
+    repeatTimes: Number.isFinite(repeatTimesRaw) && repeatTimesRaw > 1 ? repeatTimesRaw : null,
+    endingStart,
+    endingStop,
+    endingStopType:
+      endingStopTypeRaw === "discontinue" || endingStopTypeRaw === "stop"
+        ? endingStopTypeRaw
+        : (endingStop ? "stop" : ""),
+  });
+  return true;
+};
+
+const applyAbcTransposeMeta = (
+  params: AbcMetaParams,
+  transposeHintByVoiceId: Map<string, { chromatic?: number; diatonic?: number }>
+): boolean => {
+  const voiceId = String(params.voice || "").trim();
+  const chromatic = Number.parseInt(String(params.chromatic || ""), 10);
+  const diatonic = Number.parseInt(String(params.diatonic || ""), 10);
+  if (!(voiceId && (Number.isFinite(chromatic) || Number.isFinite(diatonic)))) return false;
+  const metaTranspose: { chromatic?: number; diatonic?: number } = {};
+  if (Number.isFinite(chromatic)) metaTranspose.chromatic = chromatic;
+  if (Number.isFinite(diatonic)) metaTranspose.diatonic = diatonic;
+  if (Object.keys(metaTranspose).length > 0) {
+    transposeHintByVoiceId.set(voiceId, metaTranspose);
+    return true;
+  }
+  return false;
+};
+
+const handleAbcMetaDirectiveLine = (
+  rawTrimmed: string,
+  trillWidthHintByKey: Map<string, string>,
+  keyHintFifthsByKey: Map<string, number>,
+  measureMetaByKey: Map<string, {
+    number: string;
+    implicit: boolean;
+    repeatStart: boolean;
+    repeatEnd: boolean;
+    repeatTimes: number | null;
+    endingStart: string;
+    endingStop: string;
+    endingStopType: "" | "stop" | "discontinue";
+  }>,
+  transposeHintByVoiceId: Map<string, { chromatic?: number; diatonic?: number }>
+): boolean => {
+  const metaMatch = rawTrimmed.match(/^%@mks\s+(trill|key|measure|transpose)\s+(.+)$/i);
+  if (!metaMatch) return false;
+  const kind = String(metaMatch[1] || "").toLowerCase();
+  const params = parseAbcMetaParams(String(metaMatch[2] || ""));
+  if (kind === "trill") return applyAbcTrillMeta(params, trillWidthHintByKey);
+  if (kind === "key") return applyAbcKeyMeta(params, keyHintFifthsByKey);
+  if (kind === "measure") return applyAbcMeasureMeta(params, measureMetaByKey);
+  if (kind === "transpose") return applyAbcTransposeMeta(params, transposeHintByVoiceId);
+  return false;
+};
+
+const isAbcStructuredDirectiveLine = (rawTrimmed: string): boolean => {
+  return /^%@mks\s+/i.test(rawTrimmed) || /^%%\s*/i.test(rawTrimmed) || /^[A-Za-z]:\s*(.*)$/.test(rawTrimmed);
+};
+
+const handleAbcUnsupportedContinuedFieldLine = (
+  raw: string,
+  rawTrimmed: string,
+  lineNo: number,
+  lineState: AbcImportLineState,
+  warnings: string[]
+): boolean => {
+  if (
+    !lineState.pendingUnsupportedContinuedFieldName ||
+    lineState.bodyStarted ||
+    isAbcStructuredDirectiveLine(rawTrimmed)
+  ) {
+    return false;
+  }
+  warnings.push(
+    "line " +
+      lineNo +
+      ": Skipped unsupported continued field text for " +
+      lineState.pendingUnsupportedContinuedFieldName +
+      ": " +
+      rawTrimmed
+  );
+  if (!/\\\s*$/.test(raw)) {
+    lineState.pendingUnsupportedContinuedFieldName = "";
+  }
+  return true;
+};
+
+const clearAbcPendingUnsupportedContinuedFieldOnStructuredLine = (
+  rawTrimmed: string,
+  lineState: AbcImportLineState
+): void => {
+  if (
+    lineState.pendingUnsupportedContinuedFieldName &&
+    !lineState.bodyStarted &&
+    isAbcStructuredDirectiveLine(rawTrimmed)
+  ) {
+    lineState.pendingUnsupportedContinuedFieldName = "";
+  }
+};
+
+const processAbcImportLine = (
+  raw: string,
+  lineNo: number,
+  context: AbcImportLineProcessorContext
+): void => {
+  const rawTrimmed = raw.trim();
+  if (!rawTrimmed) {
+    context.lineState.pendingUnsupportedContinuedFieldName = "";
+    return;
+  }
+  if (isAbcjsWrapperLine(rawTrimmed)) {
+    context.warnings.push("line " + lineNo + ": Skipped unsupported abcjs wrapper line: " + rawTrimmed);
+    context.lineState.pendingUnsupportedContinuedFieldName = "";
+    return;
+  }
+  if (handleAbcUnsupportedContinuedFieldLine(raw, rawTrimmed, lineNo, context.lineState, context.warnings)) {
+    return;
+  }
+  clearAbcPendingUnsupportedContinuedFieldOnStructuredLine(rawTrimmed, context.lineState);
+  if (
+    handleAbcMetaDirectiveLine(
+      rawTrimmed,
+      context.trillWidthHintByKey,
+      context.keyHintFifthsByKey,
+      context.measureMetaByKey,
+      context.transposeHintByVoiceId
+    )
+  ) {
+    return;
+  }
+  const scoreMatch = rawTrimmed.match(/^%%\s*score\s+(.+)$/i);
+  if (scoreMatch) {
+    context.lineState.scoreDirective = scoreMatch[1].trim();
+    return;
+  }
+  const noComment = raw.split("%")[0];
+  const trimmed = noComment.trim();
+  if (/^%%\s*/.test(rawTrimmed)) {
+    context.warnings.push("line " + lineNo + ": Skipped unsupported ABC directive: " + rawTrimmed);
+    return;
+  }
+  const headerMatch = trimmed.match(/^([A-Za-z]):\s*(.*)$/);
+  if (headerMatch && /^[A-Za-z]$/.test(headerMatch[1])) {
+    const key = headerMatch[1];
+    const valueHasContinuation = /\\\s*$/.test(headerMatch[2]);
+    const value = headerMatch[2].replace(/\\\s*$/, "").trim();
+    handleAbcHeaderFieldLine(
+      key,
+      value,
+      valueHasContinuation,
+      lineNo,
+      context.lineState,
+      context.headers,
+      context.lyricEntriesByVoice,
+      context.supportedStandaloneBodyFieldNames,
+      context.voiceRegistry,
+      context.warnings,
+      context.userDefinedDecorationBySymbol,
+      context.parseVoiceDirectiveTail,
+      context.parseUserDefinedDecoration,
+      context.expandUserDefinedDecorationSymbols,
+      context.pushBodyText
+    );
+    return;
+  }
+  const expandedBodyText = context.expandUserDefinedDecorationSymbols(noComment, context.userDefinedDecorationBySymbol);
+  context.pushBodyText(expandedBodyText, lineNo, context.lineState.currentVoiceId);
+};
+
+const buildAbcVoiceMeasureMetaByIndex = (
+  voiceId: string,
+  normalizedMeasures: AbcParsedNote[][],
+  keyHintFifthsByKey: Map<string, number>,
+  notationMeasureMetaByVoice: Record<string, Record<number, Partial<AbcMeasureMeta>>>,
+  measureMetaByKey: Map<string, AbcMeasureMeta>,
+  meterByMeasureByVoice: Record<string, Record<number, { beats: number; beatType: number }>>,
+  tempoByMeasureByVoice: Record<string, Record<number, number>>
+): {
+  keyByMeasure: Record<number, number>;
+  meterByMeasure: Record<number, { beats: number; beatType: number }>;
+  tempoByMeasure: Record<number, number>;
+  measureMetaByIndex: Record<number, AbcMeasureMeta>;
+} => {
+  const keyByMeasure: Record<number, number> = {};
+  const meterByMeasure: Record<number, { beats: number; beatType: number }> = {};
+  const tempoByMeasure: Record<number, number> = {};
+  const measureMetaByIndex: Record<number, AbcMeasureMeta> = {};
+  for (let m = 1; m <= normalizedMeasures.length; m += 1) {
+    const hinted = keyHintFifthsByKey.get(`${voiceId}#${m}`);
+    if (Number.isFinite(hinted)) {
+      keyByMeasure[m] = Number(hinted);
+    }
+    const notationMeta = notationMeasureMetaByVoice[voiceId]?.[m] || null;
+    const hintedMeta = measureMetaByKey.get(`${voiceId}#${m}`) || null;
+    const meterHint = meterByMeasureByVoice[voiceId]?.[m] || null;
+    const tempoHint = tempoByMeasureByVoice[voiceId]?.[m] || null;
+    if (notationMeta || hintedMeta) {
+      measureMetaByIndex[m] = {
+        number: hintedMeta?.number || notationMeta?.number || String(m),
+        implicit: hintedMeta?.implicit ?? notationMeta?.implicit ?? false,
+        repeatStart: Boolean(notationMeta?.repeatStart || hintedMeta?.repeatStart),
+        repeatEnd: Boolean(notationMeta?.repeatEnd || hintedMeta?.repeatEnd),
+        repeatTimes: hintedMeta?.repeatTimes ?? notationMeta?.repeatTimes ?? null,
+        endingStart: String(notationMeta?.endingStart || hintedMeta?.endingStart || ""),
+        endingStop: String(notationMeta?.endingStop || hintedMeta?.endingStop || ""),
+        endingStopType: hintedMeta?.endingStopType || notationMeta?.endingStopType || "",
+      };
+    }
+    if (meterHint) {
+      meterByMeasure[m] = {
+        beats: meterHint.beats,
+        beatType: meterHint.beatType,
+      };
+    }
+    if (Number.isFinite(tempoHint)) {
+      tempoByMeasure[m] = Math.max(20, Math.min(300, Math.round(Number(tempoHint))));
+    }
+  }
+  return { keyByMeasure, meterByMeasure, tempoByMeasure, measureMetaByIndex };
+};
+
+const buildAbcNormalizedVoiceDataById = (
+  orderedVoiceIds: string[],
+  voiceRegistry: AbcImportVoiceRegistry,
+  measuresByVoice: Record<string, AbcParsedNote[][]>,
+  measureCapacity: number,
+  overfullCompatibilityMode: boolean,
+  settings: { inferTransposeFromPartName?: boolean },
+  transposeHintByVoiceId: Map<string, { chromatic?: number; diatonic?: number }>,
+  keyHintFifthsByKey: Map<string, number>,
+  notationMeasureMetaByVoice: Record<string, Record<number, Partial<AbcMeasureMeta>>>,
+  measureMetaByKey: Map<string, AbcMeasureMeta>,
+  meterByMeasureByVoice: Record<string, Record<number, { beats: number; beatType: number }>>,
+  tempoByMeasureByVoice: Record<string, Record<number, number>>,
+  importDiagnostics: Array<{
+    level: "warn";
+    code: string;
+    fmt: "abc";
+    message?: string;
+    voiceId?: string;
+    measure?: number;
+    action?: string;
+    movedEvents?: number;
+  }>
+): Map<string, AbcNormalizedVoiceData> => {
+  const normalizedVoiceDataById = new Map<string, AbcNormalizedVoiceData>();
+  for (const voiceId of orderedVoiceIds) {
+    const partName = voiceRegistry.voiceNameById[voiceId] || ("Voice " + voiceId);
+    const transpose =
+      transposeHintByVoiceId.get(voiceId) ||
+      voiceRegistry.voiceTransposeById[voiceId] ||
+      (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
+    const normalized = overfullCompatibilityMode
+      ? normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity)
+      : { measures: measuresByVoice[voiceId] || [[]], diagnostics: [] };
+    const normalizedMeasures = normalized.measures;
+    if (overfullCompatibilityMode) {
+      for (const diag of normalized.diagnostics) {
+        importDiagnostics.push({
+          level: "warn",
+          code: "OVERFULL_REFLOWED",
+          fmt: "abc",
+          voiceId,
+          measure: diag.sourceMeasure,
+          action: "reflowed",
+          movedEvents: diag.movedEvents,
+        });
+      }
+    }
+    const measureData = buildAbcVoiceMeasureMetaByIndex(
+      voiceId,
+      normalizedMeasures,
+      keyHintFifthsByKey,
+      notationMeasureMetaByVoice,
+      measureMetaByKey,
+      meterByMeasureByVoice,
+      tempoByMeasureByVoice
+    );
+    normalizedVoiceDataById.set(voiceId, {
+      partName,
+      clef: voiceRegistry.voiceClefById[voiceId] || "",
+      transpose,
+      voiceId,
+      keyByMeasure: measureData.keyByMeasure,
+      meterByMeasure: measureData.meterByMeasure,
+      tempoByMeasure: measureData.tempoByMeasure,
+      measureMetaByIndex: measureData.measureMetaByIndex,
+      measures: normalizedMeasures,
+    });
+  }
+  return normalizedVoiceDataById;
+};
+
+const createFallbackAbcNormalizedVoiceData = (voiceId: string): AbcNormalizedVoiceData => ({
+  partName: "Voice " + voiceId,
+  clef: "",
+  transpose: null,
+  voiceId,
+  keyByMeasure: {},
+  meterByMeasure: {},
+  tempoByMeasure: {},
+  measureMetaByIndex: {},
+  measures: [[]],
+});
+
+const resolveAbcPrimaryVoiceData = (
+  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>,
+  primaryVoiceId: string
+): AbcNormalizedVoiceData => {
+  return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
+};
+
+const resolveAbcGroupedPartName = (
+  groupVoiceIds: string[],
+  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>,
+  fallbackPartName: string
+): string => {
+  if (groupVoiceIds.length <= 1) {
+    return fallbackPartName;
+  }
+  const names = groupVoiceIds
+    .map((voiceId) => normalizedVoiceDataById.get(voiceId)?.partName || ("Voice " + voiceId))
+    .filter((name, idx, arr) => name && arr.indexOf(name) === idx);
+  return names.length <= 1 ? (names[0] || fallbackPartName) : names.join(" / ");
+};
+
+const buildAbcParsedStaffVoice = (
+  voiceId: string,
+  staffIndex: number,
+  voiceData: AbcNormalizedVoiceData
+): AbcParsedStaffVoice => ({
+  staff: staffIndex + 1,
+  voiceId,
+  clef: voiceData.clef,
+  transpose: voiceData.transpose,
+  measures: (voiceData.measures || [[]]).map((measure) =>
+    (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 }))
+  ),
+});
+
+const buildAbcParsedPartBase = (
+  primary: AbcNormalizedVoiceData,
+  index: number,
+  partName: string
+): AbcParsedPart => ({
+  partId: "P" + String(index + 1),
+  partName,
+  clef: primary.clef,
+  transpose: primary.transpose,
+  voiceId: primary.voiceId,
+  keyByMeasure: primary.keyByMeasure,
+  meterByMeasure: primary.meterByMeasure,
+  tempoByMeasure: primary.tempoByMeasure,
+  measureMetaByIndex: primary.measureMetaByIndex,
+  measures: primary.measures,
+});
+
+const hasAbcGroupedStaffVoices = (part: AbcParsedPart): boolean =>
+  Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
+
+const buildAbcGroupedStaffMeasureNotesXml = (
+  staffVoices: AbcParsedStaffVoice[],
+  measureIndex: number,
+  currentMeasureDurationDiv: number,
+  buildMeasureNotesXml: (notes: AbcParsedNote[], staffNumber?: number) => string
+): string => {
+  return staffVoices
+    .map((staffVoice, staffIndex) => {
+      const staffNotes = staffVoice.measures?.[measureIndex] ?? [];
+      const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
+      if (staffIndex <= 0) {
+        return xml;
+      }
+      return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
+    })
+    .join("");
+};
+
+const buildAbcGroupedStaffClefXml = (staffVoices: AbcParsedStaffVoice[]): string => {
+  return staffVoices
+    .map((staffVoice) => {
+      const clefXml = clefXmlFromAbcClef(staffVoice.clef || "");
+      return clefXml.replace("<clef>", `<clef number="${staffVoice.staff}">`);
+    })
+    .join("");
+};
+
+const buildAbcPartTransposeXml = (
+  transpose?: { chromatic?: number; diatonic?: number } | null
+): string => {
+  if (!(transpose && (Number.isFinite(transpose.chromatic) || Number.isFinite(transpose.diatonic)))) {
+    return "";
+  }
+  return [
+    "<transpose>",
+    Number.isFinite(transpose.diatonic)
+      ? `<diatonic>${Math.round(Number(transpose.diatonic))}</diatonic>`
+      : "",
+    Number.isFinite(transpose.chromatic)
+      ? `<chromatic>${Math.round(Number(transpose.chromatic))}</chromatic>`
+      : "",
+    "</transpose>",
+  ].join("");
+};
+
+const buildAbcTempoDirectionXml = (
+  tempo: number | null,
+  include: boolean
+): string => {
+  if (!(include && tempo !== null)) {
+    return "";
+  }
+  return `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${tempo}</per-minute></metronome></direction-type><sound tempo="${tempo}"/></direction>`;
+};
+
+const buildAbcMeasureHeaderXml = (
+  part: AbcParsedPart,
+  partIndex: number,
+  measureIndex: number,
+  currentPartFifths: number,
+  currentPartMeter: { beats: number; beatType: number },
+  currentPartTempo: number | null,
+  hintedFifths: number | null,
+  hintedMeter: { beats: number; beatType: number } | null
+): { headerXml: string; tempoDirectionXml: string } => {
+  if (measureIndex === 0) {
+    const headerXml = [
+      "<attributes>",
+      "<divisions>960</divisions>",
+      `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
+      `<time><beats>${Math.round(currentPartMeter.beats)}</beats><beat-type>${Math.round(currentPartMeter.beatType)}</beat-type></time>`,
+      hasAbcGroupedStaffVoices(part)
+        ? `<staves>${part.staffVoices.length}</staves>`
+        : "",
+      buildAbcPartTransposeXml(part.transpose),
+      hasAbcGroupedStaffVoices(part)
+        ? buildAbcGroupedStaffClefXml(part.staffVoices)
+        : clefXmlFromAbcClef(part.clef),
+      "</attributes>",
+      buildAbcTempoDirectionXml(currentPartTempo, partIndex === 0),
+    ].join("");
+    return { headerXml, tempoDirectionXml: "" };
+  }
+  const headerXml =
+    hintedFifths !== null || hintedMeter
+      ? `<attributes>${
+          hintedFifths !== null ? `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>` : ""
+        }${
+          hintedMeter
+            ? `<time><beats>${Math.round(currentPartMeter.beats)}</beats><beat-type>${Math.round(currentPartMeter.beatType)}</beat-type></time>`
+            : ""
+        }</attributes>`
+      : "";
+  return {
+    headerXml,
+    tempoDirectionXml: "",
+  };
+};
+
+const buildAbcMeasureTempoDirectionXml = (
+  hintedTempo: number | null,
+  partIndex: number,
+  measureIndex: number
+): string => {
+  return buildAbcTempoDirectionXml(hintedTempo, measureIndex > 0 && partIndex === 0);
+};
+
+const buildAbcMeasureRepeatStartXml = (
+  measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any
+): string => {
+  const leftBarlineChunks: string[] = [];
+  if (measureMeta?.endingStart) {
+    leftBarlineChunks.push(`<ending number="${xmlEscape(String(measureMeta.endingStart))}" type="start"/>`);
+  }
+  if (measureMeta?.repeatStart) {
+    leftBarlineChunks.push('<repeat direction="forward" winged="none"/>');
+  }
+  return leftBarlineChunks.length > 0
+    ? `<barline location="left">${leftBarlineChunks.join("")}</barline>`
+    : "";
+};
+
+const buildAbcMeasureRepeatEndXml = (
+  measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any
+): string => {
+  const rightBarlineChunks: string[] = [];
+  if (measureMeta?.endingStop) {
+    rightBarlineChunks.push(
+      `<ending number="${xmlEscape(String(measureMeta.endingStop))}" type="${measureMeta.endingStopType || "stop"}"/>`
+    );
+  }
+  if (measureMeta?.repeatEnd) {
+    rightBarlineChunks.push(
+      `<repeat direction="backward" winged="none"${
+        Number.isFinite(measureMeta.repeatTimes) && Number(measureMeta.repeatTimes) > 1
+          ? ` times="${Math.round(Number(measureMeta.repeatTimes))}"`
+          : ""
+      }/>`
+    );
+  }
+  return rightBarlineChunks.length > 0
+    ? `<barline location="right">${rightBarlineChunks.join("")}</barline>`
+    : "";
+};
+
+const buildAbcMeasureXml = (
+  measureNo: number,
+  measureNumberText: string,
+  implicit: boolean,
+  repeatStartXml: string,
+  headerXml: string,
+  tempoDirectionXml: string,
+  debugMiscXml: string,
+  diagMiscXml: string,
+  sourceMiscXml: string,
+  notesXml: string,
+  repeatEndXml: string
+): string => {
+  const xmlMeasureNumber = xmlEscape(String(measureNumberText || measureNo));
+  const implicitAttr = implicit ? ' implicit="yes"' : "";
+  return `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${headerXml}${tempoDirectionXml}${debugMiscXml}${diagMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`;
+};
+
+const buildAbcPartMeasureRenderContext = (
+  part: AbcParsedPart,
+  measureIndex: number,
+  state: AbcPartRenderState,
+  beats: number,
+  beatType: number
+): AbcPartMeasureRenderContext => {
+  const measureNo = measureIndex + 1;
+  const notes = part.measures[measureIndex] ?? [];
+  const measureMeta = part.measureMetaByIndex?.[measureNo] ?? null;
+  const hintedFifths = Number.isFinite(part.keyByMeasure?.[measureNo])
+    ? Math.max(-7, Math.min(7, Math.round(Number(part.keyByMeasure?.[measureNo]))))
+    : null;
+  const hintedMeter = part.meterByMeasure?.[measureNo] ?? null;
+  const hintedTempo = Number.isFinite(part.tempoByMeasure?.[measureNo])
+    ? Math.max(20, Math.min(300, Math.round(Number(part.tempoByMeasure?.[measureNo]))))
+    : null;
+  const nextState: AbcPartRenderState = {
+    currentPartFifths: hintedFifths !== null ? hintedFifths : state.currentPartFifths,
+    currentPartMeter: hintedMeter
+      ? {
+          beats: Math.max(1, Math.round(Number(hintedMeter.beats) || beats)),
+          beatType: Math.max(1, Math.round(Number(hintedMeter.beatType) || beatType)),
+        }
+      : state.currentPartMeter,
+    currentPartTempo: hintedTempo !== null ? hintedTempo : state.currentPartTempo,
+  };
+  const currentMeasureDurationDiv = Math.max(
+    1,
+    Math.round((960 * 4 * Math.max(1, Math.round(nextState.currentPartMeter.beats))) / Math.max(1, Math.round(nextState.currentPartMeter.beatType)))
+  );
+  const currentMeasureContentDiv = estimateAbcMeasureContentDiv(notes);
+  const inferredImplicitPickup =
+    measureIndex === 0 &&
+    !measureMeta?.implicit &&
+    currentMeasureContentDiv > 0 &&
+    currentMeasureContentDiv < currentMeasureDurationDiv;
+  return {
+    notes,
+    measureMeta,
+    hintedFifths,
+    hintedMeter,
+    hintedTempo,
+    nextState,
+    currentMeasureDurationDiv,
+    inferredImplicitPickup,
+  };
+};
+
+const buildAbcRenderedPartMeasureXml = (
+  context: AbcRenderedPartMeasureContext
+): string => {
+  const {
+    part,
+    partIndex,
+    measureIndex,
+    measureNo,
+    notes,
+    measureMeta,
+    hintedFifths,
+    hintedMeter,
+    hintedTempo,
+    currentPartFifths,
+    currentPartMeter,
+    currentPartTempo,
+    currentMeasureDurationDiv,
+    inferredImplicitPickup,
+    debugMetadata,
+    sourceMetadata,
+    diagnostics,
+    abcSource,
+    buildMeasureNotesXml,
+  } = context;
+  const { headerXml, tempoDirectionXml: headerTempoDirectionXml } = buildAbcMeasureHeaderXml(
+    part,
+    partIndex,
+    measureIndex,
+    currentPartFifths,
+    currentPartMeter,
+    currentPartTempo,
+    hintedFifths,
+    hintedMeter
+  );
+  const tempoDirectionXml =
+    headerTempoDirectionXml || buildAbcMeasureTempoDirectionXml(hintedTempo, partIndex, measureIndex);
+  const notesXml =
+    hasAbcGroupedStaffVoices(part)
+      ? buildAbcGroupedStaffMeasureNotesXml(
+          part.staffVoices,
+          measureIndex,
+          currentMeasureDurationDiv,
+          buildMeasureNotesXml
+        )
+      : buildMeasureNotesXml(notes);
+  const repeatStartXml = buildAbcMeasureRepeatStartXml(measureMeta);
+  const repeatEndXml = buildAbcMeasureRepeatEndXml(measureMeta);
+  const { debugMiscXml, diagMiscXml, sourceMiscXml } = buildAbcRenderedMeasureMiscXml({
+    part,
+    partIndex,
+    measureNo,
+    notes,
+    debugMetadata,
+    sourceMetadata,
+    diagnostics,
+    abcSource,
+  });
+  return buildAbcMeasureXml(
+    measureNo,
+    String(measureMeta?.number || measureNo),
+    Boolean(measureMeta?.implicit || inferredImplicitPickup),
+    repeatStartXml,
+    headerXml,
+    tempoDirectionXml,
+    debugMiscXml,
+    diagMiscXml,
+    sourceMiscXml,
+    notesXml,
+    repeatEndXml
+  );
+};
+
+const buildAbcRenderedMeasureMiscXml = (
+  context: Pick<
+    AbcRenderedPartMeasureContext,
+    "part" | "partIndex" | "measureNo" | "notes" | "debugMetadata" | "sourceMetadata" | "diagnostics" | "abcSource"
+  >
+): {
+  debugMiscXml: string;
+  diagMiscXml: string;
+  sourceMiscXml: string;
+} => {
+  const {
+    part,
+    partIndex,
+    measureNo,
+    notes,
+    debugMetadata,
+    sourceMetadata,
+    diagnostics,
+    abcSource,
+  } = context;
+  return {
+    debugMiscXml: debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "",
+    diagMiscXml:
+      partIndex === 0 && measureNo === 1
+        ? buildAbcDiagMiscXml(
+            (diagnostics ?? []).filter(
+              (diag) => !diag.voiceId || diag.voiceId === (part.voiceId || "")
+            )
+          )
+        : "",
+    sourceMiscXml:
+      sourceMetadata && partIndex === 0 && measureNo === 1
+        ? buildAbcSourceMiscXml(abcSource)
+        : "",
+  };
+};
+
+const createInitialAbcPartRenderState = (
+  defaultFifths: number,
+  beats: number,
+  beatType: number,
+  tempoBpm: number | null
+): AbcPartRenderState => ({
+  currentPartFifths: Math.max(-7, Math.min(7, Math.round(defaultFifths))),
+  currentPartMeter: { beats: Math.round(beats), beatType: Math.round(beatType) },
+  currentPartTempo: tempoBpm,
+});
+
+const buildAbcPartXml = (
+  part: AbcParsedPart,
+  partIndex: number,
+  measureCount: number,
+  defaultFifths: number,
+  beats: number,
+  beatType: number,
+  tempoBpm: number | null,
+  debugMetadata: boolean,
+  sourceMetadata: boolean,
+  diagnostics: AbcParsedResult["diagnostics"] | undefined,
+  abcSource: string,
+  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
+): string => {
+  const measuresXml: string[] = [];
+  let state = createInitialAbcPartRenderState(defaultFifths, beats, beatType, tempoBpm);
+  for (let i = 0; i < measureCount; i += 1) {
+    const measureNo = i + 1;
+    const measureContext = buildAbcPartMeasureRenderContext(part, i, state, beats, beatType);
+    const {
+      notes,
+      measureMeta,
+      hintedFifths,
+      hintedMeter,
+      hintedTempo,
+      nextState,
+      currentMeasureDurationDiv,
+      inferredImplicitPickup,
+    } = measureContext;
+    state = nextState;
+    measuresXml.push(
+      buildAbcRenderedPartMeasureXml({
+        part,
+        partIndex,
+        measureIndex: i,
+        measureNo,
+        notes,
+        measureMeta,
+        hintedFifths,
+        hintedMeter,
+        hintedTempo,
+        currentPartFifths: state.currentPartFifths,
+        currentPartMeter: state.currentPartMeter,
+        currentPartTempo: state.currentPartTempo,
+        currentMeasureDurationDiv,
+        inferredImplicitPickup,
+        debugMetadata,
+        sourceMetadata,
+        diagnostics,
+        abcSource,
+        buildMeasureNotesXml,
+      })
+    );
+  }
+  return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
+};
+
+const buildAbcPartListXml = (resolvedParts: AbcParsedPart[]): string => {
+  return resolvedParts
+    .map((part, index) => {
+      const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
+      return [
+        `<score-part id="${xmlEscape(part.partId)}">`,
+        `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
+        `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
+        `<midi-channel>${midiChannel}</midi-channel>`,
+        `<midi-program>6</midi-program>`,
+        "</midi-instrument>",
+        "</score-part>",
+      ].join("");
+    })
+    .join("");
+};
+
+const buildAbcPartBodyXml = (
+  resolvedParts: AbcParsedPart[],
+  measureCount: number,
+  defaultFifths: number,
+  beats: number,
+  beatType: number,
+  tempoBpm: number | null,
+  debugMetadata: boolean,
+  sourceMetadata: boolean,
+  diagnostics: AbcParsedResult["diagnostics"] | undefined,
+  abcSource: string,
+  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
+): string => {
+  return resolvedParts
+    .map((part, partIndex) =>
+      buildAbcPartXml(
+        part,
+        partIndex,
+        measureCount,
+        defaultFifths,
+        beats,
+        beatType,
+        tempoBpm,
+        debugMetadata,
+        sourceMetadata,
+        diagnostics,
+        abcSource,
+        buildMeasureNotesXml
+      )
+    )
+    .join("");
+};
+
+const buildAbcNoteHarmonyAndWordsDirectionXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
+  if (!note.chord && Array.isArray(note.chordSymbols) && note.chordSymbols.length > 0) {
+    for (const chordSymbol of note.chordSymbols) {
+      const harmonyXml = buildHarmonyXmlFromChordSymbol(chordSymbol);
+      if (harmonyXml) {
+        chunks.push(harmonyXml);
+      } else {
+        chunks.push(`<direction><direction-type><words>${xmlEscape(String(chordSymbol))}</words></direction-type></direction>`);
+      }
+    }
+  }
+  if (!note.chord && Array.isArray(note.annotations) && note.annotations.length > 0) {
+    for (const annotation of note.annotations) {
+      if (!annotation) continue;
+      chunks.push(`<direction><direction-type><words>${xmlEscape(String(annotation))}</words></direction-type></direction>`);
+    }
+  }
+  return chunks.join("");
+};
+
+const buildAbcNoteControlDirectionXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
+  if (!note.chord && note.segno) chunks.push("<direction><direction-type><segno/></direction-type></direction>");
+  if (!note.chord && note.coda) chunks.push("<direction><direction-type><coda/></direction-type></direction>");
+  if (!note.chord && note.rehearsalMark) {
+    chunks.push(`<direction><direction-type><rehearsal>${xmlEscape(String(note.rehearsalMark))}</rehearsal></direction-type></direction>`);
+  }
+  if (!note.chord && note.fine) chunks.push('<direction><sound fine="yes"/></direction>');
+  if (!note.chord && note.daCapo) chunks.push('<direction><sound dacapo="yes"/></direction>');
+  if (!note.chord && note.dalSegno) chunks.push('<direction><sound dalsegno="segno"/></direction>');
+  if (!note.chord && note.toCoda) chunks.push('<direction><sound tocoda="coda"/></direction>');
+  if (!note.chord && note.crescendoStart) chunks.push('<direction><direction-type><wedge type="crescendo"/></direction-type></direction>');
+  if (!note.chord && note.diminuendoStart) chunks.push('<direction><direction-type><wedge type="diminuendo"/></direction-type></direction>');
+  if (!note.chord && (note.crescendoStop || note.diminuendoStop)) {
+    chunks.push('<direction><direction-type><wedge type="stop"/></direction-type></direction>');
+  }
+  if (!note.chord && note.dynamicMark) {
+    chunks.push(`<direction><direction-type><dynamics><${xmlEscape(String(note.dynamicMark))}/></dynamics></direction-type></direction>`);
+  }
+  if (!note.chord && note.sfz) {
+    chunks.push("<direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>");
+  }
+  return chunks.join("");
+};
+
+const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
+  chunks.push(buildAbcNoteHarmonyAndWordsDirectionXml(note));
+  chunks.push(buildAbcNoteControlDirectionXml(note));
+  return chunks.join("");
+};
+
+const buildAbcNotePitchOrRestXml = (note: AbcParsedNote): string => {
+  if (note.isRest) {
+    return "<rest/>";
+  }
+  const step = /^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C";
+  const octave = Number.isFinite(note.octave) ? Math.max(0, Math.min(9, Math.round(note.octave as number))) : 4;
+  return [
+    "<pitch>",
+    `<step>${step}</step>`,
+    Number.isFinite(note.alter as number) && Number(note.alter) !== 0
+      ? `<alter>${Math.round(Number(note.alter))}</alter>`
+      : "",
+    `<octave>${octave}</octave>`,
+    "</pitch>",
+  ].join("");
+};
+
+const buildAbcNoteLyricXml = (note: AbcParsedNote): string => {
+  if (!note.lyricText) {
+    return "";
+  }
+  return `<lyric><syllabic>${xmlEscape(String(note.lyricSyllabic || "single"))}</syllabic><text>${xmlEscape(String(note.lyricText))}</text>${note.lyricExtend ? "<extend/>" : ""}</lyric>`;
+};
+
+const buildAbcNoteTimeModificationXml = (note: AbcParsedNote): string => {
+  if (
+    !(
+      note.timeModification &&
+      Number.isFinite(note.timeModification.actual) &&
+      Number.isFinite(note.timeModification.normal) &&
+      Number(note.timeModification.actual) > 0 &&
+      Number(note.timeModification.normal) > 0
+    )
+  ) {
+    return "";
+  }
+  return `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`;
+};
+
+const buildAbcNoteAccidentalXml = (note: AbcParsedNote): string => {
+  if (!note.accidentalText) {
+    return "";
+  }
+  const accidentalAttrs = [note.accidentalEditorial ? 'editorial="yes"' : "", note.accidentalCautionary ? 'cautionary="yes"' : ""]
+    .filter(Boolean)
+    .join(" ");
+  return accidentalAttrs
+    ? `<accidental ${accidentalAttrs}>${xmlEscape(String(note.accidentalText))}</accidental>`
+    : `<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`;
+};
+
+const buildAbcNoteCoreXml = (
+  note: AbcParsedNote,
+  noteIndex: number,
+  staffOverride: number | null,
+  beamXmlByNoteIndex: Map<number, string>
+): string => {
+  const chunks: string[] = [];
+  chunks.push("<note>");
+  if (note.chord) chunks.push("<chord/>");
+  if (note.grace) chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
+  chunks.push(buildAbcNotePitchOrRestXml(note));
+  if (!note.grace) {
+    const duration = Math.max(1, Math.round(Number(note.duration) || 1));
+    chunks.push(`<duration>${duration}</duration>`);
+  }
+  chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
+  if (staffOverride !== null || Number.isFinite(note.staff as number)) {
+    const staffNumber =
+      staffOverride !== null
+        ? staffOverride
+        : Math.max(1, Math.round(Number(note.staff) || 1));
+    chunks.push(`<staff>${staffNumber}</staff>`);
+  }
+  chunks.push(buildAbcNoteLyricXml(note));
+  chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
+  if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
+  chunks.push(buildAbcNoteTimeModificationXml(note));
+  chunks.push(buildAbcNoteAccidentalXml(note));
+  if (note.tieStart) chunks.push('<tie type="start"/>');
+  if (note.tieStop) chunks.push('<tie type="stop"/>');
+  return chunks.join("");
+};
+
+const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string => {
+  const chunks: string[] = [];
+  if (note.trill || note.trillLineStop) {
+    const trillParts: string[] = [];
+    if (note.trill) trillParts.push("<trill-mark/>");
+    if (note.trillLineStop) {
+      trillParts.push('<wavy-line type="stop"/>');
+    } else if (note.trillLineStart) {
+      trillParts.push('<wavy-line type="start"/>');
+    }
+    if (note.trillAccidentalText) trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
+    chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
+  }
+  if (note.turnType) {
+    const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
+    const slashAttr = note.turnSlash ? ' slash="yes"' : "";
+    chunks.push(`<ornaments><${tag}${slashAttr}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
+  }
+  if (note.mordentType) {
+    const tag = note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent";
+    chunks.push(`<ornaments><${tag}/></ornaments>`);
+  }
+  if (note.tremoloType) {
+    const marks = Math.max(1, Math.min(8, Math.round(Number(note.tremoloMarks) || 1)));
+    chunks.push(`<ornaments><tremolo type="${xmlEscape(String(note.tremoloType))}">${marks}</tremolo></ornaments>`);
+  }
+  if (note.glissandoStart) chunks.push('<glissando type="start" number="1">wavy</glissando>');
+  if (note.glissandoStop) chunks.push('<glissando type="stop" number="1">wavy</glissando>');
+  if (note.slideStart) chunks.push('<slide type="start" number="1"/>');
+  if (note.slideStop) chunks.push('<slide type="stop" number="1"/>');
+  if (note.schleifer) chunks.push("<ornaments><schleifer/></ornaments>");
+  if (note.shake) chunks.push("<ornaments><shake/></ornaments>");
+  if (note.arpeggiate) chunks.push("<arpeggiate/>");
+  return chunks.join("");
+};
+
+const buildAbcNoteArticulationsXml = (note: AbcParsedNote): string => {
+  const articulationParts: string[] = [];
+  if (note.staccato) articulationParts.push("<staccato/>");
+  if (note.staccatissimo) articulationParts.push("<staccatissimo/>");
+  if (note.accent) articulationParts.push("<accent/>");
+  if (note.tenuto) articulationParts.push("<tenuto/>");
+  if (note.stress) articulationParts.push("<stress/>");
+  if (note.unstress) articulationParts.push("<unstress/>");
+  if (note.strongAccent) articulationParts.push("<strong-accent/>");
+  if (note.breathMark) articulationParts.push("<breath-mark/>");
+  if (note.caesura) articulationParts.push("<caesura/>");
+  if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
+  return articulationParts.length > 0 ? `<articulations>${articulationParts.join("")}</articulations>` : "";
+};
+
+const buildAbcNoteTechnicalXml = (note: AbcParsedNote): string => {
+  const technicalParts: string[] = [];
+  if (note.upBow) technicalParts.push("<up-bow/>");
+  if (note.downBow) technicalParts.push("<down-bow/>");
+  if (note.doubleTongue) technicalParts.push("<double-tongue/>");
+  if (note.tripleTongue) technicalParts.push("<triple-tongue/>");
+  if (note.heel) technicalParts.push("<heel/>");
+  if (note.toe) technicalParts.push("<toe/>");
+  if (Array.isArray(note.fingerings) && note.fingerings.length > 0) for (const fingering of note.fingerings) if (fingering) technicalParts.push(`<fingering>${xmlEscape(String(fingering))}</fingering>`);
+  if (Array.isArray(note.strings) && note.strings.length > 0) for (const stringText of note.strings) if (stringText) technicalParts.push(`<string>${xmlEscape(String(stringText))}</string>`);
+  if (Array.isArray(note.plucks) && note.plucks.length > 0) for (const pluckText of note.plucks) if (pluckText) technicalParts.push(`<pluck>${xmlEscape(String(pluckText))}</pluck>`);
+  if (note.openString) technicalParts.push("<open-string/>");
+  if (note.snapPizzicato) technicalParts.push("<snap-pizzicato/>");
+  if (note.harmonic) technicalParts.push("<harmonic/>");
+  if (note.stopped) technicalParts.push("<stopped/>");
+  if (note.thumbPosition) technicalParts.push("<thumb-position/>");
+  return technicalParts.length > 0 ? `<technical>${technicalParts.join("")}</technical>` : "";
+};
+
+const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
+  if (
+    !(
+      note.tieStart || note.tieStop || note.slurStart || note.slurStop || note.trill || note.trillLineStop || note.turnType ||
+      note.delayedTurn || note.mordentType || note.tremoloType || note.glissandoStart || note.glissandoStop ||
+      note.slideStart || note.slideStop || note.schleifer || note.shake || note.arpeggiate || note.staccato ||
+      note.staccatissimo || note.accent || note.tenuto || note.stress || note.unstress || note.fermataType ||
+      note.strongAccent || note.breathMark || note.caesura || note.phraseMark || note.upBow || note.downBow ||
+      note.doubleTongue || note.tripleTongue || note.heel || note.toe ||
+      (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
+      (Array.isArray(note.strings) && note.strings.length > 0) ||
+      (Array.isArray(note.plucks) && note.plucks.length > 0) || note.openString || note.snapPizzicato ||
+      note.harmonic || note.stopped || note.thumbPosition || note.tupletStart || note.tupletStop
+    )
+  ) {
+    return "";
+  }
+  const chunks: string[] = [];
+  chunks.push("<notations>");
+  if (note.tieStart) chunks.push('<tied type="start"/>');
+  if (note.tieStop) chunks.push('<tied type="stop"/>');
+  if (note.slurStart) chunks.push('<slur type="start"/>');
+  if (note.slurStop) chunks.push('<slur type="stop"/>');
+  if (note.tupletStart) chunks.push('<tuplet type="start"/>');
+  if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
+  chunks.push(buildAbcNoteOrnamentsXml(note));
+  chunks.push(buildAbcNoteArticulationsXml(note));
+  chunks.push(buildAbcNoteTechnicalXml(note));
+  if (note.fermataType) chunks.push(`<fermata>${note.fermataType === "inverted" ? "inverted" : "normal"}</fermata>`);
+  chunks.push("</notations>");
+  return chunks.join("");
+};
+
+const buildAbcEmptyMeasureNotesXml = (
+  measureDurationDiv: number,
+  emptyMeasureRestType: string,
+  staffOverride: number | null
+): string => {
+  return `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type>${
+    staffOverride !== null ? `<staff>${staffOverride}</staff>` : ""
+  }</note>`;
+};
+
+const buildAbcBeamXmlByNoteIndex = (
+  notes: AbcParsedNote[],
+  beatDiv: number
+): Map<number, string> => {
+  const out = new Map<number, string>();
+  const levelFromType = (typeText: string): number => {
+    switch (String(typeText || "").trim().toLowerCase()) {
+      case "eighth":
+        return 1;
+      case "16th":
+        return 2;
+      case "32nd":
+        return 3;
+      case "64th":
+        return 4;
+      default:
+        return 0;
+    }
+  };
+  const byVoice = new Map<string, Array<{ note: AbcParsedNote; noteIndex: number }>>();
+  for (let i = 0; i < notes.length; i += 1) {
+    const note = notes[i];
+    const voice = normalizeVoiceForMusicXml(note.voice);
+    const bucket = byVoice.get(voice) ?? [];
+    bucket.push({ note, noteIndex: i });
+    byVoice.set(voice, bucket);
+  }
+  for (const events of byVoice.values()) {
+    const primary = events.filter((ev) => !ev.note?.chord);
+    if (!primary.length) continue;
+    const assignments = computeBeamAssignments(
+      primary,
+      beatDiv,
+      (ev) => {
+        const type = normalizeTypeForMusicXml(ev.note?.type);
+        return {
+          timed: true,
+          chord: !Boolean(ev.note?.isRest),
+          grace: Boolean(ev.note?.grace),
+          durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
+          levels: levelFromType(type),
+          explicitMode: ev.note?.beamMode,
+        };
+      },
+      { splitAtBeatBoundaryWhenImplicit: true }
+    );
+    for (const [eventIndex, assignment] of assignments.entries()) {
+      if (!assignment || assignment.levels <= 0) continue;
+      let beamXml = "";
+      for (let level = 1; level <= assignment.levels; level += 1) {
+        beamXml += `<beam number="${level}">${assignment.state}</beam>`;
+      }
+      if (!beamXml) continue;
+      const target = primary[eventIndex];
+      if (!target) continue;
+      out.set(target.noteIndex, beamXml);
+    }
+  }
+  return out;
+};
+
+const buildAbcNoteXml = (
+  note: AbcParsedNote,
+  noteIndex: number,
+  staffOverride: number | null,
+  beamXmlByNoteIndex: Map<number, string>
+): string => {
+  const chunks: string[] = [];
+  chunks.push(buildAbcNoteLeadingDirectionXml(note));
+  chunks.push(buildAbcNoteCoreXml(note, noteIndex, staffOverride, beamXmlByNoteIndex));
+  chunks.push(buildAbcNoteNotationsXml(note));
+  chunks.push("</note>");
+  return chunks.join("");
+};
+
+const buildAbcMeasureNotesXml = (
+  notes: AbcParsedNote[],
+  measureDurationDiv: number,
+  emptyMeasureRestType: string,
+  beatDiv: number,
+  staffOverride: number | null = null
+): string => {
+  if (!notes.length) {
+    return buildAbcEmptyMeasureNotesXml(measureDurationDiv, emptyMeasureRestType, staffOverride);
+  }
+  const beamXmlByNoteIndex = buildAbcBeamXmlByNoteIndex(notes, beatDiv);
+  return notes
+    .map((note, noteIndex) => buildAbcNoteXml(note, noteIndex, staffOverride, beamXmlByNoteIndex))
+    .join("");
+};
+
+const buildAbcParsedPartsFromLayout = (
+  scoreLayout: AbcScoreLayout,
+  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>
+): AbcParsedPart[] => {
+  return scoreLayout.groups.map((groupVoiceIds, index) => {
+    const primaryVoiceId = groupVoiceIds[0] || "1";
+    const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
+    const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
+    const part = buildAbcParsedPartBase(primary, index, partName);
+    if (groupVoiceIds.length <= 1) {
+      return part;
+    }
+    return {
+      ...part,
+      staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
+        const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
+        return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
+      }),
+    };
+  });
+};
+
+const createAbcVoiceStores = (): AbcVoiceStores => {
+  return {
+    measuresByVoice: {},
+    notationMeasureMetaByVoice: {},
+    activeEndingByVoice: {},
+    currentKeyFifthsByVoice: {},
+    meterByMeasureByVoice: {},
+    tempoByMeasureByVoice: {},
+  };
+};
+
+const ensureAbcVoiceMeasures = (
+  stores: AbcVoiceStores,
+  voiceId: string
+): AbcParsedNote[][] => {
+  if (!Object.prototype.hasOwnProperty.call(stores.measuresByVoice, voiceId)) {
+    stores.measuresByVoice[voiceId] = [[]];
+  }
+  return stores.measuresByVoice[voiceId];
+};
+
+const ensureAbcNotationMeasureMeta = (
+  stores: AbcVoiceStores,
+  voiceId: string,
+  measureNo: number
+): AbcMeasureMeta => {
+  if (!Object.prototype.hasOwnProperty.call(stores.notationMeasureMetaByVoice, voiceId)) {
+    stores.notationMeasureMetaByVoice[voiceId] = {};
+  }
+  if (!Object.prototype.hasOwnProperty.call(stores.notationMeasureMetaByVoice[voiceId], measureNo)) {
+    stores.notationMeasureMetaByVoice[voiceId][measureNo] = {
+      number: String(measureNo),
+      implicit: false,
+      repeatStart: false,
+      repeatEnd: false,
+      repeatTimes: null,
+      endingStart: "",
+      endingStop: "",
+      endingStopType: "",
+    };
+  }
+  return stores.notationMeasureMetaByVoice[voiceId][measureNo];
+};
+
+const ensureAbcMeterByMeasure = (
+  stores: AbcVoiceStores,
+  voiceId: string
+): Record<number, { beats: number; beatType: number }> => {
+  if (!Object.prototype.hasOwnProperty.call(stores.meterByMeasureByVoice, voiceId)) {
+    stores.meterByMeasureByVoice[voiceId] = {};
+  }
+  return stores.meterByMeasureByVoice[voiceId];
+};
+
+const ensureAbcTempoByMeasure = (
+  stores: AbcVoiceStores,
+  voiceId: string
+): Record<number, number> => {
+  if (!Object.prototype.hasOwnProperty.call(stores.tempoByMeasureByVoice, voiceId)) {
+    stores.tempoByMeasureByVoice[voiceId] = {};
+  }
+  return stores.tempoByMeasureByVoice[voiceId];
+};
+
+const finalizeAbcActiveEndings = (stores: AbcVoiceStores): void => {
+  for (const voiceId of Object.keys(stores.measuresByVoice)) {
+    const measures = stores.measuresByVoice[voiceId];
+    while (measures.length > 1 && measures[measures.length - 1].length === 0) {
+      measures.pop();
+    }
+    const activeEndingMarker = String(stores.activeEndingByVoice[voiceId] || "");
+    if (activeEndingMarker) {
+      const lastMeasureNo = measures.length;
+      if (lastMeasureNo >= 1) {
+        const measureMeta = ensureAbcNotationMeasureMeta(stores, voiceId, lastMeasureNo);
+        if (!measureMeta.endingStop) {
+          measureMeta.endingStop = activeEndingMarker;
+          measureMeta.endingStopType = "stop";
+        }
+      }
+    }
+  }
+};
+
+const applyAbcLyricsToMeasures = (
+  lyricEntriesByVoice: Record<string, AbcLyricEntry[]>,
+  measuresByVoice: Record<string, AbcParsedNote[][]>
+): void => {
+  for (const voiceId of Object.keys(lyricEntriesByVoice)) {
+    const measures = measuresByVoice[voiceId];
+    if (!Array.isArray(measures) || measures.length === 0) continue;
+    const lyricTargets: AbcParsedNote[] = [];
+    for (const measure of measures) {
+      for (const note of measure) {
+        if (note && !note.isRest && !note.grace && !note.chord) {
+          lyricTargets.push(note);
+        }
+      }
+    }
+    if (lyricTargets.length === 0) continue;
+    let cursor = 0;
+    for (const lyricEntry of lyricEntriesByVoice[voiceId]) {
+      const tokens = tokenizeAbcLyricLine(lyricEntry.text);
+      for (const token of tokens) {
+        if (cursor >= lyricTargets.length) break;
+        if (token.type === "skip") {
+          cursor += 1;
+          continue;
+        }
+        if (token.type === "extend") {
+          const target = lyricTargets[Math.max(0, cursor - 1)];
+          if (target) {
+            target.lyricExtend = true;
+          }
+          continue;
+        }
+        const target = lyricTargets[cursor];
+        if (target) {
+          target.lyricText = token.text;
+          target.lyricSyllabic = token.syllabic;
+        }
+        cursor += 1;
+      }
+    }
+  }
+};
+
+const applyAbcBodyField = (
+  fieldName: string,
+  fieldValue: string,
+  context: AbcBodyFieldContext
+): {
+  handled: boolean;
+  activeKeyFifths: number;
+  activeKeySignatureAccidentals: Record<string, number>;
+  activeUnitLength: Fraction;
+  activeMeter: { beats: number; beatType: number };
+  activeTempoBpm: number | null;
+  measureAccidentals: Record<string, number>;
+} => {
+  let activeKeyFifths = context.activeKeyFifths;
+  let activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+  let activeUnitLength = context.activeUnitLength;
+  let activeMeter = context.activeMeter;
+  let activeTempoBpm = context.activeTempoBpm;
+  let measureAccidentals = context.measureAccidentals;
+  if (fieldName === "K") {
+    const inlineKeyInfo = parseKey(fieldValue || "C", context.warnings);
+    activeKeyFifths = inlineKeyInfo.fifths;
+    activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
+    context.voiceStores.currentKeyFifthsByVoice[context.entryVoiceId] = activeKeyFifths;
+    context.keyHintFifthsByKey.set(`${context.entryVoiceId}#${context.currentMeasureNo}`, activeKeyFifths);
+    measureAccidentals = {};
+    return { handled: true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
+  }
+  if (fieldName === "L") {
+    activeUnitLength = parseFraction(fieldValue || "1/8", "L", context.warnings);
+    return { handled: true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
+  }
+  if (fieldName === "M") {
+    activeMeter = parseMeter(fieldValue || "4/4", context.warnings);
+    ensureAbcMeterByMeasure(context.voiceStores, context.entryVoiceId)[context.currentMeasureNo] = {
+      beats: activeMeter.beats,
+      beatType: activeMeter.beatType,
+    };
+    return { handled: true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
+  }
+  if (fieldName === "Q") {
+    activeTempoBpm = parseTempoFromQ(fieldValue || "", context.warnings);
+    if (Number.isFinite(activeTempoBpm)) {
+      ensureAbcTempoByMeasure(context.voiceStores, context.entryVoiceId)[context.currentMeasureNo] =
+        Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
+    }
+    return { handled: true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
+  }
+  return { handled: false, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
+};
+
+const processAbcBarlineEntry = (
+  barlineToken: AbcParsedBodyEntryToken["barlineToken"],
+  context: AbcBarlineEntryContext
+): boolean => {
+  const bareRepeatEndingMarker =
+    barlineToken.endsMeasure ? parseAbcBareRepeatEndingMarkerAt(context.text, barlineToken.nextIdx) : null;
+  if (barlineToken.repeatEnd) {
+    context.markRepeatEnd();
+  }
+  if (barlineToken.repeatStart) {
+    context.markRepeatStart();
+  }
+  if ((barlineToken.endingStop || bareRepeatEndingMarker) && context.activeEndingMarker) {
+    context.stopActiveEndingAtMeasure(context.currentMeasureNo);
+  }
+  if (barlineToken.endsMeasure && (context.currentMeasureLength > 0 || context.measuresLength === 0)) {
+    context.advanceToNextMeasure();
+  }
+  if (barlineToken.endsMeasure) {
+    context.clearMeasureAccidentals();
+    context.clearLastNote();
+  }
+  if (bareRepeatEndingMarker) {
+    return context.startEndingAtCurrentMeasure(bareRepeatEndingMarker.marker, bareRepeatEndingMarker.nextIdx);
+  }
+  context.idx = barlineToken.nextIdx;
+  context.resetBeamContext();
+  return true;
+};
+
+const processAbcNonPlayableBodyEntry = (
+  bodyEntry: AbcParsedBodyEntryToken | null,
+  context: AbcNonPlayableBodyEntryContext
+): boolean => {
+  if (!bodyEntry) {
+    return false;
+  }
+  if (bodyEntry.kind === "barline") {
+    return context.handleBarlineToken(bodyEntry.barlineToken);
+  }
+  if (bodyEntry.kind === "standalone-body-field") {
+    const { standaloneBodyField } = bodyEntry;
+    if (!context.applyBodyField(standaloneBodyField.fieldName, standaloneBodyField.fieldValue)) {
+      context.warnBody("Skipped unsupported standalone body field token: " + standaloneBodyField.token);
+    }
+    context.idx = standaloneBodyField.nextIdx;
+    return true;
+  }
+  if (bodyEntry.kind === "unsupported-body-token") {
+    const { unsupportedBodyToken } = bodyEntry;
+    context.warnBody("Skipped unsupported body token: " + unsupportedBodyToken.token);
+    context.idx = unsupportedBodyToken.nextIdx;
+    return true;
+  }
+  if (bodyEntry.kind === "unsupported-body-number") {
+    const { unsupportedBodyNumber } = bodyEntry;
+    context.warnBody("Skipped unsupported body number token: " + unsupportedBodyNumber.token);
+    context.idx = unsupportedBodyNumber.nextIdx;
+    return true;
+  }
+  return false;
+};
+
+const processAbcPlayableEvent = (
+  playableEvent: {
+    pitchSources: Array<{
+      pitchChar: string;
+      accidentalText: string;
+      octaveShift: number;
+      explicitNatural?: boolean;
+      accidentalKind?: "editorial" | "courtesy" | "";
+    }>;
+  },
+  context: AbcPlayableEventContext
+): boolean => {
+  if (context.timing.dur <= 0) {
+    context.warnBody(context.resolution.invalidLengthMessage);
+    return true;
+  }
+  const eventNotes = context.buildPlayableEventFromPitches(playableEvent.pitchSources, context.timing, {
+    octaveWarningMessage: context.resolution.octaveWarningMessage,
+    firstNoteOptions: context.resolution.firstNoteOptions,
+  });
+  if (eventNotes.length === 0) {
+    context.clearLastEventState();
+    return true;
+  }
+  context.commitPlayableEvent(eventNotes, context.resolution.commitOptions);
+  return true;
+};
+
+const buildAbcPlayableEventNotes = (
+  context: AbcPlayableEventBuildContext
+): any[] => {
+  const notes: any[] = [];
+  for (let pitchIndex = 0; pitchIndex < context.pitchSources.length; pitchIndex += 1) {
+    const note = context.buildPlayableNoteForBody(
+      context.pitchSources[pitchIndex],
+      context.timing.absoluteLength,
+      context.timing.dur,
+      context.octaveWarningMessage
+    );
+    if (!note) {
+      notes.length = 0;
+      break;
+    }
+    if (pitchIndex === 0) {
+      context.finalizePlayableEventStart(
+        note,
+        context.timing.dur,
+        context.timing.activeTuplet,
+        context.firstNoteOptions
+      );
+    } else {
+      note.chord = true;
+    }
+    notes.push(note);
+  }
+  return notes;
+};
+
+const processAbcSimpleBodyToken = (
+  bodyToken: any,
+  context: AbcSimpleBodyTokenHandlerContext
+): boolean => {
+  if (!bodyToken) {
+    return false;
+  }
+  const bodyTokenHandlers = {
+    "broken-rhythm": () => context.handleBrokenRhythmBodyToken(bodyToken),
+    "decoration": () => context.handleDecorationBodyToken(bodyToken, context.char),
+    "paren": () => context.handleParenBodyToken(bodyToken),
+    "quoted-string": () => context.handleQuotedStringBodyToken(bodyToken),
+    "single-char-shorthand": () => context.handleSingleCharShorthandBodyToken(bodyToken, context.char),
+    "slur-stop": () => context.handleSlurStopBodyToken(bodyToken),
+    "tie": () => context.handleTieBodyToken(bodyToken),
+  };
+  const handler = bodyTokenHandlers[bodyToken.kind];
+  return handler ? handler() : false;
+};
+
+const processAbcBracketBodyToken = (
+  bodyToken: any,
+  context: AbcBracketBodyTokenContext
+): boolean => {
+  if (!bodyToken || bodyToken.kind !== "bracket") {
+    return false;
+  }
+  const { bracketToken } = bodyToken;
+  if (bracketToken.kind === "inline-field") {
+    return context.handleInlineFieldBracketToken(bracketToken);
+  }
+  if (bracketToken.kind === "repeat-ending") {
+    return context.handleRepeatEndingBracketToken(bracketToken);
+  }
+  const playableEvent = parseAbcPlayableEventAt(context.text, context.idx);
+  return context.handlePlayableEvent(playableEvent, { fallbackToNextChar: true });
+};
+
+const processAbcGraceGroup = (
+  context: AbcGraceGroupContext
+): { handled: boolean; nextIdx: number } => {
+  if (context.char !== "{") {
+    return { handled: false, nextIdx: context.idx };
+  }
+  const graceResult = parseGraceGroupAt(
+    context.text,
+    context.idx,
+    context.lineNo,
+    context.activeUnitLength,
+    context.activeKeySignatureAccidentals,
+    context.measureAccidentals,
+    context.entryVoiceId,
+    context.warnings
+  );
+  if (!graceResult) {
+    context.warnBody("Failed to parse grace group; skipped.");
+    return { handled: true, nextIdx: context.idx + 1 };
+  }
+  context.appendGraceNotes(graceResult.notes);
+  return { handled: true, nextIdx: graceResult.nextIdx };
+};
+
+const processAbcBodyFallback = (
+  context: AbcBodyFallbackContext
+): boolean => {
+  const fallbackHandlers = [
+    () => context.handleClosingNotation(context.char),
+    () => context.handleUnsupportedPunctuation(context.char),
+  ];
+  for (const handler of fallbackHandlers) {
+    if (handler()) {
+      return true;
+    }
+  }
+  if (!context.bodyEntry) {
+    context.throwBodyParseError();
+  }
+  return false;
+};
+
+const applyAbcPendingStateToPlayableNote = (
+  context: AbcPendingPlayableNoteContext
+): void => {
+  const {
+    note,
+    options,
+    applyPendingOrnamentState,
+    applyPendingArticulationState,
+    applyPendingDirectionState,
+    applyPendingTechnicalState,
+    hasPendingTieToNext,
+    clearPendingTieToNext,
+    warnBody,
+  } = context;
+  const {
+    applySlurStart = true,
+    applyTieStop = true,
+    trillHint = "",
+  } = options;
+
+  applyPendingOrnamentState(note, { applySlurStart, trillHint });
+  applyPendingArticulationState(note);
+  applyPendingDirectionState(note);
+  applyPendingTechnicalState(note);
+
+  if (applyTieStop && hasPendingTieToNext() && !note.isRest) {
+    note.tieStop = true;
+    clearPendingTieToNext();
+  } else if (applyTieStop && note.isRest && hasPendingTieToNext()) {
+    warnBody("tie(-) was followed by a rest; tie removed.");
+    clearPendingTieToNext();
+  }
+};
+
+const applyAbcPendingNoteValue = (
+  context: AbcPendingNoteValueContext
+): void => {
+  if (!context.note.isRest && context.isPending) {
+    context.apply();
+    context.clear();
+  }
+};
+
+const applyAbcPendingNoteOptionalValue = (
+  context: AbcPendingNoteOptionalValueContext
+): void => {
+  if (!context.note.isRest && !context.isEmpty(context.value)) {
+    context.apply(context.value);
+    context.clear();
+  }
+};
+
+const applyAbcPendingNoteArray = (
+  context: AbcPendingNoteArrayContext
+): void => {
+  if (!context.note.isRest && context.values.length > 0) {
+    context.apply(context.values);
+    context.clear();
+  }
 };
 
 const fifthsFromAbcKey = (raw: string): number | null => {
@@ -177,6 +2462,261 @@ if (typeof window !== "undefined") {
 
 const abcCommon = AbcCommon;
 
+const TRILL_DECORATIONS = new Set(["trill", "tr", "triller"]);
+const TURN_DECORATIONS = new Set(["turn"]);
+const TURN_SLASH_DECORATIONS = new Set(["turnx"]);
+const INVERTED_TURN_DECORATIONS = new Set(["invertedturn", "inverted-turn", "lowerturn"]);
+const INVERTED_TURN_SLASH_DECORATIONS = new Set(["invertedturnx", "inverted-turnx"]);
+const LOWER_MORDENT_DECORATIONS = new Set(["mordent", "lowermordent"]);
+const UPPER_MORDENT_DECORATIONS = new Set([
+  "pralltriller",
+  "pralltrill",
+  "prall",
+  "uppermordent",
+  "invertedmordent",
+  "inverted-mordent",
+]);
+const GLISS_START_DECORATIONS = new Set(["gliss-start", "glissando-start"]);
+const GLISS_STOP_DECORATIONS = new Set(["gliss-stop", "glissando-stop"]);
+const SLIDE_START_DECORATIONS = new Set(["slide", "slide-start"]);
+const ARPEGGIATE_DECORATIONS = new Set(["roll", "arpeggio", "arpeggiate"]);
+const STACCATO_DECORATIONS = new Set(["staccato", "stacc", "stac"]);
+const STACCATISSIMO_DECORATIONS = new Set(["staccatissimo", "wedge", "spiccato"]);
+const ACCENT_DECORATIONS = new Set(["accent", ">", "emphasis"]);
+const INVERTED_FERMATA_DECORATIONS = new Set(["invertedfermata", "inverted-fermata", "inverted fermata"]);
+const STRONG_ACCENT_DECORATIONS = new Set(["marcato", "strongaccent", "strong-accent", "strong accent"]);
+const BREATH_DECORATIONS = new Set(["breath", "breath-mark", "breathmark", "breath mark"]);
+const PHRASE_DECORATIONS = new Set(["shortphrase", "mediumphrase", "longphrase"]);
+const DACAPO_DECORATIONS = new Set(["dacapo", "da-capo", "da capo", "d.c."]);
+const DALSEGNO_DECORATIONS = new Set(["dalsegno", "dal-segno", "dal segno", "d.s."]);
+const TOCODA_DECORATIONS = new Set(["tocoda", "to-coda", "to coda"]);
+const CRESC_START_DECORATIONS = new Set(["crescendo(", "cresc(", "<("]);
+const CRESC_STOP_DECORATIONS = new Set(["crescendo)", "cresc)", "<)"]);
+const DIM_START_DECORATIONS = new Set(["diminuendo(", "decrescendo(", "dim(", "decresc(", ">("]);
+const DIM_STOP_DECORATIONS = new Set(["diminuendo)", "decrescendo)", "dim)", "decresc)", ">)"]);
+const DYNAMIC_DECORATIONS = new Set(["pppp", "ppp", "p", "pp", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp"]);
+const UPBOW_DECORATIONS = new Set(["upbow", "up-bow", "up bow"]);
+const DOWNBOW_DECORATIONS = new Set(["downbow", "down-bow", "down bow"]);
+const DOUBLE_TONGUE_DECORATIONS = new Set(["doubletongue", "double-tongue", "double tongue"]);
+const TRIPLE_TONGUE_DECORATIONS = new Set(["tripletongue", "triple-tongue", "triple tongue"]);
+const OPEN_STRING_DECORATIONS = new Set(["open", "open-string", "openstring", "open string"]);
+const SNAP_PIZZICATO_DECORATIONS = new Set(["snap", "snap-pizzicato", "snappizzicato", "snap pizzicato"]);
+const STOPPED_DECORATIONS = new Set(["stopped", "+", "plus", "stopped horn", "stopped-horn"]);
+const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-position", "thumbpos", "thumb pos", "thumb position"]);
+
+  function tokenizeAbcLyricLine(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return [];
+    const chunks = raw
+      .replace(/\|/g, " ")
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    const tokens = [];
+    let pendingHyphenWord = false;
+    for (const chunk of chunks) {
+      if (chunk === "*") {
+        tokens.push({ type: "skip" });
+        continue;
+      }
+      if (chunk === "_") {
+        tokens.push({ type: "extend" });
+        continue;
+      }
+      const normalized = chunk.replace(/~/g, " ");
+      if (normalized.endsWith("-") && normalized.length > 1) {
+        tokens.push({
+          type: "text",
+          text: normalized.slice(0, -1),
+          syllabic: pendingHyphenWord ? "middle" : "begin"
+        });
+        pendingHyphenWord = true;
+        continue;
+      }
+      const parts = normalized.split("-").filter((part) => part.length > 0);
+      if (parts.length <= 1) {
+        tokens.push({
+          type: "text",
+          text: normalized,
+          syllabic: pendingHyphenWord ? "end" : "single"
+        });
+        pendingHyphenWord = false;
+        continue;
+      }
+      for (let i = 0; i < parts.length; i += 1) {
+        const syllabic =
+          i === 0
+            ? "begin"
+            : (i === parts.length - 1 ? "end" : "middle");
+        tokens.push({ type: "text", text: parts[i], syllabic });
+      }
+      pendingHyphenWord = false;
+    }
+    return tokens;
+  }
+
+  function splitBodyTextByInlineVoice(text, initialVoiceId) {
+    const segments = [];
+    let activeVoiceId = String(initialVoiceId || "1").trim() || "1";
+    let buffer = "";
+    const raw = String(text || "");
+    let idx = 0;
+    while (idx < raw.length) {
+      if (raw[idx] === "[") {
+        const bracketToken = parseAbcBracketTokenAt(raw, idx);
+        if (bracketToken.kind === "inline-field" && bracketToken.inlineField.fieldName === "V") {
+          const { inlineField } = bracketToken;
+          if (buffer.trim()) {
+            segments.push({ voiceId: activeVoiceId, text: buffer });
+          }
+          buffer = "";
+          const voiceMatch = String(inlineField.fieldValue || "").match(/^(\S+)/);
+          if (voiceMatch) {
+            activeVoiceId = voiceMatch[1];
+          } else {
+            buffer += raw.slice(idx, inlineField.nextIdx);
+          }
+          idx = inlineField.nextIdx;
+          continue;
+        }
+      }
+      buffer += raw[idx];
+      idx += 1;
+    }
+    if (buffer.trim()) {
+      segments.push({ voiceId: activeVoiceId, text: buffer });
+    }
+    return {
+      segments,
+      finalVoiceId: activeVoiceId,
+    };
+  }
+
+  function splitBodyTextByOverlay(text, baseVoiceId) {
+    const raw = String(text || "");
+    const normalizedBaseVoiceId = String(baseVoiceId || "1").trim() || "1";
+    const overlayBuffers = [""];
+    let completedMeasureSkeleton = "";
+    let activeOverlayIndex = 0;
+    let idx = 0;
+
+    const ensureOverlayBuffer = (overlayIndex) => {
+      while (overlayBuffers.length <= overlayIndex) {
+        overlayBuffers.push(completedMeasureSkeleton);
+      }
+    };
+
+    while (idx < raw.length) {
+      const ch = raw[idx];
+
+      if (ch === '"') {
+        const token = parseAbcDelimitedSpanAt(raw, idx, '"');
+        if (!token) {
+          idx += 1;
+          continue;
+        }
+        ensureOverlayBuffer(activeOverlayIndex);
+        overlayBuffers[activeOverlayIndex] += token.text;
+        idx = token.nextIdx;
+        continue;
+      }
+
+      if (ch === "!" || ch === "+") {
+        const token = parseAbcDelimitedSpanAt(raw, idx, ch);
+        if (!token) {
+          idx += 1;
+          continue;
+        }
+        ensureOverlayBuffer(activeOverlayIndex);
+        overlayBuffers[activeOverlayIndex] += token.text;
+        idx = token.nextIdx;
+        continue;
+      }
+
+      const barlineToken = parseAbcBarlineTokenAt(raw, idx);
+      if (barlineToken) {
+        const tokenText = raw.slice(idx, barlineToken.nextIdx);
+        if (barlineToken.endsMeasure) {
+          for (let overlayIndex = 0; overlayIndex < overlayBuffers.length; overlayIndex += 1) {
+            ensureOverlayBuffer(overlayIndex);
+            overlayBuffers[overlayIndex] += tokenText;
+          }
+          completedMeasureSkeleton += tokenText;
+          activeOverlayIndex = 0;
+        } else {
+          ensureOverlayBuffer(activeOverlayIndex);
+          overlayBuffers[activeOverlayIndex] += tokenText;
+        }
+        idx = barlineToken.nextIdx;
+        continue;
+      }
+
+      if (ch === "&") {
+        activeOverlayIndex += 1;
+        ensureOverlayBuffer(activeOverlayIndex);
+        idx += 1;
+        continue;
+      }
+
+      ensureOverlayBuffer(activeOverlayIndex);
+      overlayBuffers[activeOverlayIndex] += ch;
+      idx += 1;
+    }
+
+    return overlayBuffers
+      .map((segmentText, overlayIndex) => ({
+        voiceId: overlayIndex === 0 ? normalizedBaseVoiceId : `${normalizedBaseVoiceId}_ov${overlayIndex + 1}`,
+        overlayIndex,
+        text: segmentText,
+      }))
+      .filter((segment) => segment.text.trim().length > 0);
+  }
+
+  function parseUserDefinedDecoration(rawValue) {
+    const text = String(rawValue || "").trim();
+    const match = text.match(/^(\S)(?:\s*=\s*|\s+)(.+)$/);
+    if (!match) return null;
+    const symbol = String(match[1] || "");
+    const rhs = String(match[2] || "").trim();
+    if (!symbol || !rhs) return null;
+    const wrapped = rhs.match(/^[!+](.+)[!+]$/);
+    const decoration = String(wrapped ? wrapped[1] : rhs).trim();
+    if (!decoration) return null;
+    return { symbol, decoration };
+  }
+
+  function expandUserDefinedDecorationSymbols(text, userDefinedDecorationBySymbol) {
+    const raw = String(text || "");
+    const symbolMap = userDefinedDecorationBySymbol || {};
+    if (!raw || Object.keys(symbolMap).length === 0) {
+      return raw;
+    }
+    let out = "";
+    let idx = 0;
+    while (idx < raw.length) {
+      const ch = raw[idx];
+      if (ch === '"' || ch === "!" || ch === "+") {
+        const token = parseAbcDelimitedSpanAt(raw, idx, ch);
+        if (!token) {
+          out += ch;
+          idx += 1;
+          continue;
+        }
+        out += token.text;
+        idx = token.nextIdx;
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(symbolMap, ch)) {
+        out += `!${String(symbolMap[ch])}!`;
+        idx += 1;
+        continue;
+      }
+      out += ch;
+      idx += 1;
+    }
+    return out;
+  }
+
   function parseTempoFromQ(rawQ, warnings) {
     const raw = String(rawQ || "").trim();
     if (!raw) {
@@ -222,152 +2762,58 @@ const abcCommon = AbcCommon;
     const measureMetaByKey = new Map();
     const transposeHintByVoiceId = new Map();
     const headers = {};
-    const bodyEntries = [];
-    const declaredVoiceIds = [];
-    const voiceNameById = {};
-    const voiceClefById = {};
-    const voiceTransposeById = {};
-    let currentVoiceId = "1";
-    let scoreDirective = "";
+    const bodyEntries: AbcImportBodyEntry[] = [];
+    const lyricEntriesByVoice = {};
+    const voiceRegistry: AbcImportVoiceRegistry = {
+      declaredVoiceIds: [],
+      voiceNameById: {},
+      voiceClefById: {},
+      voiceTransposeById: {},
+    };
+    const userDefinedDecorationBySymbol = {};
+    const supportedStandaloneBodyFieldNames = new Set(["K", "L", "M", "Q"]);
+    const lineState: AbcImportLineState = {
+      currentVoiceId: "1",
+      scoreDirective: "",
+      bodyStarted: false,
+      pendingUnsupportedContinuedFieldName: "",
+    };
+
+    function pushBodyText(rawBodyText, lineNo, voiceId) {
+      const result = appendAbcBodyTextEntries(
+        rawBodyText,
+        lineNo,
+        voiceId,
+        voiceRegistry,
+        bodyEntries,
+        splitBodyTextByInlineVoice,
+        splitBodyTextByOverlay
+      );
+      if (result.appended) {
+        lineState.bodyStarted = true;
+      }
+      lineState.currentVoiceId = result.finalVoiceId;
+    }
 
     for (let i = 0; i < lines.length; i += 1) {
       const lineNo = i + 1;
-      const raw = lines[i];
-      const rawTrimmed = raw.trim();
-      const metaMatch = rawTrimmed.match(/^%@mks\s+trill\s+(.+)$/i);
-      if (metaMatch) {
-        const params = {};
-        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
-        let kv;
-        while ((kv = kvRegex.exec(metaMatch[1])) !== null) {
-          params[String(kv[1]).toLowerCase()] = String(kv[2]);
-        }
-        const voiceId = String(params.voice || "").trim();
-        const measureNo = Number.parseInt(String(params.measure || ""), 10);
-        const eventNo = Number.parseInt(String(params.event || ""), 10);
-        const upper = String(params.upper || "").trim();
-        if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(eventNo) && eventNo > 0 && upper) {
-          trillWidthHintByKey.set(`${voiceId}#${measureNo}#${eventNo}`, upper);
-        }
-        continue;
-      }
-      const keyMetaMatch = rawTrimmed.match(/^%@mks\s+key\s+(.+)$/i);
-      if (keyMetaMatch) {
-        const params = {};
-        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
-        let kv;
-        while ((kv = kvRegex.exec(keyMetaMatch[1])) !== null) {
-          params[String(kv[1]).toLowerCase()] = String(kv[2]);
-        }
-        const voiceId = String(params.voice || "").trim();
-        const measureNo = Number.parseInt(String(params.measure || ""), 10);
-        const fifths = Number.parseInt(String(params.fifths || ""), 10);
-        if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(fifths)) {
-          const key = `${voiceId}#${measureNo}`;
-          if (!keyHintFifthsByKey.has(key)) {
-            keyHintFifthsByKey.set(key, Math.max(-7, Math.min(7, Math.round(fifths))));
-          }
-        }
-        continue;
-      }
-      const measureMetaMatch = rawTrimmed.match(/^%@mks\s+measure\s+(.+)$/i);
-      if (measureMetaMatch) {
-        const params = {};
-        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
-        let kv;
-        while ((kv = kvRegex.exec(measureMetaMatch[1])) !== null) {
-          params[String(kv[1]).toLowerCase()] = String(kv[2]);
-        }
-        const voiceId = String(params.voice || "").trim();
-        const measureNo = Number.parseInt(String(params.measure || ""), 10);
-        if (voiceId && Number.isFinite(measureNo) && measureNo > 0) {
-          const measureNumberText = String(params.number || "").trim();
-          const implicitRaw = String(params.implicit || "").trim().toLowerCase();
-          const repeatRaw = String(params.repeat || "").trim().toLowerCase();
-          const repeatTimesRaw = Number.parseInt(String(params.times || ""), 10);
-          measureMetaByKey.set(`${voiceId}#${measureNo}`, {
-            number: measureNumberText || String(measureNo),
-            implicit: implicitRaw === "1" || implicitRaw === "true" || implicitRaw === "yes",
-            repeat:
-              repeatRaw === "forward" || repeatRaw === "backward"
-                ? repeatRaw
-                : "",
-            repeatTimes: Number.isFinite(repeatTimesRaw) && repeatTimesRaw > 1 ? repeatTimesRaw : null
-          });
-        }
-        continue;
-      }
-      const transposeMetaMatch = rawTrimmed.match(/^%@mks\s+transpose\s+(.+)$/i);
-      if (transposeMetaMatch) {
-        const params = {};
-        const kvRegex = /([A-Za-z][A-Za-z0-9_-]*)=([^\s]+)/g;
-        let kv;
-        while ((kv = kvRegex.exec(transposeMetaMatch[1])) !== null) {
-          params[String(kv[1]).toLowerCase()] = String(kv[2]);
-        }
-        const voiceId = String(params.voice || "").trim();
-        const chromatic = Number.parseInt(String(params.chromatic || ""), 10);
-        const diatonic = Number.parseInt(String(params.diatonic || ""), 10);
-        if (voiceId && (Number.isFinite(chromatic) || Number.isFinite(diatonic))) {
-          const metaTranspose: { chromatic?: number; diatonic?: number } = {};
-          if (Number.isFinite(chromatic)) metaTranspose.chromatic = chromatic;
-          if (Number.isFinite(diatonic)) metaTranspose.diatonic = diatonic;
-          if (Object.keys(metaTranspose).length > 0) {
-            transposeHintByVoiceId.set(voiceId, metaTranspose);
-          }
-        }
-        continue;
-      }
-      const noComment = raw.split("%")[0];
-      const trimmed = noComment.trim();
-
-      if (!trimmed) {
-        continue;
-      }
-
-      const scoreMatch = trimmed.match(/^%%\s*score\s+(.+)$/i);
-      if (scoreMatch) {
-        scoreDirective = scoreMatch[1].trim();
-        continue;
-      }
-
-      const headerMatch = trimmed.match(/^([A-Za-z]):\s*(.*)$/);
-      if (headerMatch && /^[A-Za-z]$/.test(headerMatch[1])) {
-        const key = headerMatch[1];
-        const value = headerMatch[2].trim();
-        if (key === "V") {
-          const m = value.match(/^(\S+)\s*(.*)$/);
-          if (!m) {
-            continue;
-          }
-          currentVoiceId = m[1];
-          if (!declaredVoiceIds.includes(currentVoiceId)) {
-            declaredVoiceIds.push(currentVoiceId);
-          }
-          const rest = m[2].trim();
-          const parsedVoice = parseVoiceDirectiveTail(rest);
-          if (parsedVoice.name) {
-            voiceNameById[currentVoiceId] = parsedVoice.name;
-          }
-          if (parsedVoice.clef) {
-            voiceClefById[currentVoiceId] = parsedVoice.clef;
-          }
-          if (parsedVoice.transpose) {
-            voiceTransposeById[currentVoiceId] = parsedVoice.transpose;
-          }
-          if (parsedVoice.bodyText) {
-            bodyEntries.push({ text: parsedVoice.bodyText, lineNo, voiceId: currentVoiceId });
-          }
-          continue;
-        }
-        headers[key] = value;
-        continue;
-      }
-
-      if (!declaredVoiceIds.includes(currentVoiceId)) {
-        declaredVoiceIds.push(currentVoiceId);
-      }
-      bodyEntries.push({ text: noComment, lineNo, voiceId: currentVoiceId });
+      processAbcImportLine(lines[i], lineNo, {
+        lineState,
+        warnings,
+        headers,
+        lyricEntriesByVoice,
+        supportedStandaloneBodyFieldNames,
+        voiceRegistry,
+        userDefinedDecorationBySymbol,
+        trillWidthHintByKey,
+        keyHintFifthsByKey,
+        measureMetaByKey,
+        transposeHintByVoiceId,
+        pushBodyText,
+        parseVoiceDirectiveTail,
+        parseUserDefinedDecoration,
+        expandUserDefinedDecorationSymbols,
+      });
     }
 
     if (bodyEntries.length === 0) {
@@ -379,26 +2825,80 @@ const abcCommon = AbcCommon;
     const keyInfo = parseKey(headers.K || "C", warnings);
     const tempoBpm = parseTempoFromQ(headers.Q || "", warnings);
     const keySignatureAccidentals = keySignatureAlterByStep(keyInfo.fifths);
-    const measuresByVoice = {};
+    const voiceStores = createAbcVoiceStores();
     let noteCount = 0;
 
-    function ensureVoice(voiceId) {
-      if (!Object.prototype.hasOwnProperty.call(measuresByVoice, voiceId)) {
-        measuresByVoice[voiceId] = [[]];
-      }
-      return measuresByVoice[voiceId];
-    }
-
     for (const entry of bodyEntries) {
-      const measures = ensureVoice(entry.voiceId);
+      const measures = ensureAbcVoiceMeasures(voiceStores, entry.voiceId);
       let currentMeasure = measures[measures.length - 1];
       let measureAccidentals = {};
+      let activeUnitLength = unitLength;
+      let activeMeter = meter;
+      let activeTempoBpm = Number.isFinite(tempoBpm) ? Number(tempoBpm) : null;
+      let activeKeyFifths = Number.isFinite(voiceStores.currentKeyFifthsByVoice[entry.voiceId])
+        ? Number(voiceStores.currentKeyFifthsByVoice[entry.voiceId])
+        : keyInfo.fifths;
+      let activeKeySignatureAccidentals = keySignatureAlterByStep(activeKeyFifths);
       let lastNote = null;
       let lastEventNotes = [];
       let pendingTieToNext = false;
       let pendingTrill = false;
+      let pendingTrillLineStart = false;
+      let pendingTrillLineStop = false;
       let pendingTurn: "" | "turn" | "inverted-turn" = "";
+      let pendingTurnSlash = false;
+      let pendingDelayedTurn = false;
+      let pendingMordent: "" | "mordent" | "inverted-mordent" = "";
+      let pendingTremolo: { type: "single" | "start" | "stop"; marks: number } | null = null;
+      let pendingGlissandoStart = false;
+      let pendingGlissandoStop = false;
+      let pendingSlideStart = false;
+      let pendingSlideStop = false;
+      let pendingSchleifer = false;
+      let pendingShake = false;
+      let pendingArpeggiate = false;
       let pendingStaccato = false;
+      let pendingStaccatissimo = false;
+      let pendingAccent = false;
+      let pendingTenuto = false;
+      let pendingStress = false;
+      let pendingUnstress = false;
+      let pendingFermata: "" | "normal" | "inverted" = "";
+      let pendingStrongAccent = false;
+      let pendingBreathMark = false;
+      let pendingCaesura = false;
+      let pendingPhraseMark: "" | "shortphrase" | "mediumphrase" | "longphrase" = "";
+      let pendingSegno = false;
+      let pendingCoda = false;
+      let pendingFine = false;
+      let pendingDaCapo = false;
+      let pendingDalSegno = false;
+      let pendingToCoda = false;
+      let pendingCrescendoStart = false;
+      let pendingCrescendoStop = false;
+      let pendingDiminuendoStart = false;
+      let pendingDiminuendoStop = false;
+      let pendingDynamicMark: "" | "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff" | "fp" | "fz" | "rfz" | "sf" | "sfp" = "";
+      let pendingSfz = false;
+      let pendingRehearsalMark = "";
+      let pendingUpBow = false;
+      let pendingDownBow = false;
+      let pendingOpenString = false;
+      let pendingSnapPizzicato = false;
+      let pendingHarmonic = false;
+      let pendingStopped = false;
+      let pendingThumbPosition = false;
+      let pendingEditorialAccidental = false;
+      let pendingCourtesyAccidental = false;
+      let pendingDoubleTongue = false;
+      let pendingTripleTongue = false;
+      let pendingHeel = false;
+      let pendingToe = false;
+      let pendingFingerings: string[] = [];
+      let pendingStrings: string[] = [];
+      let pendingPlucks: string[] = [];
+      let pendingChordSymbols: string[] = [];
+      let pendingAnnotations: string[] = [];
       let pendingSlurStart = 0;
       let pendingRhythmScale = null;
       let tupletRemaining = 0;
@@ -406,315 +2906,495 @@ const abcCommon = AbcCommon;
       let tupletSpec = null;
       let currentMeasureNo = Math.max(1, measures.length);
       let currentEventNo = 0;
+      let beamRunActive = false;
+      let sawInterEventWhitespace = false;
+      let beamCursorDiv = 0;
+      let activeEndingMarker = String(voiceStores.activeEndingByVoice[entry.voiceId] || "");
       let idx = 0;
       const text = entry.text;
 
-      while (idx < text.length) {
-        const ch = text[idx];
+      const warnBody = (message) => {
+        warnings.push("line " + entry.lineNo + ": " + message);
+      };
 
-        if (ch === " " || ch === "\t") {
-          idx += 1;
-          continue;
-        }
+      // Field and decoration application.
+      const applyBodyField = (fieldName, fieldValue) => {
+        const result = applyAbcBodyField(fieldName, fieldValue, {
+          warnings,
+          voiceStores,
+          entryVoiceId: entry.voiceId,
+          currentMeasureNo,
+          keyHintFifthsByKey,
+          activeKeyFifths,
+          activeUnitLength,
+          activeMeter,
+          activeTempoBpm,
+          measureAccidentals,
+        });
+        activeKeyFifths = result.activeKeyFifths;
+        activeKeySignatureAccidentals = result.activeKeySignatureAccidentals;
+        activeUnitLength = result.activeUnitLength;
+        activeMeter = result.activeMeter;
+        activeTempoBpm = result.activeTempoBpm;
+        measureAccidentals = result.measureAccidentals;
+        return result.handled;
+      };
 
-        if (ch === "," || ch === "'") {
-          // Lenient compatibility: some real-world sources include standalone octave marks.
-          // They are non-standard in strict ABC, but skipping them improves interoperability.
-          idx += 1;
-          continue;
-        }
-
-        if (ch === "|" || ch === ":") {
-          if (ch === "|" && (currentMeasure.length > 0 || measures.length === 0)) {
-            currentMeasure = [];
-            measures.push(currentMeasure);
-            currentMeasureNo = Math.max(1, measures.length);
-            currentEventNo = 0;
+      const applyPrefixedDecoration = (rawDecoration, decoration) => {
+        if (decoration.startsWith("rehearsal:")) {
+          const rehearsalText = rawDecoration.slice("rehearsal:".length).trim();
+          if (rehearsalText) {
+            pendingRehearsalMark = rehearsalText;
           }
-          if (ch === "|") {
-            measureAccidentals = {};
-            lastNote = null;
-          }
-          idx += 1;
-          continue;
+          return true;
         }
-
-        if (ch === ">" || ch === "<") {
-          if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
-            warnings.push("line " + entry.lineNo + ": broken rhythm(" + ch + ")  has no preceding note; skipped.");
-            idx += 1;
-            continue;
+        if (decoration.startsWith("fingering:")) {
+          const fingeringText = rawDecoration.slice("fingering:".length).trim();
+          if (fingeringText) {
+            pendingFingerings.push(fingeringText);
           }
-          const lastScale = ch === ">" ? { num: 3, den: 2 } : { num: 1, den: 2 };
-          pendingRhythmScale = ch === ">" ? { num: 1, den: 2 } : { num: 3, den: 2 };
-          scaleNotesDuration(lastEventNotes, lastScale);
-          idx += 1;
-          continue;
+          return true;
         }
-
-        if (ch === "(") {
-          const tupletMatch = text.slice(idx).match(/^\((\d)(?::(\d))?(?::(\d))?/);
-          if (tupletMatch) {
-            const n = Number(tupletMatch[1] || 0);
-            const qRaw = tupletMatch[2] ? Number(tupletMatch[2]) : NaN;
-            const rRaw = tupletMatch[3] ? Number(tupletMatch[3]) : NaN;
-            const q = Number.isFinite(qRaw) && qRaw > 0 ? qRaw : (n === 3 ? 2 : n);
-            const r = Number.isFinite(rRaw) && rRaw > 0 ? rRaw : n;
-            if (n > 0 && q > 0 && r > 0) {
-              tupletScale = { num: q, den: n };
-              tupletRemaining = r;
-              tupletSpec = { actual: n, normal: q, remaining: r };
-            } else {
-              warnings.push("line " + entry.lineNo + ": Failed to parse tuplet notation: " + tupletMatch[0]);
-            }
-            idx += tupletMatch[0].length;
-            continue;
+        if (decoration.startsWith("string:")) {
+          const stringText = rawDecoration.slice("string:".length).trim();
+          if (stringText) {
+            pendingStrings.push(stringText);
           }
-          pendingSlurStart += 1;
-          idx += 1;
-          continue;
+          return true;
         }
-
-        if (ch === "-") {
-          if (lastNote && !lastNote.isRest) {
-            lastNote.tieStart = true;
-            pendingTieToNext = true;
-          } else {
-            warnings.push("line " + entry.lineNo + ": tie(-)  has no preceding note; skipped.");
+        if (decoration.startsWith("pluck:")) {
+          const pluckText = rawDecoration.slice("pluck:".length).trim();
+          if (pluckText) {
+            pendingPlucks.push(pluckText);
           }
-          idx += 1;
-          continue;
+          return true;
         }
+        return false;
+      };
 
-        if (ch === "\"") {
-          const endQuote = text.indexOf("\"", idx + 1);
-          if (endQuote >= 0) {
-            idx = endQuote + 1;
-          } else {
-            idx = text.length;
-          }
-          warnings.push("line " + entry.lineNo + ': Skipped inline string ("...").');
-          continue;
+      const applyTurnDecoration = (decoration) => {
+        if (decoration === "delayedturn" || decoration === "delayed-turn") {
+          pendingTurn = pendingTurn || "turn";
+          pendingDelayedTurn = true;
+          return true;
         }
+        if (decoration === "delayedinvertedturn" || decoration === "delayed-inverted-turn") {
+          pendingTurn = "inverted-turn";
+          pendingDelayedTurn = true;
+          return true;
+        }
+        const turnDecorationAppliers = [
+          [TURN_DECORATIONS, "turn", false],
+          [TURN_SLASH_DECORATIONS, "turn", true],
+          [INVERTED_TURN_DECORATIONS, "inverted-turn", false],
+          [INVERTED_TURN_SLASH_DECORATIONS, "inverted-turn", true],
+        ];
+        const matchedTurn = turnDecorationAppliers.find(([decorationSet]) => decorationSet.has(decoration));
+        if (!matchedTurn) {
+          return false;
+        }
+        pendingTurn = matchedTurn[1];
+        pendingTurnSlash = matchedTurn[2];
+        return true;
+      };
 
-        if (ch === "!" || ch === "+") {
-          const endMark = text.indexOf(ch, idx + 1);
-          if (endMark < 0) {
-            idx += 1;
-            warnings.push("line " + entry.lineNo + ": Unterminated decoration marker: " + ch);
-            continue;
-          }
-          const decoration = text.slice(idx + 1, endMark).trim().toLowerCase();
-          if (decoration === "trill" || decoration === "tr" || decoration === "triller") {
+      const applyTremoloDecoration = (decoration) => {
+        const matched = decoration.match(/^tremolo-(single|start|stop)-([1-9]\d*)$/);
+        if (!matched) {
+          return false;
+        }
+        pendingTremolo = {
+          type: matched[1] as "single" | "start" | "stop",
+          marks: Math.max(1, Math.min(8, Number.parseInt(matched[2], 10) || 1))
+        };
+        return true;
+      };
+
+      const applyDecoration = (rawDecoration, decoration) => {
+        const exactDecorationAppliers = {
+          "caesura": () => {
+            pendingCaesura = true;
+          },
+          "coda": () => {
+            pendingCoda = true;
+          },
+          "courtesy": () => {
+            pendingCourtesyAccidental = true;
+          },
+          "editorial": () => {
+            pendingEditorialAccidental = true;
+          },
+          "fermata": () => {
+            pendingFermata = "normal";
+          },
+          "fine": () => {
+            pendingFine = true;
+          },
+          "harmonic": () => {
+            pendingHarmonic = true;
+          },
+          "heel": () => {
+            pendingHeel = true;
+          },
+          "heel mark": () => {
+            pendingHeel = true;
+          },
+          "schleifer": () => {
+            pendingSchleifer = true;
+          },
+          "segno": () => {
+            pendingSegno = true;
+          },
+          "sfz": () => {
+            pendingSfz = true;
+          },
+          "shake": () => {
+            pendingShake = true;
+          },
+          "slide-stop": () => {
+            pendingSlideStop = true;
+          },
+          "stress": () => {
+            pendingStress = true;
+          },
+          "tenuto": () => {
+            pendingTenuto = true;
+          },
+          "toe": () => {
+            pendingToe = true;
+          },
+          "toe mark": () => {
+            pendingToe = true;
+          },
+          "trill(": () => {
             pendingTrill = true;
-          } else if (decoration === "turn") {
-            pendingTurn = "turn";
-          } else if (decoration === "invertedturn" || decoration === "inverted-turn" || decoration === "lowerturn") {
-            pendingTurn = "inverted-turn";
-          } else if (
-            decoration === "staccato" ||
-            decoration === "stacc" ||
-            decoration === "stac" ||
-            decoration === "staccatissimo"
-          ) {
+            pendingTrillLineStart = true;
+          },
+          "trill)": () => {
+            pendingTrillLineStop = true;
+          },
+          "unstress": () => {
+            pendingUnstress = true;
+          },
+        };
+        const applyExactDecoration = exactDecorationAppliers[decoration];
+        if (applyExactDecoration) {
+          applyExactDecoration();
+          return true;
+        }
+        const setDecorationAppliers = [
+          [TRILL_DECORATIONS, () => {
+            pendingTrill = true;
+          }],
+          [LOWER_MORDENT_DECORATIONS, () => {
+            pendingMordent = "mordent";
+          }],
+          [UPPER_MORDENT_DECORATIONS, () => {
+            pendingMordent = "inverted-mordent";
+          }],
+          [GLISS_START_DECORATIONS, () => {
+            pendingGlissandoStart = true;
+          }],
+          [GLISS_STOP_DECORATIONS, () => {
+            pendingGlissandoStop = true;
+          }],
+          [SLIDE_START_DECORATIONS, () => {
+            pendingSlideStart = true;
+          }],
+          [ARPEGGIATE_DECORATIONS, () => {
+            pendingArpeggiate = true;
+          }],
+          [STACCATO_DECORATIONS, () => {
             pendingStaccato = true;
-          } else if (decoration) {
-            warnings.push("line " + entry.lineNo + ": Skipped decoration: " + ch + decoration + ch);
-          }
-          idx = endMark + 1;
-          continue;
+          }],
+          [STACCATISSIMO_DECORATIONS, () => {
+            pendingStaccatissimo = true;
+          }],
+          [ACCENT_DECORATIONS, () => {
+            pendingAccent = true;
+          }],
+          [INVERTED_FERMATA_DECORATIONS, () => {
+            pendingFermata = "inverted";
+          }],
+          [STRONG_ACCENT_DECORATIONS, () => {
+            pendingStrongAccent = true;
+          }],
+          [BREATH_DECORATIONS, () => {
+            pendingBreathMark = true;
+          }],
+          [DACAPO_DECORATIONS, () => {
+            pendingDaCapo = true;
+          }],
+          [DALSEGNO_DECORATIONS, () => {
+            pendingDalSegno = true;
+          }],
+          [TOCODA_DECORATIONS, () => {
+            pendingToCoda = true;
+          }],
+          [CRESC_START_DECORATIONS, () => {
+            pendingCrescendoStart = true;
+          }],
+          [CRESC_STOP_DECORATIONS, () => {
+            pendingCrescendoStop = true;
+          }],
+          [DIM_START_DECORATIONS, () => {
+            pendingDiminuendoStart = true;
+          }],
+          [DIM_STOP_DECORATIONS, () => {
+            pendingDiminuendoStop = true;
+          }],
+          [UPBOW_DECORATIONS, () => {
+            pendingUpBow = true;
+          }],
+          [DOWNBOW_DECORATIONS, () => {
+            pendingDownBow = true;
+          }],
+          [DOUBLE_TONGUE_DECORATIONS, () => {
+            pendingDoubleTongue = true;
+          }],
+          [TRIPLE_TONGUE_DECORATIONS, () => {
+            pendingTripleTongue = true;
+          }],
+          [OPEN_STRING_DECORATIONS, () => {
+            pendingOpenString = true;
+          }],
+          [SNAP_PIZZICATO_DECORATIONS, () => {
+            pendingSnapPizzicato = true;
+          }],
+          [STOPPED_DECORATIONS, () => {
+            pendingStopped = true;
+          }],
+          [THUMB_POSITION_DECORATIONS, () => {
+            pendingThumbPosition = true;
+          }],
+        ];
+        const applySetDecoration = setDecorationAppliers.find(([decorationSet]) => decorationSet.has(decoration));
+        if (applySetDecoration) {
+          applySetDecoration[1]();
+          return true;
         }
-
-        if (ch === "{") {
-          const graceResult = parseGraceGroupAt(
-            text,
-            idx,
-            entry.lineNo,
-            unitLength,
-            keySignatureAccidentals,
-            measureAccidentals,
-            entry.voiceId
-          );
-          if (!graceResult) {
-            warnings.push("line " + entry.lineNo + ": Failed to parse grace group; skipped.");
-            idx += 1;
-            continue;
-          }
-          idx = graceResult.nextIdx;
-          for (const graceNote of graceResult.notes) {
-            currentMeasure.push(graceNote);
-            noteCount += 1;
-          }
-          continue;
+        if (applyPrefixedDecoration(rawDecoration, decoration)) {
+          return true;
         }
-
-        if (ch === ".") {
-          pendingStaccato = true;
-          idx += 1;
-          continue;
+        if (applyTurnDecoration(decoration)) {
+          return true;
         }
+        if (applyTremoloDecoration(decoration)) {
+          return true;
+        }
+        if (PHRASE_DECORATIONS.has(decoration)) {
+          pendingPhraseMark = decoration as "shortphrase" | "mediumphrase" | "longphrase";
+          return true;
+        }
+        if (decoration === "dacoda") {
+          pendingDaCapo = true;
+          pendingToCoda = true;
+          return true;
+        }
+        if (DYNAMIC_DECORATIONS.has(decoration)) {
+          pendingDynamicMark = decoration;
+          return true;
+        }
+        if (/^[0-5]$/.test(decoration)) {
+          pendingFingerings.push(decoration);
+          return true;
+        }
+        return false;
+      };
 
-        if (ch === "[") {
-          const chordResult = parseChordAt(text, idx, entry.lineNo);
-          if (!chordResult) {
-            warnings.push("line " + entry.lineNo + ": Failed to parse chord notation; skipped.");
-            idx += 1;
-            continue;
+      const applyPendingOrnamentState = (note, options = {}) => {
+        const { applySlurStart = true, trillHint = "" } = options;
+        applyAbcPendingNoteValue({
+          note,
+          isPending: pendingTrill,
+          apply: () => {
+            note.trill = true;
+            note.trillLineStart = pendingTrillLineStart;
+          },
+          clear: () => {
+            pendingTrill = false;
+            pendingTrillLineStart = false;
+          },
+        });
+        applyAbcPendingNoteValue({
+          note,
+          isPending: pendingTrillLineStop,
+          apply: () => {
+            note.trillLineStop = true;
+          },
+          clear: () => {
+            pendingTrillLineStop = false;
+          },
+        });
+        applyAbcPendingNoteOptionalValue({
+          note,
+          value: pendingTurn,
+          isEmpty: (value) => !value,
+          apply: (value) => {
+            note.turnType = value;
+            note.turnSlash = pendingTurnSlash;
+            note.delayedTurn = pendingDelayedTurn;
+          },
+          clear: () => {
+            pendingTurn = "";
+            pendingTurnSlash = false;
+            pendingDelayedTurn = false;
+          },
+        });
+        if (!note.isRest && (pendingEditorialAccidental || pendingCourtesyAccidental)) {
+          if (note.accidentalText) {
+            note.accidentalEditorial = pendingEditorialAccidental || undefined;
+            note.accidentalCautionary = pendingCourtesyAccidental || undefined;
           }
-          idx = chordResult.nextIdx;
-          let chordLength = parseLengthToken(chordResult.lengthToken, entry.lineNo);
-          if (!chordResult.lengthToken && chordResult.notes.length > 0 && chordResult.notes[0].lengthToken) {
-            chordLength = parseLengthToken(chordResult.notes[0].lengthToken, entry.lineNo);
-          }
-          let absoluteLength = multiplyFractions(unitLength, chordLength);
-          if (pendingRhythmScale) {
-            absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
-            pendingRhythmScale = null;
-          }
-          const activeTuplet =
-            tupletRemaining > 0 && tupletScale && tupletSpec
-              ? { actual: tupletSpec.actual, normal: tupletSpec.normal, remaining: tupletSpec.remaining }
-              : null;
-          if (tupletRemaining > 0 && tupletScale) {
-            absoluteLength = multiplyFractions(absoluteLength, tupletScale);
-            tupletRemaining -= 1;
-            if (tupletSpec) {
-              tupletSpec.remaining -= 1;
-            }
-            if (tupletRemaining <= 0) {
-              tupletScale = null;
-              tupletSpec = null;
-            }
-          }
-          if (idx < text.length && (text[idx] === ">" || text[idx] === "<")) {
-            const rhythmChar = text[idx];
-            idx += 1;
-            if (rhythmChar === ">") {
-              absoluteLength = multiplyFractions(absoluteLength, { num: 3, den: 2 });
-              pendingRhythmScale = { num: 1, den: 2 };
-            } else {
-              absoluteLength = multiplyFractions(absoluteLength, { num: 1, den: 2 });
-              pendingRhythmScale = { num: 3, den: 2 };
-            }
-          }
-          const dur = durationInDivisions(absoluteLength, 960);
-          if (dur <= 0) {
-            throw new Error("line " + entry.lineNo + ": Invalid length");
-          }
-          const chordNotes = [];
-          currentEventNo += 1;
-          const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
-          for (let chordIndex = 0; chordIndex < chordResult.notes.length; chordIndex += 1) {
-            const chordNote = chordResult.notes[chordIndex];
-            const note = buildNoteData(
-              chordNote.pitchChar,
-              chordNote.accidentalText,
-              chordNote.octaveShift,
-              absoluteLength,
-              dur,
-              entry.lineNo,
-              keySignatureAccidentals,
-              measureAccidentals
-            );
-            note.voice = entry.voiceId;
-            if (chordIndex === 0 && pendingTrill && !note.isRest) {
-              note.trill = true;
-              pendingTrill = false;
-            }
-            if (chordIndex === 0 && pendingTurn && !note.isRest) {
-              note.turnType = pendingTurn;
-              pendingTurn = "";
-            }
-            if (chordIndex === 0 && pendingSlurStart > 0 && !note.isRest) {
-              note.slurStart = true;
-              pendingSlurStart = 0;
-            }
-            if (chordIndex === 0 && note.trill && trillHint) {
-              note.trillAccidentalText = trillHint;
-            }
-            if (chordIndex === 0 && pendingStaccato && !note.isRest) {
-              note.staccato = true;
-              pendingStaccato = false;
-            }
-            if (chordIndex > 0) {
-              note.chord = true;
-            }
-            if (chordIndex === 0 && activeTuplet) {
-              note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
-              if (activeTuplet.remaining === activeTuplet.actual) {
-                note.tupletStart = true;
-              }
-              if (activeTuplet.remaining === 1) {
-                note.tupletStop = true;
-              }
-            }
-            chordNotes.push(note);
-          }
-          if (pendingTieToNext && chordNotes.length > 0) {
-            chordNotes[0].tieStop = true;
+          pendingEditorialAccidental = false;
+          pendingCourtesyAccidental = false;
+        }
+        applyAbcPendingNoteOptionalValue({ note, value: pendingMordent, isEmpty: (value) => !value, apply: (value) => { note.mordentType = value; }, clear: () => { pendingMordent = ""; } });
+        applyAbcPendingNoteOptionalValue({ note, value: pendingPhraseMark, isEmpty: (value) => !value, apply: (value) => { note.phraseMark = value; }, clear: () => { pendingPhraseMark = ""; } });
+        applyAbcPendingNoteOptionalValue({
+          note,
+          value: pendingTremolo,
+          isEmpty: (value) => !value,
+          apply: (value) => {
+            note.tremoloType = value.type;
+            note.tremoloMarks = value.marks;
+          },
+          clear: () => {
+            pendingTremolo = null;
+          },
+        });
+        applyAbcPendingNoteValue({ note, isPending: pendingGlissandoStart, apply: () => { note.glissandoStart = true; }, clear: () => { pendingGlissandoStart = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingGlissandoStop, apply: () => { note.glissandoStop = true; }, clear: () => { pendingGlissandoStop = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingSlideStart, apply: () => { note.slideStart = true; }, clear: () => { pendingSlideStart = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingSlideStop, apply: () => { note.slideStop = true; }, clear: () => { pendingSlideStop = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingSchleifer, apply: () => { note.schleifer = true; }, clear: () => { pendingSchleifer = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingShake, apply: () => { note.shake = true; }, clear: () => { pendingShake = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingArpeggiate, apply: () => { note.arpeggiate = true; }, clear: () => { pendingArpeggiate = false; } });
+        if (applySlurStart && pendingSlurStart > 0 && !note.isRest) {
+          note.slurStart = true;
+          pendingSlurStart = 0;
+        }
+        if (note.trill && trillHint) {
+          note.trillAccidentalText = trillHint;
+        }
+      };
+
+      const applyPendingArticulationState = (note) => {
+        applyAbcPendingNoteValue({ note, isPending: pendingStaccato, apply: () => { note.staccato = true; }, clear: () => { pendingStaccato = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingStaccatissimo, apply: () => { note.staccatissimo = true; }, clear: () => { pendingStaccatissimo = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingAccent, apply: () => { note.accent = true; }, clear: () => { pendingAccent = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingTenuto, apply: () => { note.tenuto = true; }, clear: () => { pendingTenuto = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingStress, apply: () => { note.stress = true; }, clear: () => { pendingStress = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingUnstress, apply: () => { note.unstress = true; }, clear: () => { pendingUnstress = false; } });
+        applyAbcPendingNoteOptionalValue({ note, value: pendingFermata, isEmpty: (value) => !value, apply: (value) => { note.fermataType = value; }, clear: () => { pendingFermata = ""; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingStrongAccent, apply: () => { note.strongAccent = true; }, clear: () => { pendingStrongAccent = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingBreathMark, apply: () => { note.breathMark = true; }, clear: () => { pendingBreathMark = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingCaesura, apply: () => { note.caesura = true; }, clear: () => { pendingCaesura = false; } });
+      };
+
+      const applyPendingDirectionState = (note) => {
+        applyAbcPendingNoteValue({ note, isPending: pendingSegno, apply: () => { note.segno = true; }, clear: () => { pendingSegno = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingCoda, apply: () => { note.coda = true; }, clear: () => { pendingCoda = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingFine, apply: () => { note.fine = true; }, clear: () => { pendingFine = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDaCapo, apply: () => { note.daCapo = true; }, clear: () => { pendingDaCapo = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDalSegno, apply: () => { note.dalSegno = true; }, clear: () => { pendingDalSegno = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingToCoda, apply: () => { note.toCoda = true; }, clear: () => { pendingToCoda = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingCrescendoStart, apply: () => { note.crescendoStart = true; }, clear: () => { pendingCrescendoStart = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingCrescendoStop, apply: () => { note.crescendoStop = true; }, clear: () => { pendingCrescendoStop = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDiminuendoStart, apply: () => { note.diminuendoStart = true; }, clear: () => { pendingDiminuendoStart = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDiminuendoStop, apply: () => { note.diminuendoStop = true; }, clear: () => { pendingDiminuendoStop = false; } });
+        applyAbcPendingNoteOptionalValue({ note, value: pendingDynamicMark, isEmpty: (value) => !value, apply: (value) => { note.dynamicMark = value; }, clear: () => { pendingDynamicMark = ""; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingSfz, apply: () => { note.sfz = true; }, clear: () => { pendingSfz = false; } });
+        applyAbcPendingNoteOptionalValue({ note, value: pendingRehearsalMark, isEmpty: (value) => !value, apply: (value) => { note.rehearsalMark = value; }, clear: () => { pendingRehearsalMark = ""; } });
+      };
+
+      const applyPendingTechnicalState = (note) => {
+        applyAbcPendingNoteValue({ note, isPending: pendingUpBow, apply: () => { note.upBow = true; }, clear: () => { pendingUpBow = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDownBow, apply: () => { note.downBow = true; }, clear: () => { pendingDownBow = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingDoubleTongue, apply: () => { note.doubleTongue = true; }, clear: () => { pendingDoubleTongue = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingTripleTongue, apply: () => { note.tripleTongue = true; }, clear: () => { pendingTripleTongue = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingHeel, apply: () => { note.heel = true; }, clear: () => { pendingHeel = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingToe, apply: () => { note.toe = true; }, clear: () => { pendingToe = false; } });
+        applyAbcPendingNoteArray({ note, values: pendingFingerings, apply: (values) => { note.fingerings = values.slice(); }, clear: () => { pendingFingerings = []; } });
+        applyAbcPendingNoteArray({ note, values: pendingStrings, apply: (values) => { note.strings = values.slice(); }, clear: () => { pendingStrings = []; } });
+        applyAbcPendingNoteArray({ note, values: pendingPlucks, apply: (values) => { note.plucks = values.slice(); }, clear: () => { pendingPlucks = []; } });
+        applyAbcPendingNoteArray({ note, values: pendingChordSymbols, apply: (values) => { note.chordSymbols = values.slice(); }, clear: () => { pendingChordSymbols = []; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingOpenString, apply: () => { note.openString = true; }, clear: () => { pendingOpenString = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingSnapPizzicato, apply: () => { note.snapPizzicato = true; }, clear: () => { pendingSnapPizzicato = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingHarmonic, apply: () => { note.harmonic = true; }, clear: () => { pendingHarmonic = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingStopped, apply: () => { note.stopped = true; }, clear: () => { pendingStopped = false; } });
+        applyAbcPendingNoteValue({ note, isPending: pendingThumbPosition, apply: () => { note.thumbPosition = true; }, clear: () => { pendingThumbPosition = false; } });
+        applyAbcPendingNoteArray({ note, values: pendingAnnotations, apply: (values) => { note.annotations = values.slice(); }, clear: () => { pendingAnnotations = []; } });
+      };
+
+      const applyPendingToPlayableNote = (note, options = {}) => {
+        applyAbcPendingStateToPlayableNote({
+          note,
+          options,
+          applyPendingOrnamentState,
+          applyPendingArticulationState,
+          applyPendingDirectionState,
+          applyPendingTechnicalState,
+          hasPendingTieToNext: () => pendingTieToNext,
+          clearPendingTieToNext: () => {
             pendingTieToNext = false;
-          }
-          for (const note of chordNotes) {
-            currentMeasure.push(note);
-          }
-          lastNote = chordNotes[0] || null;
-          lastEventNotes = chordNotes;
-          noteCount += chordNotes.length;
-          continue;
-        }
+          },
+          warnBody,
+        });
+      };
 
-        if (ch === ")") {
-          if (lastNote && !lastNote.isRest) {
-            lastNote.slurStop = true;
-          } else {
-            warnings.push("line " + entry.lineNo + ": slur stop()) has no preceding note; skipped.");
-          }
-          idx += 1;
-          continue;
+      // Event construction and commit helpers.
+      const applySingleCharShorthand = (char) => {
+        const shorthand = parseAbcSingleCharShorthandAt(char, 0);
+        if (!shorthand) {
+          return false;
         }
-
-        if (ch === "]" || ch === "}") {
-          warnings.push("line " + entry.lineNo + ": Skipped unsupported notation: " + ch);
-          idx += 1;
-          continue;
+        const shorthandAppliers = {
+          "accent": () => {
+            pendingAccent = true;
+          },
+          "arpeggiate": () => {
+            pendingArpeggiate = true;
+          },
+          "coda": () => {
+            pendingCoda = true;
+          },
+          "downbow": () => {
+            pendingDownBow = true;
+          },
+          "fermata": () => {
+            pendingFermata = "normal";
+          },
+          "inverted-mordent": () => {
+            pendingMordent = "inverted-mordent";
+          },
+          "mordent": () => {
+            pendingMordent = "mordent";
+          },
+          "segno": () => {
+            pendingSegno = true;
+          },
+          "staccato": () => {
+            pendingStaccato = true;
+          },
+          "trill": () => {
+            pendingTrill = true;
+          },
+          "upbow": () => {
+            pendingUpBow = true;
+          },
+        };
+        const apply = shorthandAppliers[shorthand.kind];
+        if (!apply) {
+          return false;
         }
+        apply();
+        return true;
+      };
 
-        let accidentalText = "";
-        while (idx < text.length && (text[idx] === "^" || text[idx] === "_" || text[idx] === "=")) {
-          accidentalText += text[idx];
-          idx += 1;
-          if (accidentalText === "=" || accidentalText.startsWith("^") || accidentalText.startsWith("_")) {
-            if (accidentalText.length >= 2 && accidentalText[0] !== accidentalText[1]) {
-              break;
-            }
-            if (accidentalText.length >= 2 && accidentalText[0] === "=") {
-              accidentalText = "=";
-              break;
-            }
-          }
-        }
-
-        const pitchChar = text[idx];
-        if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-          throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
-        }
-        idx += 1;
-
-        let octaveShift = "";
-        while (idx < text.length && (text[idx] === "'" || text[idx] === ",")) {
-          octaveShift += text[idx];
-          idx += 1;
-        }
-
-        let lengthToken = "";
-        const lengthMatch = text.slice(idx).match(/^(\d+\/\d+|\d+|\/\d+|\/)/);
-        if (lengthMatch) {
-          lengthToken = lengthMatch[1];
-          idx += lengthToken.length;
-        }
-
-        const len = parseLengthToken(lengthToken, entry.lineNo);
-        let absoluteLength = multiplyFractions(unitLength, len);
+      const consumePlayableTiming = (rawLengthToken, tokenIdx) => {
+        const len = parseLengthToken(rawLengthToken, entry.lineNo);
+        let absoluteLength = multiplyFractions(activeUnitLength, len);
         if (pendingRhythmScale) {
           absoluteLength = multiplyFractions(absoluteLength, pendingRhythmScale);
           pendingRhythmScale = null;
@@ -735,142 +3415,601 @@ const abcCommon = AbcCommon;
           }
         }
 
-        if (idx < text.length && (text[idx] === ">" || text[idx] === "<")) {
-          const rhythmChar = text[idx];
-          idx += 1;
-          if (rhythmChar === ">") {
-            absoluteLength = multiplyFractions(absoluteLength, { num: 3, den: 2 });
-            pendingRhythmScale = { num: 1, den: 2 };
-          } else {
-            absoluteLength = multiplyFractions(absoluteLength, { num: 1, den: 2 });
-            pendingRhythmScale = { num: 3, den: 2 };
-          }
+        let nextIdx = tokenIdx;
+        const trailingBrokenRhythm = parseAbcBrokenRhythmAt(text, nextIdx);
+        if (trailingBrokenRhythm) {
+          absoluteLength = multiplyFractions(absoluteLength, trailingBrokenRhythm.leftScale);
+          pendingRhythmScale = trailingBrokenRhythm.rightScale;
+          nextIdx = trailingBrokenRhythm.nextIdx;
         }
 
-        const dur = durationInDivisions(absoluteLength, 960);
-        if (dur <= 0) {
-          throw new Error("line " + entry.lineNo + ": Invalid length");
-        }
-
-        const note = buildNoteData(
-          pitchChar,
-          accidentalText,
-          octaveShift,
+        return {
           absoluteLength,
-          dur,
-          entry.lineNo,
-          keySignatureAccidentals,
-          measureAccidentals
-        );
-        if (pendingTrill && !note.isRest) {
-          note.trill = true;
-          pendingTrill = false;
+          dur: durationInDivisions(absoluteLength, 960),
+          activeTuplet,
+          nextIdx,
+        };
+      };
+
+      const applyTupletToEventStart = (note, activeTuplet) => {
+        if (!activeTuplet) {
+          return;
         }
-        if (pendingTurn && !note.isRest) {
-          note.turnType = pendingTurn;
-          pendingTurn = "";
+        note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
+        if (activeTuplet.remaining === activeTuplet.actual) {
+          note.tupletStart = true;
         }
-        if (pendingSlurStart > 0 && !note.isRest) {
-          note.slurStart = true;
-          pendingSlurStart = 0;
+        if (activeTuplet.remaining === 1) {
+          note.tupletStop = true;
         }
+      };
+
+      const finalizePlayableEventStart = (note, dur, activeTuplet, options = {}) => {
+        const applyTieStop = options.applyTieStop !== false;
+        applyBeamModeForEvent(note, dur);
         currentEventNo += 1;
         const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
-        if (note.trill && trillHint) {
-          note.trillAccidentalText = trillHint;
-        }
-        if (pendingStaccato && !note.isRest) {
-          note.staccato = true;
-          pendingStaccato = false;
-        }
-        if (pendingTieToNext && !note.isRest) {
-          note.tieStop = true;
-          pendingTieToNext = false;
-        } else if (note.isRest && pendingTieToNext) {
-          warnings.push("line " + entry.lineNo + ": tie(-) was followed by a rest; tie removed.");
-          pendingTieToNext = false;
-        }
-        if (activeTuplet) {
-          note.timeModification = { actual: activeTuplet.actual, normal: activeTuplet.normal };
-          if (activeTuplet.remaining === activeTuplet.actual) {
-            note.tupletStart = true;
+        applyPendingToPlayableNote(note, { applySlurStart: true, applyTieStop, trillHint });
+        applyTupletToEventStart(note, activeTuplet);
+        note.voice = entry.voiceId;
+      };
+
+      const buildPlayableNoteForBody = (pitchSource, absoluteLength, dur, octaveWarningMessage) => {
+        let note;
+        try {
+          note = buildNoteData(
+            pitchSource.pitchChar,
+            pitchSource.accidentalText,
+            pitchSource.octaveShift,
+            absoluteLength,
+            dur,
+            entry.lineNo,
+            activeKeySignatureAccidentals,
+            measureAccidentals
+          );
+        } catch (error) {
+          if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+            warnBody(octaveWarningMessage);
+            return null;
           }
-          if (activeTuplet.remaining === 1) {
-            note.tupletStop = true;
-          }
+          throw error;
         }
         note.voice = entry.voiceId;
-        currentMeasure.push(note);
-        lastNote = note;
-        lastEventNotes = [note];
-        noteCount += 1;
+        return note;
+      };
+
+      const clearLastEventState = (options = {}) => {
+        if (options.clearPendingTie !== false) {
+          pendingTieToNext = false;
+        }
+        lastNote = null;
+        lastEventNotes = [];
+      };
+
+      const commitPlayableEvent = (notes, options = {}) => {
+        const applyChordTieStop = options.applyChordTieStop === true;
+        if (applyChordTieStop && pendingTieToNext && notes.length > 0) {
+          for (const note of notes) {
+            if (!note.isRest) {
+              note.tieStop = true;
+            }
+          }
+          pendingTieToNext = false;
+        }
+        for (const note of notes) {
+          currentMeasure.push(note);
+        }
+        if (notes.length === 0) {
+          clearLastEventState();
+          return false;
+        }
+        lastNote = notes[0] || null;
+        lastEventNotes = notes;
+        noteCount += notes.length;
+        return true;
+      };
+
+      const buildPlayableEventFromPitches = (pitchSources, timing, options = {}) => {
+        const octaveWarningMessage = options.octaveWarningMessage || "Skipped note with unsupported octave range.";
+        const firstNoteOptions = options.firstNoteOptions || {};
+        return buildAbcPlayableEventNotes({
+          pitchSources,
+          timing,
+          octaveWarningMessage,
+          firstNoteOptions,
+          buildPlayableNoteForBody,
+          finalizePlayableEventStart,
+        });
+      };
+
+      const playableEventOptionsForSource = (source) => ({
+        invalidLengthMessage: source === "chord" ? "Skipped chord with invalid length." : "Skipped note with invalid length.",
+        octaveWarningMessage:
+          source === "chord"
+            ? "Skipped chord note with unsupported octave range."
+            : "Skipped note with unsupported octave range.",
+        firstNoteOptions: source === "chord" ? { applyTieStop: false } : {},
+        commitOptions: source === "chord" ? { applyChordTieStop: true } : {},
+      });
+
+      // Body token handlers.
+      const handleBrokenRhythmBodyToken = (bodyToken) => {
+        const { brokenRhythm } = bodyToken;
+        if (!lastEventNotes || lastEventNotes.length === 0 || lastEventNotes.some((n) => n.isRest)) {
+          warnBody("broken rhythm(" + brokenRhythm.symbol + ")  has no preceding note; skipped.");
+          idx = brokenRhythm.nextIdx;
+          return true;
+        }
+        scaleNotesDuration(lastEventNotes, brokenRhythm.leftScale);
+        pendingRhythmScale = brokenRhythm.rightScale;
+        idx = brokenRhythm.nextIdx;
+        return true;
+      };
+
+      const handleParenBodyToken = (bodyToken) => {
+        const { parenToken } = bodyToken;
+        if (parenToken.kind === "tuplet") {
+          const { tuplet } = parenToken;
+          if (tuplet.actual > 0 && tuplet.normal > 0 && tuplet.count > 0) {
+            tupletScale = { num: tuplet.normal, den: tuplet.actual };
+            tupletRemaining = tuplet.count;
+            tupletSpec = { actual: tuplet.actual, normal: tuplet.normal, remaining: tuplet.count };
+          } else {
+            warnBody("Failed to parse tuplet notation: " + tuplet.raw);
+          }
+          idx = tuplet.nextIdx;
+          return true;
+        }
+        pendingSlurStart += 1;
+        idx = parenToken.nextIdx;
+        return true;
+      };
+
+      const enqueueQuotedBodyText = (normalizedText) => {
+        if (!normalizedText) {
+          return;
+        }
+        if (isLikelyAbcChordSymbol(normalizedText)) {
+          pendingChordSymbols.push(normalizedText);
+          return;
+        }
+        pendingAnnotations.push(normalizedText);
+      };
+
+      const markTieStartOnLastEvent = () => {
+        if (!lastEventNotes || lastEventNotes.length === 0 || !lastEventNotes.some((n) => !n.isRest)) {
+          return false;
+        }
+        for (const eventNote of lastEventNotes) {
+          if (!eventNote.isRest) {
+            eventNote.tieStart = true;
+          }
+        }
+        pendingTieToNext = true;
+        return true;
+      };
+
+      const handleTieBodyToken = (bodyToken) => {
+        if (!markTieStartOnLastEvent()) {
+          warnBody("tie(-)  has no preceding note; skipped.");
+        }
+        idx = bodyToken.tie.nextIdx;
+        return true;
+      };
+
+      const handleQuotedStringBodyToken = (bodyToken) => {
+        const { quotedString } = bodyToken;
+        enqueueQuotedBodyText(quotedString.normalizedText);
+        if (!quotedString.terminated) {
+          warnBody('Unterminated inline string ("...").');
+        }
+        idx = quotedString.nextIdx;
+        return true;
+      };
+
+      const handleSingleCharShorthandBodyToken = (bodyToken, char) => {
+        applySingleCharShorthand(char);
+        idx = bodyToken.shorthand.nextIdx;
+        return true;
+      };
+
+      const handleDecorationBodyToken = (bodyToken, char) => {
+        const parsedDecoration = bodyToken.decoration;
+        if (!parsedDecoration.terminated) {
+          warnBody("Unterminated decoration marker: " + char);
+          idx = parsedDecoration.nextIdx;
+          return true;
+        }
+        const { rawDecoration, decoration } = parsedDecoration;
+        if (!applyDecoration(rawDecoration, decoration) && decoration) {
+          warnBody("Skipped decoration: " + char + decoration + char);
+        }
+        idx = parsedDecoration.nextIdx;
+        return true;
+      };
+
+      const markSlurStopOnLastNote = () => {
+        if (!lastNote || lastNote.isRest) {
+          return false;
+        }
+        lastNote.slurStop = true;
+        return true;
+      };
+
+      const handleSlurStopBodyToken = (bodyToken) => {
+        const { slurStop } = bodyToken;
+        if (!markSlurStopOnLastNote()) {
+          warnBody("slur stop()) has no preceding note; skipped.");
+        }
+        idx = slurStop.nextIdx;
+        return true;
+      };
+
+      const handleSimpleBodyToken = (bodyToken, char) => {
+        return processAbcSimpleBodyToken(bodyToken, {
+          char,
+          handleBrokenRhythmBodyToken,
+          handleDecorationBodyToken,
+          handleParenBodyToken,
+          handleQuotedStringBodyToken,
+          handleSingleCharShorthandBodyToken,
+          handleSlurStopBodyToken,
+          handleTieBodyToken,
+        });
+      };
+
+      const handleInlineFieldBracketToken = (bracketToken) => {
+        const { inlineField } = bracketToken;
+        if (!applyBodyField(inlineField.fieldName, inlineField.fieldValue)) {
+          warnBody("Skipped unsupported inline field: [" + inlineField.fieldName + ":" + inlineField.fieldValue + "]");
+        }
+        idx = inlineField.nextIdx;
+        return true;
+      };
+
+      const handleRepeatEndingBracketToken = (bracketToken) => {
+        const { repeatEndingMarker } = bracketToken;
+        return startEndingAtCurrentMeasure(repeatEndingMarker.marker, repeatEndingMarker.nextIdx);
+      };
+
+      const handleBracketBodyToken = (bodyToken) => {
+        return processAbcBracketBodyToken(bodyToken, {
+          text,
+          idx,
+          handleInlineFieldBracketToken,
+          handleRepeatEndingBracketToken,
+          handlePlayableEvent,
+        });
+      };
+
+      const handleGraceGroup = (char) => {
+        const result = processAbcGraceGroup({
+          char,
+          text,
+          idx,
+          lineNo: entry.lineNo,
+          activeUnitLength,
+          activeKeySignatureAccidentals,
+          measureAccidentals,
+          entryVoiceId: entry.voiceId,
+          warnings,
+          warnBody,
+          appendGraceNotes,
+        });
+        idx = result.nextIdx;
+        return result.handled;
+      };
+
+      // Measure and ending state helpers.
+      const appendGraceNotes = (graceNotes) => {
+        for (const graceNote of graceNotes) {
+          currentMeasure.push(graceNote);
+          noteCount += 1;
+        }
+      };
+
+      const startEndingAtCurrentMeasure = (marker, nextIdx) => {
+        if (activeEndingMarker) {
+          const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
+          stopActiveEndingAtMeasure(stopMeasureNo);
+        }
+          const measureMeta = ensureAbcNotationMeasureMeta(voiceStores, entry.voiceId, currentMeasureNo);
+        measureMeta.endingStart = marker;
+        activeEndingMarker = marker;
+        idx = nextIdx;
+        resetBeamContext();
+        return true;
+      };
+
+      const stopActiveEndingAtMeasure = (measureNo) => {
+        if (!activeEndingMarker || measureNo < 1) {
+          return false;
+        }
+        const measureMeta = ensureAbcNotationMeasureMeta(voiceStores, entry.voiceId, measureNo);
+        measureMeta.endingStop = activeEndingMarker;
+        measureMeta.endingStopType = "stop";
+        activeEndingMarker = "";
+        return true;
+      };
+
+      const advanceToNextMeasure = () => {
+        currentMeasure = [];
+        measures.push(currentMeasure);
+        currentMeasureNo = Math.max(1, measures.length);
+        currentEventNo = 0;
+        beamCursorDiv = 0;
+      };
+
+      const resetBeamContext = () => {
+        beamRunActive = false;
+        sawInterEventWhitespace = false;
+      };
+
+      const handleBarlineToken = (barlineToken) => {
+        const barlineContext = {
+          text,
+          idx,
+          currentMeasureNo,
+          currentMeasureLength: currentMeasure.length,
+          measuresLength: measures.length,
+          activeEndingMarker,
+          markRepeatEnd: () => {
+            ensureAbcNotationMeasureMeta(voiceStores, entry.voiceId, currentMeasureNo).repeatEnd = true;
+          },
+          markRepeatStart: () => {
+            ensureAbcNotationMeasureMeta(voiceStores, entry.voiceId, currentMeasureNo).repeatStart = true;
+          },
+          stopActiveEndingAtMeasure,
+          advanceToNextMeasure,
+          clearMeasureAccidentals: () => {
+            measureAccidentals = {};
+          },
+          clearLastNote: () => {
+            lastNote = null;
+          },
+          resetBeamContext,
+          startEndingAtCurrentMeasure,
+        };
+        const handled = processAbcBarlineEntry(barlineToken, barlineContext);
+        idx = Math.max(idx, barlineContext.idx);
+        return handled;
+      };
+
+      const handleNonPlayableBodyEntry = (bodyEntry) => {
+        const nonPlayableContext = {
+          text,
+          idx,
+          warnBody,
+          applyBodyField,
+          handleBarlineToken,
+        };
+        const handled = processAbcNonPlayableBodyEntry(bodyEntry, nonPlayableContext);
+        idx = Math.max(idx, nonPlayableContext.idx);
+        return handled;
+      };
+
+      // Playable-event and fallback handlers.
+      const handleResolvedPlayableEvent = (playableEvent) => {
+        const timing = consumePlayableTiming(playableEvent.rawLengthToken, playableEvent.nextIdx);
+        idx = timing.nextIdx;
+        return processAbcPlayableEvent(playableEvent, {
+          timing,
+          resolution: playableEventOptionsForSource(playableEvent.source),
+          buildPlayableEventFromPitches,
+          commitPlayableEvent,
+          clearLastEventState,
+          warnBody,
+        });
+      };
+
+      const skipInvalidPlayableEvent = (message, nextIdx) => {
+        warnBody(message);
+        idx = nextIdx;
+        return true;
+      };
+
+      const handleInvalidPlayableEvent = (playableEvent, options = {}) => {
+        const { fallbackToNextChar = false } = options;
+        if (!playableEvent) {
+          return false;
+        }
+        if (playableEvent.kind === "malformed-accidental") {
+          return skipInvalidPlayableEvent("Skipped malformed accidental token: " + playableEvent.accidentalText, playableEvent.nextIdx);
+        }
+        if (playableEvent.kind === "invalid-chord") {
+          return skipInvalidPlayableEvent("Failed to parse chord notation; skipped.", playableEvent.nextIdx);
+        }
+        if (fallbackToNextChar) {
+          idx += 1;
+          return true;
+        }
+        return false;
+      };
+
+      const handlePlayableEvent = (playableEvent, options = {}) => {
+        const { fallbackToNextChar = false } = options;
+        if (playableEvent.kind !== "playable") {
+          return handleInvalidPlayableEvent(playableEvent, { fallbackToNextChar });
+        }
+        return handleResolvedPlayableEvent(playableEvent);
+      };
+
+      const advanceBodyCursorWithWarning = (message, nextIdx = idx + 1) => {
+        warnBody(message);
+        idx = nextIdx;
+        resetBeamContext();
+        return true;
+      };
+
+      const handleClosingNotation = (char) => {
+        if (char !== "]" && char !== "}") {
+          return false;
+        }
+        if (char === "]" && activeEndingMarker) {
+          const stopMeasureNo = currentMeasure.length === 0 ? currentMeasureNo - 1 : currentMeasureNo;
+          stopActiveEndingAtMeasure(stopMeasureNo);
+          idx += 1;
+          resetBeamContext();
+          return true;
+        }
+        return advanceBodyCursorWithWarning("Skipped unsupported notation: " + char);
+      };
+
+      const handleUnsupportedPunctuation = (char) => {
+        if (char !== ";" && char !== "`" && char !== "?" && char !== "@" && char !== "#" && char !== "$" && char !== "*") {
+          return false;
+        }
+        return advanceBodyCursorWithWarning("Skipped unsupported body punctuation: " + char);
+      };
+
+      const handleBodyEntry = (bodyEntry, char) => {
+        const bodyToken = bodyEntry?.kind === "body-token" ? bodyEntry.bodyToken : null;
+        const entryHandlers = [
+          () => handleNonPlayableBodyEntry(bodyEntry),
+          () => handleSimpleBodyToken(bodyToken, char),
+          () => handleGraceGroup(char),
+          () => handleBracketBodyToken(bodyToken),
+          () => (bodyEntry?.kind === "playable-event" ? handlePlayableEvent(bodyEntry.playableEvent) : false),
+        ];
+        for (const handler of entryHandlers) {
+          if (handler()) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const throwBodyParseError = () => {
+        throw new Error("line " + entry.lineNo + ": Failed to parse note/rest: " + text.slice(idx, idx + 12));
+      };
+
+      const handleBodyFallback = (bodyEntry, char) => {
+        return processAbcBodyFallback({
+          char,
+          bodyEntry,
+          handleClosingNotation,
+          handleUnsupportedPunctuation,
+          throwBodyParseError,
+        });
+      };
+
+      const consumeIgnorableBodyChar = (char) => {
+        if (char === " " || char === "\t") {
+          sawInterEventWhitespace = true;
+          idx += 1;
+          return true;
+        }
+        if (char === "\\") {
+          warnBody("Skipped stray body continuation marker: \\");
+          idx += 1;
+          return true;
+        }
+        if (char === "," || char === "'") {
+          // Lenient compatibility: some real-world sources include standalone octave marks.
+          // They are non-standard in strict ABC, but skipping them improves interoperability.
+          idx += 1;
+          return true;
+        }
+        return false;
+      };
+
+      const isBeamableAbcNote = (note) =>
+        Boolean(
+          note &&
+          !note.isRest &&
+          !note.grace &&
+          ["eighth", "16th", "32nd", "64th"].includes(String(note.type || "").trim().toLowerCase())
+        );
+      const applyBeamModeForEvent = (note, durationDiv) => {
+        const resolvedDurationDiv = Math.max(0, Math.round(Number(durationDiv) || 0));
+        const beatDiv = Math.max(1, Math.round((960 * 4) / Math.max(1, Math.round(Number(activeMeter?.beatType) || 4))));
+        const startsAtBeatBoundary = beamCursorDiv > 0 && beamCursorDiv % beatDiv === 0;
+        if (startsAtBeatBoundary) {
+          beamRunActive = false;
+        }
+        if (isBeamableAbcNote(note)) {
+          note.beamMode = !beamRunActive || sawInterEventWhitespace ? "begin" : "mid";
+          beamRunActive = true;
+        } else {
+          beamRunActive = false;
+        }
+        sawInterEventWhitespace = false;
+        beamCursorDiv += resolvedDurationDiv;
+      };
+
+      const ensureAbcBodyCursorAdvanced = (beforeIdx, stage) => {
+        if (idx > beforeIdx) {
+          return;
+        }
+        const contextText = text.slice(Math.max(0, beforeIdx - 12), Math.min(text.length, beforeIdx + 24));
+        throw new Error(
+          "line " +
+          entry.lineNo +
+          ": ABC body parser made no progress at idx " +
+          beforeIdx +
+          " during " +
+          stage +
+          ": " +
+          contextText
+        );
+      };
+
+      while (idx < text.length) {
+        const beforeIdx = idx;
+        const ch = text[idx];
+
+        if (consumeIgnorableBodyChar(ch)) {
+          ensureAbcBodyCursorAdvanced(beforeIdx, "consumeIgnorableBodyChar");
+          continue;
+        }
+
+        const bodyEntry = parseAbcBodyEntryAt(text, idx);
+
+        if (handleBodyEntry(bodyEntry, ch)) {
+          ensureAbcBodyCursorAdvanced(beforeIdx, "handleBodyEntry");
+          continue;
+        }
+
+        if (handleBodyFallback(bodyEntry, ch)) {
+          ensureAbcBodyCursorAdvanced(beforeIdx, "handleBodyFallback");
+          continue;
+        }
       }
+      voiceStores.activeEndingByVoice[entry.voiceId] = activeEndingMarker;
+      voiceStores.currentKeyFifthsByVoice[entry.voiceId] = activeKeyFifths;
     }
 
-    for (const voiceId of Object.keys(measuresByVoice)) {
-      const measures = measuresByVoice[voiceId];
-      while (measures.length > 1 && measures[measures.length - 1].length === 0) {
-        measures.pop();
-      }
-    }
+    finalizeAbcActiveEndings(voiceStores);
+    applyAbcLyricsToMeasures(lyricEntriesByVoice, voiceStores.measuresByVoice);
 
     if (noteCount === 0) {
       throw new Error("No notes or rests were found. (line 1)");
     }
 
-    const orderedVoiceIds = parseScoreVoiceOrder(scoreDirective, declaredVoiceIds);
+    const scoreLayout = parseAbcScoreLayout(lineState.scoreDirective, voiceRegistry.declaredVoiceIds);
+    const orderedVoiceIds = scoreLayout.orderedVoiceIds;
     const measureCapacity = Math.max(
       1,
       Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960)
     );
     const importDiagnostics = [];
     const overfullCompatibilityMode = settings?.overfullCompatibilityMode !== false;
-    const parts = orderedVoiceIds.map((voiceId, index) => {
-      const partName = voiceNameById[voiceId] || ("Voice " + voiceId);
-      const transpose =
-        transposeHintByVoiceId.get(voiceId) ||
-        voiceTransposeById[voiceId] ||
-        (settings.inferTransposeFromPartName ? inferTransposeFromPartName(partName) : null);
-      const normalized = overfullCompatibilityMode
-        ? normalizeMeasuresToCapacity(measuresByVoice[voiceId] || [[]], measureCapacity)
-        : { measures: measuresByVoice[voiceId] || [[]], diagnostics: [] };
-      const normalizedMeasures = normalized.measures;
-      if (overfullCompatibilityMode) {
-        for (const diag of normalized.diagnostics) {
-          importDiagnostics.push({
-            level: "warn",
-            code: "OVERFULL_REFLOWED",
-            fmt: "abc",
-            voiceId,
-            measure: diag.sourceMeasure,
-            action: "reflowed",
-            movedEvents: diag.movedEvents,
-          });
-        }
-      }
-      const keyByMeasure: Record<number, number> = {};
-      const measureMetaByIndex: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }> = {};
-      for (let m = 1; m <= normalizedMeasures.length; m += 1) {
-        const hinted = keyHintFifthsByKey.get(`${voiceId}#${m}`);
-        if (Number.isFinite(hinted)) {
-          keyByMeasure[m] = Number(hinted);
-        }
-        const meta = measureMetaByKey.get(`${voiceId}#${m}`);
-        if (meta) {
-          measureMetaByIndex[m] = meta;
-        }
-      }
-      return {
-        partId: "P" + String(index + 1),
-        partName,
-        clef: voiceClefById[voiceId] || "",
-        transpose,
-        voiceId,
-        keyByMeasure,
-        measureMetaByIndex,
-        measures: normalizedMeasures
-      };
-    });
+    const normalizedVoiceDataById = buildAbcNormalizedVoiceDataById(
+      orderedVoiceIds,
+      voiceRegistry,
+      voiceStores.measuresByVoice,
+      measureCapacity,
+      overfullCompatibilityMode,
+      settings,
+      transposeHintByVoiceId,
+      keyHintFifthsByKey,
+      voiceStores.notationMeasureMetaByVoice,
+      measureMetaByKey,
+      voiceStores.meterByMeasureByVoice,
+      voiceStores.tempoByMeasureByVoice,
+      importDiagnostics
+    );
+    const parts = buildAbcParsedPartsFromLayout(scoreLayout, normalizedVoiceDataById);
     const measureCount = parts.reduce((acc, part) => Math.max(acc, part.measures.length), 0);
 
     const warningDiagnostics = warnings.map((message) => ({
@@ -901,46 +4040,20 @@ const abcCommon = AbcCommon;
     };
   }
 
-  function parseScoreVoiceOrder(raw, declaredVoiceIds) {
-    const baseOrder = Array.from(declaredVoiceIds || []);
-    if (!raw) {
-      return baseOrder.length > 0 ? baseOrder : ["1"];
-    }
-
-    const ordered = [];
-    const seen = new Set();
-    const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
-    let m;
-    while ((m = groupRegex.exec(raw)) !== null) {
-      const chunk = m[1] || m[2] || "";
-      const ids = chunk
-        .split(/\s+/)
-        .map((v) => v.trim())
-        .filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
-      for (const id of ids) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          ordered.push(id);
-        }
-      }
-    }
-    for (const id of baseOrder) {
-      if (!seen.has(id)) {
-        seen.add(id);
-        ordered.push(id);
-      }
-    }
-    return ordered.length > 0 ? ordered : ["1"];
-  }
-
   function parseVoiceDirectiveTail(raw) {
     if (!raw) {
-      return { name: "", clef: "", transpose: null, bodyText: "" };
+      return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "", unsupportedKeys: [] };
     }
     let bodyText = String(raw);
     let name = "";
     let clef = "";
     let transpose = null;
+    const unsupportedKeys = [];
+    const bareClefMatch = bodyText.match(/^\s*(bass|treble|alto|tenor|c3|c4)(?=\s|$)/i);
+    if (bareClefMatch) {
+      clef = String(bareClefMatch[1] || "").trim().toLowerCase();
+      bodyText = bodyText.slice(bareClefMatch[0].length);
+    }
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
       const lowerKey = String(key).toLowerCase();
@@ -953,14 +4066,26 @@ const abcCommon = AbcCommon;
         if (Number.isFinite(parsed) && parsed >= -24 && parsed <= 24) {
           transpose = { chromatic: parsed };
         }
+      } else {
+        unsupportedKeys.push(lowerKey);
       }
       return " ";
     });
+    bodyText = bodyText.trim();
+    let skippedText = "";
+    const firstTokenMatch = bodyText.match(/^(\S+)/);
+    const firstToken = firstTokenMatch ? firstTokenMatch[1] : "";
+    if (firstToken && /^[A-Za-z][A-Za-z0-9_-]*$/.test(firstToken) && /[^A-Ga-gzZxX]/.test(firstToken)) {
+      skippedText = firstToken;
+      bodyText = bodyText.slice(firstToken.length).trim();
+    }
     return {
       name: name.trim(),
       clef: clef.trim(),
       transpose,
-      bodyText: bodyText.trim()
+      bodyText,
+      skippedText,
+      unsupportedKeys
     };
   }
 
@@ -1052,103 +4177,45 @@ const abcCommon = AbcCommon;
     return abcCommon.parseAbcLengthToken(token, lineNo);
   }
 
-  function parseChordAt(text, startIdx, lineNo) {
-    if (text[startIdx] !== "[") {
-      return null;
-    }
-    const closeIdx = text.indexOf("]", startIdx + 1);
-    if (closeIdx < 0) {
-      return null;
-    }
-    const inner = text.slice(startIdx + 1, closeIdx);
-    const noteRegex = /(\^{1,2}|_{1,2}|=)?([A-Ga-g])([',]*)(\d+\/\d+|\d+|\/\d+|\/)?/g;
-    const notes = [];
-    let match;
-    while ((match = noteRegex.exec(inner)) !== null) {
-      notes.push({
-        accidentalText: match[1] || "",
-        pitchChar: match[2],
-        octaveShift: match[3] || "",
-        lengthToken: match[4] || ""
-      });
-    }
-    if (notes.length === 0) {
-      return null;
-    }
-    const after = text.slice(closeIdx + 1);
-    const lengthMatch = after.match(/^(\d+\/\d+|\d+|\/\d+|\/)/);
-    const lengthToken = lengthMatch ? lengthMatch[1] : "";
-    const nextIdx = closeIdx + 1 + (lengthMatch ? lengthMatch[1].length : 0);
-    return {
-      notes,
-      lengthToken,
-      nextIdx
-    };
-  }
-
-  function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId) {
-    if (text[startIdx] !== "{") return null;
-    const closeIdx = text.indexOf("}", startIdx + 1);
-    if (closeIdx < 0) return null;
-    const inner = text.slice(startIdx + 1, closeIdx);
+  function parseGraceGroupAt(text, startIdx, lineNo, unitLength, keySignatureAccidentals, measureAccidentals, voiceId, warnings) {
+    const parsedGrace = parseAbcGraceGroupAt(text, startIdx, lineNo, warnings);
+    if (!parsedGrace) return null;
     const graceAccidentals = { ...measureAccidentals };
     const notes = [];
-    let idx = 0;
-    let graceSlashPending = false;
-    while (idx < inner.length) {
-      const ch = inner[idx];
-      if (ch === " " || ch === "\t") {
-        idx += 1;
-        continue;
-      }
-      if (ch === "/") {
-        graceSlashPending = true;
-        idx += 1;
-        continue;
-      }
-      let accidentalText = "";
-      while (idx < inner.length && (inner[idx] === "^" || inner[idx] === "_" || inner[idx] === "=")) {
-        accidentalText += inner[idx];
-        idx += 1;
-      }
-      const pitchChar = inner[idx];
-      if (!pitchChar || !/[A-Ga-gzZxX]/.test(pitchChar)) {
-        idx += 1;
-        continue;
-      }
-      idx += 1;
-      let octaveShift = "";
-      while (idx < inner.length && (inner[idx] === "'" || inner[idx] === ",")) {
-        octaveShift += inner[idx];
-        idx += 1;
-      }
-      let lengthToken = "";
-      const lengthMatch = inner.slice(idx).match(/^(\d+\/\d+|\d+|\/\d+|\/)/);
-      if (lengthMatch) {
-        lengthToken = lengthMatch[1];
-        idx += lengthToken.length;
-      }
+    for (const parsedNote of parsedGrace.notes) {
+      const { accidentalText, pitchChar, octaveShift, lengthToken, graceSlash } = parsedNote;
       const len = parseLengthToken(lengthToken, lineNo);
       const absoluteLength = multiplyFractions(unitLength, len);
       const dur = durationInDivisions(absoluteLength, 960);
-      if (dur <= 0) continue;
-      const note = buildNoteData(
-        pitchChar,
-        accidentalText,
-        octaveShift,
-        absoluteLength,
-        dur,
-        lineNo,
-        keySignatureAccidentals,
-        graceAccidentals
-      );
+      if (dur <= 0) {
+        warnings.push("line " + lineNo + ": Skipped grace note with invalid length.");
+        continue;
+      }
+      let note;
+      try {
+        note = buildNoteData(
+          pitchChar,
+          accidentalText,
+          octaveShift,
+          absoluteLength,
+          dur,
+          lineNo,
+          keySignatureAccidentals,
+          graceAccidentals
+        );
+      } catch (error) {
+        if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+          warnings.push("line " + lineNo + ": Skipped grace note with unsupported octave range.");
+          continue;
+        }
+        throw error;
+      }
       note.voice = voiceId;
       note.grace = true;
-      note.graceSlash = graceSlashPending;
-      graceSlashPending = false;
+      note.graceSlash = graceSlash;
       notes.push(note);
     }
-    return { notes, nextIdx: closeIdx + 1 };
+    return { notes, nextIdx: parsedGrace.nextIdx };
   }
 
   function scaleNotesDuration(notes, scale) {
@@ -1400,13 +4467,15 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const fifths = Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() || "0");
   const mode = firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() || "major";
   const key = AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
-  const explicitTempo = Number(doc.querySelector("sound[tempo]")?.getAttribute("tempo") ?? "");
-  const metronomeTempo = Number(
-    doc.querySelector("direction-type > metronome > per-minute")?.textContent?.trim() ?? ""
-  );
-  const tempoBpm = Number.isFinite(explicitTempo) && explicitTempo > 0
-    ? explicitTempo
-    : (Number.isFinite(metronomeTempo) && metronomeTempo > 0 ? metronomeTempo : NaN);
+  const initialTempo = readInitialTempoFromMusicXml(doc);
+  const tempoBpm = initialTempo?.bpm ?? NaN;
+  const abcTempoHeader = (() => {
+    if (initialTempo?.unit && Number.isFinite(initialTempo.bpm) && initialTempo.bpm > 0) {
+      return `Q:${fractionToAbcTempoUnit(initialTempo.unit)}=${Math.round(initialTempo.bpm)}`;
+    }
+    if (Number.isFinite(tempoBpm)) return `Q:1/4=${Math.round(tempoBpm)}`;
+    return "";
+  })();
 
   const partNameById = new Map<string, string>();
   for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
@@ -1463,13 +4532,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
     composer ? `C:${composer}` : "",
     `M:${meterBeats}/${meterBeatType}`,
     "L:1/8",
-    Number.isFinite(tempoBpm) ? `Q:1/4=${Math.round(tempoBpm)}` : "",
+    abcTempoHeader,
     `K:${key}`,
   ].filter(Boolean);
 
   const bodyLines: string[] = [];
   const metaLines: string[] = [];
-  const emittedKeyMetaByVoiceMeasure = new Set<string>();
   const emitDiagMetaForMeasure = (
     normalizedVoiceId: string,
     measure: Element,
@@ -1477,7 +4545,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   ): void => {
     const fields = Array.from(
       measure.querySelectorAll(
-        ':scope > attributes > miscellaneous > miscellaneous-field[name^="diag:"]'
+        ':scope > attributes > miscellaneous > miscellaneous-field[name^="mks:diag:"]'
       )
     );
     if (!fields.length) return;
@@ -1489,8 +4557,10 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
       byName.set(name, value);
     }
     const orderedNames = Array.from(byName.keys()).sort((a, b) => {
-      if (a === "diag:count") return -1;
-      if (b === "diag:count") return 1;
+      const isCountA = a === "mks:diag:count";
+      const isCountB = b === "mks:diag:count";
+      if (isCountA && !isCountB) return -1;
+      if (!isCountA && isCountB) return 1;
       return a.localeCompare(b);
     });
     for (const name of orderedNames) {
@@ -1594,10 +4664,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
       let currentDivisions = 480;
       let currentFifths = partInitialFifths;
-      let lastEmittedKeyFifths: number | null = null;
+      let lastEmittedKeyFifths: number | null = Number.isFinite(fifths) ? Math.round(fifths) : 0;
       let currentBeats = Number(meterBeats) || 4;
       let currentBeatType = Number(meterBeatType) || 4;
       const measureTexts: string[] = [];
+      const lyricTokens: string[] = [];
+      let pendingLyricExtension = false;
       for (const measure of measures) {
         let activeTuplet: { actual: number; normal: number; remaining: number } | null = null;
         let eventNo = 0;
@@ -1615,43 +4687,38 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
         const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
         const leftRepeatNode = measure.querySelector(':scope > barline[location="left"] > repeat');
         const rightRepeatNode = measure.querySelector(':scope > barline[location="right"] > repeat');
+        const leftEndingNode = measure.querySelector(':scope > barline[location="left"] > ending');
+        const rightEndingNode = measure.querySelector(':scope > barline[location="right"] > ending');
         const leftRepeatDir = (leftRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
         const rightRepeatDir = (rightRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
-        const repeatDir =
-          rightRepeatDir === "backward"
-            ? "backward"
-            : (leftRepeatDir === "forward" ? "forward" : "");
+        const hasLeftRepeat = leftRepeatDir === "forward";
+        const hasRightRepeat = rightRepeatDir === "backward";
         const repeatTimes = Number.parseInt(String(rightRepeatNode?.getAttribute("times") || ""), 10);
-        if (isImplicit || repeatDir || rawMeasureNumber !== String(safeMeasureNumber)) {
+        const leftEndingNumber = (leftEndingNode?.getAttribute("number") || "").trim();
+        const rightEndingNumber = (rightEndingNode?.getAttribute("number") || "").trim();
+        const rightEndingType = (rightEndingNode?.getAttribute("type") || "").trim().toLowerCase();
+        if (
+          isImplicit ||
+          rawMeasureNumber !== String(safeMeasureNumber) ||
+          (hasRightRepeat && Number.isFinite(repeatTimes) && repeatTimes > 2) ||
+          (rightEndingNumber && rightEndingType === "discontinue")
+        ) {
           const metaChunks = [
             `%@mks measure voice=${normalizedVoiceId} measure=${safeMeasureNumber}`,
             `number=${rawMeasureNumber}`,
             `implicit=${isImplicit ? 1 : 0}`,
           ];
-          if (repeatDir) {
-            metaChunks.push(`repeat=${repeatDir}`);
-          }
-          if (repeatDir === "backward" && Number.isFinite(repeatTimes) && repeatTimes > 1) {
+          if (hasRightRepeat && Number.isFinite(repeatTimes) && repeatTimes > 2) {
             metaChunks.push(`times=${Math.round(repeatTimes)}`);
+          }
+          if (rightEndingNumber && rightEndingType === "discontinue") {
+            metaChunks.push(`ending-stop=${rightEndingNumber}`);
+            metaChunks.push(`ending-type=${rightEndingType}`);
           }
           metaLines.push(metaChunks.join(" "));
         }
         emitDiagMetaForMeasure(normalizedVoiceId, measure, safeMeasureNumber);
-        const isFirstMeasureForLane = measureTexts.length === 0;
-        const hasExplicitKeyInMeasure = parsedFifths !== null;
-        const shouldEmitMeasureHint = hasExplicitKeyInMeasure || isFirstMeasureForLane;
-        if (shouldEmitMeasureHint) {
-          if (lastEmittedKeyFifths === null || lastEmittedKeyFifths !== currentFifths) {
-            const metaKey = `${normalizedVoiceId}#${safeMeasureNumber}`;
-            if (!emittedKeyMetaByVoiceMeasure.has(metaKey)) {
-              metaLines.push(
-                `%@mks key voice=${normalizedVoiceId} measure=${safeMeasureNumber} fifths=${Math.max(-7, Math.min(7, Math.round(currentFifths)))}`
-              );
-              emittedKeyMetaByVoiceMeasure.add(metaKey);
-            }
-            lastEmittedKeyFifths = currentFifths;
-          }
-        }
+        const needsInlineKeyChange = lastEmittedKeyFifths === null || lastEmittedKeyFifths !== currentFifths;
         const parsedBeats = parseOptionalNumber(measure.querySelector("attributes > time > beats")?.textContent);
         if (parsedBeats !== null && parsedBeats > 0) {
           currentBeats = parsedBeats;
@@ -1665,6 +4732,10 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
 
         let pending: { pitches: string[]; len: string; tie: boolean; slurStop: boolean; prefix: string } | null = null;
         const pendingGraceTokens: string[] = [];
+        const pendingHarmonySymbols: string[] = [];
+        const pendingDirectionWords: string[] = [];
+        const pendingDirectionDecorations: string[] = [];
+        let activeWedgeType: "" | "crescendo" | "diminuendo" = "";
         const tokens: string[] = [];
         const flush = (): void => {
           if (!pending) return;
@@ -1677,6 +4748,66 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
         };
 
         for (const child of Array.from(measure.children)) {
+          if (child.tagName === "harmony") {
+            const chordSymbol = abcChordSymbolFromHarmony(child);
+            if (chordSymbol) {
+              pendingHarmonySymbols.push(chordSymbol);
+            }
+            continue;
+          }
+          if (child.tagName === "direction") {
+            const rehearsalTexts = Array.from(child.querySelectorAll(":scope > direction-type > rehearsal"))
+              .map((node) => abcQuotedTextEscape(node.textContent || ""))
+              .filter(Boolean);
+            for (const rehearsalText of rehearsalTexts) {
+              pendingDirectionDecorations.push(`!rehearsal:${rehearsalText}!`);
+            }
+            const words = Array.from(child.querySelectorAll(":scope > direction-type > words"))
+              .map((node) => abcQuotedTextEscape(node.textContent || ""))
+              .filter(Boolean);
+            pendingDirectionWords.push(...words);
+            if (child.querySelector(":scope > direction-type > segno")) {
+              pendingDirectionDecorations.push("!segno!");
+            }
+            if (child.querySelector(":scope > direction-type > coda")) {
+              pendingDirectionDecorations.push("!coda!");
+            }
+            if (child.querySelector(':scope > sound[fine="yes"]')) {
+              pendingDirectionDecorations.push("!fine!");
+            }
+            const hasDaCapo = Boolean(child.querySelector(':scope > sound[dacapo="yes"]'));
+            const hasToCoda = Boolean(child.querySelector(":scope > sound[tocoda]"));
+            if (hasDaCapo && hasToCoda) {
+              pendingDirectionDecorations.push("!dacoda!");
+            } else if (hasDaCapo) {
+              pendingDirectionDecorations.push("!dacapo!");
+            }
+            if (child.querySelector(":scope > sound[dalsegno]")) {
+              pendingDirectionDecorations.push("!dalsegno!");
+            }
+            if (hasToCoda && !hasDaCapo) {
+              pendingDirectionDecorations.push("!tocoda!");
+            }
+            for (const wedgeNode of Array.from(child.querySelectorAll(":scope > direction-type > wedge"))) {
+              const wedgeType = (wedgeNode.getAttribute("type") || "").trim().toLowerCase();
+              if (wedgeType === "crescendo") {
+                pendingDirectionDecorations.push("!crescendo(!");
+                activeWedgeType = "crescendo";
+              } else if (wedgeType === "diminuendo") {
+                pendingDirectionDecorations.push("!diminuendo(!");
+                activeWedgeType = "diminuendo";
+              } else if (wedgeType === "stop") {
+                pendingDirectionDecorations.push(activeWedgeType === "diminuendo" ? "!diminuendo)!" : "!crescendo)!");
+                activeWedgeType = "";
+              }
+            }
+            for (const dynamicName of ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp", "sfz"]) {
+              if (child.querySelector(`:scope > direction-type > dynamics > ${dynamicName}`)) {
+                pendingDirectionDecorations.push(`!${dynamicName}!`);
+              }
+            }
+            continue;
+          }
           if (child.tagName !== "note") continue;
           if (lane.staff) {
             const noteStaff = child.querySelector(":scope > staff")?.textContent?.trim() ?? "";
@@ -1699,16 +4830,80 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
           const hasTurn = Boolean(child.querySelector(":scope > notations > ornaments > turn"));
           const hasInvertedTurn = Boolean(child.querySelector(":scope > notations > ornaments > inverted-turn"));
+          const hasTurnSlash = Array.from(child.querySelectorAll(":scope > notations > ornaments > turn, :scope > notations > ornaments > inverted-turn"))
+            .some((node) => (node.getAttribute("slash") || "").trim().toLowerCase() === "yes");
+          const hasDelayedTurn = Boolean(child.querySelector(":scope > notations > ornaments > delayed-turn"));
+          const hasMordent = Boolean(child.querySelector(":scope > notations > ornaments > mordent"));
+          const hasInvertedMordent = Boolean(child.querySelector(":scope > notations > ornaments > inverted-mordent"));
+          const tremoloNode = child.querySelector(":scope > notations > ornaments > tremolo");
+          const hasSchleifer = Boolean(child.querySelector(":scope > notations > ornaments > schleifer"));
+          const hasShake = Boolean(child.querySelector(":scope > notations > ornaments > shake"));
+          const hasGlissandoStart = Boolean(child.querySelector(':scope > notations > glissando[type="start"]'));
+          const hasGlissandoStop = Boolean(child.querySelector(':scope > notations > glissando[type="stop"]'));
+          const hasSlideStart = Boolean(child.querySelector(':scope > notations > slide[type="start"]'));
+          const hasSlideStop = Boolean(child.querySelector(':scope > notations > slide[type="stop"]'));
+          const hasArpeggiate = Boolean(child.querySelector(":scope > notations > arpeggiate"));
           const hasWavyLineStart = Array.from(
             child.querySelectorAll(":scope > notations > ornaments > wavy-line")
           ).some((node) => {
             const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
             return type === "" || type === "start";
           });
+          const hasWavyLineStop = Array.from(
+            child.querySelectorAll(":scope > notations > ornaments > wavy-line")
+          ).some((node) => {
+            const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
+            return type === "stop";
+          });
           const hasTrill = hasTrillMark || hasWavyLineStart;
           const turnType: "" | "turn" | "inverted-turn" = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
+          const mordentType: "" | "mordent" | "inverted-mordent" = hasInvertedMordent ? "inverted-mordent" : (hasMordent ? "mordent" : "");
+          const tremoloTypeRaw = (tremoloNode?.getAttribute("type") || "").trim().toLowerCase();
+          const tremoloType: "" | "single" | "start" | "stop" =
+            tremoloTypeRaw === "single" || tremoloTypeRaw === "start" || tremoloTypeRaw === "stop"
+              ? tremoloTypeRaw
+              : "";
+          const tremoloMarks = Math.max(1, Math.min(8, Number.parseInt(tremoloNode?.textContent?.trim() || "", 10) || 0));
           const trillAccidentalText = child.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() || "";
           const hasStaccato = Boolean(child.querySelector(":scope > notations > articulations > staccato"));
+          const hasStaccatissimo = Boolean(child.querySelector(":scope > notations > articulations > staccatissimo"));
+          const hasAccent = Boolean(child.querySelector(":scope > notations > articulations > accent"));
+          const hasTenuto = Boolean(child.querySelector(":scope > notations > articulations > tenuto"));
+          const hasStress = Boolean(child.querySelector(":scope > notations > articulations > stress"));
+          const hasUnstress = Boolean(child.querySelector(":scope > notations > articulations > unstress"));
+          const hasStrongAccent = Boolean(child.querySelector(":scope > notations > articulations > strong-accent"));
+          const hasBreathMark = Boolean(child.querySelector(":scope > notations > articulations > breath-mark"));
+          const hasCaesura = Boolean(child.querySelector(":scope > notations > articulations > caesura"));
+          const phraseMarkText = Array.from(child.querySelectorAll(":scope > notations > articulations > other-articulation"))
+            .map((node) => (node.textContent || "").trim().toLowerCase())
+            .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") || "";
+          const hasUpBow = Boolean(child.querySelector(":scope > notations > technical > up-bow"));
+          const hasDownBow = Boolean(child.querySelector(":scope > notations > technical > down-bow"));
+          const hasDoubleTongue = Boolean(child.querySelector(":scope > notations > technical > double-tongue"));
+          const hasTripleTongue = Boolean(child.querySelector(":scope > notations > technical > triple-tongue"));
+          const hasHeel = Boolean(child.querySelector(":scope > notations > technical > heel"));
+          const hasToe = Boolean(child.querySelector(":scope > notations > technical > toe"));
+          const fingeringTexts = Array.from(child.querySelectorAll(":scope > notations > technical > fingering"))
+            .map((node) => (node.textContent || "").trim())
+            .filter(Boolean);
+          const stringTexts = Array.from(child.querySelectorAll(":scope > notations > technical > string"))
+            .map((node) => (node.textContent || "").trim())
+            .filter(Boolean);
+          const pluckTexts = Array.from(child.querySelectorAll(":scope > notations > technical > pluck"))
+            .map((node) => (node.textContent || "").trim())
+            .filter(Boolean);
+          const hasOpenString = Boolean(child.querySelector(":scope > notations > technical > open-string"));
+          const hasSnapPizzicato = Boolean(child.querySelector(":scope > notations > technical > snap-pizzicato"));
+          const hasHarmonic = Boolean(child.querySelector(":scope > notations > technical > harmonic"));
+          const hasStopped = Boolean(child.querySelector(":scope > notations > technical > stopped"));
+          const hasThumbPosition = Boolean(child.querySelector(":scope > notations > technical > thumb-position"));
+          const fermataNode = child.querySelector(":scope > notations > fermata");
+          const fermataTypeRaw = fermataNode?.getAttribute("type")?.trim().toLowerCase() || "";
+          const fermataShapeRaw = fermataNode?.textContent?.trim().toLowerCase() || "";
+          const fermataType: "" | "normal" | "inverted" =
+            !fermataNode
+              ? ""
+              : (fermataTypeRaw === "inverted" || fermataShapeRaw === "inverted" ? "inverted" : "normal");
           const hasSlurStart = Boolean(child.querySelector(':scope > notations > slur[type="start"]'));
           const hasSlurStop = Boolean(child.querySelector(':scope > notations > slur[type="stop"]'));
           const hasGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
@@ -1737,8 +4932,11 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             const alterRaw = child.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? "";
             const explicitAlter =
               alterRaw !== "" && Number.isFinite(Number(alterRaw)) ? Math.round(Number(alterRaw)) : null;
-            const accidentalText = child.querySelector(":scope > accidental")?.textContent?.trim() ?? "";
+            const accidentalNode = child.querySelector(":scope > accidental");
+            const accidentalText = accidentalNode?.textContent?.trim() ?? "";
             const accidentalAlter = accidentalTextToAlter(accidentalText);
+            const accidentalEditorial = ((accidentalNode?.getAttribute("editorial") || "").trim().toLowerCase() === "yes");
+            const accidentalCautionary = ((accidentalNode?.getAttribute("cautionary") || "").trim().toLowerCase() === "yes");
 
             const keyAlter = keyAlterMap[upperStep] ?? 0;
             const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
@@ -1761,6 +4959,12 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
               : "";
             measureAccidentalByStepOctave.set(stepOctaveKey, targetAlter);
             pitchToken = `${accidental}${AbcCommon.abcPitchFromStepOctave(step, Number.isFinite(octave) ? octave : 4)}`;
+            if (accidentalEditorial && accidental) {
+              pitchToken = `!editorial!${pitchToken}`;
+            }
+            if (accidentalCautionary && accidental) {
+              pitchToken = `!courtesy!${pitchToken}`;
+            }
           }
           if (isGrace) {
             const graceSlashPrefix = hasGraceSlash ? "/" : "";
@@ -1791,11 +4995,70 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
                   ? `(${activeTuplet.actual}:${activeTuplet.normal}:${activeTuplet.actual}`
                   : "")
               : "";
-          const trillPrefix = hasTrill ? "!trill!" : "";
-          const turnPrefix = turnType === "inverted-turn" ? "!invertedturn!" : (turnType === "turn" ? "!turn!" : "");
-          const staccatoPrefix = hasStaccato ? "!staccato!" : "";
+          const trillPrefix = hasWavyLineStop
+            ? "!trill)!"
+            : (hasWavyLineStart && !hasTrillMark ? "!trill!" : (hasWavyLineStart ? "!trill(!" : (hasTrill ? "!trill!" : "")));
+          const turnPrefix =
+            turnType === "inverted-turn"
+              ? (hasDelayedTurn ? "!delayedinvertedturn!" : (hasTurnSlash ? "!invertedturnx!" : "!invertedturn!"))
+              : (turnType === "turn" ? (hasDelayedTurn ? "!delayedturn!" : (hasTurnSlash ? "!turnx!" : "!turn!")) : "");
+          const mordentPrefix = mordentType === "inverted-mordent" ? "!pralltriller!" : (mordentType === "mordent" ? "!mordent!" : "");
+          const tremoloPrefix = tremoloType ? `!tremolo-${tremoloType}-${tremoloMarks}!` : "";
+          const glissandoPrefix = hasGlissandoStart ? "!gliss-start!" : (hasGlissandoStop ? "!gliss-stop!" : "");
+          const slidePrefix = hasSlideStart ? "!slide!" : (hasSlideStop ? "!slide-stop!" : "");
+          const schleiferPrefix = hasSchleifer ? "!schleifer!" : "";
+          const shakePrefix = hasShake ? "!shake!" : "";
+          const arpeggiatePrefix = hasArpeggiate ? "!arpeggio!" : "";
+          const staccatoPrefix = hasStaccatissimo ? "!wedge!" : (hasStaccato ? "!staccato!" : "");
+          const accentPrefix = hasAccent ? "!accent!" : "";
+          const tenutoPrefix = hasTenuto ? "!tenuto!" : "";
+          const stressPrefix = hasStress ? "!stress!" : "";
+          const unstressPrefix = hasUnstress ? "!unstress!" : "";
+          const strongAccentPrefix = hasStrongAccent ? "!marcato!" : "";
+          const breathMarkPrefix = hasBreathMark ? "!breath!" : "";
+          const caesuraPrefix = hasCaesura ? "!caesura!" : "";
+          const phraseMarkPrefix =
+            phraseMarkText === "shortphrase" || phraseMarkText === "mediumphrase" || phraseMarkText === "longphrase"
+              ? `!${phraseMarkText}!`
+              : "";
+          const upBowPrefix = hasUpBow ? "!upbow!" : "";
+          const downBowPrefix = hasDownBow ? "!downbow!" : "";
+          const doubleTonguePrefix = hasDoubleTongue ? "!doubletongue!" : "";
+          const tripleTonguePrefix = hasTripleTongue ? "!tripletongue!" : "";
+          const heelPrefix = hasHeel ? "!heel!" : "";
+          const toePrefix = hasToe ? "!toe!" : "";
+          const fingeringPrefix = fingeringTexts
+            .map((value) => (/^[0-5]$/.test(value) ? `!${value}!` : `!fingering:${value}!`))
+            .join("");
+          const stringPrefix = stringTexts.map((value) => `!string:${value}!`).join("");
+          const pluckPrefix = pluckTexts.map((value) => `!pluck:${value}!`).join("");
+          const openStringPrefix = hasOpenString ? "!open!" : "";
+          const snapPizzicatoPrefix = hasSnapPizzicato ? "!snap!" : "";
+          const harmonicPrefix = hasHarmonic ? "!harmonic!" : "";
+          const stoppedPrefix = hasStopped ? "!stopped!" : "";
+          const thumbPrefix = hasThumbPosition ? "!thumb!" : "";
+          const fermataPrefix = fermataType === "inverted" ? "!invertedfermata!" : (fermataType === "normal" ? "!fermata!" : "");
           const slurStartPrefix = hasSlurStart ? "(" : "";
-          const eventPrefix = `${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${staccatoPrefix}`;
+          const wordsPrefix =
+            !isChord && pendingDirectionWords.length > 0
+              ? `${pendingDirectionWords.map((word) => `"${word}"`).join("")}`
+              : "";
+          const harmonyPrefix =
+            !isChord && pendingHarmonySymbols.length > 0
+              ? `${pendingHarmonySymbols.map((symbol) => `"${abcQuotedTextEscape(symbol)}"`).join("")}`
+              : "";
+          const directionDecorationPrefix =
+            !isChord && pendingDirectionDecorations.length > 0 ? pendingDirectionDecorations.join("") : "";
+          const eventPrefix = `${harmonyPrefix}${wordsPrefix}${directionDecorationPrefix}${tupletPrefix}${slurStartPrefix}${gracePrefix}${trillPrefix}${turnPrefix}${mordentPrefix}${tremoloPrefix}${glissandoPrefix}${slidePrefix}${schleiferPrefix}${shakePrefix}${arpeggiatePrefix}${staccatoPrefix}${accentPrefix}${tenutoPrefix}${stressPrefix}${unstressPrefix}${strongAccentPrefix}${breathMarkPrefix}${caesuraPrefix}${phraseMarkPrefix}${upBowPrefix}${downBowPrefix}${doubleTonguePrefix}${tripleTonguePrefix}${heelPrefix}${toePrefix}${fingeringPrefix}${stringPrefix}${pluckPrefix}${openStringPrefix}${snapPizzicatoPrefix}${harmonicPrefix}${stoppedPrefix}${thumbPrefix}${fermataPrefix}`;
+          if (!isChord && pendingHarmonySymbols.length > 0) {
+            pendingHarmonySymbols.length = 0;
+          }
+          if (!isChord && pendingDirectionWords.length > 0) {
+            pendingDirectionWords.length = 0;
+          }
+          if (!isChord && pendingDirectionDecorations.length > 0) {
+            pendingDirectionDecorations.length = 0;
+          }
           if (pendingGraceTokens.length > 0) {
             pendingGraceTokens.length = 0;
           }
@@ -1824,6 +5087,23 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
               activeTuplet = null;
             }
           }
+          if (!isGrace && !isChord && !child.querySelector(":scope > rest")) {
+            const lyric = child.querySelector(":scope > lyric");
+            const lyricText = lyric?.querySelector(":scope > text")?.textContent?.trim() || "";
+            const lyricSyllabic = lyric?.querySelector(":scope > syllabic")?.textContent?.trim() || "single";
+            const lyricExtend = Boolean(lyric?.querySelector(":scope > extend"));
+            if (lyricText) {
+              lyricTokens.push(abcLyricTokenFromMusicXml(lyricText, lyricSyllabic));
+              pendingLyricExtension = lyricExtend;
+            } else if (pendingLyricExtension) {
+              lyricTokens.push("_");
+            } else {
+              lyricTokens.push("*");
+            }
+            if (lyricText && !lyricExtend) {
+              pendingLyricExtension = false;
+            }
+          }
         }
         if (pendingGraceTokens.length > 0) {
           tokens.push(`{${pendingGraceTokens.join("")}}`);
@@ -1839,11 +5119,28 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const lenRatio = AbcCommon.divideFractions(wholeFraction, unitLength, { num: 1, den: 1 });
           tokens.push(`z${AbcCommon.abcLengthTokenFromFraction(lenRatio)}`);
         }
-        measureTexts.push(tokens.join(" "));
+        const measureTokenText = tokens.join(" ");
+        const keyPrefix = needsInlineKeyChange
+          ? `[K:${AbcCommon.keyFromFifthsMode(Math.max(-7, Math.min(7, Math.round(currentFifths))), "major")}]`
+          : "";
+        const leftPrefix = `${hasLeftRepeat ? "|:" : ""}${leftEndingNumber ? `[${leftEndingNumber}` : ""}`;
+        let rightSuffix = "|";
+        if (hasRightRepeat && rightEndingNumber) {
+          rightSuffix = `:|]`;
+        } else if (hasRightRepeat) {
+          rightSuffix = ":|";
+        } else if (rightEndingNumber) {
+          rightSuffix = "]|";
+        }
+        measureTexts.push(`${leftPrefix}${leftPrefix ? " " : ""}${keyPrefix}${keyPrefix ? " " : ""}${measureTokenText} ${rightSuffix}`.trim());
+        lastEmittedKeyFifths = currentFifths;
       }
 
       bodyLines.push(`V:${normalizedVoiceId}`);
-      bodyLines.push(`${measureTexts.join(" | ")} |`);
+      bodyLines.push(measureTexts.join(" "));
+      if (lyricTokens.some((token) => token !== "*")) {
+        bodyLines.push(`w: ${lyricTokens.join(" ")}`);
+      }
     }
   });
 
@@ -1858,6 +5155,132 @@ const xmlEscape = (text: string): string =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+
+const abcQuotedTextEscape = (text: string): string =>
+  String(text || "")
+    .replace(/"/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const normalizeChordToken = (raw: string): string =>
+  String(raw || "")
+    .trim()
+    .replace(/♯/g, "#")
+    .replace(/♭/g, "b")
+    .replace(/\s+/g, "");
+
+const isLikelyAbcChordSymbol = (raw: string): boolean => {
+  const text = normalizeChordToken(raw);
+  return /^[A-G](?:#|b)?(?:[^/\s"]*)?(?:\/[A-G](?:#|b)?)?$/.test(text);
+};
+
+const xmlHarmonyKindFromChordSuffix = (suffixRaw: string): string | null => {
+  const suffix = String(suffixRaw || "").trim().toLowerCase();
+  if (!suffix) return "major";
+  if (suffix === "m" || suffix === "min") return "minor";
+  if (suffix === "6") return "major-sixth";
+  if (suffix === "m6" || suffix === "min6") return "minor-sixth";
+  if (suffix === "7") return "dominant";
+  if (suffix === "7sus4") return "suspended-fourth";
+  if (suffix === "9") return "dominant-ninth";
+  if (suffix === "11") return "dominant-11th";
+  if (suffix === "13") return "dominant-13th";
+  if (suffix === "maj7") return "major-seventh";
+  if (suffix === "maj9") return "major-ninth";
+  if (suffix === "m9" || suffix === "min9") return "minor-ninth";
+  if (suffix === "m7" || suffix === "min7") return "minor-seventh";
+  if (suffix === "dim") return "diminished";
+  if (suffix === "dim7") return "diminished-seventh";
+  if (suffix === "aug" || suffix === "+") return "augmented";
+  if (suffix === "sus4") return "suspended-fourth";
+  if (suffix === "sus2") return "suspended-second";
+  if (suffix === "m7b5" || suffix === "min7b5" || suffix === "ø") return "half-diminished";
+  return null;
+};
+
+const xmlHarmonyRootFromChordToken = (token: string): { step: string; alter: number } | null => {
+  const m = String(token || "").match(/^([A-G])(#|b)?$/);
+  if (!m) return null;
+  return {
+    step: m[1],
+    alter: m[2] === "#" ? 1 : (m[2] === "b" ? -1 : 0),
+  };
+};
+
+const buildHarmonyXmlFromChordSymbol = (raw: string): string => {
+  const normalized = normalizeChordToken(raw);
+  const match = normalized.match(/^([A-G](?:#|b)?)([^/]*)?(?:\/([A-G](?:#|b)?))?$/);
+  if (!match) return "";
+  const root = xmlHarmonyRootFromChordToken(match[1] || "");
+  if (!root) return "";
+  const suffix = String(match[2] || "");
+  const bass = match[3] ? xmlHarmonyRootFromChordToken(match[3]) : null;
+  const kind = xmlHarmonyKindFromChordSuffix(suffix);
+  if (!kind) return "";
+  return [
+    "<harmony>",
+    "<root>",
+    `<root-step>${xmlEscape(root.step)}</root-step>`,
+    root.alter !== 0 ? `<root-alter>${root.alter}</root-alter>` : "",
+    "</root>",
+    bass
+      ? `<bass><bass-step>${xmlEscape(bass.step)}</bass-step>${bass.alter !== 0 ? `<bass-alter>${bass.alter}</bass-alter>` : ""}</bass>`
+      : "",
+    `<kind text="${xmlEscape(normalized)}">${kind}</kind>`,
+    "</harmony>",
+  ].join("");
+};
+
+const abcChordSymbolFromHarmony = (harmony: Element | null): string => {
+  if (!harmony) return "";
+  const rootStep = (harmony.querySelector(":scope > root > root-step")?.textContent || "").trim().toUpperCase();
+  if (!/^[A-G]$/.test(rootStep)) return "";
+  const rootAlter = Number(harmony.querySelector(":scope > root > root-alter")?.textContent || "0");
+  const kindNode = harmony.querySelector(":scope > kind");
+  const kindTextAttr = (kindNode?.getAttribute("text") || "").trim();
+  if (kindTextAttr) return abcQuotedTextEscape(kindTextAttr);
+  const kindValue = (kindNode?.textContent || "").trim().toLowerCase();
+  const rootToken = `${rootStep}${rootAlter === 1 ? "#" : (rootAlter === -1 ? "b" : "")}`;
+  const suffix =
+    kindValue === "major" ? "" :
+    kindValue === "minor" ? "m" :
+    kindValue === "major-sixth" ? "6" :
+    kindValue === "minor-sixth" ? "m6" :
+    kindValue === "dominant" ? "7" :
+    kindValue === "dominant-11th" ? "11" :
+    kindValue === "dominant-13th" ? "13" :
+    kindValue === "dominant-ninth" ? "9" :
+    kindValue === "major-seventh" ? "maj7" :
+    kindValue === "major-ninth" ? "maj9" :
+    kindValue === "minor-ninth" ? "m9" :
+    kindValue === "minor-seventh" ? "m7" :
+    kindValue === "diminished" ? "dim" :
+    kindValue === "diminished-seventh" ? "dim7" :
+    kindValue === "augmented" ? "aug" :
+    kindValue === "suspended-fourth" ? "sus4" :
+    kindValue === "suspended-second" ? "sus2" :
+    kindValue === "half-diminished" ? "m7b5" :
+    "";
+  const bassStep = (harmony.querySelector(":scope > bass > bass-step")?.textContent || "").trim().toUpperCase();
+  const bassAlter = Number(harmony.querySelector(":scope > bass > bass-alter")?.textContent || "0");
+  const bassToken = /^[A-G]$/.test(bassStep)
+    ? `/${bassStep}${bassAlter === 1 ? "#" : (bassAlter === -1 ? "b" : "")}`
+    : "";
+  return `${rootToken}${suffix}${bassToken}`;
+};
+
+const abcLyricTokenFromMusicXml = (
+  text: string,
+  syllabic?: "single" | "begin" | "middle" | "end" | string
+): string => {
+  const normalized = String(text || "").trim().replace(/\s+/g, "~");
+  const mode = String(syllabic || "single").trim().toLowerCase();
+  if (!normalized) return "*";
+  if (mode === "begin" || mode === "middle") {
+    return `${normalized}-`;
+  }
+  return normalized;
+};
 
 const normalizeTypeForMusicXml = (t?: string): string => {
   const raw = String(t || "").trim();
@@ -1940,11 +5363,15 @@ type AbcParsedMeta = {
 type AbcParsedNote = {
   isRest: boolean;
   duration: number;
+  staff?: number;
   type?: string;
+  beamMode?: "begin" | "mid";
   step?: string;
   octave?: number;
   alter?: number | null;
   accidentalText?: string | null;
+  accidentalEditorial?: boolean;
+  accidentalCautionary?: boolean;
   tieStart?: boolean;
   tieStop?: boolean;
   slurStart?: boolean;
@@ -1953,9 +5380,65 @@ type AbcParsedNote = {
   grace?: boolean;
   graceSlash?: boolean;
   trill?: boolean;
+  trillLineStart?: boolean;
+  trillLineStop?: boolean;
   trillAccidentalText?: string;
   turnType?: "turn" | "inverted-turn";
+  turnSlash?: boolean;
+  delayedTurn?: boolean;
+  mordentType?: "mordent" | "inverted-mordent";
+  phraseMark?: "shortphrase" | "mediumphrase" | "longphrase";
+  tremoloType?: "single" | "start" | "stop";
+  tremoloMarks?: number;
+  glissandoStart?: boolean;
+  glissandoStop?: boolean;
+  slideStart?: boolean;
+  slideStop?: boolean;
+  schleifer?: boolean;
+  shake?: boolean;
+  arpeggiate?: boolean;
   staccato?: boolean;
+  staccatissimo?: boolean;
+  accent?: boolean;
+  tenuto?: boolean;
+  stress?: boolean;
+  unstress?: boolean;
+  fermataType?: "normal" | "inverted";
+  strongAccent?: boolean;
+  breathMark?: boolean;
+  caesura?: boolean;
+  segno?: boolean;
+  coda?: boolean;
+  fine?: boolean;
+  daCapo?: boolean;
+  dalSegno?: boolean;
+  toCoda?: boolean;
+  crescendoStart?: boolean;
+  crescendoStop?: boolean;
+  diminuendoStart?: boolean;
+  diminuendoStop?: boolean;
+  rehearsalMark?: string;
+  dynamicMark?: "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff" | "fp" | "fz" | "rfz" | "sf" | "sfp";
+  sfz?: boolean;
+  upBow?: boolean;
+  downBow?: boolean;
+  doubleTongue?: boolean;
+  tripleTongue?: boolean;
+  heel?: boolean;
+  toe?: boolean;
+  fingerings?: string[];
+  strings?: string[];
+  plucks?: string[];
+  chordSymbols?: string[];
+  openString?: boolean;
+  snapPizzicato?: boolean;
+  harmonic?: boolean;
+  stopped?: boolean;
+  thumbPosition?: boolean;
+  annotations?: string[];
+  lyricText?: string;
+  lyricSyllabic?: "single" | "begin" | "middle" | "end";
+  lyricExtend?: boolean;
   timeModification?: { actual: number; normal: number };
   tupletStart?: boolean;
   tupletStop?: boolean;
@@ -1968,8 +5451,20 @@ type AbcParsedPart = {
   clef?: string;
   transpose?: { chromatic?: number; diatonic?: number } | null;
   voiceId?: string;
+  staffVoices?: AbcParsedStaffVoice[];
   keyByMeasure?: Record<number, number>;
-  measureMetaByIndex?: Record<number, { number: string; implicit: boolean; repeat: string; repeatTimes: number | null }>;
+  meterByMeasure?: Record<number, { beats: number; beatType: number }>;
+  tempoByMeasure?: Record<number, number>;
+  measureMetaByIndex?: Record<number, {
+    number: string;
+    implicit: boolean;
+    repeatStart: boolean;
+    repeatEnd: boolean;
+    repeatTimes: number | null;
+    endingStart: string;
+    endingStop: string;
+    endingStopType: "" | "stop" | "discontinue";
+  }>;
   measures: AbcParsedNote[][];
 };
 
@@ -1989,6 +5484,53 @@ type AbcParsedResult = {
   }>;
 };
 
+type AbcParsedStaffVoice = {
+  staff: number;
+  voiceId: string;
+  clef?: string;
+  transpose?: { chromatic?: number; diatonic?: number } | null;
+  measures: AbcParsedNote[][];
+};
+
+type AbcPartRenderState = {
+  currentPartFifths: number;
+  currentPartMeter: { beats: number; beatType: number };
+  currentPartTempo: number | null;
+};
+
+type AbcPartMeasureRenderContext = {
+  notes: AbcParsedNote[];
+  measureMeta: NonNullable<AbcParsedPart["measureMetaByIndex"]>[number] | null;
+  hintedFifths: number | null;
+  hintedMeter: { beats: number; beatType: number } | null;
+  hintedTempo: number | null;
+  nextState: AbcPartRenderState;
+  currentMeasureDurationDiv: number;
+  inferredImplicitPickup: boolean;
+};
+
+type AbcRenderedPartMeasureContext = {
+  part: AbcParsedPart;
+  partIndex: number;
+  measureIndex: number;
+  measureNo: number;
+  notes: AbcParsedNote[];
+  measureMeta: NonNullable<AbcParsedPart["measureMetaByIndex"]>[number] | null;
+  hintedFifths: number | null;
+  hintedMeter: { beats: number; beatType: number } | null;
+  hintedTempo: number | null;
+  currentPartFifths: number;
+  currentPartMeter: { beats: number; beatType: number };
+  currentPartTempo: number | null;
+  currentMeasureDurationDiv: number;
+  inferredImplicitPickup: boolean;
+  debugMetadata: boolean;
+  sourceMetadata: boolean;
+  diagnostics: AbcParsedResult["diagnostics"] | undefined;
+  abcSource: string;
+  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string;
+};
+
 export type AbcImportOptions = {
   debugMetadata?: boolean;
   debugPrettyPrint?: boolean;
@@ -2004,7 +5546,7 @@ const toHex = (value: number, width = 2): string => {
 const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string => {
   if (!notes.length) return "";
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="mks:abc-meta-count">${toHex(notes.length, 4)}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:dbg:abc:meta:count">${toHex(notes.length, 4)}</miscellaneous-field>`;
   for (let i = 0; i < notes.length; i += 1) {
     const note = notes[i];
     const voice = normalizeVoiceForMusicXml(note.voice);
@@ -2025,7 +5567,7 @@ const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number):
       `dd=${toHex(dur, 4)}`,
       `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
     ].join(";");
-    xml += `<miscellaneous-field name="mks:abc-meta-${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:dbg:abc:meta:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2046,13 +5588,13 @@ const buildAbcSourceMiscXml = (abcSource: string): string => {
   }
   const truncated = chunks.join("").length < encoded.length;
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
-  xml += `<miscellaneous-field name="src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
   for (let i = 0; i < chunks.length; i += 1) {
-    xml += `<miscellaneous-field name="src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:src:abc:raw-${String(i + 1).padStart(4, "0")}">${xmlEscape(chunks[i])}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2073,7 +5615,7 @@ const buildAbcDiagMiscXml = (
   if (!diagnostics.length) return "";
   const maxEntries = Math.min(256, diagnostics.length);
   let xml = "<attributes><miscellaneous>";
-  xml += `<miscellaneous-field name="diag:count">${maxEntries}</miscellaneous-field>`;
+  xml += `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
   for (let i = 0; i < maxEntries; i += 1) {
     const item = diagnostics[i];
     const payload = [
@@ -2088,7 +5630,7 @@ const buildAbcDiagMiscXml = (
     ]
       .filter(Boolean)
       .join(";");
-    xml += `<miscellaneous-field name="diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
+    xml += `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${payload}</miscellaneous-field>`;
   }
   xml += "</miscellaneous></attributes>";
   return xml;
@@ -2111,22 +5653,34 @@ const prettyPrintXml = (xml: string): string => {
   return lines.join("\n");
 };
 
-const buildMusicXmlFromAbcParsed = (
-  parsed: AbcParsedResult,
-  abcSource: string,
-  options: AbcImportOptions = {}
-): string => {
-  const debugMetadata = options.debugMetadata ?? true;
-  const sourceMetadata = options.sourceMetadata ?? true;
-  const debugPrettyPrint = options.debugPrettyPrint ?? debugMetadata;
-  const parts =
-    parsed.parts && parsed.parts.length > 0
-      ? parsed.parts
+const resolveAbcParsedPartsForExport = (parts: AbcParsedPart[] | undefined): AbcParsedPart[] => {
+  const safeParts =
+    parts && parts.length > 0
+      ? parts
       : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
-  const resolvedParts = parts.map((part) => ({
+  return safeParts.map((part) => ({
     ...part,
     clef: resolveAbcImportClef(part),
   }));
+};
+
+type AbcMusicXmlExportContext = {
+  resolvedParts: AbcParsedPart[];
+  measureCount: number;
+  title: string;
+  composer: string;
+  beats: number;
+  beatType: number;
+  defaultFifths: number;
+  divisions: number;
+  beatDiv: number;
+  measureDurationDiv: number;
+  emptyMeasureRestType: string;
+  tempoBpm: number | null;
+};
+
+const buildAbcMusicXmlExportContext = (parsed: AbcParsedResult): AbcMusicXmlExportContext => {
+  const resolvedParts = resolveAbcParsedPartsForExport(parsed.parts);
   const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
   const title = parsed.meta?.title || "mikuscore";
   const composer = parsed.meta?.composer || "Unknown";
@@ -2141,249 +5695,29 @@ const buildMusicXmlFromAbcParsed = (
     Number.isFinite(parsed.meta?.tempoBpm as number) && Number(parsed.meta?.tempoBpm) > 0
       ? Math.max(20, Math.min(300, Math.round(Number(parsed.meta?.tempoBpm))))
       : null;
+  return {
+    resolvedParts,
+    measureCount,
+    title,
+    composer,
+    beats,
+    beatType,
+    defaultFifths,
+    divisions,
+    beatDiv,
+    measureDurationDiv,
+    emptyMeasureRestType,
+    tempoBpm,
+  };
+};
 
-  const partListXml = resolvedParts
-    .map((part, index) => {
-      const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
-      return [
-        `<score-part id="${xmlEscape(part.partId)}">`,
-        `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
-        `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
-        `<midi-channel>${midiChannel}</midi-channel>`,
-        `<midi-program>6</midi-program>`,
-        "</midi-instrument>",
-        "</score-part>",
-      ].join("");
-    })
-    .join("");
-
-  const partBodyXml = resolvedParts
-    .map((part, partIndex) => {
-      const measuresXml: string[] = [];
-      let currentPartFifths = Math.max(-7, Math.min(7, Math.round(defaultFifths)));
-      for (let i = 0; i < measureCount; i += 1) {
-        const measureNo = i + 1;
-        const notes = part.measures[i] ?? [];
-        const measureMeta = part.measureMetaByIndex?.[measureNo] ?? null;
-        const hintedFifths = Number.isFinite(part.keyByMeasure?.[measureNo])
-          ? Math.max(-7, Math.min(7, Math.round(Number(part.keyByMeasure?.[measureNo]))))
-          : null;
-        if (hintedFifths !== null) {
-          currentPartFifths = hintedFifths;
-        }
-        const header =
-          i === 0
-            ? [
-                "<attributes>",
-                "<divisions>960</divisions>",
-                `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
-                `<time><beats>${Math.round(beats)}</beats><beat-type>${Math.round(beatType)}</beat-type></time>`,
-                part.transpose && (Number.isFinite(part.transpose.chromatic) || Number.isFinite(part.transpose.diatonic))
-                  ? [
-                      "<transpose>",
-                      Number.isFinite(part.transpose.diatonic)
-                        ? `<diatonic>${Math.round(Number(part.transpose.diatonic))}</diatonic>`
-                        : "",
-                      Number.isFinite(part.transpose.chromatic)
-                        ? `<chromatic>${Math.round(Number(part.transpose.chromatic))}</chromatic>`
-                        : "",
-                      "</transpose>",
-                    ].join("")
-                  : "",
-                clefXmlFromAbcClef(part.clef),
-                "</attributes>",
-                tempoBpm !== null && partIndex === 0
-                  ? `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${tempoBpm}</per-minute></metronome></direction-type><sound tempo="${tempoBpm}"/></direction>`
-                  : "",
-              ].join("")
-            : hintedFifths !== null
-              ? `<attributes><key><fifths>${Math.round(currentPartFifths)}</fifths></key></attributes>`
-              : "";
-
-        const notesXml =
-          notes.length > 0
-            ? (() => {
-                const beamXmlByNoteIndex = (() => {
-                  const out = new Map();
-                  const levelFromType = (typeText) => {
-                    switch (String(typeText || "").trim().toLowerCase()) {
-                      case "eighth":
-                        return 1;
-                      case "16th":
-                        return 2;
-                      case "32nd":
-                        return 3;
-                      case "64th":
-                        return 4;
-                      default:
-                        return 0;
-                    }
-                  };
-                  const byVoice = new Map();
-                  for (let i = 0; i < notes.length; i += 1) {
-                    const n = notes[i];
-                    const voice = normalizeVoiceForMusicXml(n.voice);
-                    const bucket = byVoice.get(voice) ?? [];
-                    bucket.push({ note: n, noteIndex: i });
-                    byVoice.set(voice, bucket);
-                  }
-                  for (const events of byVoice.values()) {
-                    const primary = events.filter((ev) => !ev.note?.chord);
-                    if (!primary.length) continue;
-                    const assignments = computeBeamAssignments(
-                      primary,
-                      beatDiv,
-                      (ev) => {
-                        const type = normalizeTypeForMusicXml(ev.note?.type);
-                        return {
-                          timed: true,
-                          chord: !Boolean(ev.note?.isRest),
-                          grace: Boolean(ev.note?.grace),
-                          durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
-                          levels: levelFromType(type),
-                        };
-                      },
-                      { splitAtBeatBoundaryWhenImplicit: true }
-                    );
-                    for (const [eventIndex, assignment] of assignments.entries()) {
-                      if (!assignment || assignment.levels <= 0) continue;
-                      let beamXml = "";
-                      for (let level = 1; level <= assignment.levels; level += 1) {
-                        beamXml += `<beam number="${level}">${assignment.state}</beam>`;
-                      }
-                      if (!beamXml) continue;
-                      const target = primary[eventIndex];
-                      if (!target) continue;
-                      out.set(target.noteIndex, beamXml);
-                    }
-                  }
-                  return out;
-                })();
-                return notes
-                  .map((note, noteIndex) => {
-                  const chunks: string[] = ["<note>"];
-                  if (note.chord) chunks.push("<chord/>");
-                  if (note.grace) {
-                    chunks.push(note.graceSlash ? '<grace slash="yes"/>' : "<grace/>");
-                  }
-                  if (note.isRest) {
-                    chunks.push("<rest/>");
-                  } else {
-                    const step = /^[A-G]$/.test(String(note.step || "").toUpperCase())
-                      ? String(note.step).toUpperCase()
-                      : "C";
-                    const octave = Number.isFinite(note.octave)
-                      ? Math.max(0, Math.min(9, Math.round(note.octave as number)))
-                      : 4;
-                    chunks.push("<pitch>");
-                    chunks.push(`<step>${step}</step>`);
-                    if (Number.isFinite(note.alter as number) && Number(note.alter) !== 0) {
-                      chunks.push(`<alter>${Math.round(Number(note.alter))}</alter>`);
-                    }
-                    chunks.push(`<octave>${octave}</octave>`);
-                    chunks.push("</pitch>");
-                  }
-                  if (!note.grace) {
-                    const duration = Math.max(1, Math.round(Number(note.duration) || 1));
-                    chunks.push(`<duration>${duration}</duration>`);
-                  }
-                  chunks.push(`<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`);
-                  chunks.push(`<type>${normalizeTypeForMusicXml(note.type)}</type>`);
-                  if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) {
-                    chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
-                  }
-                  if (
-                    note.timeModification &&
-                    Number.isFinite(note.timeModification.actual) &&
-                    Number.isFinite(note.timeModification.normal) &&
-                    Number(note.timeModification.actual) > 0 &&
-                    Number(note.timeModification.normal) > 0
-                  ) {
-                    chunks.push(
-                      `<time-modification><actual-notes>${Math.round(Number(note.timeModification.actual))}</actual-notes><normal-notes>${Math.round(Number(note.timeModification.normal))}</normal-notes></time-modification>`
-                    );
-                  }
-                  if (note.accidentalText) {
-                    chunks.push(`<accidental>${xmlEscape(String(note.accidentalText))}</accidental>`);
-                  }
-                  if (note.tieStart) chunks.push('<tie type="start"/>');
-                  if (note.tieStop) chunks.push('<tie type="stop"/>');
-                  if (
-                    note.tieStart ||
-                    note.tieStop ||
-                    note.slurStart ||
-                    note.slurStop ||
-                    note.trill ||
-                    note.turnType ||
-                    note.staccato ||
-                    note.tupletStart ||
-                    note.tupletStop
-                  ) {
-                    chunks.push("<notations>");
-                    if (note.tieStart) chunks.push('<tied type="start"/>');
-                    if (note.tieStop) chunks.push('<tied type="stop"/>');
-                    if (note.slurStart) chunks.push('<slur type="start"/>');
-                    if (note.slurStop) chunks.push('<slur type="stop"/>');
-                    if (note.tupletStart) chunks.push('<tuplet type="start"/>');
-                    if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
-                    if (note.trill) {
-                      const trillParts: string[] = [];
-                      trillParts.push("<trill-mark/>");
-                      if (note.trillAccidentalText) {
-                        trillParts.push(`<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>`);
-                      }
-                      chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
-                    }
-                    if (note.turnType) {
-                      const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
-                      chunks.push(`<ornaments><${tag}/></ornaments>`);
-                    }
-                    if (note.staccato) chunks.push("<articulations><staccato/></articulations>");
-                    chunks.push("</notations>");
-                  }
-                  chunks.push("</note>");
-                  return chunks.join("");
-                })
-                .join("");
-              })()
-            : `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type></note>`;
-
-        const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
-        const implicitAttr = measureMeta?.implicit ? ' implicit="yes"' : "";
-        const repeatStartXml =
-          measureMeta?.repeat === "forward"
-            ? '<barline location="left"><repeat direction="forward" winged="none"/></barline>'
-            : "";
-        const repeatEndXml =
-          measureMeta?.repeat === "backward"
-            ? `<barline location="right"><repeat direction="backward" winged="none"${
-                Number.isFinite(measureMeta.repeatTimes) && Number(measureMeta.repeatTimes) > 1
-                  ? ` times="${Math.round(Number(measureMeta.repeatTimes))}"`
-                  : ""
-              }/></barline>`
-            : "";
-        const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
-        const diagMiscXml =
-          partIndex === 0 && measureNo === 1
-            ? buildAbcDiagMiscXml(
-                (parsed.diagnostics ?? []).filter(
-                  (diag) => !diag.voiceId || diag.voiceId === (part.voiceId || "")
-                )
-              )
-            : "";
-        const sourceMiscXml =
-          sourceMetadata && partIndex === 0 && measureNo === 1
-            ? buildAbcSourceMiscXml(abcSource)
-            : "";
-        measuresXml.push(
-          `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${header}${debugMiscXml}${diagMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`
-        );
-      }
-      return `<part id="${xmlEscape(part.partId)}">${measuresXml.join("")}</part>`;
-    })
-    .join("");
-
-  const xml = [
+const buildAbcScorePartwiseXmlDocument = (
+  title: string,
+  composer: string,
+  partListXml: string,
+  partBodyXml: string
+): string => {
+  return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<score-partwise version="4.0">',
     `<work><work-title>${xmlEscape(title)}</work-title></work>`,
@@ -2392,6 +5726,47 @@ const buildMusicXmlFromAbcParsed = (
     partBodyXml,
     "</score-partwise>",
   ].join("");
+};
+
+const buildMusicXmlFromAbcParsed = (
+  parsed: AbcParsedResult,
+  abcSource: string,
+  options: AbcImportOptions = {}
+): string => {
+  const debugMetadata = options.debugMetadata ?? true;
+  const sourceMetadata = options.sourceMetadata ?? true;
+  const debugPrettyPrint = options.debugPrettyPrint ?? debugMetadata;
+  const exportContext = buildAbcMusicXmlExportContext(parsed);
+  const buildMeasureNotesXml = (notes: AbcParsedNote[], staffOverride: number | null = null): string =>
+    buildAbcMeasureNotesXml(
+      notes,
+      exportContext.measureDurationDiv,
+      exportContext.emptyMeasureRestType,
+      exportContext.beatDiv,
+      staffOverride
+    );
+
+  const partListXml = buildAbcPartListXml(exportContext.resolvedParts);
+  const partBodyXml = buildAbcPartBodyXml(
+    exportContext.resolvedParts,
+    exportContext.measureCount,
+    exportContext.defaultFifths,
+    exportContext.beats,
+    exportContext.beatType,
+    exportContext.tempoBpm,
+    debugMetadata,
+    sourceMetadata,
+    parsed.diagnostics,
+    abcSource,
+    buildMeasureNotesXml
+  );
+
+  const xml = buildAbcScorePartwiseXmlDocument(
+    exportContext.title,
+    exportContext.composer,
+    partListXml,
+    partBodyXml
+  );
   return debugPrettyPrint ? prettyPrintXml(xml) : xml;
 };
 

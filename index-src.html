@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>mikuscore</title>
+  <style>
+    :root {
+      --bg: #f6f4f8;
+      --surface: #ffffff;
+      --text: #1c1b1f;
+      --muted: #5f5a6b;
+      --primary: #6200ee;
+      --on-primary: #ffffff;
+      --outline: #ddd6ea;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "BIZ UDPGothic", "Noto Sans JP", "Hiragino Sans", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(680px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--outline);
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(20, 14, 35, 0.08);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 1.9rem;
+      line-height: 1.2;
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+    p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+    ul {
+      margin: 0 0 16px;
+      padding-left: 1.2rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .link-btn {
+      display: inline-block;
+      text-decoration: none;
+      background: var(--primary);
+      color: var(--on-primary);
+      padding: 0.68rem 1.2rem;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .link-btn-secondary {
+      display: inline-block;
+      text-decoration: none;
+      background: #f0edf5;
+      color: #3f3b46;
+      border: 1px solid #d2cadf;
+      padding: 0.68rem 1.2rem;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .link-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .sub {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .divider {
+      border: 0;
+      border-top: 1px solid var(--outline);
+      margin: 20px 0;
+    }
+    .lang-block:last-child p:last-child {
+      margin-bottom: 0;
+    }
+    .shots {
+      margin-top: 20px;
+      display: grid;
+      gap: 10px;
+    }
+    .shots h2 {
+      margin-bottom: 4px;
+    }
+    .shots-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+    }
+    .shots-grid img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      border: 1px solid var(--outline);
+      background: #fff;
+    }
+    @media (min-width: 760px) {
+      .shots-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>mikuscore</h1>
+    <p class="sub">Updated: {{BUILD_DATE}}</p>
+    <section class="lang-block" aria-label="English">
+      <h2>English</h2>
+      <p>
+        mikuscore is a browser-based score format converter centered on MusicXML.
+        It runs offline as a single-file web app.
+      </p>
+      <ul>
+        <li>MusicXML-first conversion pipeline.</li>
+        <li>Designed to preserve existing MusicXML as much as possible.</li>
+        <li>Keeps conversion losses visible via diagnostics / metadata.</li>
+        <li>No installation required (single HTML, browser only).</li>
+      </ul>
+      <p><strong>Supported formats:</strong> MusicXML (`.musicxml` / `.xml` / `.mxl`), MuseScore (`.mscx` / `.mscz`), MIDI (`.mid` / `.midi`), VSQX (`.vsqx`), ABC (`.abc`), MEI (`.mei`, experimental), LilyPond (`.ly`, experimental).</p>
+      <p>
+        A convert-first CLI is also available for scripted workflows. Related projects include
+        mikuscore-skills, which embeds mikuscore into generative-AI workflows,
+        and miku-abc-player, which makes an ABC-limited subset of mikuscore easier to use.
+      </p>
+      <div class="link-row">
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">Open mikuscore</a>
+        <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </section>
+    <hr class="divider" />
+    <section class="shots" aria-label="Screenshots">
+      <h2>Screenshots / スクリーンショット</h2>
+      <div class="shots-grid">
+        <img src="screenshots/screen1.png" alt="mikuscore screenshot 1" />
+        <img src="screenshots/screen2.png" alt="mikuscore screenshot 2" />
+        <img src="screenshots/screen3.png" alt="mikuscore screenshot 3" />
+        <img src="screenshots/screen4.png" alt="mikuscore screenshot 4" />
+      </div>
+    </section>
+    <hr class="divider" />
+    <section class="lang-block" aria-label="日本語">
+      <h2>日本語</h2>
+      <p>
+        mikuscore は、MusicXML を中核に据えたブラウザベースの譜面フォーマット変換ソフトです。
+        単一 HTML 配布でオフライン動作します。
+      </p>
+      <ul>
+        <li>MusicXML-first の変換パイプライン。</li>
+        <li>既存 MusicXML を極力壊さない編集を重視しています。</li>
+        <li>変換で生じた欠落を診断情報・メタデータで追跡できます。</li>
+        <li>インストール不要（単一 HTML、ブラウザのみ）。</li>
+      </ul>
+      <p><strong>対応フォーマット:</strong> MusicXML（`.musicxml` / `.xml` / `.mxl`）、MuseScore（`.mscx` / `.mscz`）、MIDI（`.mid` / `.midi`）、VSQX（`.vsqx`）、ABC（`.abc`）、MEI（`.mei`、実験的対応）、LilyPond（`.ly`、実験的対応）。</p>
+      <p>
+        スクリプト利用向けには convert-first の CLI もあります。関連プロダクトとして、
+        mikuscore-skills は mikuscore を生成 AI ワークフローに組み込むための agent skills、
+        miku-abc-player は mikuscore の機能を ABC に限定して使いやすくした companion web app です。
+      </p>
+      <div class="link-row">
+        <a class="link-btn" href="./mikuscore.html?v=202602270655">mikuscore を開く</a>
+        <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    (() => {
+      // Cache-busting: append a timestamp query right before opening mikuscore.html.
+      const selector = 'a[href^="./mikuscore.html"]';
+      const buildVersionStamp = () => {
+        const d = new Date();
+        return (
+          d.getFullYear().toString() +
+          String(d.getMonth() + 1).padStart(2, "0") +
+          String(d.getDate()).padStart(2, "0") +
+          String(d.getHours()).padStart(2, "0") +
+          String(d.getMinutes()).padStart(2, "0")
+        );
+      };
+      const stampAndGo = (anchor) => {
+        const u = new URL(anchor.getAttribute("href"), location.href);
+        u.searchParams.set("v", buildVersionStamp());
+        anchor.setAttribute("href", u.pathname + u.search);
+      };
+      document.addEventListener("click", (ev) => {
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+      document.addEventListener("auxclick", (ev) => {
+        if (ev.button !== 1) return;
+        const a = ev.target.closest(selector);
+        if (!a) return;
+        stampAndGo(a);
+      }, true);
+    })();
+  </script>
+</body>
+</html>

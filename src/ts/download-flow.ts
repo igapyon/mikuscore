@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import {
   buildMidiBytesForPlayback,
   collectMidiControlEventsFromMusicXmlDoc,
@@ -6,6 +11,7 @@ import {
   collectMidiTempoEventsFromMusicXmlDoc,
   buildPlaybackEventsFromMusicXmlDoc,
   collectMidiProgramOverridesFromMusicXmlDoc,
+  collectLeadingPickupTicksFromMusicXmlDoc,
   type GraceTimingMode,
   type MetricAccentProfile,
   type MidiProgramPreset,
@@ -283,6 +289,14 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
   };
 };
 
+export const createJsonDownloadPayload = (jsonText: string, stem = "measure-detail"): DownloadFilePayload => {
+  const ts = buildFileTimestamp();
+  return {
+    fileName: `mikuscore-${stem}-${ts}.json`,
+    blob: new Blob([jsonText], { type: "application/json;charset=utf-8" }),
+  };
+};
+
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
   const ts = buildFileTimestamp();
   const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
@@ -300,7 +314,8 @@ export const createMidiDownloadPayload = (
   graceTimingMode: GraceTimingMode = "before_beat",
   metricAccentEnabled = false,
   metricAccentProfile: MetricAccentProfile = "subtle",
-  exportProfile: MidiExportProfile = "safe"
+  exportProfile: MidiExportProfile = "safe",
+  keepRoundtripMetadata = true
 ): DownloadFilePayload | null => {
   const playbackDoc = parseMusicXmlDocument(xmlText);
   if (!playbackDoc) return null;
@@ -340,6 +355,7 @@ export const createMidiDownloadPayload = (
         ?.textContent?.trim() ??
       playbackDoc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
       "";
+    const pickupTicks = collectLeadingPickupTicksFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
     midiBytes = buildMidiBytesForPlayback(
       parsedPlayback.events,
       parsedPlayback.tempo,
@@ -351,6 +367,7 @@ export const createMidiDownloadPayload = (
       midiKeySignatureEvents,
       {
         embedMksSysEx: true,
+        emitMksTextMeta: keepRoundtripMetadata,
         ticksPerQuarter: exportTicksPerQuarter,
         normalizeForParity: runtime.normalizeForParity,
         rawWriter: runtime.rawWriter,
@@ -359,6 +376,7 @@ export const createMidiDownloadPayload = (
           title: scoreTitle,
           movementTitle,
           composer: scoreComposer,
+          pickupTicks,
         },
       }
     );
@@ -398,14 +416,18 @@ export const createAbcDownloadPayload = (
 
 export const createMeiDownloadPayload = (
   xmlText: string,
-  convertMusicXmlToMei: (doc: Document) => string
+  convertMusicXmlToMei: (
+    doc: Document,
+    options?: { meiVersion?: string }
+  ) => string,
+  options: { meiVersion?: string } = {}
 ): DownloadFilePayload | null => {
   const musicXmlDoc = parseMusicXmlDocument(xmlText);
   if (!musicXmlDoc) return null;
 
   let meiText = "";
   try {
-    meiText = convertMusicXmlToMei(musicXmlDoc);
+    meiText = convertMusicXmlToMei(musicXmlDoc, options);
   } catch {
     return null;
   }

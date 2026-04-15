@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { ScoreCore } from "../../core/ScoreCore";
 import { getMeasureCapacity, getOccupiedTime } from "../../core/timeIndex";
 import type {
@@ -43,6 +48,7 @@ import {
 } from "./download-flow";
 import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
 import { resolveLoadFlow } from "./load-flow";
+import { extractZipEntryBytesByPath, listZipRootEntryPathsByExtensions } from "./mxl-io";
 import {
   createBasicWaveSynthEngine,
   PLAYBACK_TICKS_PER_QUARTER,
@@ -55,8 +61,12 @@ import {
   renderMeasureEditorPreview as renderMeasureEditorPreviewFlow,
   renderScorePreview as renderScorePreviewFlow,
 } from "./preview-flow";
-import { sampleXml } from "./sampleXml";
+import { sampleXml1 } from "./sampleXml1";
 import { sampleXml2 } from "./sampleXml2";
+import { sampleXml3 } from "./sampleXml3";
+import { sampleXml4 } from "./sampleXml4";
+import { sampleXml6 } from "./sampleXml6";
+import { sampleXml7 } from "./sampleXml7";
 import {
   buildPlaybackEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
@@ -80,6 +90,8 @@ type NoteLocation = {
   partId: string;
   measureNumber: string;
 };
+
+type EditSubTabName = "editor" | "xml";
 
 const DEFAULT_VOICE = "1";
 
@@ -125,11 +137,19 @@ const lilyPondInput = q<HTMLTextAreaElement>("#lilyPondInput");
 const localDraftNotice = q<HTMLDivElement>("#localDraftNotice");
 const localDraftText = q<HTMLDivElement>("#localDraftText");
 const discardDraftExportBtn = q<HTMLButtonElement>("#discardDraftExportBtn");
-const loadSampleBtn1 = q<HTMLButtonElement>("#loadSampleBtn1");
+const loadSample1Btn = q<HTMLButtonElement>("#loadSample1Btn");
 const loadSample2Btn = q<HTMLButtonElement>("#loadSample2Btn");
+const loadSample3Btn = q<HTMLButtonElement>("#loadSample3Btn");
+const loadSample4Btn = q<HTMLButtonElement>("#loadSample4Btn");
+const loadSampleBtn6 = q<HTMLButtonElement>("#loadSampleBtn6");
+const loadSample7Btn = q<HTMLButtonElement>("#loadSample7Btn");
 const fileSelectBtn = q<HTMLButtonElement>("#fileSelectBtn");
 const fileInput = q<HTMLInputElement>("#fileInput");
 const fileNameText = q<HTMLSpanElement>("#fileNameText");
+const zipEntrySelectBlock = q<HTMLDivElement>("#zipEntrySelectBlock");
+const zipEntrySelectHelp = document.querySelector<HTMLElement>("lht-select-help[field-id='zipEntrySelect']");
+const zipEntrySelect = q<HTMLSelectElement>("#zipEntrySelect");
+const fileLoadOverlay = q<HTMLElement>("#fileLoadOverlay");
 const loadBtn = q<HTMLButtonElement>("#loadBtn");
 const noteSelect = qo<HTMLSelectElement>("#noteSelect");
 const statusText = qo<HTMLParagraphElement>("#statusText");
@@ -160,7 +180,9 @@ const midiExportProfileSelect = q<HTMLSelectElement>("#midiExportProfile");
 const midiImportQuantizeGridSelect = q<HTMLSelectElement>("#midiImportQuantizeGrid");
 const midiImportTripletAware = q<HTMLInputElement>("#midiImportTripletAware");
 const forceMidiProgramOverride = q<HTMLInputElement>("#forceMidiProgramOverride");
-const keepMetadataInMusicXml = q<HTMLInputElement>("#keepMetadataInMusicXml");
+const keepMksMetaMetadataInMusicXml = q<HTMLInputElement>("#keepMksMetaMetadataInMusicXml");
+const keepMksSrcMetadataInMusicXml = q<HTMLInputElement>("#keepMksSrcMetadataInMusicXml");
+const keepMksDbgMetadataInMusicXml = q<HTMLInputElement>("#keepMksDbgMetadataInMusicXml");
 const exportMusicXmlAsXmlExtension = q<HTMLInputElement>("#exportMusicXmlAsXmlExtension");
 const compressXmlMuseScoreExport = q<HTMLInputElement>("#compressXmlMuseScoreExport");
 const generalSettingsAccordion = q<HTMLDetailsElement>("#generalSettingsAccordion");
@@ -179,15 +201,24 @@ const playbackText = qo<HTMLParagraphElement>("#playbackText");
 const outputXml = qo<HTMLTextAreaElement>("#outputXml");
 const diagArea = qo<HTMLDivElement>("#diagArea");
 const debugScoreMeta = qo<HTMLParagraphElement>("#debugScoreMeta");
+const debugScoreWrap = q<HTMLDivElement>("#debugScoreWrap");
 const debugScoreArea = q<HTMLDivElement>("#debugScoreArea");
 const scoreHeaderMetaText = q<HTMLParagraphElement>("#scoreHeaderMetaText");
-const inputUiMessage = q<HTMLDivElement>("#inputUiMessage");
-const uiMessage = q<HTMLDivElement>("#uiMessage");
+const inputUiMessage = q<HTMLElement>("#inputUiMessage");
+const uiMessage = q<HTMLElement>("#uiMessage");
 const measurePartNameText = q<HTMLParagraphElement>("#measurePartNameText");
 const measureEmptyState = q<HTMLDivElement>("#measureEmptyState");
 const measureSelectGuideBtn = q<HTMLButtonElement>("#measureSelectGuideBtn");
 const measureEditorWrap = q<HTMLDivElement>("#measureEditorWrap");
 const measureEditorArea = q<HTMLDivElement>("#measureEditorArea");
+const editSubTabList = q<HTMLDivElement>("#editSubTabList");
+const editSubTabEditorBtn = q<HTMLButtonElement>("#editSubTabEditorBtn");
+const editSubTabXmlBtn = q<HTMLButtonElement>("#editSubTabXmlBtn");
+const editSubTabEditorPanel = q<HTMLDivElement>("#editSubTabEditorPanel");
+const editSubTabXmlPanel = q<HTMLDivElement>("#editSubTabXmlPanel");
+const measureXmlInspector = q<HTMLDivElement>("#measureXmlInspector");
+const measureXmlMeasureViewer = q<HTMLTextAreaElement>("#measureXmlMeasureViewer");
+const measureXmlDocumentViewer = q<HTMLTextAreaElement>("#measureXmlDocumentViewer");
 const measureApplyBtn = q<HTMLButtonElement>("#measureApplyBtn");
 const measureDiscardBtn = q<HTMLButtonElement>("#measureDiscardBtn");
 const measureNavLeftBtn = q<HTMLButtonElement>("#measureNavLeftBtn");
@@ -196,6 +227,8 @@ const measureNavUpBtn = q<HTMLButtonElement>("#measureNavUpBtn");
 const measureNavRightBtn = q<HTMLButtonElement>("#measureNavRightBtn");
 const appendMeasureBtn = q<HTMLButtonElement>("#appendMeasureBtn");
 const playMeasureBtn = q<HTMLButtonElement>("#playMeasureBtn");
+const downloadMeasureMusicXmlBtn = q<HTMLButtonElement>("#downloadMeasureMusicXmlBtn");
+const downloadMeasureMidiBtn = q<HTMLButtonElement>("#downloadMeasureMidiBtn");
 const topTabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".ms-top-tab"));
 const topTabPanels = Array.from(document.querySelectorAll<HTMLElement>(".ms-tab-panel"));
 
@@ -221,13 +254,17 @@ let measureNumbersByPart = new Map<string, string[]>();
 let scoreTitleText = "";
 let scoreComposerText = "";
 let selectedMeasure: NoteLocation | null = null;
+let activePlaybackLocation: NoteLocation | null = null;
+let lastPlaybackAutoScrollKey = "";
 let draftCore: ScoreCore | null = null;
 let draftNoteNodeIds: string[] = [];
 let draftSvgIdToNodeId = new Map<string, string>();
+let activeEditSubTab: EditSubTabName = "editor";
 let selectedDraftVoice = DEFAULT_VOICE;
 let selectedDraftNoteIsRest = false;
 let suppressDurationPresetEvent = false;
 let selectedDraftDurationValue: number | null = null;
+let isFileLoadInProgress = false;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
@@ -238,15 +275,87 @@ const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
 const DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE = false;
 const DEFAULT_MIDI_EXPORT_PROFILE: MidiExportProfile = "musescore_parity";
+const ZIP_IMPORT_EXTENSIONS = [
+  ".musicxml",
+  ".xml",
+  ".mxl",
+  ".abc",
+  ".mid",
+  ".midi",
+  ".vsqx",
+  ".mei",
+  ".ly",
+  ".mscx",
+  ".mscz",
+] as const;
+let selectedZipEntryVirtualFile: File | null = null;
 const DEFAULT_MIDI_IMPORT_QUANTIZE_GRID: MidiImportQuantizeGrid = "1/64";
 const DEFAULT_MIDI_IMPORT_TRIPLET_AWARE = true;
-const DEFAULT_KEEP_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML = true;
+const DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML = true;
 const DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION = false;
-const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = false;
+const DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT = true;
 const DEFAULT_GRACE_TIMING_MODE: GraceTimingMode = "before_beat";
 const DEFAULT_METRIC_ACCENT_ENABLED = true;
 const DEFAULT_METRIC_ACCENT_PROFILE: MetricAccentProfile = "subtle";
 const DEFAULT_VSQX_LYRIC = "ら";
+
+fileNameText.classList.add("md-hidden");
+
+type LhtLoadingOverlayElement = HTMLElement & {
+  setActive?: (active: boolean) => void;
+  waitForNextPaint?: () => Promise<void>;
+};
+
+type LhtErrorAlertElement = HTMLElement & {
+  show?: (message?: string) => void;
+  hide?: () => void;
+  clear?: () => void;
+};
+
+type LhtSelectHelpElement = HTMLElement & {
+  setOptions?: (
+    options: Array<{ value: string; label: string; selected?: boolean; disabled?: boolean }>,
+    config?: { preserveValue?: boolean }
+  ) => void;
+  setValue?: (value: string) => void;
+};
+
+const isLhtLoadingOverlayElement = (element: Element): element is LhtLoadingOverlayElement => {
+  return (
+    element.tagName.toLowerCase() === "lht-loading-overlay"
+    && typeof (element as LhtLoadingOverlayElement).setActive === "function"
+  );
+};
+
+const isLhtErrorAlertElement = (element: Element): element is LhtErrorAlertElement => {
+  return (
+    element.tagName.toLowerCase() === "lht-error-alert"
+    && typeof (element as LhtErrorAlertElement).show === "function"
+  );
+};
+
+const isLhtSelectHelpElement = (element: Element | null): element is LhtSelectHelpElement => {
+  return !!element
+    && element.tagName.toLowerCase() === "lht-select-help"
+    && typeof (element as LhtSelectHelpElement).setOptions === "function";
+};
+
+const syncSelectHelpValue = (fieldId: string, value: string): void => {
+  const normalized = value == null ? "" : String(value);
+  const host = document.querySelector(`lht-select-help[field-id='${fieldId}']`);
+  const field = document.getElementById(fieldId) as HTMLSelectElement | null;
+  if (field) {
+    field.value = normalized;
+  }
+  if (!isLhtSelectHelpElement(host)) return;
+  host.setAttribute("value", normalized);
+  host.setValue?.(normalized);
+  requestAnimationFrame(() => {
+    host.setValue?.(normalized);
+  });
+};
 
 type LocalDraft = {
   xml: string;
@@ -264,7 +373,9 @@ type PlaybackSettings = {
   midiImportQuantizeGrid: MidiImportQuantizeGrid;
   midiImportTripletAware: boolean;
   forceMidiProgramOverride: boolean;
-  keepMetadataInMusicXml: boolean;
+  keepMksMetaMetadataInMusicXml: boolean;
+  keepMksSrcMetadataInMusicXml: boolean;
+  keepMksDbgMetadataInMusicXml: boolean;
   exportMusicXmlAsXmlExtension: boolean;
   compressXmlMuseScoreExport: boolean;
   generalSettingsExpanded: boolean;
@@ -292,7 +403,7 @@ const normalizeMidiProgram = (value: string): PlaybackSettings["midiProgram"] =>
 };
 
 const normalizeWaveformSetting = (value: string): PlaybackSettings["waveform"] => {
-  if (value === "triangle" || value === "square") return value;
+  if (value === "sine" || value === "triangle" || value === "square") return value;
   return DEFAULT_PLAYBACK_WAVEFORM;
 };
 
@@ -300,7 +411,7 @@ const normalizeForceMidiProgramOverride = (value: unknown): boolean => {
   return value === true;
 };
 
-const normalizeKeepMetadataInMusicXml = (value: unknown): boolean => {
+const normalizeKeepMksMetadataInMusicXml = (value: unknown): boolean => {
   return value !== false;
 };
 
@@ -343,7 +454,8 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
   try {
     const raw = localStorage.getItem(PLAYBACK_SETTINGS_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PlaybackSettings>;
+    const parsed = JSON.parse(raw) as Partial<PlaybackSettings> & { keepMetadataInMusicXml?: unknown };
+    const legacyKeepMetadataInMusicXml = normalizeKeepMksMetadataInMusicXml(parsed.keepMetadataInMusicXml);
     return {
       midiProgram: normalizeMidiProgram(String(parsed.midiProgram ?? "")),
       waveform: normalizeWaveformSetting(String(parsed.waveform ?? "")),
@@ -355,7 +467,18 @@ const readPlaybackSettings = (): PlaybackSettings | null => {
       midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(parsed.midiImportQuantizeGrid),
       midiImportTripletAware: normalizeMidiImportTripletAware(parsed.midiImportTripletAware),
       forceMidiProgramOverride: normalizeForceMidiProgramOverride(parsed.forceMidiProgramOverride),
-      keepMetadataInMusicXml: normalizeKeepMetadataInMusicXml(parsed.keepMetadataInMusicXml),
+      keepMksMetaMetadataInMusicXml:
+        parsed.keepMksMetaMetadataInMusicXml === undefined
+          ? legacyKeepMetadataInMusicXml
+          : normalizeKeepMksMetadataInMusicXml(parsed.keepMksMetaMetadataInMusicXml),
+      keepMksSrcMetadataInMusicXml:
+        parsed.keepMksSrcMetadataInMusicXml === undefined
+          ? legacyKeepMetadataInMusicXml
+          : normalizeKeepMksMetadataInMusicXml(parsed.keepMksSrcMetadataInMusicXml),
+      keepMksDbgMetadataInMusicXml:
+        parsed.keepMksDbgMetadataInMusicXml === undefined
+          ? legacyKeepMetadataInMusicXml
+          : normalizeKeepMksMetadataInMusicXml(parsed.keepMksDbgMetadataInMusicXml),
       exportMusicXmlAsXmlExtension: normalizeExportMusicXmlAsXmlExtension(parsed.exportMusicXmlAsXmlExtension),
       compressXmlMuseScoreExport: normalizeCompressXmlMuseScoreExport(parsed.compressXmlMuseScoreExport),
       generalSettingsExpanded: Boolean(parsed.generalSettingsExpanded),
@@ -380,7 +503,9 @@ const writePlaybackSettings = (): void => {
       midiImportQuantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
       midiImportTripletAware: midiImportTripletAware.checked,
       forceMidiProgramOverride: forceMidiProgramOverride.checked,
-      keepMetadataInMusicXml: keepMetadataInMusicXml.checked,
+      keepMksMetaMetadataInMusicXml: keepMksMetaMetadataInMusicXml.checked,
+      keepMksSrcMetadataInMusicXml: keepMksSrcMetadataInMusicXml.checked,
+      keepMksDbgMetadataInMusicXml: keepMksDbgMetadataInMusicXml.checked,
       exportMusicXmlAsXmlExtension: exportMusicXmlAsXmlExtension.checked,
       compressXmlMuseScoreExport: compressXmlMuseScoreExport.checked,
       generalSettingsExpanded: generalSettingsAccordion.open,
@@ -401,25 +526,43 @@ const syncGeneralExportSettings = (): void => {
 
 const applyInitialPlaybackSettings = (): void => {
   const stored = readPlaybackSettings();
-  midiProgramSelect.value = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
-  playbackWaveform.value = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
-  playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
-  graceTimingModeSelect.value = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
-  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
-  metricAccentProfileSelect.value = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
-  midiExportProfileSelect.value = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
-  midiImportQuantizeGridSelect.value =
+  const midiProgram = stored?.midiProgram ?? DEFAULT_MIDI_PROGRAM;
+  const waveform = stored?.waveform ?? DEFAULT_PLAYBACK_WAVEFORM;
+  const graceTimingMode = stored?.graceTimingMode ?? DEFAULT_GRACE_TIMING_MODE;
+  const metricAccentProfile = stored?.metricAccentProfile ?? DEFAULT_METRIC_ACCENT_PROFILE;
+  const midiExportProfile = stored?.midiExportProfile ?? DEFAULT_MIDI_EXPORT_PROFILE;
+  const midiImportQuantizeGrid =
     stored?.midiImportQuantizeGrid ?? DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
+
+  midiProgramSelect.value = midiProgram;
+  playbackWaveform.value = waveform;
+  playbackUseMidiLike.checked = stored?.useMidiLikePlayback ?? DEFAULT_PLAYBACK_USE_MIDI_LIKE;
+  graceTimingModeSelect.value = graceTimingMode;
+  metricAccentEnabledInput.checked = stored?.metricAccentEnabled ?? DEFAULT_METRIC_ACCENT_ENABLED;
+  metricAccentProfileSelect.value = metricAccentProfile;
+  midiExportProfileSelect.value = midiExportProfile;
+  midiImportQuantizeGridSelect.value = midiImportQuantizeGrid;
   midiImportTripletAware.checked =
     stored?.midiImportTripletAware ?? DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
   forceMidiProgramOverride.checked =
     stored?.forceMidiProgramOverride ?? DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
-  keepMetadataInMusicXml.checked = stored?.keepMetadataInMusicXml ?? DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  keepMksMetaMetadataInMusicXml.checked =
+    stored?.keepMksMetaMetadataInMusicXml ?? DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML;
+  keepMksSrcMetadataInMusicXml.checked =
+    stored?.keepMksSrcMetadataInMusicXml ?? DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML;
+  keepMksDbgMetadataInMusicXml.checked =
+    stored?.keepMksDbgMetadataInMusicXml ?? DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML;
   exportMusicXmlAsXmlExtension.checked =
     stored?.exportMusicXmlAsXmlExtension ?? DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
   compressXmlMuseScoreExport.checked =
     stored?.compressXmlMuseScoreExport ?? DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
   syncGeneralExportSettings();
+  syncSelectHelpValue("midiProgramSelect", midiProgram);
+  syncSelectHelpValue("playbackWaveform", waveform);
+  syncSelectHelpValue("graceTimingMode", graceTimingMode);
+  syncSelectHelpValue("metricAccentProfile", metricAccentProfile);
+  syncSelectHelpValue("midiExportProfile", midiExportProfile);
+  syncSelectHelpValue("midiImportQuantizeGrid", midiImportQuantizeGrid);
   generalSettingsAccordion.open = stored?.generalSettingsExpanded ?? false;
   settingsAccordion.open = stored?.settingsExpanded ?? false;
 };
@@ -435,24 +578,57 @@ const onResetPlaybackSettings = (): void => {
   midiImportQuantizeGridSelect.value = DEFAULT_MIDI_IMPORT_QUANTIZE_GRID;
   midiImportTripletAware.checked = DEFAULT_MIDI_IMPORT_TRIPLET_AWARE;
   forceMidiProgramOverride.checked = DEFAULT_FORCE_MIDI_PROGRAM_OVERRIDE;
-  keepMetadataInMusicXml.checked = DEFAULT_KEEP_METADATA_IN_MUSICXML;
+  keepMksMetaMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_META_METADATA_IN_MUSICXML;
+  keepMksSrcMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_SRC_METADATA_IN_MUSICXML;
+  keepMksDbgMetadataInMusicXml.checked = DEFAULT_KEEP_MKS_DBG_METADATA_IN_MUSICXML;
   exportMusicXmlAsXmlExtension.checked = DEFAULT_EXPORT_MUSICXML_AS_XML_EXTENSION;
   compressXmlMuseScoreExport.checked = DEFAULT_COMPRESS_XML_MUSESCORE_EXPORT;
   syncGeneralExportSettings();
+  syncSelectHelpValue("midiProgramSelect", DEFAULT_MIDI_PROGRAM);
+  syncSelectHelpValue("playbackWaveform", DEFAULT_PLAYBACK_WAVEFORM);
+  syncSelectHelpValue("graceTimingMode", DEFAULT_GRACE_TIMING_MODE);
+  syncSelectHelpValue("metricAccentProfile", DEFAULT_METRIC_ACCENT_PROFILE);
+  syncSelectHelpValue("midiExportProfile", DEFAULT_MIDI_EXPORT_PROFILE);
+  syncSelectHelpValue("midiImportQuantizeGrid", DEFAULT_MIDI_IMPORT_QUANTIZE_GRID);
   writePlaybackSettings();
   renderControlState();
 };
 
-const stripMetadataFromMusicXml = (xml: string, keepMetadata: boolean): string => {
-  if (keepMetadata) return xml;
+type MksMetadataOutputSettings = {
+  keepMeta: boolean;
+  keepSrc: boolean;
+  keepDbg: boolean;
+};
+
+const getMksMetadataOutputSettings = (): MksMetadataOutputSettings => {
+  return {
+    keepMeta: keepMksMetaMetadataInMusicXml.checked,
+    keepSrc: keepMksSrcMetadataInMusicXml.checked,
+    keepDbg: keepMksDbgMetadataInMusicXml.checked,
+  };
+};
+
+const shouldRemoveMksField = (fieldName: string, settings: MksMetadataOutputSettings): boolean => {
+  const lowered = fieldName.trim().toLowerCase();
+  if (!lowered.startsWith("mks:")) return false;
+  if (lowered.startsWith("mks:meta:")) return !settings.keepMeta;
+  if (lowered.startsWith("mks:src:")) return !settings.keepSrc;
+  if (lowered.startsWith("mks:dbg:")) return !settings.keepDbg;
+  return false;
+};
+
+const stripMetadataFromMusicXml = (xml: string, settings: MksMetadataOutputSettings): string => {
+  if (settings.keepMeta && settings.keepSrc && settings.keepDbg) return xml;
   const doc = parseMusicXmlDocument(xml);
   if (!doc) return xml;
   const fields = Array.from(
     doc.querySelectorAll(
-      'part > measure > attributes > miscellaneous > miscellaneous-field[name^="src:"], part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'
+      'part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'
     )
   );
   for (const field of fields) {
+    const name = field.getAttribute("name") ?? "";
+    if (!shouldRemoveMksField(name, settings)) continue;
     field.remove();
   }
   for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
@@ -471,10 +647,10 @@ const summarizeImportedDiagWarnings = (xml: string): string => {
   if (!doc) return "";
   let overfullReflowCount = 0;
   let parserWarningCount = 0;
-  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="diag:"]'));
+  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
   for (const field of fields) {
     const name = (field.getAttribute("name") || "").trim().toLowerCase();
-    if (name === "diag:count") continue;
+    if (name === "mks:diag:count") continue;
     const payload = field.textContent?.trim() ?? "";
     const m = payload.match(/(?:^|;)code=([^;]+)/);
     const code = (m?.[1] ?? "").trim().toUpperCase();
@@ -489,7 +665,7 @@ const summarizeImportedDiagWarnings = (xml: string): string => {
 
 const resolveMusicXmlOutput = (): string => {
   if (!state.lastSuccessfulSaveXml) return "";
-  return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, keepMetadataInMusicXml.checked);
+  return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, getMksMetadataOutputSettings());
 };
 
 const logDiagnostics = (
@@ -656,7 +832,7 @@ const applyInitialXmlInputValue = (): void => {
     xmlInput.value = draft.xml;
     return;
   }
-  xmlInput.value = sampleXml;
+  xmlInput.value = sampleXml6;
 };
 
 const getSelectedSourceType = (): "xml" | "musescore" | "vsqx" | "abc" | "mei" | "lilypond" => {
@@ -696,6 +872,118 @@ const renderInputMode = (): void => {
     loadLabel.textContent = isNewEntry ? "Create" : "Load";
   }
 
+};
+
+const resetZipEntrySelectionUi = (): void => {
+  if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+    zipEntrySelectHelp.setOptions?.([], { preserveValue: false });
+    zipEntrySelectHelp.setValue?.("");
+  } else {
+    zipEntrySelect.innerHTML = "";
+  }
+  zipEntrySelectBlock.classList.add("md-hidden");
+  selectedZipEntryVirtualFile = null;
+};
+
+const setFileLoadInProgress = (inProgress: boolean): void => {
+  isFileLoadInProgress = inProgress;
+  fileSelectBtn.disabled = inProgress;
+  loadBtn.disabled = inProgress;
+  zipEntrySelect.disabled = inProgress;
+  fileInputBlock.setAttribute("aria-busy", inProgress ? "true" : "false");
+  if (isLhtLoadingOverlayElement(fileLoadOverlay)) {
+    fileLoadOverlay.setActive?.(inProgress);
+  } else {
+    fileLoadOverlay.classList.toggle("md-hidden", !inProgress);
+    fileLoadOverlay.setAttribute("aria-hidden", inProgress ? "false" : "true");
+  }
+};
+
+const waitForNextPaint = async (): Promise<void> => {
+  if (isLhtLoadingOverlayElement(fileLoadOverlay) && typeof fileLoadOverlay.waitForNextPaint === "function") {
+    await fileLoadOverlay.waitForNextPaint();
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => resolve());
+  });
+};
+
+const isZipFileName = (name: string): boolean => {
+  return name.toLowerCase().endsWith(".zip");
+};
+
+const loadZipEntryAsVirtualFile = async (archive: File, entryPath: string): Promise<File> => {
+  const entryBytes = await extractZipEntryBytesByPath(await archive.arrayBuffer(), entryPath);
+  const copiedBuffer = new ArrayBuffer(entryBytes.byteLength);
+  new Uint8Array(copiedBuffer).set(entryBytes);
+  return new File([copiedBuffer], entryPath, { type: "application/octet-stream" });
+};
+
+const prepareZipEntrySelection = async (
+  archive: File
+): Promise<{ ok: true; autoLoad: boolean } | { ok: false; message: string }> => {
+  resetZipEntrySelectionUi();
+  let entryPaths: string[] = [];
+  try {
+    entryPaths = await listZipRootEntryPathsByExtensions(await archive.arrayBuffer(), [...ZIP_IMPORT_EXTENSIONS]);
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Failed to parse ZIP: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  if (!entryPaths.length) {
+    return {
+      ok: false,
+      message:
+        "No supported root files were found in ZIP. Use root-level .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
+    };
+  }
+  zipEntrySelectBlock.classList.remove("md-hidden");
+  if (entryPaths.length === 1) {
+    if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+      zipEntrySelectHelp.setOptions?.([
+        { value: entryPaths[0], label: entryPaths[0], selected: true }
+      ], { preserveValue: false });
+    } else {
+      const onlyOption = document.createElement("option");
+      onlyOption.value = entryPaths[0];
+      onlyOption.textContent = entryPaths[0];
+      zipEntrySelect.appendChild(onlyOption);
+    }
+    try {
+      selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPaths[0]);
+      return { ok: true, autoLoad: true };
+    } catch (error) {
+      return {
+        ok: false,
+        message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+  if (isLhtSelectHelpElement(zipEntrySelectHelp)) {
+    zipEntrySelectHelp.setOptions?.([
+      { value: "", label: "Select a ZIP root entry", selected: true, disabled: true },
+      ...entryPaths.map((path) => ({ value: path, label: path }))
+    ], { preserveValue: false });
+    zipEntrySelectHelp.setValue?.("");
+  } else {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a ZIP root entry";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    zipEntrySelect.appendChild(placeholder);
+    for (const path of entryPaths) {
+      const option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      zipEntrySelect.appendChild(option);
+    }
+  }
+  selectedZipEntryVirtualFile = null;
+  return { ok: true, autoLoad: false };
 };
 
 const normalizeNewPartCount = (): number => {
@@ -1116,6 +1404,9 @@ const renderMeasureEditorState = (): void => {
     measurePartNameText.classList.add("md-hidden");
     measureEmptyState.classList.remove("md-hidden");
     measureEditorWrap.classList.add("md-hidden");
+    measureXmlMeasureViewer.value = "";
+    measureXmlDocumentViewer.value = "";
+    renderEditSubTabState(false);
     measureApplyBtn.disabled = true;
     measureDiscardBtn.disabled = true;
     return;
@@ -1126,9 +1417,129 @@ const renderMeasureEditorState = (): void => {
   measurePartNameText.classList.remove("md-hidden");
   measureEmptyState.classList.add("md-hidden");
   measureEditorWrap.classList.remove("md-hidden");
+  renderEditSubTabState(true);
+  const inspectorText = buildMeasureXmlInspectorText();
+  measureXmlMeasureViewer.value = inspectorText.measureOnly;
+  measureXmlDocumentViewer.value = inspectorText.selfContainedDocument;
   const hasDirtyDraft = draftCore.isDirty();
   measureDiscardBtn.disabled = !hasDirtyDraft;
   measureApplyBtn.disabled = !hasDirtyDraft;
+};
+
+const serializeElementXml = (element: Element): string => {
+  return new XMLSerializer().serializeToString(element);
+};
+
+const collectEffectiveSrcFieldsForSelectedMeasure = (): Array<{ name: string; value: string }> => {
+  const xml = core.debugSerializeCurrentXml() ?? "";
+  if (!xml) return [];
+  const sourceDoc = parseMusicXmlDocument(xml);
+  if (!sourceDoc) return [];
+
+  const latestByName = new Map<string, string>();
+  const srcFields = sourceDoc.querySelectorAll(
+    'score-partwise > part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:src:"]'
+  );
+  for (const field of Array.from(srcFields)) {
+    const name = (field.getAttribute("name") ?? "").trim();
+    if (!name) continue;
+    // Keep the most recent value when the same name appears multiple times.
+    latestByName.set(name, field.textContent?.trim() ?? "");
+  }
+
+  if (latestByName.size === 0 && selectedMeasure) {
+    const part = sourceDoc.querySelector(`score-partwise > part[id="${CSS.escape(selectedMeasure.partId)}"]`);
+    if (part) {
+      for (const measure of Array.from(part.querySelectorAll(":scope > measure"))) {
+        const attrs = measure.querySelector(":scope > attributes");
+        if (!attrs) continue;
+        const partSrcFields = attrs.querySelectorAll(
+          ':scope > miscellaneous > miscellaneous-field[name^="mks:src:"]'
+        );
+        for (const field of Array.from(partSrcFields)) {
+          const name = (field.getAttribute("name") ?? "").trim();
+          if (!name) continue;
+          latestByName.set(name, field.textContent?.trim() ?? "");
+        }
+      }
+    }
+  }
+  return Array.from(latestByName.entries()).map(([name, value]) => ({ name, value }));
+};
+
+const injectSrcFieldsIntoSelfContainedXml = (
+  selfContainedXml: string,
+  fields: Array<{ name: string; value: string }>
+): string => {
+  if (fields.length === 0) return selfContainedXml;
+  const doc = parseMusicXmlDocument(selfContainedXml);
+  if (!doc) return selfContainedXml;
+  const measure = doc.querySelector("part > measure");
+  if (!measure) return selfContainedXml;
+
+  let attrs = measure.querySelector(":scope > attributes");
+  if (!attrs) {
+    attrs = doc.createElement("attributes");
+    measure.insertBefore(attrs, measure.firstChild);
+  }
+  let miscellaneous = attrs.querySelector(":scope > miscellaneous");
+  if (!miscellaneous) {
+    miscellaneous = doc.createElement("miscellaneous");
+    attrs.appendChild(miscellaneous);
+  }
+
+  const existingNames = new Set(
+    Array.from(miscellaneous.querySelectorAll(":scope > miscellaneous-field"))
+      .map((field) => (field.getAttribute("name") ?? "").trim())
+      .filter(Boolean)
+  );
+  for (const field of fields) {
+    if (existingNames.has(field.name)) continue;
+    const node = doc.createElement("miscellaneous-field");
+    node.setAttribute("name", field.name);
+    node.textContent = field.value;
+    miscellaneous.appendChild(node);
+    existingNames.add(field.name);
+  }
+  return serializeMusicXmlDocument(doc);
+};
+
+const buildMeasureXmlInspectorText = (): { measureOnly: string; selfContainedDocument: string } => {
+  if (!draftCore) {
+    return { measureOnly: "", selfContainedDocument: "" };
+  }
+  const draftXml = draftCore.debugSerializeCurrentXml() ?? "";
+  const draftDoc = parseMusicXmlDocument(draftXml);
+  const measureOnly = draftDoc
+    ? prettyPrintMusicXmlText(serializeElementXml(draftDoc.querySelector("part > measure") ?? draftDoc.documentElement)).trim()
+    : draftXml;
+  const srcFields = collectEffectiveSrcFieldsForSelectedMeasure();
+  const xmlWithSrc = injectSrcFieldsIntoSelfContainedXml(draftXml, srcFields);
+  const prettyDoc = prettyPrintMusicXmlText(xmlWithSrc).trim();
+  return {
+    measureOnly: measureOnly || draftXml,
+    selfContainedDocument: prettyDoc || xmlWithSrc,
+  };
+};
+
+const activateEditSubTab = (tabName: EditSubTabName): void => {
+  activeEditSubTab = tabName;
+  renderEditSubTabState(Boolean(selectedMeasure && draftCore));
+};
+
+const renderEditSubTabState = (hasMeasure: boolean): void => {
+  editSubTabList.classList.remove("md-hidden");
+  editSubTabEditorBtn.disabled = false;
+  editSubTabEditorPanel.classList.toggle("md-hidden", !hasMeasure || activeEditSubTab !== "editor");
+  editSubTabXmlPanel.classList.toggle("md-hidden", activeEditSubTab !== "xml");
+  measureXmlInspector.classList.toggle("md-hidden", activeEditSubTab !== "xml");
+
+  const editorActive = hasMeasure && activeEditSubTab === "editor";
+  const xmlActive = activeEditSubTab === "xml";
+  editSubTabEditorBtn.classList.toggle("is-active", editorActive);
+  editSubTabXmlBtn.classList.toggle("is-active", xmlActive);
+  editSubTabEditorBtn.setAttribute("aria-selected", editorActive ? "true" : "false");
+  editSubTabXmlBtn.setAttribute("aria-selected", xmlActive ? "true" : "false");
 };
 
 const highlightSelectedDraftNoteInEditor = (): void => {
@@ -1152,25 +1563,90 @@ const highlightSelectedDraftNoteInEditor = (): void => {
 
 const highlightSelectedMeasureInMainPreview = (): void => {
   debugScoreArea
-    .querySelectorAll(".ms-measure-selected")
-    .forEach((el) => el.classList.remove("ms-measure-selected"));
+    .querySelectorAll(".ms-measure-selected, .ms-measure-playing")
+    .forEach((el) => {
+      el.classList.remove("ms-measure-selected");
+      el.classList.remove("ms-measure-playing");
+    });
 
-  if (!selectedMeasure || currentSvgIdToNodeId.size === 0) return;
+  if (currentSvgIdToNodeId.size === 0) return;
 
   for (const [svgId, nodeId] of currentSvgIdToNodeId.entries()) {
     const location = nodeIdToLocation.get(nodeId);
     if (!location) continue;
-    if (location.partId !== selectedMeasure.partId || location.measureNumber !== selectedMeasure.measureNumber) {
-      continue;
-    }
     const target = document.getElementById(svgId);
     if (!target || !debugScoreArea.contains(target)) continue;
-    target.classList.add("ms-measure-selected");
     const group = target.closest("g");
-    if (group && debugScoreArea.contains(group)) {
-      group.classList.add("ms-measure-selected");
+    const applyClass = (className: "ms-measure-selected" | "ms-measure-playing"): void => {
+      target.classList.add(className);
+      if (group && debugScoreArea.contains(group)) {
+        group.classList.add(className);
+      }
+    };
+    if (
+      selectedMeasure
+      && location.partId === selectedMeasure.partId
+      && location.measureNumber === selectedMeasure.measureNumber
+    ) {
+      applyClass("ms-measure-selected");
+    }
+    if (
+      activePlaybackLocation
+      && location.measureNumber === activePlaybackLocation.measureNumber
+    ) {
+      applyClass("ms-measure-playing");
     }
   }
+};
+
+const scrollActivePlaybackMeasureIntoView = (): void => {
+  if (!activePlaybackLocation) {
+    lastPlaybackAutoScrollKey = "";
+    return;
+  }
+  const playingNodes = Array.from(debugScoreArea.querySelectorAll<HTMLElement>(".ms-measure-playing"));
+  if (playingNodes.length === 0) return;
+
+  let minLeft = Number.POSITIVE_INFINITY;
+  let maxRight = Number.NEGATIVE_INFINITY;
+  const wrapRect = debugScoreWrap.getBoundingClientRect();
+  for (const node of playingNodes) {
+    const rect = node.getBoundingClientRect();
+    if (!(rect.width > 0) || !(rect.height > 0)) continue;
+    const left = rect.left - wrapRect.left + debugScoreWrap.scrollLeft;
+    const right = rect.right - wrapRect.left + debugScoreWrap.scrollLeft;
+    minLeft = Math.min(minLeft, left);
+    maxRight = Math.max(maxRight, right);
+  }
+  if (!Number.isFinite(minLeft) || !Number.isFinite(maxRight) || maxRight <= minLeft) return;
+
+  const viewLeft = debugScoreWrap.scrollLeft;
+  const viewWidth = debugScoreWrap.clientWidth;
+  const viewRight = viewLeft + viewWidth;
+  const leftTargetRatio = 0.2;
+  const rightThresholdRatio = 0.7;
+  const desiredLeft = Math.max(
+    0,
+    Math.min(
+      debugScoreWrap.scrollWidth - debugScoreWrap.clientWidth,
+      minLeft - debugScoreWrap.clientWidth * leftTargetRatio
+    )
+  );
+  const measureKey = `${activePlaybackLocation.partId}:${activePlaybackLocation.measureNumber}:${Math.round(desiredLeft)}`;
+  const isOffscreen = minLeft < viewLeft || maxRight > viewRight;
+  const isTooFarRight = maxRight > viewLeft + viewWidth * rightThresholdRatio;
+  if (!isOffscreen && !isTooFarRight) return;
+  if (lastPlaybackAutoScrollKey === measureKey) return;
+
+  if (Math.abs(debugScoreWrap.scrollLeft - desiredLeft) < 2) {
+    lastPlaybackAutoScrollKey = measureKey;
+    return;
+  }
+  debugScoreWrap.scrollTo({
+    left: desiredLeft,
+    behavior: "smooth",
+  });
+  lastPlaybackAutoScrollKey = measureKey;
 };
 
 const renderDiagnostics = (): void => {
@@ -1217,6 +1693,10 @@ const renderDiagnostics = (): void => {
 const renderUiMessage = (): void => {
   const messageTargets = [inputUiMessage, uiMessage];
   for (const target of messageTargets) {
+    if (isLhtErrorAlertElement(target)) {
+      target.clear?.();
+      continue;
+    }
     target.classList.remove("ms-ui-message--error", "ms-ui-message--warning");
     target.textContent = "";
   }
@@ -1224,6 +1704,10 @@ const renderUiMessage = (): void => {
   const showMessage = (kind: "error" | "warning", text: string): void => {
     const className = kind === "error" ? "ms-ui-message--error" : "ms-ui-message--warning";
     for (const target of messageTargets) {
+      if (isLhtErrorAlertElement(target)) {
+        target.show?.(text);
+        continue;
+      }
       target.textContent = text;
       target.classList.add(className);
       target.classList.remove("md-hidden");
@@ -1257,6 +1741,10 @@ const renderUiMessage = (): void => {
   }
 
   for (const target of messageTargets) {
+    if (isLhtErrorAlertElement(target)) {
+      target.hide?.();
+      continue;
+    }
     target.classList.add("md-hidden");
   }
 };
@@ -1293,6 +1781,8 @@ const renderControlState = (): void => {
   convertRestBtn.disabled = !hasDraft || !hasSelection || !selectedDraftNoteIsRest;
   deleteBtn.disabled = !hasDraft || !hasSelection || selectedDraftNoteIsRest;
   playMeasureBtn.disabled = !hasDraft || isPlaying;
+  downloadMeasureMusicXmlBtn.disabled = !hasDraft;
+  downloadMeasureMidiBtn.disabled = !hasDraft;
   playBtn.disabled = !state.loaded || isPlaying;
   stopBtn.disabled = !isPlaying;
   scoreEditBtn.disabled = !state.loaded || !selectedMeasure;
@@ -1888,6 +2378,14 @@ const playbackFlowOptions: PlaybackFlowOptions = {
       playbackText.textContent = text;
     }
   },
+  setActivePlaybackLocation: (location) => {
+    activePlaybackLocation = location;
+    if (!location) {
+      lastPlaybackAutoScrollKey = "";
+    }
+    highlightSelectedMeasureInMainPreview();
+    scrollActivePlaybackMeasureIntoView();
+  },
   renderControlState,
   renderAll,
   logDiagnostics: (scope, diagnostics) => {
@@ -2084,81 +2582,123 @@ const loadFromText = (xml: string): void => {
 };
 
 const onLoadClick = async (): Promise<void> => {
-  const selectedSourceType = getSelectedSourceType();
-  const keepMetadata = keepMetadataInMusicXml.checked;
-  const result = await resolveLoadFlow({
-    isNewType: inputEntryNew.checked,
-    sourceType: selectedSourceType,
-    isFileMode: inputEntryFile.checked,
-    selectedFile: fileInput.files?.[0] ?? null,
-    xmlSourceText: xmlInput.value,
-    museScoreSourceText: museScoreInput.value,
-    vsqxSourceText: vsqxInput.value,
-    abcSourceText: abcInput.value,
-    meiSourceText: meiInput.value,
-    lilyPondSourceText: lilyPondInput.value,
-    createNewMusicXml,
-    formatImportedMusicXml: normalizeImportedMusicXmlText,
-    convertAbcToMusicXml: (abcSource) =>
-      convertAbcToMusicXml(abcSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-        overfullCompatibilityMode: true,
-      }),
-    convertMeiToMusicXml: (meiSource) =>
-      convertMeiToMusicXml(meiSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertLilyPondToMusicXml: (lilySource) =>
-      convertLilyPondToMusicXml(lilySource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertMuseScoreToMusicXml: (musescoreSource) =>
-      convertMuseScoreToMusicXml(musescoreSource, {
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-    convertVsqxToMusicXml: (vsqxSource) =>
-      convertVsqxToMusicXml(vsqxSource, {
-        defaultLyric: DEFAULT_VSQX_LYRIC,
-      }),
-    convertMidiToMusicXml: (midiBytes) =>
-      convertMidiToMusicXml(midiBytes, {
-        quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
-        tripletAwareQuantize: midiImportTripletAware.checked,
-        sourceMetadata: keepMetadata,
-        debugMetadata: keepMetadata,
-      }),
-  });
+  if (isFileLoadInProgress) return;
+  const isFileMode = inputEntryFile.checked;
+  if (isFileMode) {
+    setFileLoadInProgress(true);
+    // Ensure progress UI is painted before heavy parsing/conversion starts.
+    await waitForNextPaint();
+  }
+  try {
+    const selectedSourceType = getSelectedSourceType();
+    const metadataOutputSettings = getMksMetadataOutputSettings();
+    const keepSourceMetadata = metadataOutputSettings.keepSrc;
+    const keepDebugMetadata = metadataOutputSettings.keepDbg;
+    const selectedRawFile = fileInput.files?.[0] ?? null;
+    let selectedFile = selectedZipEntryVirtualFile ?? selectedRawFile;
 
-  if (!result.ok) {
-    state.importWarningSummary = "";
-    state.lastDispatchResult = {
-      ok: false,
-      dirtyChanged: false,
-      changedNodeIds: [],
-      affectedMeasureNumbers: [],
-      diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
-      warnings: [],
-    };
-    renderAll();
-    return;
-  }
+    if (
+      inputEntryFile.checked &&
+      selectedRawFile &&
+      isZipFileName(selectedRawFile.name) &&
+      !selectedZipEntryVirtualFile
+    ) {
+      const prepared = await prepareZipEntrySelection(selectedRawFile);
+      if (!prepared.ok) {
+        state.importWarningSummary = "";
+        state.lastDispatchResult = {
+          ok: false,
+          dirtyChanged: false,
+          changedNodeIds: [],
+          affectedMeasureNumbers: [],
+          diagnostics: [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message: prepared.message }],
+          warnings: [],
+        };
+        renderAll();
+        return;
+      }
+      if (!prepared.autoLoad) {
+        return;
+      }
+      selectedFile = selectedZipEntryVirtualFile ?? selectedRawFile;
+    }
 
-  if (result.nextAbcInputText !== undefined) {
-    abcInput.value = result.nextAbcInputText;
+    const result = await resolveLoadFlow({
+      isNewType: inputEntryNew.checked,
+      sourceType: selectedSourceType,
+      isFileMode: inputEntryFile.checked,
+      selectedFile,
+      xmlSourceText: xmlInput.value,
+      museScoreSourceText: museScoreInput.value,
+      vsqxSourceText: vsqxInput.value,
+      abcSourceText: abcInput.value,
+      meiSourceText: meiInput.value,
+      lilyPondSourceText: lilyPondInput.value,
+      createNewMusicXml,
+      formatImportedMusicXml: normalizeImportedMusicXmlText,
+      convertAbcToMusicXml: (abcSource) =>
+        convertAbcToMusicXml(abcSource, {
+          sourceMetadata: keepSourceMetadata,
+          debugMetadata: keepDebugMetadata,
+          overfullCompatibilityMode: true,
+        }),
+      convertMeiToMusicXml: (meiSource) =>
+        convertMeiToMusicXml(meiSource, {
+          sourceMetadata: keepSourceMetadata,
+          debugMetadata: keepDebugMetadata,
+        }),
+      convertLilyPondToMusicXml: (lilySource) =>
+        convertLilyPondToMusicXml(lilySource, {
+          sourceMetadata: keepSourceMetadata,
+          debugMetadata: keepDebugMetadata,
+        }),
+      convertMuseScoreToMusicXml: (musescoreSource) =>
+        convertMuseScoreToMusicXml(musescoreSource, {
+          sourceMetadata: keepSourceMetadata,
+          debugMetadata: keepDebugMetadata,
+        }),
+      convertVsqxToMusicXml: (vsqxSource) =>
+        convertVsqxToMusicXml(vsqxSource, {
+          defaultLyric: DEFAULT_VSQX_LYRIC,
+        }),
+      convertMidiToMusicXml: (midiBytes) =>
+        convertMidiToMusicXml(midiBytes, {
+          quantizeGrid: normalizeMidiImportQuantizeGrid(midiImportQuantizeGridSelect.value),
+          tripletAwareQuantize: midiImportTripletAware.checked,
+          sourceMetadata: keepSourceMetadata,
+          debugMetadata: keepDebugMetadata,
+        }),
+    });
+
+    if (!result.ok) {
+      state.importWarningSummary = "";
+      state.lastDispatchResult = {
+        ok: false,
+        dirtyChanged: false,
+        changedNodeIds: [],
+        affectedMeasureNumbers: [],
+        diagnostics: [{ code: result.diagnosticCode, message: result.diagnosticMessage }],
+        warnings: [],
+      };
+      renderAll();
+      return;
+    }
+
+    if (result.nextAbcInputText !== undefined) {
+      abcInput.value = result.nextAbcInputText;
+    }
+    if (result.nextXmlInputText !== undefined) {
+      xmlInput.value = result.nextXmlInputText;
+    }
+    state.importWarningSummary =
+      selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
+    // Persist immediately on explicit load actions (Load / Load sample).
+    writeLocalDraft(result.xmlToLoad);
+    loadFromText(result.xmlToLoad);
+    activateTopTab("score");
+  } finally {
+    if (isFileMode) setFileLoadInProgress(false);
   }
-  if (result.nextXmlInputText !== undefined) {
-    xmlInput.value = result.nextXmlInputText;
-  }
-  state.importWarningSummary =
-    selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
-  // Persist immediately on explicit load actions (Load / Load sample).
-  writeLocalDraft(result.xmlToLoad);
-  loadFromText(result.xmlToLoad);
-  activateTopTab("score");
 };
 
 const onDiscardLocalDraft = (): void => {
@@ -2633,7 +3173,7 @@ const onConvertRestToNote = (): void => {
 };
 
 const failExport = (
-  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "MEI" | "LilyPond" | "MuseScore" | "All" | "SVG",
+  format: "MusicXML" | "MIDI" | "VSQX" | "ABC" | "JSON" | "MEI" | "LilyPond" | "MuseScore" | "All" | "SVG",
   reason: string
 ): void => {
   const message = `${format} export failed: ${reason}`;
@@ -2647,6 +3187,15 @@ const failExport = (
     warnings: [],
   };
   renderAll();
+};
+
+const parseDirectChildInt = (parent: Element, selector: string): number | null => {
+  const node = parent.querySelector(selector);
+  if (!node) return null;
+  const text = node.textContent?.trim() ?? "";
+  if (text === "") return null;
+  const value = Number(text);
+  return Number.isInteger(value) ? value : null;
 };
 
 const onDownload = async (): Promise<void> => {
@@ -2695,7 +3244,8 @@ const onDownloadMidi = (): void => {
     normalizeGraceTimingMode(graceTimingModeSelect.value),
     metricAccentEnabledInput.checked,
     normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-    normalizeMidiExportProfile(midiExportProfileSelect.value)
+    normalizeMidiExportProfile(midiExportProfileSelect.value),
+    keepMksMetaMetadataInMusicXml.checked
   );
   if (!payload) {
     failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
@@ -2828,7 +3378,8 @@ const onDownloadAll = async (): Promise<void> => {
       normalizeGraceTimingMode(graceTimingModeSelect.value),
       metricAccentEnabledInput.checked,
       normalizeMetricAccentProfile(metricAccentProfileSelect.value),
-      normalizeMidiExportProfile(midiExportProfileSelect.value)
+      normalizeMidiExportProfile(midiExportProfileSelect.value),
+      keepMksMetaMetadataInMusicXml.checked
     );
     if (!midiPayload) {
       failExport("All", "Could not build MIDI payload from current MusicXML.");
@@ -2861,7 +3412,7 @@ const onDownloadAll = async (): Promise<void> => {
       return;
     }
     const svgPayload = createSvgDownloadPayload(new XMLSerializer().serializeToString(svgNode));
-    const allPayload = await createZipBundleDownloadPayload([
+    const allEntries = [
       musicXmlPayload,
       museScorePayload,
       midiPayload,
@@ -2870,7 +3421,8 @@ const onDownloadAll = async (): Promise<void> => {
       meiPayload,
       lilyPondPayload,
       svgPayload,
-    ]);
+    ];
+    const allPayload = await createZipBundleDownloadPayload(allEntries);
     triggerFileDownload(allPayload);
   } catch (err) {
     failExport("All", err instanceof Error ? err.message : "Unknown download error.");
@@ -2888,6 +3440,70 @@ const onDownloadSvg = (): void => {
     triggerFileDownload(createSvgDownloadPayload(svgText));
   } catch (err) {
     failExport("SVG", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadMeasureMusicXml = (): void => {
+  const xmlText = draftCore?.debugSerializeCurrentXml() ?? "";
+  if (!xmlText) {
+    failExport("MusicXML", "No editable measure XML is available.");
+    return;
+  }
+  const ts = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 12);
+  const partId = selectedMeasure?.partId ?? "part";
+  const measureNumber = selectedMeasure?.measureNumber ?? "measure";
+  const safePartId = partId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeMeasureNumber = measureNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
+  try {
+    triggerFileDownload({
+      fileName: `mikuscore-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
+      blob: new Blob([prettyPrintMusicXmlText(xmlText)], { type: "application/xml;charset=utf-8" }),
+    });
+  } catch (err) {
+    failExport("MusicXML", err instanceof Error ? err.message : "Unknown download error.");
+  }
+};
+
+const onDownloadMeasureMidi = (): void => {
+  const xmlText = draftCore?.debugSerializeCurrentXml() ?? "";
+  if (!xmlText) {
+    failExport("MIDI", "No editable measure XML is available.");
+    return;
+  }
+  const sourceDoc = parseMusicXmlDocument(xmlText);
+  if (!sourceDoc) {
+    failExport("MIDI", "Current measure MusicXML could not be parsed.");
+    return;
+  }
+  const parsedForCheck = buildPlaybackEventsFromMusicXmlDoc(sourceDoc, PLAYBACK_TICKS_PER_QUARTER, {
+    mode: "midi",
+    graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabled: metricAccentEnabledInput.checked,
+    metricAccentProfile: normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+  });
+  if (parsedForCheck.events.length === 0) {
+    failExport("MIDI", "No notes to export (MIDI events are empty).");
+    return;
+  }
+  const payload = createMidiDownloadPayload(
+    xmlText,
+    PLAYBACK_TICKS_PER_QUARTER,
+    normalizeMidiProgram(midiProgramSelect.value),
+    forceMidiProgramOverride.checked,
+    normalizeGraceTimingMode(graceTimingModeSelect.value),
+    metricAccentEnabledInput.checked,
+    normalizeMetricAccentProfile(metricAccentProfileSelect.value),
+    normalizeMidiExportProfile(midiExportProfileSelect.value),
+    keepMksMetaMetadataInMusicXml.checked
+  );
+  if (!payload) {
+    failExport("MIDI", "Could not build MIDI payload from current measure MusicXML.");
+    return;
+  }
+  try {
+    triggerFileDownload(payload);
+  } catch (err) {
+    failExport("MIDI", err instanceof Error ? err.message : "Unknown download error.");
   }
 };
 
@@ -2925,9 +3541,24 @@ measureSelectGuideBtn.addEventListener("click", () => {
   activateTopTab("score");
 });
 
-inputEntryFile.addEventListener("change", renderInputMode);
-inputEntrySource.addEventListener("change", renderInputMode);
-inputEntryNew.addEventListener("change", renderInputMode);
+inputEntryFile.addEventListener("change", () => {
+  if (!inputEntryFile.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
+inputEntrySource.addEventListener("change", () => {
+  if (inputEntrySource.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
+inputEntryNew.addEventListener("change", () => {
+  if (inputEntryNew.checked) {
+    resetZipEntrySelectionUi();
+  }
+  renderInputMode();
+});
 sourceTypeXml.addEventListener("change", renderInputMode);
 sourceTypeMuseScore.addEventListener("change", renderInputMode);
 sourceTypeVsqx.addEventListener("change", renderInputMode);
@@ -2937,22 +3568,62 @@ sourceTypeLilyPond.addEventListener("change", renderInputMode);
 newPartCountInput.addEventListener("change", renderNewPartClefControls);
 newPartCountInput.addEventListener("input", renderNewPartClefControls);
 newTemplatePianoGrandStaff.addEventListener("change", renderNewPartClefControls);
-fileSelectBtn.addEventListener("click", () => {
+fileSelectBtn.closest("lht-file-select")?.addEventListener("lht-file-select:before-open", () => {
   // Clear selection so choosing the same file again still fires `change`.
+  resetZipEntrySelectionUi();
   fileInput.value = "";
-  fileInput.click();
 });
-fileInput.addEventListener("change", () => {
+
+if (!fileSelectBtn.closest("lht-file-select")) {
+  fileSelectBtn.addEventListener("click", () => {
+    resetZipEntrySelectionUi();
+    fileInput.value = "";
+    fileInput.click();
+  });
+}
+fileInput.addEventListener("change", async () => {
   const f = fileInput.files?.[0];
   fileNameText.textContent = f ? f.name : "No file selected";
   fileNameText.classList.toggle("md-hidden", !f);
-  if (!f) return;
+  if (!f) {
+    resetZipEntrySelectionUi();
+    return;
+  }
   inputEntryFile.checked = true;
   inputEntrySource.checked = false;
   inputEntryNew.checked = false;
+  if (!isZipFileName(f.name)) {
+    resetZipEntrySelectionUi();
+  }
   renderInputMode();
   if (inputEntryNew.checked || !inputEntryFile.checked) return;
-  void onLoadClick();
+  await onLoadClick();
+});
+zipEntrySelect.addEventListener("change", async () => {
+  const archive = fileInput.files?.[0];
+  const entryPath = zipEntrySelect.value;
+  if (!archive || !entryPath || !isZipFileName(archive.name)) return;
+  try {
+    selectedZipEntryVirtualFile = await loadZipEntryAsVirtualFile(archive, entryPath);
+  } catch (error) {
+    state.importWarningSummary = "";
+    state.lastDispatchResult = {
+      ok: false,
+      dirtyChanged: false,
+      changedNodeIds: [],
+      affectedMeasureNumbers: [],
+      diagnostics: [
+        {
+          code: "MVP_INVALID_COMMAND_PAYLOAD",
+          message: `Failed to read ZIP entry: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      ],
+      warnings: [],
+    };
+    renderAll();
+    return;
+  }
+  await onLoadClick();
 });
 loadBtn.addEventListener("click", () => {
   void onLoadClick();
@@ -2973,11 +3644,23 @@ const loadBuiltInSample = (xml: string): void => {
   renderLocalDraftUi();
   void onLoadClick();
 };
-loadSampleBtn1.addEventListener("click", () => {
-  loadBuiltInSample(sampleXml);
+loadSampleBtn6.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml6);
+});
+loadSample1Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml1);
 });
 loadSample2Btn.addEventListener("click", () => {
   loadBuiltInSample(sampleXml2);
+});
+loadSample3Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml3);
+});
+loadSample4Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml4);
+});
+loadSample7Btn.addEventListener("click", () => {
+  loadBuiltInSample(sampleXml7);
 });
 if (noteSelect) {
   noteSelect.addEventListener("change", () => {
@@ -3049,7 +3732,15 @@ metricAccentEnabledInput.addEventListener("change", () => {
   renderControlState();
 });
 metricAccentProfileSelect.addEventListener("change", writePlaybackSettings);
-keepMetadataInMusicXml.addEventListener("change", () => {
+keepMksMetaMetadataInMusicXml.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderOutput();
+});
+keepMksSrcMetadataInMusicXml.addEventListener("change", () => {
+  writePlaybackSettings();
+  renderOutput();
+});
+keepMksDbgMetadataInMusicXml.addEventListener("change", () => {
   writePlaybackSettings();
   renderOutput();
 });
@@ -3064,6 +3755,12 @@ generalSettingsAccordion.addEventListener("toggle", writePlaybackSettings);
 settingsAccordion.addEventListener("toggle", writePlaybackSettings);
 debugScoreArea.addEventListener("click", onVerovioScoreClick);
 measureEditorArea.addEventListener("click", onMeasureEditorClick);
+editSubTabEditorBtn.addEventListener("click", () => {
+  activateEditSubTab("editor");
+});
+editSubTabXmlBtn.addEventListener("click", () => {
+  activateEditSubTab("xml");
+});
 measureApplyBtn.addEventListener("click", onMeasureApply);
 measureDiscardBtn.addEventListener("click", onMeasureDiscard);
 measureNavLeftBtn.addEventListener("click", () => navigateSelectedMeasure("left"));
@@ -3074,6 +3771,8 @@ appendMeasureBtn.addEventListener("click", onAppendMeasureAtEnd);
 playMeasureBtn.addEventListener("click", () => {
   void startMeasurePlayback();
 });
+downloadMeasureMusicXmlBtn.addEventListener("click", onDownloadMeasureMusicXml);
+downloadMeasureMidiBtn.addEventListener("click", onDownloadMeasureMidi);
 playMeasureBtn.addEventListener("pointerdown", unlockAudioOnGesture, { passive: true });
 playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: true });
 

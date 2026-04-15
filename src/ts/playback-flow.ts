@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { Diagnostic, SaveResult } from "../../core/interfaces";
 import {
   buildMidiBytesForPlayback,
@@ -23,6 +28,7 @@ export type SynthSchedule = {
     start: number;
     ticks: number;
     channel: number;
+    trackId?: string;
   }>;
 };
 
@@ -31,12 +37,18 @@ export type BasicWaveSynthEngine = {
   playSchedule: (
     schedule: SynthSchedule,
     waveform: OscillatorType,
+    onTickUpdate?: (currentTick: number) => void,
     onEnded?: () => void
   ) => Promise<void>;
   stop: () => void;
 };
 
 export const PLAYBACK_TICKS_PER_QUARTER = 480;
+const DENSE_PLAYBACK_EVENT_THRESHOLD = 2048;
+const DENSE_PLAYBACK_MAX_EVENTS = 4096;
+const DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET = 48;
+const DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR = 64;
+const DENSE_PLAYBACK_PROTECTED_ONSET_SIZE = 8;
 
 const summarizeDiagnostics = (diagnostics: Diagnostic[]): string => {
   if (!diagnostics.length) return "unknown reason";
@@ -64,6 +76,174 @@ const normalizeWaveform = (value: string): OscillatorType => {
   return "sine";
 };
 
+type LightweightPlaybackSummary = {
+  applied: boolean;
+  originalEventCount: number;
+  finalEventCount: number;
+  droppedUltraShortCount: number;
+  droppedDenseOnsetCount: number;
+  droppedBudgetCount: number;
+};
+
+const compareScheduleEventsForRetention = (
+  a: SynthSchedule["events"][number],
+  b: SynthSchedule["events"][number]
+): number => {
+  if (b.ticks !== a.ticks) return b.ticks - a.ticks;
+  if (a.channel === 10 && b.channel !== 10) return -1;
+  if (b.channel === 10 && a.channel !== 10) return 1;
+  if (a.start !== b.start) return a.start - b.start;
+  if (a.midiNumber !== b.midiNumber) return b.midiNumber - a.midiNumber;
+  return (a.trackId ?? "").localeCompare(b.trackId ?? "");
+};
+
+const prioritizeOnsetGroupForRetention = (
+  group: SynthSchedule["events"]
+): SynthSchedule["events"] => {
+  const sortedByMidi = group.slice().sort((a, b) =>
+    a.midiNumber === b.midiNumber ? compareScheduleEventsForRetention(a, b) : a.midiNumber - b.midiNumber
+  );
+  const lowestMidi = sortedByMidi[0]?.midiNumber ?? 0;
+  const highestMidi = sortedByMidi[sortedByMidi.length - 1]?.midiNumber ?? 0;
+  const byPitchClass = new Map<number, SynthSchedule["events"]>();
+  for (const event of sortedByMidi) {
+    const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+    const bucket = byPitchClass.get(pitchClass) ?? [];
+    bucket.push(event);
+    byPitchClass.set(pitchClass, bucket);
+  }
+
+  const anchors: SynthSchedule["events"] = [];
+  const uniquePitchClasses: SynthSchedule["events"] = [];
+  const octaveOuter: SynthSchedule["events"] = [];
+  const octaveInner: SynthSchedule["events"] = [];
+
+  for (const event of sortedByMidi) {
+    if (event.midiNumber === lowestMidi || event.midiNumber === highestMidi) {
+      anchors.push(event);
+      continue;
+    }
+    const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+    const bucket = byPitchClass.get(pitchClass) ?? [];
+    if (bucket.length <= 1) {
+      uniquePitchClasses.push(event);
+      continue;
+    }
+    const bucketLowest = bucket[0]?.midiNumber ?? event.midiNumber;
+    const bucketHighest = bucket[bucket.length - 1]?.midiNumber ?? event.midiNumber;
+    if (event.midiNumber === bucketLowest || event.midiNumber === bucketHighest) {
+      octaveOuter.push(event);
+    } else {
+      octaveInner.push(event);
+    }
+  }
+
+  const sortBucket = (bucket: SynthSchedule["events"]): SynthSchedule["events"] =>
+    bucket.slice().sort(compareScheduleEventsForRetention);
+
+  return [
+    ...sortBucket(anchors),
+    ...sortBucket(uniquePitchClasses),
+    ...sortBucket(octaveOuter),
+    ...sortBucket(octaveInner),
+  ];
+};
+
+export const compactSynthScheduleForPlayback = (
+  schedule: SynthSchedule,
+  ticksPerQuarter: number
+): { schedule: SynthSchedule; summary: LightweightPlaybackSummary } => {
+  const originalEventCount = Array.isArray(schedule.events) ? schedule.events.length : 0;
+  if (originalEventCount <= DENSE_PLAYBACK_EVENT_THRESHOLD) {
+    return {
+      schedule,
+      summary: {
+        applied: false,
+        originalEventCount,
+        finalEventCount: originalEventCount,
+        droppedUltraShortCount: 0,
+        droppedDenseOnsetCount: 0,
+        droppedBudgetCount: 0,
+      },
+    };
+  }
+
+  const minDenseEventTicks = Math.max(1, Math.round(ticksPerQuarter / DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR));
+  const keptAfterShortFilter: SynthSchedule["events"] = [];
+  let droppedUltraShortCount = 0;
+  for (const event of schedule.events) {
+    if ((event.ticks ?? 0) < minDenseEventTicks) {
+      droppedUltraShortCount += 1;
+      continue;
+    }
+    keptAfterShortFilter.push(event);
+  }
+
+  const byOnset = new Map<number, SynthSchedule["events"]>();
+  for (const event of keptAfterShortFilter) {
+    const group = byOnset.get(event.start) ?? [];
+    group.push(event);
+    byOnset.set(event.start, group);
+  }
+
+  const orderedOnsets = Array.from(byOnset.keys()).sort((a, b) => a - b);
+  const onsetGroups = orderedOnsets.map((start) => {
+    const retained = prioritizeOnsetGroupForRetention(byOnset.get(start) ?? []);
+    return retained.slice(0, DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET);
+  });
+  const denseLimitedEvents: SynthSchedule["events"] = [];
+  for (const group of onsetGroups) {
+    denseLimitedEvents.push(...group);
+  }
+  const droppedDenseOnsetCount = keptAfterShortFilter.length - denseLimitedEvents.length;
+
+  let finalEvents = denseLimitedEvents;
+  let droppedBudgetCount = 0;
+  if (denseLimitedEvents.length > DENSE_PLAYBACK_MAX_EVENTS) {
+    const protectedGroups = onsetGroups.filter((group) => group.length <= DENSE_PLAYBACK_PROTECTED_ONSET_SIZE);
+    const reducibleGroups = onsetGroups
+      .filter((group) => group.length > DENSE_PLAYBACK_PROTECTED_ONSET_SIZE)
+      .map((group) => group.slice());
+    const retained: SynthSchedule["events"] = [];
+    for (const group of protectedGroups) {
+      retained.push(...group);
+    }
+    if (retained.length < DENSE_PLAYBACK_MAX_EVENTS) {
+      const rounds = reducibleGroups.reduce((max, group) => Math.max(max, group.length), 0);
+      for (let round = 0; round < rounds && retained.length < DENSE_PLAYBACK_MAX_EVENTS; round += 1) {
+        for (const group of reducibleGroups) {
+          const event = group[round];
+          if (!event) continue;
+          retained.push(event);
+          if (retained.length >= DENSE_PLAYBACK_MAX_EVENTS) break;
+        }
+      }
+    }
+    if (retained.length > DENSE_PLAYBACK_MAX_EVENTS) {
+      retained.length = DENSE_PLAYBACK_MAX_EVENTS;
+    }
+    finalEvents = retained.sort((a, b) =>
+      a.start === b.start ? a.midiNumber - b.midiNumber : a.start - b.start
+    );
+    droppedBudgetCount = denseLimitedEvents.length - finalEvents.length;
+  }
+
+  return {
+    schedule: {
+      ...schedule,
+      events: finalEvents,
+    },
+    summary: {
+      applied: true,
+      originalEventCount,
+      finalEventCount: finalEvents.length,
+      droppedUltraShortCount,
+      droppedDenseOnsetCount,
+      droppedBudgetCount,
+    },
+  };
+};
+
 export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number }): BasicWaveSynthEngine => {
   const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
     ? Math.max(1, Math.round(options.ticksPerQuarter))
@@ -71,6 +251,16 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   let audioContext: AudioContext | null = null;
   let activeSynthNodes: Array<{ oscillator: OscillatorNode; gainNode: GainNode }> = [];
   let synthStopTimer: number | null = null;
+  let playbackProgressTimer: number | null = null;
+
+  const hasActiveUserGesture = (): boolean => {
+    const nav = navigator as Navigator & {
+      userActivation?: { isActive?: boolean; hasBeenActive?: boolean };
+    };
+    const ua = nav.userActivation;
+    if (!ua) return true;
+    return ua.isActive === true || ua.hasBeenActive === true;
+  };
 
   const ensureAudioContext = (): AudioContext => {
     if (audioContext) return audioContext;
@@ -88,6 +278,10 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   const ensureAudioContextRunning = async (): Promise<AudioContext> => {
     const context = ensureAudioContext();
     if (context.state !== "running") {
+      // Avoid autoplay-policy warnings by not calling resume() outside user activation.
+      if (!hasActiveUserGesture()) {
+        throw new Error("AudioContext resume requires an active user gesture.");
+      }
       await context.resume();
     }
     if (context.state !== "running") {
@@ -101,11 +295,13 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     startAt: number,
     bodyDuration: number,
     waveform: OscillatorType,
-    sustainHoldSeconds = 0
+    sustainHoldSeconds = 0,
+    legatoFromOverlap = false
   ): number => {
     if (!audioContext) return startAt;
-    const attack = 0.005;
-    const release = 0.03;
+    const isSine = waveform === "sine";
+    const attack = legatoFromOverlap && !isSine ? 0.0015 : 0.005;
+    const release = legatoFromOverlap || isSine ? 0.03 : 0.01;
     const endAt = startAt + bodyDuration;
     const heldEndAt = endAt + Math.max(0, sustainHoldSeconds);
     const oscillator = audioContext.createOscillator();
@@ -114,8 +310,13 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
     const gainNode = audioContext.createGain();
     const gainLevel = event.channel === 10 ? 0.06 : 0.1;
-    gainNode.gain.setValueAtTime(0.0001, startAt);
-    gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    if (legatoFromOverlap && !isSine) {
+      gainNode.gain.setValueAtTime(gainLevel * 0.75, startAt);
+      gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    } else {
+      gainNode.gain.setValueAtTime(0.0001, startAt);
+      gainNode.gain.linearRampToValueAtTime(gainLevel, startAt + attack);
+    }
     gainNode.gain.setValueAtTime(gainLevel, heldEndAt);
     gainNode.gain.linearRampToValueAtTime(0.0001, heldEndAt + release);
 
@@ -139,6 +340,10 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     if (synthStopTimer !== null) {
       window.clearTimeout(synthStopTimer);
       synthStopTimer = null;
+    }
+    if (playbackProgressTimer !== null) {
+      window.clearInterval(playbackProgressTimer);
+      playbackProgressTimer = null;
     }
     for (const node of activeSynthNodes) {
       try {
@@ -190,6 +395,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
   const playSchedule = async (
     schedule: SynthSchedule,
     waveform: OscillatorType,
+    onTickUpdate?: (currentTick: number) => void,
     onEnded?: () => void
   ): Promise<void> => {
     if (!schedule || !Array.isArray(schedule.events) || schedule.events.length === 0) {
@@ -198,11 +404,13 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
     const runningContext = await ensureAudioContextRunning();
     stop();
+    const compacted = compactSynthScheduleForPlayback(schedule, ticksPerQuarter);
+    const effectiveSchedule = compacted.schedule;
 
     const normalizedWaveform = normalizeWaveform(waveform);
-    const normalizedTempoEvents = (schedule.tempoEvents?.length
-      ? schedule.tempoEvents
-      : [{ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) }]
+    const normalizedTempoEvents = (effectiveSchedule.tempoEvents?.length
+      ? effectiveSchedule.tempoEvents
+      : [{ startTick: 0, bpm: Math.max(1, Number(effectiveSchedule.tempo) || 120) }]
     )
       .map((event) => ({
         startTick: Math.max(0, Math.round(event.startTick)),
@@ -219,7 +427,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       }
     }
     if (!mergedTempoEvents.length || mergedTempoEvents[0].startTick !== 0) {
-      mergedTempoEvents.unshift({ startTick: 0, bpm: Math.max(1, Number(schedule.tempo) || 120) });
+      mergedTempoEvents.unshift({ startTick: 0, bpm: Math.max(1, Number(effectiveSchedule.tempo) || 120) });
     }
     const tickToSeconds = (targetTick: number): number => {
       let seconds = 0;
@@ -238,9 +446,28 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
       }
       return seconds;
     };
+    const secondsToTick = (elapsedSeconds: number): number => {
+      if (!(elapsedSeconds > 0)) return 0;
+      let remainingSeconds = elapsedSeconds;
+      let resolvedTick = 0;
+      for (let i = 0; i < mergedTempoEvents.length; i += 1) {
+        const current = mergedTempoEvents[i];
+        const nextStart = mergedTempoEvents[i + 1]?.startTick ?? Number.POSITIVE_INFINITY;
+        const currentStart = current.startTick;
+        const spanTicks = Number.isFinite(nextStart) ? Math.max(0, nextStart - currentStart) : Number.POSITIVE_INFINITY;
+        const secPerTick = 60 / (current.bpm * ticksPerQuarter);
+        const spanSeconds = Number.isFinite(spanTicks) ? spanTicks * secPerTick : Number.POSITIVE_INFINITY;
+        if (remainingSeconds <= spanSeconds) {
+          return Math.max(resolvedTick, currentStart + Math.round(remainingSeconds / secPerTick));
+        }
+        remainingSeconds -= spanSeconds;
+        resolvedTick = Number.isFinite(spanTicks) ? nextStart : resolvedTick;
+      }
+      return Math.max(0, resolvedTick);
+    };
     const baseTime = runningContext.currentTime + 0.04;
     let latestEndTime = baseTime;
-    const pedalRanges = (schedule.pedalRanges ?? []).map((range) => ({
+    const pedalRanges = (effectiveSchedule.pedalRanges ?? []).map((range) => ({
       channel: Math.max(1, Math.min(16, Math.round(range.channel || 1))),
       startTick: Math.max(0, Math.round(range.startTick)),
       endTick: Math.max(0, Math.round(range.endTick)),
@@ -248,21 +475,87 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
     const isPedalHeldAt = (channel: number, tick: number): boolean => {
       return pedalRanges.some((range) => range.channel === channel && tick >= range.startTick && tick < range.endTick);
     };
+    const laneStarts = new Map<string, number[]>();
+    for (const event of effectiveSchedule.events) {
+      const laneKey = `${event.channel}|${event.trackId ?? ""}`;
+      const starts = laneStarts.get(laneKey) ?? [];
+      starts.push(event.start);
+      laneStarts.set(laneKey, starts);
+    }
+    for (const [laneKey, starts] of laneStarts.entries()) {
+      const uniqSorted = Array.from(new Set(starts)).sort((a, b) => a - b);
+      laneStarts.set(laneKey, uniqSorted);
+    }
+    const findNextStartTickOnLane = (laneKey: string, startTick: number): number | null => {
+      const starts = laneStarts.get(laneKey);
+      if (!starts || starts.length === 0) return null;
+      let lo = 0;
+      let hi = starts.length - 1;
+      let ans = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if ((starts[mid] ?? 0) > startTick) {
+          ans = starts[mid] ?? -1;
+          hi = mid - 1;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return ans >= 0 ? ans : null;
+    };
+    const lastNoteByLane = new Map<string, { startTick: number; endTick: number }>();
 
-    for (const event of schedule.events) {
+    for (const event of effectiveSchedule.events) {
+      const laneKey = `${event.channel}|${event.trackId ?? ""}`;
+      const prevInLane = lastNoteByLane.get(laneKey);
+      const legatoFromOverlap =
+        (prevInLane?.startTick ?? -1) < event.start && (prevInLane?.endTick ?? -1) > event.start;
       const startAt = baseTime + tickToSeconds(event.start);
       const endAt = baseTime + tickToSeconds(event.start + event.ticks);
-      const bodyDuration = Math.max(0.04, endAt - startAt);
+      let bodyDuration = Math.max(0.04, endAt - startAt);
+      const nextStartTick = findNextStartTickOnLane(laneKey, event.start);
+      if (
+        normalizedWaveform !== "sine"
+        && !legatoFromOverlap
+        && nextStartTick !== null
+        && nextStartTick > event.start
+      ) {
+        const hasForwardOverlapIntent = event.start + event.ticks > nextStartTick;
+        if (!hasForwardOverlapIntent) {
+          const nextStartAt = baseTime + tickToSeconds(nextStartTick);
+          const separatedEndAt = Math.max(startAt + 0.02, nextStartAt - 0.006);
+          bodyDuration = Math.max(0.02, Math.min(bodyDuration, separatedEndAt - startAt));
+        }
+      }
       const sustainHoldSeconds = isPedalHeldAt(event.channel, event.start) ? 0.18 : 0;
       latestEndTime = Math.max(
         latestEndTime,
-        scheduleBasicWaveNote(event, startAt, bodyDuration, normalizedWaveform, sustainHoldSeconds)
+        scheduleBasicWaveNote(
+          event,
+          startAt,
+          bodyDuration,
+          normalizedWaveform,
+          sustainHoldSeconds,
+          legatoFromOverlap
+        )
       );
+      lastNoteByLane.set(laneKey, { startTick: event.start, endTick: event.start + event.ticks });
     }
 
+    if (typeof onTickUpdate === "function") {
+      onTickUpdate(0);
+      playbackProgressTimer = window.setInterval(() => {
+        const elapsed = Math.max(0, runningContext.currentTime - baseTime);
+        onTickUpdate(secondsToTick(elapsed));
+      }, 90);
+    }
     const waitMs = Math.max(0, Math.ceil((latestEndTime - runningContext.currentTime) * 1000));
     synthStopTimer = window.setTimeout(() => {
       activeSynthNodes = [];
+      if (playbackProgressTimer !== null) {
+        window.clearInterval(playbackProgressTimer);
+        playbackProgressTimer = null;
+      }
       if (typeof onEnded === "function") {
         onEnded();
       }
@@ -274,7 +567,7 @@ export const createBasicWaveSynthEngine = (options: { ticksPerQuarter: number })
 
 const toSynthSchedule = (
   tempo: number,
-  events: Array<{ midiNumber: number; startTicks: number; durTicks: number; channel: number }>,
+  events: Array<{ midiNumber: number; startTicks: number; durTicks: number; channel: number; trackId?: string }>,
   tempoEvents: Array<{ startTicks: number; bpm: number }> = [],
   controlEvents: Array<{ channel: number; startTicks: number; controllerNumber: number; controllerValue: number }> = []
 ): SynthSchedule => {
@@ -333,6 +626,7 @@ const toSynthSchedule = (
         start: event.startTicks,
         ticks: event.durTicks,
         channel: event.channel,
+        trackId: event.trackId,
       })),
   };
 };
@@ -350,6 +644,7 @@ export type PlaybackFlowOptions = {
   getIsPlaying: () => boolean;
   setIsPlaying: (isPlaying: boolean) => void;
   setPlaybackText: (text: string) => void;
+  setActivePlaybackLocation: (location: PlaybackStartLocation | null) => void;
   renderControlState: () => void;
   renderAll: () => void;
   logDiagnostics: (
@@ -376,36 +671,199 @@ const parsePositiveInt = (text: string | null | undefined): number | null => {
   return Number.isFinite(value) && value > 0 ? value : null;
 };
 
+const getFirstNumber = (el: ParentNode, selector: string): number | null => {
+  const text = el.querySelector(selector)?.textContent?.trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+};
+
+const measureCapacityDivFromContext = (divisions: number, beats: number, beatType: number): number => {
+  const safeDivisions = Math.max(1, Math.round(divisions));
+  const safeBeats = Math.max(1, Math.round(beats));
+  const safeBeatType = Math.max(1, Math.round(beatType));
+  return Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+};
+
+const estimateMeasureContentSpanDiv = (measure: Element): number => {
+  let cursorDiv = 0;
+  let measureMaxDiv = 0;
+  const lastStartByVoice = new Map<string, number>();
+  for (const child of Array.from(measure.children)) {
+    if (child.tagName === "backup" || child.tagName === "forward") {
+      const dur = getFirstNumber(child, "duration");
+      if (!dur || dur <= 0) continue;
+      if (child.tagName === "backup") {
+        cursorDiv = Math.max(0, cursorDiv - dur);
+      } else {
+        cursorDiv += dur;
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
+      }
+      continue;
+    }
+    if (child.tagName !== "note") continue;
+    const durationDiv = getFirstNumber(child, "duration");
+    if (!durationDiv || durationDiv <= 0) continue;
+    const voice = child.querySelector("voice")?.textContent?.trim() ?? "1";
+    const isChord = Boolean(child.querySelector("chord"));
+    const startDiv = isChord ? (lastStartByVoice.get(voice) ?? cursorDiv) : cursorDiv;
+    if (!isChord) {
+      lastStartByVoice.set(voice, startDiv);
+      cursorDiv += durationDiv;
+    }
+    measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+  }
+  return measureMaxDiv;
+};
+
+const shouldTreatFirstUnderfullAsPickup = (doc: Document): boolean => {
+  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  if (parts.length < 2) return false;
+  for (const part of parts) {
+    const firstMeasure = part.querySelector(":scope > measure");
+    if (!firstMeasure) return false;
+    const divisions = getFirstNumber(firstMeasure, "attributes > divisions") ?? 1;
+    const beats = getFirstNumber(firstMeasure, "attributes > time > beats") ?? 4;
+    const beatType = getFirstNumber(firstMeasure, "attributes > time > beat-type") ?? 4;
+    const capacityDiv = measureCapacityDivFromContext(divisions, beats, beatType);
+    const contentDiv = estimateMeasureContentSpanDiv(firstMeasure);
+    if (!(contentDiv > 0 && contentDiv < capacityDiv)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const isImplicitMeasure = (measure: Element | null | undefined): boolean => {
+  if (!measure) return false;
+  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+  return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+};
+
+const resolveMeasureAdvanceDiv = (
+  measure: Element,
+  measureMaxDiv: number,
+  currentDivisions: number,
+  currentBeats: number,
+  currentBeatType: number,
+  nextMeasureIsImplicit = false,
+  firstMeasureUnderfullAsPickup = false
+): number => {
+  const safeDivisions = Math.max(1, Math.round(currentDivisions));
+  const safeBeats = Math.max(1, Math.round(currentBeats));
+  const safeBeatType = Math.max(1, Math.round(currentBeatType));
+  const capacityDiv = Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
+  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+  const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+  if (isImplicit) {
+    return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
+  }
+  let hasPreviousMeasure = false;
+  for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
+    const prevName = (prev.localName || prev.tagName || "").toLowerCase();
+    if (prevName === "measure") {
+      hasPreviousMeasure = true;
+      break;
+    }
+  }
+  const isFirstMeasureInPart = !hasPreviousMeasure;
+  if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    return measureMaxDiv;
+  }
+  if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    return measureMaxDiv;
+  }
+  return Math.max(capacityDiv, measureMaxDiv);
+};
+
+export const buildMeasureTimelineForPart = (
+  doc: Document,
+  partId: string,
+  fallbackDivisions: number
+): Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }> => {
+  const part = Array.from(doc.querySelectorAll("score-partwise > part")).find(
+    (p) => (p.getAttribute("id") ?? "").trim() === String(partId || "").trim()
+  );
+  if (!part) return [];
+  const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
+  let divisions = Math.max(1, Math.round(fallbackDivisions));
+  let beats = 4;
+  let beatType = 4;
+  let tick = 0;
+  const ranges: Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }> = [];
+  const measures = Array.from(part.querySelectorAll(":scope > measure"));
+  for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
+    const measure = measures[measureIndex];
+    const nextMeasure = measures[measureIndex + 1] ?? null;
+    const nextDivisions = getFirstNumber(measure, "attributes > divisions");
+    if (nextDivisions && nextDivisions > 0) divisions = nextDivisions;
+    const nextBeats = getFirstNumber(measure, "attributes > time > beats");
+    const nextBeatType = getFirstNumber(measure, "attributes > time > beat-type");
+    if (nextBeats && nextBeats > 0 && nextBeatType && nextBeatType > 0) {
+      beats = nextBeats;
+      beatType = nextBeatType;
+    }
+    const measureNumber = (measure.getAttribute("number") ?? "").trim();
+    const measureContentDiv = estimateMeasureContentSpanDiv(measure);
+    const advanceDiv = resolveMeasureAdvanceDiv(
+      measure,
+      measureContentDiv,
+      divisions,
+      beats,
+      beatType,
+      isImplicitMeasure(nextMeasure),
+      firstUnderfullAsPickup
+    );
+    const measureTicks = Math.max(1, Math.round((advanceDiv / Math.max(1, divisions)) * fallbackDivisions));
+    ranges.push({
+      startTick: tick,
+      endTick: tick + measureTicks,
+      location: { partId, measureNumber },
+    });
+    tick += measureTicks;
+  }
+  return ranges;
+};
+
+const findPlaybackLocationAtTick = (
+  ranges: Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }>,
+  tick: number
+): PlaybackStartLocation | null => {
+  if (!ranges.length) return null;
+  const safeTick = Math.max(0, Math.round(tick));
+  for (const range of ranges) {
+    if (safeTick >= range.startTick && safeTick < range.endTick) {
+      return range.location;
+    }
+  }
+  return ranges[ranges.length - 1]?.location ?? null;
+};
+
+const trimMeasureTimelineFromTick = (
+  ranges: Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }>,
+  startTick: number
+): Array<{ startTick: number; endTick: number; location: PlaybackStartLocation }> => {
+  if (!ranges.length || !Number.isFinite(startTick) || startTick <= 0) {
+    return ranges;
+  }
+  const safeStartTick = Math.max(0, Math.round(startTick));
+  return ranges
+    .filter((range) => range.endTick > safeStartTick)
+    .map((range) => ({
+      startTick: Math.max(0, range.startTick - safeStartTick),
+      endTick: Math.max(0, range.endTick - safeStartTick),
+      location: range.location,
+    }));
+};
+
 const resolveMeasureStartTickInPart = (
   doc: Document,
   startFromMeasure: PlaybackStartLocation,
   fallbackDivisions: number
 ): number | null => {
-  const part = Array.from(doc.querySelectorAll("score-partwise > part")).find(
-    (p) => (p.getAttribute("id") ?? "").trim() === String(startFromMeasure.partId || "").trim()
-  );
-  if (!part) return null;
-  let divisions = Math.max(1, Math.round(fallbackDivisions));
-  let beats = 4;
-  let beatType = 4;
-  let tick = 0;
-  const measures = Array.from(part.querySelectorAll(":scope > measure"));
-  for (const measure of measures) {
-    const attrs = measure.querySelector(":scope > attributes");
-    const nextDivisions = parsePositiveInt(attrs?.querySelector(":scope > divisions")?.textContent);
-    if (nextDivisions) divisions = nextDivisions;
-    const nextBeats = parsePositiveInt(attrs?.querySelector(":scope > time > beats")?.textContent);
-    if (nextBeats) beats = nextBeats;
-    const nextBeatType = parsePositiveInt(attrs?.querySelector(":scope > time > beat-type")?.textContent);
-    if (nextBeatType) beatType = nextBeatType;
-    const measureNo = (measure.getAttribute("number") ?? "").trim();
-    if (measureNo === String(startFromMeasure.measureNumber ?? "").trim()) {
-      return tick;
-    }
-    const measureTicks = Math.max(1, Math.round((divisions * beats * 4) / Math.max(1, beatType)));
-    tick += measureTicks;
-  }
-  return null;
+  const ranges = buildMeasureTimelineForPart(doc, startFromMeasure.partId, fallbackDivisions);
+  const hit = ranges.find((range) => range.location.measureNumber === String(startFromMeasure.measureNumber ?? "").trim());
+  return hit ? hit.startTick : null;
 };
 
 const trimPlaybackFromTick = (
@@ -458,6 +916,7 @@ const trimPlaybackFromTick = (
 export const stopPlayback = (options: PlaybackFlowOptions): void => {
   options.engine.stop();
   options.setIsPlaying(false);
+  options.setActivePlaybackLocation(null);
   options.setPlaybackText("Playback: stopped");
   options.renderControlState();
 };
@@ -467,6 +926,7 @@ export const startPlayback = async (
   params: { isLoaded: boolean; core: SaveCapableCore; startFromMeasure?: PlaybackStartLocation | null }
 ): Promise<void> => {
   if (!params.isLoaded || options.getIsPlaying()) return;
+  options.setActivePlaybackLocation(null);
 
   const saveResult = params.core.save();
   options.onFullSaveResult(saveResult);
@@ -500,6 +960,8 @@ export const startPlayback = async (
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
     metricAccentProfile: options.getMetricAccentProfile(),
+    includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+    applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
   });
   let effectiveParsedPlayback = parsedPlayback;
   let effectiveTempoEvents = useMidiLikePlayback
@@ -508,9 +970,15 @@ export const startPlayback = async (
   let effectiveControlEvents = useMidiLikePlayback
     ? collectMidiControlEventsFromMusicXmlDoc(playbackDoc, options.ticksPerQuarter)
     : [];
+  const playbackAnchorPartId =
+    params.startFromMeasure?.partId ??
+    playbackDoc.querySelector("score-partwise > part")?.getAttribute("id")?.trim() ??
+    "";
+  let playbackStartTick = 0;
   if (params.startFromMeasure) {
     const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
     if (startTick !== null && startTick > 0) {
+      playbackStartTick = startTick;
       const trimmed = trimPlaybackFromTick(
         effectiveParsedPlayback,
         effectiveTempoEvents,
@@ -536,6 +1004,15 @@ export const startPlayback = async (
     : [];
 
   const waveform = options.getPlaybackWaveform();
+  const measureTimeline = playbackAnchorPartId
+    ? trimMeasureTimelineFromTick(
+      buildMeasureTimelineForPart(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter),
+      playbackStartTick
+    )
+    : [];
+  if (params.startFromMeasure) {
+    options.setActivePlaybackLocation(params.startFromMeasure);
+  }
 
   let midiBytes: Uint8Array;
   try {
@@ -580,8 +1057,12 @@ export const startPlayback = async (
     await options.engine.playSchedule(
       toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents),
       waveform,
+      (currentTick) => {
+        options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
+      },
       () => {
         options.setIsPlaying(false);
+        options.setActivePlaybackLocation(null);
         options.setPlaybackText("Playback: stopped");
         options.renderControlState();
       }
@@ -610,6 +1091,7 @@ export const startMeasurePlayback = async (
   params: { draftCore: SaveCapableCore | null }
 ): Promise<void> => {
   if (!params.draftCore || options.getIsPlaying()) return;
+  options.setActivePlaybackLocation(null);
 
   const saveResult = params.draftCore.save();
   if (!saveResult.ok) {
@@ -637,6 +1119,8 @@ export const startMeasurePlayback = async (
     graceTimingMode: options.getGraceTimingMode(),
     metricAccentEnabled: options.getMetricAccentEnabled(),
     metricAccentProfile: options.getMetricAccentProfile(),
+    includeTieInPlaybackLikeMode: !useMidiLikePlayback,
+    applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
   });
   const events = parsedPlayback.events;
   if (events.length === 0) {
@@ -652,13 +1136,22 @@ export const startMeasurePlayback = async (
     : [];
 
   const waveform = options.getPlaybackWaveform();
+  const playbackAnchorPartId =
+    playbackDoc.querySelector("score-partwise > part")?.getAttribute("id")?.trim() ?? "";
+  const measureTimeline = playbackAnchorPartId
+    ? buildMeasureTimelineForPart(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
+    : [];
 
   try {
     await options.engine.playSchedule(
       toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents),
       waveform,
+      (currentTick) => {
+        options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
+      },
       () => {
         options.setIsPlaying(false);
+        options.setActivePlaybackLocation(null);
         options.setPlaybackText("Playback: stopped");
         options.renderControlState();
       }

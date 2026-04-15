@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -79,7 +84,7 @@ const collectCandidateSignals = (candidateDoc: Document): CandidateMeasureSignal
 };
 
 describe("Local parity (moonlight): reference musicxml -> mscx", () => {
-  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
+  const root = resolve(process.cwd(), "tests", "local-data", "roundtrip", "musescore", "moonlight");
   const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
   const itWithLocalFixture = existsSync(referencePath) ? it : it.skip;
 

@@ -1,14 +1,56 @@
-# ABC Compat Parser EBNF (draft)
+# ABC Compat Parser EBNF
 
 ## English
-This document defines the grammar baseline for the project ABC parser.
+This document defines the current grammar baseline for the project ABC parser.
 
 It is based on ABC 2.1 and includes currently supported compatibility behavior observed in real-world `abcjs` / `abcm2ps` style inputs.
 
+Warning:
+
+- this document is a practical grammar baseline, not a fully synchronized dump of every parser helper and dispatch path in the current implementation
+- when this document and implementation detail appear to diverge, treat implementation, regression tests, and `docs/spec/ABC_IO.md` as the more authoritative source for the currently supported bounded behavior
+- update this document when the bounded grammar baseline changes materially, but do not assume every internal parser refactor requires line-by-line EBNF churn here
+
+The parser should be understood in three layers:
+
+- standard ABC surface
+- compatibility behavior for real-world ABC variance
+- `mikuscore` extension metadata comments (`%@mks ...`) used for roundtrip support
+
+ABC is a supported format in `mikuscore`.
+This grammar therefore documents the implemented compatibility baseline for supported import behavior, rather than an experimental parser sketch.
+
+## Practical Interpretation
+
+ABC interoperability is influenced not only by the narrow core grammar, but also by de facto conventions widely seen in tools such as `abcjs` and `abcm2ps`.
+
+For that reason, this document should be read as:
+
+- a grammar baseline for the standard ABC surface actually implemented by `mikuscore`
+- a record of compatibility behavior accepted for common real-world inputs
+- not a promise that every informal ABC variant in the wild is accepted
+
+For `mikuscore`, `abcjs` / `abcm2ps` behavior is not itself the normative grammar.
+Instead, it is evidence for de facto interoperability expectations that may justify explicit compatibility rules in this document.
+
+De facto compatibility should therefore be understood as:
+
+- acceptable to adopt when a pattern is common enough in practice
+- acceptable to adopt when the intended musical meaning is sufficiently clear
+- required to be documented in spec text and regression tests once adopted
+- not a blanket reason to accept arbitrary malformed or ambiguous ABC
+
+When extending compatibility, the preferred policy is:
+
+- add support by recognizable pattern classes, not by one-off token hacks
+- keep directive/context parsing separate from body note parsing
+- fail clearly on input that is still structurally or musically uninterpretable after compatibility handling
+
 ## Scope
-- Header: `X,T,C,M,L,K,V` and `%%score`
-- Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets
-- Compatibility extensions: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`), mikuscore `%@mks ...` metadata comments
+- Header: `X,T,C,M,L,K,U,V` and `%%score`
+- Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets, overlay (`&`)
+- Compatibility behavior: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
+- `mikuscore` extension metadata comments: `%@mks ...`
 
 ## EBNF
 
@@ -21,7 +63,7 @@ score_expr       = { score_group | voice_id | ws } ;
 score_group      = "(" , { ws | voice_id } , ")" ;
 
 header           = header_key , ":" , ws* , header_value ;
-header_key       = "X" | "T" | "C" | "M" | "L" | "K" | "V" | letter ;
+header_key       = "X" | "T" | "C" | "M" | "L" | "K" | "U" | "V" | letter ;
 header_value     = { any_char_except_newline } ;
 
 body             = { body_token | ws } ;
@@ -81,9 +123,19 @@ digit            = "0".."9" ;
 - Treat `x` rest as `z` rest.
 - Support chords (`[CEG]`, `[A,,CE]`).
 - Support tuplets (`(3abc`, `(5:4:5abcde`) with duration scaling.
-- Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
+- Support overlay marker `&` by splitting the body stream into synthetic overlay voices at measure boundaries.
+- Support `U:` single-character user-defined decoration aliases on import by expanding them into regular decoration markers before parsing.
 - Ignore `:` in barline variants (`:|`, `|:`, `||`) without parse failure.
 - Ignore standalone `,` / `'` for compatibility.
+- Allow recognized bare `V:` clef shorthands such as `V:2 bass`, `V:1 treble C D |`, `V:1 c3`, and `V:2 c4`.
+- Prefer class-based compatibility rules derived from common `abcjs` / `abcm2ps` practice over one-off special cases.
+- Do not let unknown directive-tail fragments silently fall through into body note parsing.
+- Prefer warning on unsupported bare `V:` tail words over later note/rest parse failure caused by directive leftovers.
+
+## `mikuscore` Extension Notes
+- Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
+- These comments are not part of the standard ABC musical surface.
+- They are `mikuscore`-specific extension metadata used for restoration and roundtrip support.
 
 ## Growth Policy
 - Parsing robustness first (warning-first policy).
@@ -92,30 +144,15 @@ digit            = "0".."9" ;
 
 ---
 
-## 日本語
-この文書は、プロジェクトの ABC パーサーにおける文法基準を定義する。
+## 日本語（抄訳）
 
-ABC 2.1 を土台とし、`abcjs` / `abcm2ps` 系の実データ差を現行実装で吸収している範囲を含む。
+- 正本は上記 English セクションです。
+- 本セクションは要点のみを示します。
+- 例外として、未決定事項や検討中メモは日本語のみで記述する場合があります。
 
-## Scope
-- ヘッダ: `X,T,C,M,L,K,V` と `%%score`
-- ボディ: 音符、休符(`z/x`)、臨時記号、長さ、タイ(`-`)、broken rhythm(`>` `<`)、小節線、和音、連符
-- 許容拡張: `M:C`, `M:C|`, インライン文字列(`"..."`)のスキップ、単独オクターブ記号(`,`/`'`)の許容、mikuscore の `%@mks ...` メタコメント
-
-## EBNF
-上記 English セクションの EBNF を正本とする。
-
-## Compatibility Notes
-- `A > B` のような空白入り broken rhythm を許容。
-- `"D"A` のような和音名/注釈は MusicXML 生成対象外としてスキップ（警告のみ）。
-- `x` 休符を `z` と同様に扱う。
-- chord (`[CEG]`, `[A,,CE]` など) を同時発音として扱う。
-- tuplet (`(3abc`, `(5:4:5abcde` など) を音価スケーリングで扱う。
-- `%@mks` メタコメント（`key` / `measure` / `transpose`）を受理し、存在時は往復メタ情報として利用する。
-- `:|`, `|:`, `||` などの `:` は小節補助記号として無視（構文エラー化しない）。
-- 単独の `,` / `'` は互換目的で無視して継続する。
-
-## Growth Policy
-- まず parse を落とさない（warning first）。
-- 音価・音高の意味解釈を追加する時は回帰テストを同時追加。
-- 実データ差分を吸収したら `Compatibility Notes` を更新する。
+### 要点
+- ABC 2.1 を基準に、実データ互換（`abcjs` / `abcm2ps` 系）を取り込みます。
+- EBNF は English セクションを正本として扱います。
+- 互換挙動（`M:C`, `M:C|`, standalone `,` / `'` など）を許容します。
+- `%@mks` は `mikuscore` 独自拡張コメントとして扱います。
+- 文法・意味解釈の拡張時は回帰テストを追加します。

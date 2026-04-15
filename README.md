@@ -1,175 +1,163 @@
 # mikuscore
 
-## English
-mikuscore is a browser-based score editor for importing and exporting MusicXML, MuseScore, MIDI, VSQX, ABC, MEI, and LilyPond, with notation preview and note editing.
+![mikuscore OGP image](screenshots/mikuscore-ogp.png)
 
-- Designed to preserve existing MusicXML as much as possible.
-- Works offline in a single HTML distribution.
-- Smartphone-centered workflows, with PC use also supported.
-- ABC, MEI, and LilyPond support is currently experimental.
+mikuscore is a MusicXML-first score converter for people who need to move score data between formats.  
+It treats MusicXML as the central interchange format and helps bridge notation tools, file formats, and AI-oriented workflows.
 
-Its primary goal is reliability, not feature volume: edit while preserving existing MusicXML as much as possible.
+It is distributed as a single-file web app (`mikuscore.html`) and is designed to run offline in a browser.
 
-### Product Positioning
-- Focus on the following two smartphone-centered workflows (PC use is also supported):
-  - Quick and easy entry for simple scores on a smartphone.
-  - Execute part of a large score workflow (prepared on PC) on a smartphone.
-- Keep an intentionally small feature set and optimize for mobile usability and editing speed.
-- Use MusicXML as the core data structure and avoid unnecessary transformations.
+## What mikuscore is for
 
-### Core Principles
-- Prioritize preserving existing MusicXML with minimal patch editing.
-- Preserve unknown/unsupported elements.
-- Preserve `<backup>`, `<forward>`, and existing `<beam>` nodes.
-- Roll back atomically on failure.
-- Keep Core/UI separated so UI can be replaced later.
-- Keep smartphone-centered workflows practical, with PC use also supported.
+mikuscore is a practical tool for:
 
-### MVP Highlights
-- If `dirty === false`, save returns original XML text (`original_noop`).
-- Overfull measures are rejected with `MEASURE_OVERFULL`.
-- Commands must target the same voice as the selected note; mismatches are rejected with `MVP_UNSUPPORTED_NON_EDITABLE_VOICE`.
-- MVP commands: `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, `split_note`.
-- Rests are not a normal edit target, but rest-to-note via `change_to_pitch` is allowed.
-- Serialization is compact (no pretty-print).
+- moving score data from one format to another
+- normalizing score data around MusicXML
+- bridging notation software, exchange files, and AI-friendly handoff workflows
 
-### Supported MusicXML Version
-- **MusicXML 4.0**
+## What mikuscore is not
 
-### Format Support Note
-- `utaformatix3-ts-plus` is bundled as a vendored integration (`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`) for VSQX <-> MusicXML conversion.
-- We sincerely appreciate the UtaFormatix / utaformatix3 ecosystem and contributors for making this VSQX interoperability possible.
-- MEI support is currently experimental.
-- MEI reference samples used for compatibility/parity work:
-  - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
-- LilyPond (`.ly`) support is currently experimental.
+- not a full score engraving editor
+- not a replacement for MuseScore or other dedicated notation editors
+- not a promise of lossless conversion between every format pair
 
-### Distribution and Development
-- Distribution: **single-file web app** (`mikuscore.html`).
-- Runtime: offline, no external network dependency.
-- Source: split TypeScript files.
-- Build: `mikuscore-src.html` + `src/` -> `mikuscore.html`.
+If you want to edit notation in depth, use a notation editor such as MuseScore.  
+mikuscore is for converting, inspecting, and handing score data off.
 
-### Development Commands
-- `npm run build`
-- `npm run check:all`
-- `npm run clean`
-- `npm run typecheck`
-- `npm run test:unit`
-- `npm run test:property`
-- `npm run test:all`
-- `npm run build:vendor:utaformatix3` (sync vendored `utaformatix3-ts-plus` JS/doc from upstream)
+## Core idea
 
-### Documents
-- `docs/spec/SPEC.md`
-- `docs/spec/TERMS.md`
-- `docs/spec/COMMANDS.md`
-- `docs/spec/COMMAND_CATALOG.md`
-- `docs/spec/DIAGNOSTICS.md`
-- `docs/spec/MIDI_IO.md`
-- `docs/spec/PLAYBACK.md`
-- `docs/spec/ABC_IO.md`
-- `docs/spec/TEST_MATRIX.md`
-- `docs/spec/LOCAL_WORKFLOW.md`
-- `docs/spec/BUILD_PROCESS.md`
-- `docs/spec/ARCHITECTURE.md`
-- `docs/spec/UI_SPEC.md`
-- `docs/spec/SCREEN_SPEC.md`
-- `TODO.md`
+- MusicXML-first conversion pipeline
+- preserve existing MusicXML as much as possible
+- keep conversion losses visible through diagnostics and metadata
+- stay lightweight and portable
 
-Debugging note:
-- For import-side incident analysis, check `docs/spec/MIDI_IO.md` and `docs/spec/ABC_IO.md` sections about `attributes > miscellaneous > miscellaneous-field` (`mks:*` debug fields).
+## Supported formats
 
-### Screenshots
+- MusicXML (`.musicxml`, `.xml`, `.mxl`)
+- MuseScore (`.mscx`, `.mscz`)
+- MIDI (`.mid`, `.midi`)
+- VSQX (`.vsqx`)
+- ABC (`.abc`)
+- MEI (`.mei`, experimental)
+- LilyPond (`.ly`, experimental)
+
+## Typical use cases
+
+- convert ABC, MIDI, or MuseScore data into MusicXML for downstream editing or archival
+- export MusicXML into another format for a tool or workflow that does not speak MusicXML directly
+- inspect conversion diagnostics instead of silently losing information
+- use ABC as a practical handoff format in generative-AI workflows while keeping MusicXML as the canonical score structure
+
+## Related projects
+
+- `mikuscore-skills`
+  - agent skills for embedding `mikuscore` into generative-AI workflows and making `mikuscore` score-conversion features easier to use from generative AI
+  - https://github.com/igapyon/mikuscore-skills
+- `miku-abc-player`
+  - a companion web app that makes an ABC-limited subset of `mikuscore` easier to use
+  - https://github.com/igapyon/miku-abc-player
+
+## Quick start
+
+### Web app
+
+- open `mikuscore.html` in a browser
+- load a score file
+- convert and export
+- inspect diagnostics if conversion details matter
+
+### CLI
+
+Current CLI is `convert`-first.
+
+Examples:
+
+- `npm run cli -- convert --from abc --to musicxml --in score.abc --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to abc --in score.musicxml --out score.abc`
+- `npm run cli -- convert --from midi --to musicxml --in score.mid --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to midi --in score.musicxml --out score.mid`
+- `npm run cli -- convert --from musescore --to musicxml --in score.mscx --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscx`
+- `npm run cli -- render svg --in score.musicxml --out score.svg`
+
+For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.
+
+## Screenshots
+
 ![mikuscore screenshot 1](screenshots/screen1.png)
 ![mikuscore screenshot 2](screenshots/screen2.png)
 ![mikuscore screenshot 3](screenshots/screen3.png)
 ![mikuscore screenshot 4](screenshots/screen4.png)
 
----
+## Documents
 
-## 日本語
-mikuscore は、MusicXML、MuseScore、MIDI、VSQX、ABC、MEI、LilyPond の入出力に対応し、譜面プレビューとノート編集をブラウザ上で行うスコアエディタです。
+User-facing documents:
 
-- 既存 MusicXML を極力壊さない編集を重視しています。
-- 単一 HTML 配布でオフライン動作します。
-- スマホ中心のワークフローを重視しつつ、PC利用にも対応します。
-- ABC、MEI、LilyPond 対応は現在 Experimental（試験対応）です。
+- `docs/FORMAT_COVERAGE.md`
+- `docs/PRODUCT_POSITIONING.md`
+- `docs/CONVERSION_PRINCIPLES.md`
+- `docs/QUALITY.md`
 
-このアプリの主眼は「多機能化」ではなく、極力既存 MusicXML を壊さずに編集する信頼性です。
+Contributor and repository workflow:
 
-### プロダクトの位置づけ
-- 利用シーンは次の2つを中心に据えます（スマホ中心ですが、PC利用も可能です）。
-  - 簡単な譜面入力をスマホ上で手軽に行う。
-  - PCで進めている大規模な譜面作業の一部を切り出し、スマホで一部実施する。
-- 機能は意図的に絞り、スマホ上での使いやすさと入力スピードを優先します。
-- MusicXML を基軸データ構造として扱い、不要な変換を避けます。
-
-### 基本方針
-- 既存 MusicXML の保全を最優先に最小パッチ編集を実現。
-- unknown / unsupported 要素を保持。
-- `<backup>` / `<forward>` / 既存 `<beam>` を保持。
-- 失敗時は原子的にロールバック。
-- 将来の UI 置換を考慮した Core / UI 分離設計。
-- スマートフォンをサポート。
-
-### MVP 仕様ハイライト
-- `dirty === false` の保存は入力 XML をそのまま返す（`original_noop`）。
-- 小節 overfull は `MEASURE_OVERFULL` で拒否。
-- コマンド voice と対象ノート voice が不一致の場合は `MVP_UNSUPPORTED_NON_EDITABLE_VOICE` で拒否。
-- `change_to_pitch` / `change_duration` / `insert_note_after` / `delete_note` / `split_note` をMVPコマンドとして扱う。
-- 休符は通常の編集対象外だが、`change_to_pitch` による休符音符化は許可。
-- pretty-print なしでシリアライズ。
-
-### 対応 MusicXML バージョン
-- **MusicXML 4.0**
-
-### フォーマット対応メモ
-- VSQX <-> MusicXML 変換のため、`utaformatix3-ts-plus` を同梱連携しています（`src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js`）。
-- VSQX 相互運用を実現する基盤を築いてくださった UtaFormatix / utaformatix3 のエコシステムと貢献者の皆さまに、深く感謝します。
-- MEI 対応は現在 Experimental（試験対応）です。
-- MEI 互換性/パリティ確認で参照する公式サンプル:
-  - https://github.com/music-encoding/sample-encodings/tree/main/MEI_5.1/Music
-- LilyPond（`.ly`）対応は現在 Experimental（試験対応）です。
-
-### 配布と開発方針
-- 配布形態: 単一 HTML（`mikuscore.html`）。
-- 実行条件: オフライン動作、外部依存なし。
-- 開発形態: 分割 TypeScript ソース。
-- ビルド方針: `mikuscore-src.html` + `src/` から `mikuscore.html` を生成。
-
-### 開発コマンド
-- `npm run build`
-- `npm run check:all`
-- `npm run clean`
-- `npm run typecheck`
-- `npm run test:unit`
-- `npm run test:property`
-- `npm run test:all`
-- `npm run build:vendor:utaformatix3`（upstream から `utaformatix3-ts-plus` の同梱JS/ドキュメントを同期）
-
-### ドキュメント
-- `docs/spec/SPEC.md`
-- `docs/spec/TERMS.md`
-- `docs/spec/COMMANDS.md`
-- `docs/spec/COMMAND_CATALOG.md`
-- `docs/spec/DIAGNOSTICS.md`
-- `docs/spec/MIDI_IO.md`
-- `docs/spec/PLAYBACK.md`
-- `docs/spec/ABC_IO.md`
-- `docs/spec/TEST_MATRIX.md`
-- `docs/spec/LOCAL_WORKFLOW.md`
-- `docs/spec/BUILD_PROCESS.md`
-- `docs/spec/ARCHITECTURE.md`
-- `docs/spec/UI_SPEC.md`
-- `docs/spec/SCREEN_SPEC.md`
+- `docs/DEVELOPMENT.md`
+- `CONTRIBUTING.md`
 - `TODO.md`
 
-デバッグメモ:
-- インポート時の事象解析は `docs/spec/MIDI_IO.md` と `docs/spec/ABC_IO.md` の `attributes > miscellaneous > miscellaneous-field`（`mks:*` デバッグ項目）を参照してください。
+Implementation specs:
 
-### スクリーンショット
-![mikuscore スクリーンショット 1](screenshots/screen1.png)
-![mikuscore スクリーンショット 2](screenshots/screen2.png)
-![mikuscore スクリーンショット 3](screenshots/screen3.png)
-![mikuscore スクリーンショット 4](screenshots/screen4.png)
+- `docs/spec/SPEC.md`
+- `docs/spec/ARCHITECTURE.md`
+- `docs/spec/ABC_IO.md`
+- `docs/spec/MIDI_IO.md`
+- `docs/spec/MUSESCORE_IO.md`
+
+## 日本語
+
+mikuscore は、譜面データを別形式へ持ち替えたい人のための、MusicXML-first な譜面変換ツールです。  
+MusicXML を変換の中心に置き、譜面ソフト、交換用ファイル、生成 AI 向けワークフローの橋渡しを行います。
+
+配布形態は単一 HTML (`mikuscore.html`) で、ブラウザでオフライン動作します。
+
+### 用途
+
+- 複数の譜面フォーマット間の変換
+- MusicXML を基準にした譜面データ整理
+- 他ソフトや AI ワークフローへの受け渡し
+
+### これは何ではないか
+
+- 多機能な浄書エディタではありません
+- MuseScore などの本格的な譜面編集ソフトの代替ではありません
+- すべての形式間で完全な無損失変換を保証するものではありません
+
+譜面をしっかり編集したい場合は、MuseScore などの既存エディタの利用を推奨します。  
+mikuscore は、変換・確認・受け渡しのためのツールです。
+
+### 対応フォーマット
+
+- MusicXML（`.musicxml`, `.xml`, `.mxl`）
+- MuseScore（`.mscx`, `.mscz`）
+- MIDI（`.mid`, `.midi`）
+- VSQX（`.vsqx`）
+- ABC（`.abc`）
+- MEI（`.mei`、実験的）
+- LilyPond（`.ly`、実験的）
+
+### 関連プロジェクト
+
+- `mikuscore-skills`
+  - `mikuscore` を生成 AI に組み込み、生成 AI から `mikuscore` の譜面変換機能を利用しやすくするための agent skills
+  - https://github.com/igapyon/mikuscore-skills
+- `miku-abc-player`
+  - `mikuscore` の機能を ABC に限定して使いやすくした companion web app
+  - https://github.com/igapyon/miku-abc-player
+
+### はじめかた
+
+- `mikuscore.html` をブラウザで開く
+- 譜面ファイルを読み込む
+- 変換して書き出す
+- 必要なら診断情報を確認する
+
+CLI や開発向け情報は `docs/DEVELOPMENT.md` を参照してください。

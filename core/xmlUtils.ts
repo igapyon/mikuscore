@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { NodeId, Pitch } from "./interfaces";
 
 const SCORE_PARTWISE = "score-partwise";

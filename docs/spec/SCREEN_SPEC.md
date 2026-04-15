@@ -4,6 +4,11 @@
 ## Purpose
 Define the current screen specification for `mikuscore` based on the actual UI text and tooltips in `mikuscore-src.html`.
 
+Scope note:
+
+- This file is a screen text/layout inventory centered on actual UI copy.
+- Normative UI behavior and interaction rules are defined in `docs/spec/UI_SPEC.md`.
+
 ## Global Layout
 - Single-page application.
 - Top brand header:
@@ -17,19 +22,19 @@ Define the current screen specification for `mikuscore` based on the actual UI t
   - `Export`
 
 ### Brand Tooltip `(i)` (`About mikuscore`)
-- Browser-based local score editor.
-- Preserves existing MusicXML structure while editing.
-- Supports loading MusicXML/ABC, score preview, note editing, playback, and export/download (`MusicXML`/`ABC`/`MIDI`) in one screen.
-- Intentionally small feature set for practical, fast editing, especially on smartphones.
+- Browser-based MusicXML-first score converter.
+- Uses MusicXML as the central interchange format for moving score data between formats.
+- Supports loading score data, previewing structure, checking diagnostics, playback, and export/download in one screen.
+- Intentionally focused on conversion, inspection, and handoff rather than deep notation editing.
 - Smartphone-centered, but usable on PCs as well.
 - Workflow guidance:
   - `1) Choose input and load`
-  - `2) Select from score preview`
-  - `3) Edit notes`
-  - `4) Verify by playback and export/download`
+  - `2) Inspect the score and diagnostics`
+  - `3) Verify by playback if needed`
+  - `4) Export or hand off in another format`
 - Positioning guidance:
-  - Use dedicated notation software for large-scale/complex work.
-  - Use mikuscore for quick input or focused partial tasks.
+  - Use dedicated notation software for large-scale or complex notation editing.
+  - Use mikuscore for conversion-oriented tasks.
 
 ## Tabs / Interaction
 - Clicking a top tab opens the corresponding panel.
@@ -72,8 +77,8 @@ Define the current screen specification for `mikuscore` based on the actual UI t
 ### Actions
 - `Load from file`
 - `Load` (source mode)
-- `Load sample 1`
-- `Load sample 2`
+- `Load sample 6`
+- `Load sample 7`
 
 ### Messages
 - `inputUiMessage` for inline status/error.
@@ -244,244 +249,14 @@ Define the current screen specification for `mikuscore` based on the actual UI t
 
 ---
 
-## 日本語
-## 目的
-`mikuscore-src.html` の現行文言・ツールチップに合わせて、`mikuscore` の画面仕様を定義する。
+## 日本語（抄訳）
 
-## 全体レイアウト
-- 単一ページ構成。
-- 上部ブランドヘッダ:
-  - `mikuscore` タイトル
-  - `About mikuscore` 情報チップ `(i)`
-  - GitHub リンク
-- 4ステップのタブ導線:
-  - `Input`
-  - `Score`
-  - `Edit`
-  - `Export`
+- 正本は上記 English セクションです。
+- 本セクションは画面仕様の要点のみを記載します。
+- 例外として、未決定事項や検討中メモは日本語のみで記述する場合があります。
 
-### ブランドツールチップ `(i)` (`About mikuscore`)
-- ブラウザで動くローカル譜面エディタ。
-- 編集時に既存 MusicXML 構造を極力維持。
-- 1画面で `MusicXML/ABC` 読み込み、譜面プレビュー、ノート編集、再生、`MusicXML/ABC/MIDI` 出力に対応。
-- 機能は意図的に絞り、特にスマホでの実用速度を優先。
-- スマホ中心だが PC 利用も可能。
-- ワークフロー案内:
-  - `1) 入力して読み込む`
-  - `2) 譜面で対象を選ぶ`
-  - `3) ノート編集`
-  - `4) 再生と出力で確認`
-- 位置づけ:
-  - 大規模・複雑作業は専用作譜ソフト。
-  - mikuscore はクイック入力や部分作業。
-
-## タブ / 操作
-- 上部タブをクリックすると対応パネルを表示。
-- 現在タブは `is-active`。
-- 非表示パネルは `hidden`。
-
-## パネル: Input
-### セクションタイトル
-- `1 Input`
-
-### ヘッダツールチップ `(i)` (`Input help`)
-- まずここで譜面を読み込む（file/source）か新規作成する。
-- このステップ完了後に `Score` / `Edit` / `Export` へ進む。
-
-### 入力形式ラジオ
-- `MusicXML Input`
-- `ABC Input`
-- `New Score`
-
-### 読み込みモードラジオ
-- `File input`
-- `Source input`
-
-### ブロック
-- `newInputBlock`
-  - `Use Piano Grand Staff template (treble + bass, single part)`
-  - `Track count (parts)`
-  - `Time signature`
-  - `Key signature`
-  - partごとの clef 選択
-- `fileInputBlock`
-  - ファイル選択（`Load from file`）
-  - 選択ファイル名表示
-- `sourceXmlInputBlock`
-  - `MusicXML` テキストエリア
-- `abcInputBlock`
-  - `ABC` テキストエリア
-
-### アクション
-- `Load from file`
-- `Load`（source モード）
-- `Load sample 1`
-- `Load sample 2`
-
-### メッセージ
-- `inputUiMessage` に inline の状態/エラーを表示。
-- `localDraftNotice` でローカルドラフトの有無を通知。
-
-## パネル: Score
-### セクションタイトル
-- `2 Score`
-
-### ヘッダツールチップ `(i)` (`Score preview help`)
-- 読み込み済み譜面の確認。
-- 簡易再生の試行。
-- 編集対象小節の選択。
-- 対象小節のノートを選んでから `Edit` で編集反映。
-
-### アクション
-- `Play`
-- `Stop`
-- `Add Measure (End)`
-
-### メイン表示
-- `debugScoreArea` に Verovio SVG 譜面を描画。
-- クリックで SVG 要素 id から内部 `nodeId` へ解決。
-
-### ステータス
-- `playbackText`（初期値: `Playback: idle`）。
-
-## パネル: Edit
-### セクションタイトル
-- `3 Edit`
-
-### ヘッダツールチップ `(i)` (`Edit help`)
-- 編集は休符を音符化して始める。
-- 選択小節内で次を調整:
-  - 分割
-  - 音高
-  - 臨時記号
-  - 音価
-- 簡易再生に対応。
-- `Apply` で `Score` へ反映。
-- `Discard` で当該小節の編集中変更を破棄。
-- 矢印ボタンで小節移動。
-- MusicXML 構造破壊リスクを避けるため、編集範囲は意図的に限定。
-
-### ナビゲーション / 文脈
-- 選択パート名表示（`measurePartNameText`）。
-- 小節移動ボタン:
-  - 同一トラック前小節（`←`）
-  - 同一トラック次小節（`→`）
-  - 同小節の前トラック（`↑`）
-  - 同小節の次トラック（`↓`）
-
-### 未選択状態
-- タイトル: `No measure selected`
-- 本文: `Click a measure in the score to select it`
-- ボタン: `Go to Score`
-
-### 選択小節表示
-- `measureEditorArea` に選択小節の Verovio プレビュー。
-- `uiMessage` に inline メッセージを表示。
-
-### 小節反映アクション
-- `Apply`
-- `Discard`
-
-### ノート編集アクション
-- `Convert Rest to Note`
-- `Split Note`
-- `Delete Note`
-- `Play`（小節再生）
-
-### 音高 / 音価コントロール
-- ステップ上下（`↑` / `↓`）と現在 step 表示。
-- 変化記号:
-  - `None`
-  - `♭♭`
-  - `♭`
-  - `♮`
-  - `♯`
-  - `♯♯`
-- 音価プリセット:
-  - `(Select duration)`
-
-## パネル: Export
-### セクションタイトル
-- `4 Export`
-
-### ヘッダツールチップ `(i)` (`Export help`)
-- mikuscore から成果物を持ち出す場所。
-- 主経路は `MusicXML` 出力。
-- `ABC` と軽量 `MIDI` はクイック確認用途。
-- 本格制作/書き出しは専用ソフトを想定。
-
-### 出力アクション
-- `Export MusicXML`（primary）
-- `Export ABC`
-- `Export MIDI`
-- `Discard Draft`（条件付き表示）
-
-### 設定カード
-- アコーディオンタイトル: `MIDI & Playback Settings`
-
-#### ブロック: `MIDI & Playback Shared Settings`
-- `Grace Timing Mode`
-  - 選択肢:
-    - `Before beat (appoggiatura-like)`
-    - `On beat (principal delayed)`
-    - `Classical equal split`
-  - ツールチップ: MIDI-like playback と MIDI export の両方に適用。
-- `Use metric beat accents`（スイッチ）
-  - ツールチップ:
-    - MIDI-like playback / export で拍感の微小強調を付与。
-    - パターン例:
-      - `4/4: strong-weak-medium-weak`
-      - `6/8: strong-weak-weak-medium-weak-weak`
-      - `3-beat: strong-weak-weak`
-      - `5-beat: strong-weak-medium-weak-weak`
-      - `others: strong-weak-weak-...`
-- `Accent amount`
-  - 選択肢:
-    - `Subtle`
-    - `Balanced`
-    - `Strong`
-  - ツールチップ: アクセント有効時の velocity 差を調整。
-
-#### ブロック: `MIDI Settings`
-- `MIDI Export Instrument`
-  - ツールチップ: MusicXML 側に楽器指定がない part で使用。
-- `Always override instrument`（スイッチ）
-  - ツールチップ: MusicXML 楽器指定より選択中出力楽器を常に優先。
-
-#### ブロック: `Playback Settings`
-- `Use MIDI-like playback`（スイッチ）
-  - ツールチップ: 簡易再生で MIDI 風の timing/expression を使用。
-- `Quick Playback Tone`
-  - 選択肢:
-    - `Sine`
-    - `Triangle`
-    - `Square`
-
-#### 設定アクション / デバッグ
-- `Reset to defaults`
-- ブロック: `MIDI Debug`
-  - `Refresh MIDI Debug`
-  - `midiDebugText` 出力領域
-
-#### ブロック: `General Settings`
-- `Export MusicXML text as .xml extension`（スイッチ、デフォルトOFF）
-  - ツールチップ: デフォルトのテキスト出力は `.musicxml`、有効時は `.xml`。
-- `Compress MusicXML / MuseScore export`（スイッチ）
-  - ツールチップ: 有効時は MusicXML が `.mxl`、MuseScore が `.mscz`。
-- 相互排他ルール:
-  - `.xml extension` が ON のとき、圧縮出力は強制 OFF。
-  - 圧縮出力を ON にしたとき、`.xml extension` は OFF。
-
-### ファイル命名規則
-- MusicXMLテキスト: デフォルト `mikuscore-YYYYMMDDhhmm.musicxml`、有効時 `mikuscore-YYYYMMDDhhmm.xml`
-- `mikuscore-YYYYMMDDhhmm.abc`
-- `mikuscore-YYYYMMDDhhmm.mid`
-
-## 診断 / メッセージ表示
-- `inputUiMessage` / `uiMessage` に inline フィードバックを表示。
-- save/dispatch の診断は core の意味を保ったまま表示。
-
-## 非対象
-- 複雑な作譜ワークフロー。
-- 多段モーダル中心の導線。
-- 画面内高度履歴管理（`undo`/`redo`）。
+### 要点
+- 本文書は `mikuscore-src.html` の画面文言・配置インベントリです。
+- 規範的な UI 挙動は `docs/spec/UI_SPEC.md` を参照してください。
+- 主要導線は `Input / Score / Edit / Export` の4パネルです。
+- `MIDI & Playback Settings` と `General Settings` の詳細仕様は English セクションを参照してください。

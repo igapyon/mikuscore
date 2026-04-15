@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -92,7 +97,7 @@ const diffMultiset = (a: Map<string, number>, b: Map<string, number>): string[] 
 };
 
 describe("Local parity (moonlight): mscx vs reference musicxml", () => {
-  const root = resolve(process.cwd(), "tests", "fixtures-local", "roundtrip", "musescore", "moonlight");
+  const root = resolve(process.cwd(), "tests", "local-data", "roundtrip", "musescore", "moonlight");
   const mscxPath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.mscx");
   const referencePath = resolve(root, "pianosonata-di14fanyue-guang-di1le-zhang.musicxml");
   const itWithLocalFixture = existsSync(mscxPath) && existsSync(referencePath) ? it : it.skip;

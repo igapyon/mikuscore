@@ -186,6 +186,7 @@ The module includes a built-in raw SMF Type-1 writer path in addition to `midi-w
   - time signature meta (`FF 58`)
   - key signature meta (`FF 59`)
   - optional mikuscore SysEx chunks
+  - optional mikuscore text meta (`FF 01`, `mks:*`)
 - `MTrk #N` (note tracks by `trackId`):
   - program change per used channel (except ch10)
   - note-on / note-off events
@@ -215,6 +216,22 @@ For same-tick same-pitch situations, event ordering is configurable:
   - TPQ is fixed to `480`
   - raw writer path enabled
   - retrigger policy defaults to `off_before_on`
+
+#### `mks` metadata emission policy
+
+- `buildMidiBytesForPlayback(..., options)` supports:
+  - `embedMksSysEx?: boolean` (default: `true`)
+  - `emitMksTextMeta?: boolean` (default: `true`)
+- `embedMksSysEx` controls mikuscore SysEx payload emission on the meta track.
+- `emitMksTextMeta` controls text meta lines such as:
+  - `mks:meta-version:1`
+  - `mks:title:*`
+  - `mks:movement-title:*`
+  - `mks:composer:*`
+  - `mks:pickup-ticks:*`
+  - `mks:part-name-track:*`
+- In app export flow, `Keep roundtrip metadata (mks:meta:*)` controls `emitMksTextMeta`.
+- `Keep roundtrip metadata` does NOT disable `embedMksSysEx`; SysEx diagnostics/statistics remain enabled by default.
 
 #### Known constraints
 
@@ -298,13 +315,13 @@ Rules:
 
 When analyzing rendering/import issues, inspect:
 
-- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:midi-meta-count"]`
-- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:midi-meta-"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:midi:meta:count"]`
+- `part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:dbg:midi:meta:"]`
 
 Recommended flow:
 
 1. identify the problematic measure and note on screen.
-2. open the same measure in MusicXML and read `mks:midi-meta-*`.
+2. open the same measure in MusicXML and read `mks:dbg:midi:meta:*`.
 3. compare note duration/type and debug payload (`key`, `vel`, `sd`, `dd`, `tk0`, `tk1`) to detect where conversion diverged.
 
 ### Drum note rendering

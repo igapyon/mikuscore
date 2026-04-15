@@ -1,4 +1,10 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
+import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -49,6 +55,7 @@ describe("MEI export", () => {
     expect(mei).toContain("<scoreDef");
     expect(mei).toContain("meter.count=\"4\"");
     expect(mei).toContain("<staffDef");
+    expect(mei).toContain("<label>Piano</label>");
     expect(mei).toContain("<measure n=\"1\">");
     expect(mei).toContain("<note ");
     expect(mei).toContain("<rest ");
@@ -82,7 +89,7 @@ describe("MEI export", () => {
     expect(mei).toContain('trans.semi="-3"');
   });
 
-  it("exports MEI with default meiversion=5.1", () => {
+  it("exports MEI with default meiversion=5.1+basic", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
@@ -92,7 +99,7 @@ describe("MEI export", () => {
     expect(doc).not.toBeNull();
     if (!doc) return;
     const mei = exportMusicXmlDomToMei(doc);
-    expect(mei).toContain('meiversion="5.1"');
+    expect(mei).toContain('meiversion="5.1+basic"');
   });
 
   it("exports MEI with custom meiversion when specified", () => {
@@ -106,6 +113,208 @@ describe("MEI export", () => {
     if (!doc) return;
     const mei = exportMusicXmlDomToMei(doc, { meiVersion: "4.0.1" });
     expect(mei).toContain('meiversion="4.0.1"');
+  });
+
+  it("exports tempo direction (words + sound tempo) as MEI tempo", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction placement="above">
+        <direction-type><words>Allegretto moderato</words></direction-type>
+        <sound tempo="116"/>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<tempo staff="1" tstamp="1" midi.bpm="116" place="above">Allegretto moderato</tempo>');
+    expect(mei).not.toContain("<dynam tstamp=\"1\" place=\"above\">Allegretto moderato</dynam>");
+  });
+
+  it("exports dynamics direction without offset at current measure cursor", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <direction placement="below">
+        <direction-type><dynamics><p/></dynamics></direction-type>
+      </direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<dynam staff="1" tstamp="2" place="below">p</dynam>');
+  });
+
+  it("exports standalone measure sound tempo as MuseScore helper tempo", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>8</divisions><time><beats>6</beats><beat-type>8</beat-type></time></attributes>
+      <direction placement="above">
+        <direction-type><words>Allegretto moderato</words></direction-type>
+        <sound tempo="116"/>
+      </direction>
+      <sound tempo="60"/>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain(
+      '<tempo staff="1" type="mscore-infer-from-text" tstamp="1" midi.bpm="60">♩ = 60</tempo>'
+    );
+  });
+
+
+  it("exports slur controls using startid/endid with generated xml:id notes", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<note[^>]*xml:id="mkN\d+"/);
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"[^>]*\/>/);
+  });
+
+  it("exports cross-measure slur as startid/endid control", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>P1</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>480</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="start" number="1"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch><step>D</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations><slur type="stop" number="1"/></notations>
+      </note>
+      <note><rest/><duration>1440</duration><voice>1</voice><type>half</type><dot/></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"\/>/);
+  });
+
+  it("exports sample2.mxl with MuseScore-friendly MEI tempo/slur controls", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample2.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toContain('<tempo staff="1" tstamp="1" midi.bpm="116" place="above">Allegretto moderato</tempo>');
+    expect(mei).toContain(
+      '<tempo staff="1" type="mscore-infer-from-text" tstamp="1" midi.bpm="60">♩ = 60</tempo>'
+    );
+    expect(mei).toMatch(/<slur staff="1" startid="#mkN\d+" endid="#mkN\d+"[^>]*\/>/);
+  });
+
+  it("exports sample1.mxl Violin2 measure1 staccato as MEI artic elements", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample1.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc);
+    expect(mei).toMatch(/<measure n="1">[\s\S]*<staff n="2">[\s\S]*<artic artic="stacc"\/>/);
+  });
+
+  it("exports sample1.mxl measure9 dynamics with distinct/stable timing per staff", () => {
+    const mxlPath = resolve(process.cwd(), "src", "samples", "musicxml", "sample1.mxl");
+    const xml = execSync(`unzip -p "${mxlPath}" score.xml`, { encoding: "utf-8" });
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const mei = exportMusicXmlDomToMei(doc);
+    const meiDoc = new DOMParser().parseFromString(mei, "application/xml");
+    const measure9 = Array.from(meiDoc.querySelectorAll("measure")).find(
+      (m) => (m.getAttribute("n") || "").trim() === "9"
+    );
+    expect(measure9).not.toBeUndefined();
+    if (!measure9) return;
+
+    const assertFpOrdering = (staffNo: string): void => {
+      const dyns = Array.from(measure9.querySelectorAll(`:scope > dynam[staff="${staffNo}"]`));
+      const f = dyns.find((d) => (d.textContent || "").trim() === "f");
+      const p = dyns.find((d) => (d.textContent || "").trim() === "p");
+      expect(f).toBeDefined();
+      expect(p).toBeDefined();
+      if (!f || !p) return;
+      const fTstamp = Number.parseFloat((f.getAttribute("tstamp") || "").trim());
+      const pTstamp = Number.parseFloat((p.getAttribute("tstamp") || "").trim());
+      expect(Number.isFinite(fTstamp)).toBe(true);
+      expect(Number.isFinite(pTstamp)).toBe(true);
+      if (!Number.isFinite(fTstamp) || !Number.isFinite(pTstamp)) return;
+      expect(pTstamp).toBeGreaterThan(fTstamp);
+    };
+
+    assertFpOrdering("1");
+    assertFpOrdering("2");
+    assertFpOrdering("4");
+  });
+
+  it("keeps custom meiversion profile suffix (5.1+basic)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><note><rest/><duration>480</duration><voice>1</voice><type>quarter</type></note></measure></part>
+</score-partwise>`;
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+    const mei = exportMusicXmlDomToMei(doc, { meiVersion: "5.1+basic" });
+    expect(mei).toContain('meiversion="5.1+basic"');
   });
 
   it("exports full-measure rest as MEI mRest", () => {
@@ -223,14 +432,203 @@ describe("MEI export", () => {
     expect(outDoc.querySelector("part > measure > note > pitch > step")?.textContent).toBe("C");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:mei-debug-count"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:mei:notes:count"]'
       )?.textContent
     ).toBe("0x0003");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:mei-debug-0001"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:dbg:mei:notes:0001"]'
       )?.textContent
     ).toContain("k=note");
+  });
+
+  it("imports measure-level MEI slur startid/endid into MusicXML slur notations", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music><body><mdiv><score>
+    <scoreDef meter.count="4" meter.unit="4"><staffGrp><staffDef n="1" label="Lead"/></staffGrp></scoreDef>
+    <section>
+      <measure n="1">
+        <staff n="1">
+          <layer n="1">
+            <note xml:id="n1" pname="c" oct="4" dur="4"/>
+            <note xml:id="n2" pname="d" oct="4" dur="4"/>
+          </layer>
+        </staff>
+        <slur startid="#n1" endid="#n2"/>
+      </measure>
+    </section>
+  </score></mdiv></body></music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(1) > notations > slur[type=\"start\"]")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(2) > notations > slur[type=\"stop\"]")).not.toBeNull();
+  });
+
+  it("imports MEI tempo into MusicXML direction sound/words and skips infer-from-text helper tempo", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="4" meter.unit="4">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2"/></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1">
+                <layer n="1">
+                  <note xml:id="n1" pname="c" oct="4" dur="4"/>
+                </layer>
+              </staff>
+              <tempo staff="1" tstamp="1" midi.bpm="116">Allegretto moderato</tempo>
+              <tempo staff="1" tstamp="1" type="mscore-infer-from-text" midi.bpm="90">q = 90</tempo>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction > direction-type > words")?.textContent?.trim()).toBe("Allegretto moderato");
+    expect(outDoc.querySelector("part > measure > direction > sound")?.getAttribute("tempo")).toBe("116");
+    expect(outDoc.querySelectorAll("part > measure > direction").length).toBe(1);
+  });
+
+  it("imports infer-from-text tempo as fallback sound tempo when no visible tempo exists", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music><body><mdiv><score>
+    <scoreDef meter.count="4" meter.unit="4">
+      <staffGrp><staffDef n="1" clef.shape="G" clef.line="2"/></staffGrp>
+    </scoreDef>
+    <section>
+      <measure n="1">
+        <staff n="1"><layer n="1"><note pname="c" oct="4" dur="4"/></layer></staff>
+        <tempo staff="1" tstamp="1" type="mscore-infer-from-text" midi.bpm="90">q = 90</tempo>
+      </measure>
+    </section>
+  </score></mdiv></body></music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction > sound")?.getAttribute("tempo")).toBe("90");
+  });
+
+  it("imports part-name from MEI staffDef child <label>", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music><body><mdiv><score>
+    <scoreDef meter.count="4" meter.unit="4">
+      <staffGrp><staffDef n="1" clef.shape="G" clef.line="2"><label>Violin 1</label></staffDef></staffGrp>
+    </scoreDef>
+    <section>
+      <measure n="1"><staff n="1"><layer n="1"><note pname="c" oct="4" dur="4"/></layer></staff></measure>
+    </section>
+  </score></mdiv></body></music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("score-partwise > part-list > score-part > part-name")?.textContent?.trim()).toBe("Violin 1");
+  });
+
+  it("imports MEI meter.sym=common on staffDef as MusicXML time@symbol", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music><body><mdiv><score>
+    <scoreDef>
+      <staffGrp><staffDef n="1" meter.sym="common" clef.shape="G" clef.line="2"/></staffGrp>
+    </scoreDef>
+    <section>
+      <measure n="1"><staff n="1"><layer n="1"><note pname="c" oct="4" dur="4"/></layer></staff></measure>
+    </section>
+  </score></mdiv></body></music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const time = outDoc.querySelector("part > measure > attributes > time");
+    expect(time?.getAttribute("symbol")).toBe("common");
+    expect(time?.querySelector(":scope > beats")?.textContent?.trim()).toBe("4");
+    expect(time?.querySelector(":scope > beat-type")?.textContent?.trim()).toBe("4");
+  });
+
+  it("imports sample1.mei staff 1 measure 2 second note as C# with sharp accidental", () => {
+    const fixturePath = resolve(process.cwd(), "src/samples/mei/sample1.mei");
+    const mei = readFileSync(fixturePath, "utf-8");
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const alter = outDoc.querySelector('part:nth-of-type(1) > measure[number="2"] > note:nth-of-type(2) > pitch > alter');
+    const accidental = outDoc.querySelector('part:nth-of-type(1) > measure[number="2"] > note:nth-of-type(2) > accidental');
+    expect(alter?.textContent?.trim()).toBe("1");
+    expect(accidental?.textContent?.trim()).toBe("sharp");
+  });
+
+  it("imports sample4.mei initial time from staffDef meter.count/meter.unit (6/8)", () => {
+    const fixturePath = resolve(process.cwd(), "src/samples/mei/sample4.mei");
+    const mei = readFileSync(fixturePath, "utf-8");
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part:nth-of-type(1) > measure:nth-of-type(1) > attributes > time > beats")?.textContent?.trim()).toBe("6");
+    expect(outDoc.querySelector("part:nth-of-type(1) > measure:nth-of-type(1) > attributes > time > beat-type")?.textContent?.trim()).toBe("8");
+  });
+
+  it("imports sample1.mei tempo direction (words + sound tempo)", () => {
+    const fixturePath = resolve(process.cwd(), "src/samples/mei/sample1.mei");
+    const mei = readFileSync(fixturePath, "utf-8");
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(
+      outDoc.querySelector('part:nth-of-type(1) > measure[number="1"] > direction > direction-type > words')?.textContent?.trim()
+    ).toBe("Allegretto moderato");
+    expect(
+      outDoc.querySelector('part:nth-of-type(1) > measure[number="1"] > direction > sound')?.getAttribute("tempo")
+    ).toBe("116");
+  });
+
+  it("imports sample1.mei Violin 2 measure 5 staccato articulations", () => {
+    const fixturePath = resolve(process.cwd(), "src/samples/mei/sample1.mei");
+    const mei = readFileSync(fixturePath, "utf-8");
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const staccato = outDoc.querySelector(
+      'part:nth-of-type(2) > measure[number="5"] > note:nth-of-type(2) > notations > articulations > staccato'
+    );
+    expect(staccato).not.toBeNull();
+  });
+
+  it("imports sample1.mei measure 10 wedge staccato (spicc) as staccatissimo", () => {
+    const fixturePath = resolve(process.cwd(), "src/samples/mei/sample1.mei");
+    const mei = readFileSync(fixturePath, "utf-8");
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const staccatissimo = outDoc.querySelector(
+      'part:nth-of-type(1) > measure[number="10"] > note:nth-of-type(1) > notations > articulations > staccatissimo'
+    );
+    expect(staccatissimo).not.toBeNull();
   });
 
   it("imports mid-score scoreDef changes (time/key/clef) into subsequent MusicXML measure attributes", () => {
@@ -1609,6 +2007,40 @@ describe("MEI export", () => {
     expect(first?.querySelector(":scope > notations > ornaments > trill-mark")).not.toBeNull();
   });
 
+  it("imports measure-level MEI trill control event into MusicXML trill-mark notation", () => {
+    const mei = `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
+  <music>
+    <body>
+      <mdiv>
+        <score>
+          <scoreDef meter.count="4" meter.unit="4" key.sig="0">
+            <staffGrp><staffDef n="1" label="Lead" clef.shape="G" clef.line="2"/></staffGrp>
+          </scoreDef>
+          <section>
+            <measure n="1">
+              <staff n="1">
+                <layer n="1">
+                  <note xml:id="t1m" pname="c" oct="4" dur="4"/>
+                  <note pname="d" oct="4" dur="4"/>
+                </layer>
+              </staff>
+              <trill startid="#t1m"/>
+            </measure>
+          </section>
+        </score>
+      </mdiv>
+    </body>
+  </music>
+</mei>`;
+    const xml = convertMeiToMusicXml(mei);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
+    expect(first?.querySelector(":scope > notations > ornaments > trill-mark")).not.toBeNull();
+  });
+
   it("imports MEI control event using plist when startid is absent", () => {
     const mei = `<?xml version="1.0" encoding="UTF-8"?>
 <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.1">
@@ -2601,7 +3033,7 @@ describe("MEI export", () => {
     expect(outDoc.querySelector("part > measure > note:nth-of-type(3) > notations > articulations > caesura")).not.toBeNull();
   });
 
-  it("maps non-namespaced MEI misc labels to src:mei:* namespace", () => {
+  it("maps non-namespaced MEI misc labels to mks:src:mei:* namespace", () => {
     const mei = `<?xml version="1.0" encoding="UTF-8"?>
 <mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="4.0.1">
   <music>
@@ -2633,7 +3065,7 @@ describe("MEI export", () => {
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     const field = outDoc.querySelector(
-      'part > measure > attributes > miscellaneous > miscellaneous-field[name="src:mei:legacy-token"]'
+      'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:src:mei:legacy-token"]'
     );
     expect(field).not.toBeNull();
     expect(field?.textContent).toBe("abc123");
@@ -2678,12 +3110,12 @@ describe("MEI export", () => {
     expect(total).toBe(1440);
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:count"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:count"]'
       )?.textContent
     ).toBe("1");
     expect(
       outDoc.querySelector(
-        'part > measure > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+        'part > measure > attributes > miscellaneous > miscellaneous-field[name="mks:diag:0001"]'
       )?.textContent
     ).toContain("code=OVERFULL_CLAMPED");
   });
@@ -2804,22 +3236,37 @@ describe("MEI export", () => {
     expect(hasBoundaryDouble).toBe(true);
   });
 
-  it("roundtrips staccato/accent articulations between MusicXML and MEI", () => {
+  it("roundtrips articulation set (staccato/accent/staccatissimo/tenuto/strong-accent) between MusicXML and MEI", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
   <part id="P1">
     <measure number="1">
-      <attributes><divisions>480</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <attributes><divisions>480</divisions><time><beats>5</beats><beat-type>8</beat-type></time></attributes>
       <note>
         <pitch><step>C</step><octave>4</octave></pitch>
-        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
         <notations><articulations><staccato/></articulations></notations>
       </note>
       <note>
         <pitch><step>D</step><octave>4</octave></pitch>
-        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
         <notations><articulations><accent/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+        <notations><articulations><staccatissimo/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>F</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+        <notations><articulations><tenuto/></articulations></notations>
+      </note>
+      <note>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>240</duration><voice>1</voice><type>eighth</type>
+        <notations><articulations><strong-accent/></articulations></notations>
       </note>
     </measure>
   </part>
@@ -2828,20 +3275,24 @@ describe("MEI export", () => {
     expect(srcDoc).not.toBeNull();
     if (!srcDoc) return;
     const mei = exportMusicXmlDomToMei(srcDoc);
-    expect(mei).toContain('artic="stacc"');
-    expect(mei).toContain('artic="acc"');
+    expect(mei).toContain('<artic artic="stacc"/>');
+    expect(mei).toContain('<artic artic="acc"/>');
+    expect(mei).toContain('<artic artic="spicc"/>');
+    expect(mei).toContain('<artic artic="ten"/>');
+    expect(mei).toContain('<artic artic="marc"/>');
 
     const roundtripXml = convertMeiToMusicXml(mei);
     const outDoc = parseMusicXmlDocument(roundtripXml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
-    const first = outDoc.querySelector("part > measure > note:nth-of-type(1)");
-    const second = outDoc.querySelector("part > measure > note:nth-of-type(2)");
-    expect(first?.querySelector(":scope > notations > articulations > staccato")).not.toBeNull();
-    expect(second?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(1) > notations > articulations > staccato")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(2) > notations > articulations > accent")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(3) > notations > articulations > staccatissimo")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(4) > notations > articulations > tenuto")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > note:nth-of-type(5) > notations > articulations > strong-accent")).not.toBeNull();
   });
 
-  it("roundtrips tie/slur from MusicXML note notation into MEI @tie/@slur and back", () => {
+  it("roundtrips tie/slur from MusicXML note notation into MEI controls and back", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
   <part-list><score-part id="P1"><part-name>Part 1</part-name></score-part></part-list>
@@ -2869,11 +3320,11 @@ describe("MEI export", () => {
     const mei = exportMusicXmlDomToMei(srcDoc);
     expect(mei).toContain('tie="i"');
     expect(mei).toContain('tie="t"');
-    expect(mei).toContain('slur="i1"');
-    expect(mei).toContain('slur="t1"');
+    expect(mei).not.toContain('slur="i1"');
+    expect(mei).not.toContain('slur="t1"');
     expect(mei).toContain("<tie ");
-    expect(mei).toContain('tstamp="1"');
-    expect(mei).toContain('tstamp2="2"');
+    expect(mei).toContain('startid="#mkN1"');
+    expect(mei).toContain('endid="#mkN2"');
     expect(mei).toContain("<slur ");
 
     const roundtripXml = convertMeiToMusicXml(mei);
@@ -3097,7 +3548,7 @@ describe("MEI export", () => {
     expect(measure2Notes.length).toBe(4);
     expect(
       outDoc.querySelector(
-        'part > measure:nth-of-type(2) > attributes > miscellaneous > miscellaneous-field[name="diag:0001"]'
+        'part > measure:nth-of-type(2) > attributes > miscellaneous > miscellaneous-field[name="mks:diag:0001"]'
       )
     ).toBeNull();
   });
@@ -3225,11 +3676,11 @@ describe("MEI export", () => {
   });
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei",
+    "tests/local-data/mei-official/beam-grace/source-listing-132-snippet.mei",
     "imports official MEI fixture (CMN Listing 132 excerpt) with grace pitch/timing semantics",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-grace/source-listing-132-snippet.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beam-grace/source-listing-132-snippet.mei"),
       "utf8"
     );
 
@@ -3276,11 +3727,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei",
+    "tests/local-data/mei-official/beam-secondary/source-listing-142-snippet.mei",
     "imports official MEI fixture (CMN Listing 142 excerpt) with breaksec secondary-beam split semantics",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beam-secondary/source-listing-142-snippet.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beam-secondary/source-listing-142-snippet.mei"),
       "utf8"
     );
 
@@ -3315,11 +3766,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "tests/local-data/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
     "imports Bach Brandenburg fixture and preserves first-measure key signature from keysig",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
+      resolve(process.cwd(), "tests", "local-data", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3339,11 +3790,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
+    "tests/local-data/Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei",
     "imports Bach Brandenburg fixture and keeps viola clef as C3 on part 6",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests", "fixtures-local", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
+      resolve(process.cwd(), "tests", "local-data", "Bach-JS_BrandenburgConcert_No4_I_BWV1049.mei"),
       "utf-8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3361,11 +3812,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei",
+    "tests/local-data/mei-official/beamspan-min/source-listing-147-inspired.mei",
     "imports beamSpan minimal fixture and keeps beam continuity on listed notes",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/beamspan-min/source-listing-147-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/beamspan-min/source-listing-147-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3385,11 +3836,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei",
+    "tests/local-data/mei-official/tie-crossbar-min/source-listing-148-inspired.mei",
     "imports tie-crossbar minimal fixture and keeps tie start/stop across measures",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/tie-crossbar-min/source-listing-148-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/tie-crossbar-min/source-listing-148-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3407,11 +3858,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei",
+    "tests/local-data/mei-official/slur-min/source-listing-152-inspired.mei",
     "imports slur minimal fixture and maps i/m/t slur markers",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/slur-min/source-listing-152-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/slur-min/source-listing-152-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3430,11 +3881,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei",
+    "tests/local-data/mei-official/hairpin-min/source-hairpin-inspired.mei",
     "imports hairpin minimal fixture and maps startid/endid to wedge start/stop",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/hairpin-min/source-hairpin-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/hairpin-min/source-hairpin-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3494,11 +3945,11 @@ describe("MEI export", () => {
   });
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei",
+    "tests/local-data/mei-official/dynam-min/source-dynam-inspired.mei",
     "imports dynam minimal fixture and maps MEI dynam text to MusicXML dynamics mark",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/dynam-min/source-dynam-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/dynam-min/source-dynam-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3512,11 +3963,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei",
+    "tests/local-data/mei-official/tuplet-min/source-tuplet-inspired.mei",
     "imports tuplet minimal fixture and keeps 3:2 time-modification on notes",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/tuplet-min/source-tuplet-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/tuplet-min/source-tuplet-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3533,11 +3984,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei",
+    "tests/local-data/mei-official/fermata-min/source-fermata-inspired.mei",
     "imports fermata minimal fixture and maps to MusicXML fermata notation",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/fermata-min/source-fermata-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/fermata-min/source-fermata-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);
@@ -3550,11 +4001,11 @@ describe("MEI export", () => {
   );
 
   itWithLocalFixture(
-    "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei",
+    "tests/local-data/mei-official/gliss-min/source-gliss-inspired.mei",
     "imports gliss minimal fixture and maps to MusicXML glissando start/stop",
     () => {
     const mei = readFileSync(
-      resolve(process.cwd(), "tests/fixtures-local/mei-official/gliss-min/source-gliss-inspired.mei"),
+      resolve(process.cwd(), "tests/local-data/mei-official/gliss-min/source-gliss-inspired.mei"),
       "utf8"
     );
     const xml = convertMeiToMusicXml(mei);

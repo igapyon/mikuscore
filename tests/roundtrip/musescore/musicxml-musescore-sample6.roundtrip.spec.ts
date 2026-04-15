@@ -1,3 +1,8 @@
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -205,7 +210,7 @@ describe("MuseScore roundtrip (public/local cases)", () => {
     if (src.firstTempo !== null) {
       expect(dst.firstTempo).toBe(src.firstTempo);
     }
-    if (roundtripCase.id === "sample1" || roundtripCase.id === "sample1-m1-m2") {
+    if (roundtripCase.id === "sample6" || roundtripCase.id === "sample6-m1-m2") {
       const srcPitchEvents = collectPitchEvents(srcDoc, 2);
       const dstPitchEvents = collectPitchEvents(dstDoc, 2);
       expect(dstPitchEvents).toEqual(srcPitchEvents);
