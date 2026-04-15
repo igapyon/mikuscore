@@ -7,6 +7,8 @@ const ENTRY_TS = "src/ts/main.ts";
 const ENTRY_JS = ENTRY_TS.replace(/\.ts$/, ".js");
 const TEMPLATE = "mikuscore-src.html";
 const DIST = "mikuscore.html";
+const INDEX_TEMPLATE = "index-src.html";
+const INDEX_DIST = "index.html";
 const SAMPLE1_MXL_PATH = "src/samples/musicxml/sample1.mxl";
 const SAMPLE2_MXL_PATH = "src/samples/musicxml/sample2.mxl";
 const SAMPLE3_MXL_PATH = "src/samples/musicxml/sample3.mxl";
@@ -51,6 +53,19 @@ const writeTextIfChanged = (relPath, text) => {
   }
   writeFileSync(abs, text, "utf8");
   return true;
+};
+
+const formatBuildDate = () => {
+  const d = new Date();
+  const year = d.getFullYear().toString();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const renderStaticTemplate = (templateRelPath) => {
+  const template = readText(templateRelPath);
+  return template.replaceAll("{{BUILD_DATE}}", formatBuildDate());
 };
 
 const extractMusicXmlTextFromMxl = (mxlPath) => {
@@ -290,8 +305,10 @@ const run = () => {
 
   const distHtml = inlineTemplate(jsBundle);
   writeTextIfChanged(DIST, distHtml);
+  const indexHtml = renderStaticTemplate(INDEX_TEMPLATE);
+  writeTextIfChanged(INDEX_DIST, indexHtml);
 
-  process.stdout.write(`Built ${DIST} and ${JS_OUT}\n`);
+  process.stdout.write(`Built ${DIST}, ${INDEX_DIST}, and ${JS_OUT}\n`);
 };
 
 run();
