@@ -16,13 +16,15 @@ Scope note:
 
 ## Target Artifact
 
-- Development template: `mikuscore-src.html` (editable source template)
-- Distribution artifact: `mikuscore.html` (generated file, do not edit directly)
+- Development templates: `mikuscore-src.html`, `index-src.html` (editable source templates)
+- Distribution artifacts: `mikuscore.html`, `index.html` (generated files, do not edit directly)
 
 ## Suggested Project Layout (MVP)
 
 - `mikuscore-src.html`
+- `index-src.html`
 - `mikuscore.html` (generated)
+- `index.html` (generated)
 - `src/css/app.css`
 - `src/ts/main.ts`
 - `src/ts/**/*.ts` (core/ui split modules)
@@ -40,8 +42,9 @@ npm run build
 
 1. Compile `src/ts/**/*.ts` to `src/js/**/*.js`
 2. Validate `mikuscore-src.html` tag order (CSS and JS include order)
-3. Inline local CSS and JS into HTML
-4. Output `mikuscore.html` as single-file artifact
+3. Inline local CSS and JS into `mikuscore.html`
+4. Render static landing templates such as `index-src.html`
+5. Output generated HTML artifacts
 
 ## Related Commands
 
@@ -70,8 +73,8 @@ For verification and daily commands (`typecheck`, `test:*`, `check:all`, `clean`
 
 ## Editing Rules
 
-- `mikuscore.html` is generated; do not edit directly
-- edit only `mikuscore-src.html` and files under `src/`
+- `mikuscore.html` and `index.html` are generated; do not edit them directly
+- edit `mikuscore-src.html`, `index-src.html`, and files under `src/`
 - PRs SHOULD include regenerated `mikuscore.html` when behavior changes
 
 ## Notes

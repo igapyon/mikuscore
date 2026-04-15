@@ -26,6 +26,12 @@ Practical command split:
 - `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
 - `npm run check:all`: full verification (`typecheck` + full `test:all` + `build:dist`)
 
+Generated HTML note:
+
+- `mikuscore.html` is generated from `mikuscore-src.html`
+- `index.html` is generated from `index-src.html`
+- `{{BUILD_DATE}}` placeholders are filled during the build
+
 ## CLI Notes
 
 Current CLI uses a `convert`-first command surface.
