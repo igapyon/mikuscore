@@ -194,6 +194,7 @@ Options:
 - warnings, diagnostics, and summary text SHOULD go to `stderr`
 - binary output is out of Step 1 scope
 - compressed `.mxl` / `.mscz` support is limited to file-path I/O; `stdin` / `stdout` remain text-only for `musicxml` and `musescore`
+- plain-text decoding for `musicxml` / `musescore` CLI inputs SHOULD use UTF-8 decoding that is compatible with non-Node runtimes as well as Node-based execution
 
 ## Error Contract
 

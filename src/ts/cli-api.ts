@@ -64,13 +64,17 @@ const failureResult = (message: string): CliResult => ({
   diagnostics: [message],
 });
 
+const decodeUtf8Text = (bytes: Uint8Array): string => {
+  return new TextDecoder("utf-8").decode(bytes);
+};
+
 export const decodeCliMusicXmlInput = async (inputBytes: Uint8Array, inputPath?: string): Promise<CliResult> => {
   const name = lowerFileName(inputPath);
   try {
     if (name.endsWith(".mxl")) {
       return textResult(await extractMusicXmlTextFromMxl(bytesToArrayBuffer(inputBytes)));
     }
-    return textResult(Buffer.from(inputBytes).toString("utf8"));
+    return textResult(decodeUtf8Text(inputBytes));
   } catch (error) {
     return failureResult(`Failed to read MusicXML input: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -85,7 +89,7 @@ export const decodeCliMuseScoreInput = async (inputBytes: Uint8Array, inputPath?
         [".mscx"]
       ));
     }
-    return textResult(Buffer.from(inputBytes).toString("utf8"));
+    return textResult(decodeUtf8Text(inputBytes));
   } catch (error) {
     return failureResult(`Failed to read MuseScore input: ${error instanceof Error ? error.message : String(error)}`);
   }

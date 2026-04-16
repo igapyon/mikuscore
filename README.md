@@ -70,6 +70,8 @@ mikuscore is for converting, inspecting, and handing score data off.
 
 Current CLI is `convert`-first.
 
+For `musicxml` and `musescore`, plain-text `stdin` / `stdout` paths are handled as UTF-8 text, while `.mxl` / `.mscz` compression stays on file-path I/O.
+
 Examples:
 
 - `npm run cli -- convert --from abc --to musicxml --in score.abc --out score.musicxml`
