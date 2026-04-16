@@ -9887,7 +9887,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
  * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.extractZipEntryBytesByPath = exports.listZipRootEntryPathsByExtensions = exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = void 0;
+exports.listZipRootEntryPathsByExtensions = exports.extractZipEntryBytesByPath = exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = void 0;
+var zip_io_1 = require("./zip-io");
+Object.defineProperty(exports, "extractMusicXmlTextFromMxl", { enumerable: true, get: function () { return zip_io_1.extractMusicXmlTextFromMxl; } });
+Object.defineProperty(exports, "extractTextFromZipByExtensions", { enumerable: true, get: function () { return zip_io_1.extractTextFromZipByExtensions; } });
+Object.defineProperty(exports, "extractZipEntryBytesByPath", { enumerable: true, get: function () { return zip_io_1.extractZipEntryBytesByPath; } });
+Object.defineProperty(exports, "listZipRootEntryPathsByExtensions", { enumerable: true, get: function () { return zip_io_1.listZipRootEntryPathsByExtensions; } });
+
+  },
+  "src/ts/zip-io.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.extractZipEntryBytesByPath = exports.listZipRootEntryPathsByExtensions = exports.extractTextFromZipByExtensions = exports.extractMusicXmlTextFromMxl = exports.makeMsczBytes = exports.makeMxlBytes = exports.makeZipBytes = exports.bytesToArrayBuffer = exports.formatXmlWithTwoSpaceIndent = void 0;
 const ZIP_EOCD_SIG = 0x06054b50;
 const ZIP_CDFH_SIG = 0x02014b50;
 const ZIP_LFH_SIG = 0x04034b50;
@@ -9912,7 +9927,6 @@ const decodeZipFileName = (bytes, utf8Flag) => {
     return out;
 };
 const findEndOfCentralDirectoryOffset = (bytes) => {
-    // EOCD is within the last 65,557 bytes by ZIP spec.
     const minOffset = Math.max(0, bytes.length - 65557);
     for (let offset = bytes.length - 22; offset >= minOffset; offset -= 1) {
         if (readU32(bytes, offset) === ZIP_EOCD_SIG)
@@ -9976,11 +9990,15 @@ const readZipEntries = (bytes) => {
 const inflateDeflateRaw = async (compressed) => {
     const DS = globalThis.DecompressionStream;
     if (!DS) {
-        throw new Error("DecompressionStream is not available in this browser.");
+        throw new Error("DecompressionStream is not available in this runtime.");
     }
     const copied = new Uint8Array(compressed.length);
     copied.set(compressed);
-    const stream = new Blob([copied.buffer]).stream().pipeThrough(new DS("deflate-raw"));
+    const source = new Response(copied).body;
+    if (!source) {
+        throw new Error("DecompressionStream source body is not available in this runtime.");
+    }
+    const stream = source.pipeThrough(new DS("deflate-raw"));
     const arrayBuffer = await new Response(stream).arrayBuffer();
     return new Uint8Array(arrayBuffer);
 };
@@ -9991,9 +10009,6 @@ const extractEntryBytes = async (archiveBytes, entry) => {
     }
     if (entry.compressionMethod === 8) {
         const inflated = await inflateDeflateRaw(compressed);
-        if (entry.uncompressedSize > 0 && inflated.length !== entry.uncompressedSize) {
-            // Keep going: some archives are inconsistent here, but data is often still valid.
-        }
         return inflated;
     }
     throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}.`);
@@ -10047,6 +10062,197 @@ const parseContainerRootFilePath = (containerXmlText) => {
     const fullPath = (_b = (_a = rootFileNode === null || rootFileNode === void 0 ? void 0 : rootFileNode.getAttribute("full-path")) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
     return fullPath || null;
 };
+const crc32Table = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+        let c = n;
+        for (let k = 0; k < 8; k += 1) {
+            c = (c & 1) !== 0 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+        }
+        table[n] = c >>> 0;
+    }
+    return table;
+})();
+const crc32 = (bytes) => {
+    let crc = 0xffffffff;
+    for (let i = 0; i < bytes.length; i += 1) {
+        crc = crc32Table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+};
+const writeU16 = (target, offset, value) => {
+    target[offset] = value & 0xff;
+    target[offset + 1] = (value >>> 8) & 0xff;
+};
+const writeU32 = (target, offset, value) => {
+    target[offset] = value & 0xff;
+    target[offset + 1] = (value >>> 8) & 0xff;
+    target[offset + 2] = (value >>> 16) & 0xff;
+    target[offset + 3] = (value >>> 24) & 0xff;
+};
+const toDosDateTime = (date) => {
+    const year = Math.max(1980, Math.min(2107, date.getFullYear()));
+    const month = Math.max(1, Math.min(12, date.getMonth() + 1));
+    const day = Math.max(1, Math.min(31, date.getDate()));
+    const hours = Math.max(0, Math.min(23, date.getHours()));
+    const minutes = Math.max(0, Math.min(59, date.getMinutes()));
+    const seconds = Math.max(0, Math.min(59, date.getSeconds()));
+    const dosTime = ((hours & 0x1f) << 11) | ((minutes & 0x3f) << 5) | ((Math.floor(seconds / 2)) & 0x1f);
+    const dosDate = (((year - 1980) & 0x7f) << 9) | ((month & 0x0f) << 5) | (day & 0x1f);
+    return { dosTime, dosDate };
+};
+const compressDeflateRaw = async (input) => {
+    const CS = globalThis.CompressionStream;
+    if (!CS)
+        return null;
+    try {
+        const source = new Uint8Array(input.length);
+        source.set(input);
+        const body = new Response(source).body;
+        if (!body)
+            return null;
+        const stream = body.pipeThrough(new CS("deflate-raw"));
+        const compressedBuffer = await new Response(stream).arrayBuffer();
+        return new Uint8Array(compressedBuffer);
+    }
+    catch (_a) {
+        return null;
+    }
+};
+const formatXmlWithTwoSpaceIndent = (xml) => {
+    const compact = String(xml || "").replace(/>\s+</g, "><").trim();
+    const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
+    let indentLevel = 0;
+    const lines = [];
+    for (const rawToken of split) {
+        const token = rawToken.trim();
+        if (!token)
+            continue;
+        if (/^<\//.test(token))
+            indentLevel = Math.max(0, indentLevel - 1);
+        lines.push(`${"  ".repeat(indentLevel)}${token}`);
+        const isOpening = /^<[^!?/][^>]*>$/.test(token);
+        const isSelfClosing = /\/>$/.test(token);
+        if (isOpening && !isSelfClosing)
+            indentLevel += 1;
+    }
+    return lines.join("\n");
+};
+exports.formatXmlWithTwoSpaceIndent = formatXmlWithTwoSpaceIndent;
+const bytesToArrayBuffer = (bytes) => {
+    const out = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(out).set(bytes);
+    return out;
+};
+exports.bytesToArrayBuffer = bytesToArrayBuffer;
+const makeZipBytes = async (entries, preferCompression) => {
+    const encoder = new TextEncoder();
+    const localChunks = [];
+    const centralChunks = [];
+    let localOffset = 0;
+    const nowDos = toDosDateTime(new Date());
+    const encodedEntries = [];
+    for (const entry of entries) {
+        const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
+        const uncompressed = entry.bytes;
+        let data = uncompressed;
+        let method = 0;
+        if (preferCompression) {
+            const compressed = await compressDeflateRaw(uncompressed);
+            if (compressed && compressed.length < uncompressed.length) {
+                data = compressed;
+                method = 8;
+            }
+        }
+        encodedEntries.push({
+            pathBytes,
+            data,
+            crc: crc32(uncompressed),
+            method,
+            compressedSize: data.length,
+            uncompressedSize: uncompressed.length,
+        });
+    }
+    for (const entry of encodedEntries) {
+        const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
+        const localHeader = new Uint8Array(30 + pathBytes.length);
+        writeU32(localHeader, 0, 0x04034b50);
+        writeU16(localHeader, 4, 20);
+        writeU16(localHeader, 6, 0x0800);
+        writeU16(localHeader, 8, method);
+        writeU16(localHeader, 10, nowDos.dosTime);
+        writeU16(localHeader, 12, nowDos.dosDate);
+        writeU32(localHeader, 14, crc);
+        writeU32(localHeader, 18, compressedSize);
+        writeU32(localHeader, 22, uncompressedSize);
+        writeU16(localHeader, 26, pathBytes.length);
+        writeU16(localHeader, 28, 0);
+        localHeader.set(pathBytes, 30);
+        localChunks.push(localHeader, data);
+        const centralHeader = new Uint8Array(46 + pathBytes.length);
+        writeU32(centralHeader, 0, 0x02014b50);
+        writeU16(centralHeader, 4, 20);
+        writeU16(centralHeader, 6, 20);
+        writeU16(centralHeader, 8, 0x0800);
+        writeU16(centralHeader, 10, method);
+        writeU16(centralHeader, 12, nowDos.dosTime);
+        writeU16(centralHeader, 14, nowDos.dosDate);
+        writeU32(centralHeader, 16, crc);
+        writeU32(centralHeader, 20, compressedSize);
+        writeU32(centralHeader, 24, uncompressedSize);
+        writeU16(centralHeader, 28, pathBytes.length);
+        writeU16(centralHeader, 30, 0);
+        writeU16(centralHeader, 32, 0);
+        writeU16(centralHeader, 34, 0);
+        writeU16(centralHeader, 36, 0);
+        writeU32(centralHeader, 38, 0);
+        writeU32(centralHeader, 42, localOffset);
+        centralHeader.set(pathBytes, 46);
+        centralChunks.push(centralHeader);
+        localOffset += localHeader.length + compressedSize;
+    }
+    const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
+    const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
+    const eocd = new Uint8Array(22);
+    writeU32(eocd, 0, 0x06054b50);
+    writeU16(eocd, 4, 0);
+    writeU16(eocd, 6, 0);
+    writeU16(eocd, 8, entries.length);
+    writeU16(eocd, 10, entries.length);
+    writeU32(eocd, 12, centralSize);
+    writeU32(eocd, 16, localSize);
+    writeU16(eocd, 20, 0);
+    const out = new Uint8Array(localSize + centralSize + eocd.length);
+    let cursor = 0;
+    for (const chunk of localChunks) {
+        out.set(chunk, cursor);
+        cursor += chunk.length;
+    }
+    for (const chunk of centralChunks) {
+        out.set(chunk, cursor);
+        cursor += chunk.length;
+    }
+    out.set(eocd, cursor);
+    return out;
+};
+exports.makeZipBytes = makeZipBytes;
+const makeMxlBytes = async (formattedXml) => {
+    const encoder = new TextEncoder();
+    const containerXml = `<?xml version="1.0" encoding="UTF-8"?>` +
+        `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
+        `<rootfiles><rootfile full-path="score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles>` +
+        `</container>`;
+    return (0, exports.makeZipBytes)([
+        { path: "META-INF/container.xml", bytes: encoder.encode(containerXml) },
+        { path: "score.musicxml", bytes: encoder.encode(formattedXml) },
+    ], true);
+};
+exports.makeMxlBytes = makeMxlBytes;
+const makeMsczBytes = async (mscxText) => {
+    const encoder = new TextEncoder();
+    return (0, exports.makeZipBytes)([{ path: "score.mscx", bytes: encoder.encode(mscxText) }], true);
+};
+exports.makeMsczBytes = makeMsczBytes;
 const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
     const archiveBytes = new Uint8Array(archiveBuffer);
     const entries = readZipEntries(archiveBytes);
@@ -10590,6 +10796,7 @@ exports.createZipBundleDownloadPayload = exports.createMuseScoreDownloadPayload 
 const midi_io_1 = require("./midi-io");
 const midi_musescore_io_1 = require("./midi-musescore-io");
 const musicxml_io_1 = require("./musicxml-io");
+const zip_io_1 = require("./zip-io");
 const pad2 = (value) => String(value).padStart(2, "0");
 const buildFileTimestamp = () => {
     const now = new Date();
@@ -10601,25 +10808,6 @@ const buildFileTimestamp = () => {
         pad2(now.getMinutes()),
     ].join("");
 };
-const prettyPrintXmlWithTwoSpaceIndent = (xml) => {
-    const compact = String(xml || "").replace(/>\s+</g, "><").trim();
-    const split = compact.replace(/(>)(<)(\/*)/g, "$1\n$2$3").split("\n");
-    let indentLevel = 0;
-    const lines = [];
-    for (const rawToken of split) {
-        const token = rawToken.trim();
-        if (!token)
-            continue;
-        if (/^<\//.test(token))
-            indentLevel = Math.max(0, indentLevel - 1);
-        lines.push(`${"  ".repeat(indentLevel)}${token}`);
-        const isOpening = /^<[^!?/][^>]*>$/.test(token);
-        const isSelfClosing = /\/>$/.test(token);
-        if (isOpening && !isSelfClosing)
-            indentLevel += 1;
-    }
-    return lines.join("\n");
-};
 const triggerFileDownload = (payload) => {
     const url = URL.createObjectURL(payload.blob);
     const a = document.createElement("a");
@@ -10629,178 +10817,14 @@ const triggerFileDownload = (payload) => {
     URL.revokeObjectURL(url);
 };
 exports.triggerFileDownload = triggerFileDownload;
-const crc32Table = (() => {
-    const table = new Uint32Array(256);
-    for (let n = 0; n < 256; n += 1) {
-        let c = n;
-        for (let k = 0; k < 8; k += 1) {
-            c = (c & 1) !== 0 ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-        }
-        table[n] = c >>> 0;
-    }
-    return table;
-})();
-const crc32 = (bytes) => {
-    let crc = 0xffffffff;
-    for (let i = 0; i < bytes.length; i += 1) {
-        crc = crc32Table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-    }
-    return (crc ^ 0xffffffff) >>> 0;
-};
-const writeU16 = (target, offset, value) => {
-    target[offset] = value & 0xff;
-    target[offset + 1] = (value >>> 8) & 0xff;
-};
-const writeU32 = (target, offset, value) => {
-    target[offset] = value & 0xff;
-    target[offset + 1] = (value >>> 8) & 0xff;
-    target[offset + 2] = (value >>> 16) & 0xff;
-    target[offset + 3] = (value >>> 24) & 0xff;
-};
-const toDosDateTime = (date) => {
-    const year = Math.max(1980, Math.min(2107, date.getFullYear()));
-    const month = Math.max(1, Math.min(12, date.getMonth() + 1));
-    const day = Math.max(1, Math.min(31, date.getDate()));
-    const hours = Math.max(0, Math.min(23, date.getHours()));
-    const minutes = Math.max(0, Math.min(59, date.getMinutes()));
-    const seconds = Math.max(0, Math.min(59, date.getSeconds()));
-    const dosTime = ((hours & 0x1f) << 11) | ((minutes & 0x3f) << 5) | ((Math.floor(seconds / 2)) & 0x1f);
-    const dosDate = (((year - 1980) & 0x7f) << 9) | ((month & 0x0f) << 5) | (day & 0x1f);
-    return { dosTime, dosDate };
-};
-const compressDeflateRaw = async (input) => {
-    const CS = globalThis.CompressionStream;
-    if (!CS)
-        return null;
-    try {
-        const source = new Uint8Array(input.length);
-        source.set(input);
-        const stream = new Blob([bytesToArrayBuffer(source)]).stream().pipeThrough(new CS("deflate-raw"));
-        const compressedBuffer = await new Response(stream).arrayBuffer();
-        return new Uint8Array(compressedBuffer);
-    }
-    catch (_a) {
-        return null;
-    }
-};
-const makeZipBytes = async (entries, preferCompression) => {
-    const encoder = new TextEncoder();
-    const localChunks = [];
-    const centralChunks = [];
-    let localOffset = 0;
-    const nowDos = toDosDateTime(new Date());
-    const encodedEntries = [];
-    for (const entry of entries) {
-        const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
-        const uncompressed = entry.bytes;
-        let data = uncompressed;
-        let method = 0;
-        if (preferCompression) {
-            const compressed = await compressDeflateRaw(uncompressed);
-            if (compressed && compressed.length < uncompressed.length) {
-                data = compressed;
-                method = 8;
-            }
-        }
-        encodedEntries.push({
-            pathBytes,
-            data,
-            crc: crc32(uncompressed),
-            method,
-            compressedSize: data.length,
-            uncompressedSize: uncompressed.length,
-        });
-    }
-    for (const entry of encodedEntries) {
-        const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
-        const localHeader = new Uint8Array(30 + pathBytes.length);
-        writeU32(localHeader, 0, 0x04034b50);
-        writeU16(localHeader, 4, 20);
-        writeU16(localHeader, 6, 0x0800);
-        writeU16(localHeader, 8, method);
-        writeU16(localHeader, 10, nowDos.dosTime);
-        writeU16(localHeader, 12, nowDos.dosDate);
-        writeU32(localHeader, 14, crc);
-        writeU32(localHeader, 18, compressedSize);
-        writeU32(localHeader, 22, uncompressedSize);
-        writeU16(localHeader, 26, pathBytes.length);
-        writeU16(localHeader, 28, 0);
-        localHeader.set(pathBytes, 30);
-        localChunks.push(localHeader, data);
-        const centralHeader = new Uint8Array(46 + pathBytes.length);
-        writeU32(centralHeader, 0, 0x02014b50);
-        writeU16(centralHeader, 4, 20);
-        writeU16(centralHeader, 6, 20);
-        writeU16(centralHeader, 8, 0x0800);
-        writeU16(centralHeader, 10, method);
-        writeU16(centralHeader, 12, nowDos.dosTime);
-        writeU16(centralHeader, 14, nowDos.dosDate);
-        writeU32(centralHeader, 16, crc);
-        writeU32(centralHeader, 20, compressedSize);
-        writeU32(centralHeader, 24, uncompressedSize);
-        writeU16(centralHeader, 28, pathBytes.length);
-        writeU16(centralHeader, 30, 0);
-        writeU16(centralHeader, 32, 0);
-        writeU16(centralHeader, 34, 0);
-        writeU16(centralHeader, 36, 0);
-        writeU32(centralHeader, 38, 0);
-        writeU32(centralHeader, 42, localOffset);
-        centralHeader.set(pathBytes, 46);
-        centralChunks.push(centralHeader);
-        localOffset += localHeader.length + compressedSize;
-    }
-    const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
-    const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
-    const eocd = new Uint8Array(22);
-    writeU32(eocd, 0, 0x06054b50);
-    writeU16(eocd, 4, 0);
-    writeU16(eocd, 6, 0);
-    writeU16(eocd, 8, entries.length);
-    writeU16(eocd, 10, entries.length);
-    writeU32(eocd, 12, centralSize);
-    writeU32(eocd, 16, localSize);
-    writeU16(eocd, 20, 0);
-    const out = new Uint8Array(localSize + centralSize + eocd.length);
-    let cursor = 0;
-    for (const chunk of localChunks) {
-        out.set(chunk, cursor);
-        cursor += chunk.length;
-    }
-    for (const chunk of centralChunks) {
-        out.set(chunk, cursor);
-        cursor += chunk.length;
-    }
-    out.set(eocd, cursor);
-    return out;
-};
-const makeMxlBytes = async (formattedXml) => {
-    const encoder = new TextEncoder();
-    const containerXml = `<?xml version="1.0" encoding="UTF-8"?>` +
-        `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
-        `<rootfiles><rootfile full-path="score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles>` +
-        `</container>`;
-    return makeZipBytes([
-        { path: "META-INF/container.xml", bytes: encoder.encode(containerXml) },
-        { path: "score.musicxml", bytes: encoder.encode(formattedXml) },
-    ], true);
-};
-const makeMsczBytes = async (mscxText) => {
-    const encoder = new TextEncoder();
-    return makeZipBytes([{ path: "score.mscx", bytes: encoder.encode(mscxText) }], true);
-};
-const bytesToArrayBuffer = (bytes) => {
-    const out = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(out).set(bytes);
-    return out;
-};
 const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
     const ts = buildFileTimestamp();
     const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
     if (options.compressed === true) {
-        const mxlBytes = await makeMxlBytes(formattedXml);
+        const mxlBytes = await (0, zip_io_1.makeMxlBytes)(formattedXml);
         return {
             fileName: `mikuscore-${ts}.mxl`,
-            blob: new Blob([bytesToArrayBuffer(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
+            blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
         };
     }
     const extension = options.useXmlExtension === true ? "xml" : "musicxml";
@@ -10828,7 +10852,7 @@ const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
 exports.createJsonDownloadPayload = createJsonDownloadPayload;
 const createVsqxDownloadPayload = (vsqxText) => {
     const ts = buildFileTimestamp();
-    const formattedVsqx = prettyPrintXmlWithTwoSpaceIndent(vsqxText);
+    const formattedVsqx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
     return {
         fileName: `mikuscore-${ts}.vsqx`,
         blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
@@ -10961,13 +10985,13 @@ const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScor
     catch (_a) {
         return null;
     }
-    const formattedMscx = prettyPrintXmlWithTwoSpaceIndent(mscxText);
+    const formattedMscx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(mscxText);
     const ts = buildFileTimestamp();
     if (options.compressed === true) {
-        const msczBytes = await makeMsczBytes(formattedMscx);
+        const msczBytes = await (0, zip_io_1.makeMsczBytes)(formattedMscx);
         return {
             fileName: `mikuscore-${ts}.mscz`,
-            blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
+            blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(msczBytes)], { type: "application/zip" }),
         };
     }
     return {
@@ -10987,10 +11011,10 @@ const createZipBundleDownloadPayload = async (entries, options = {}) => {
         const bytes = new Uint8Array(await entry.blob.arrayBuffer());
         zipEntries.push({ path: fileName, bytes });
     }
-    const zipBytes = await makeZipBytes(zipEntries, options.compressed !== false);
+    const zipBytes = await (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
     return {
         fileName: `${safeBase}-${ts}.zip`,
-        blob: new Blob([bytesToArrayBuffer(zipBytes)], { type: "application/zip" }),
+        blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(zipBytes)], { type: "application/zip" }),
     };
 };
 exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;

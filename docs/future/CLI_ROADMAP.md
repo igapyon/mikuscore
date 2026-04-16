@@ -4,7 +4,7 @@
 
 - Step 1 first cut exists.
 - Initial Step 2 MIDI pairs now exist as a first cut.
-- Initial Step 3 MuseScore text pairs now exist as a first cut.
+- Initial Step 3 MuseScore pairs now exist as a first cut, including `.mscz` / `.mxl` file I/O support.
 - Initial `render svg` support now exists as a first cut.
 - This file tracks likely next-step expansion only.
 - This is a future note, not a current normative contract.
@@ -58,7 +58,7 @@ Implemented first-cut Step 3 additions:
 
 Rationale:
 
-- current CLI MuseScore scope is `.mscx`-style text; compressed `.mscz` handling is still outside the CLI contract
+- CLI file I/O now accepts compressed `.mxl` / `.mscz` at the path boundary while keeping `stdin` / `stdout` text-only
 - `svg` is better modeled as render output, not as the same class of interchange export as `abc` / `musicxml` / `midi`
 
 ## Facade Growth Path

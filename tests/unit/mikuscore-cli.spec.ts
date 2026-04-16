@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../../src/ts/zip-io";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -64,6 +65,53 @@ describe("mikuscore cli", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("");
     expect(readFileSync(outPath, "utf8")).toContain("<score-partwise");
+  });
+
+  it("reads .mxl input files for musicxml source", () => {
+    const inputPath = path.resolve(repoRoot, "src", "samples", "musicxml", "sample1.mxl");
+    const result = runCli(["convert", "--from", "musicxml", "--to", "abc", "--in", inputPath]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("X:1");
+    expect(result.stdout).toContain("K:");
+  });
+
+  it("reads .mscz input files for musescore source", () => {
+    const inputPath = path.resolve(repoRoot, "src", "samples", "musescore", "sample1.mscz");
+    const result = runCli(["convert", "--from", "musescore", "--to", "musicxml", "--in", inputPath]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<score-partwise");
+  });
+
+  it("writes .mxl output when --out ends with .mxl", async () => {
+    const inputPath = writeTempFile("score.abc", "X:1\nT:Zip MusicXML\nM:4/4\nL:1/4\nK:C\nC D E F|\n");
+    const outPath = tempPath("out.mxl");
+
+    const result = runCli(["convert", "--from", "abc", "--to", "musicxml", "--in", inputPath, "--out", outPath]);
+
+    expect(result.status).toBe(0);
+    const archiveBytes = readFileSync(outPath);
+    const extracted = await extractMusicXmlTextFromMxl(
+      archiveBytes.buffer.slice(archiveBytes.byteOffset, archiveBytes.byteOffset + archiveBytes.byteLength)
+    );
+    expect(extracted).toContain("<work-title>Zip MusicXML</work-title>");
+  });
+
+  it("writes .mscz output when --out ends with .mscz", async () => {
+    const inputPath = writeTempFile("score.musicxml", validMusicXml("Zip MuseScore"));
+    const outPath = tempPath("out.mscz");
+
+    const result = runCli(["convert", "--from", "musicxml", "--to", "musescore", "--in", inputPath, "--out", outPath]);
+
+    expect(result.status).toBe(0);
+    const archiveBytes = readFileSync(outPath);
+    const extracted = await extractTextFromZipByExtensions(
+      archiveBytes.buffer.slice(archiveBytes.byteOffset, archiveBytes.byteOffset + archiveBytes.byteLength),
+      [".mscx"]
+    );
+    expect(extracted).toContain("<museScore version=\"4.0\">");
+    expect(extracted).toContain("\n  <Score>");
   });
 
   it("renders SVG from stdin to stdout", () => {
