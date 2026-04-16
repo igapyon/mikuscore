@@ -61,6 +61,7 @@ Input/output contract:
 - for file output, `--to musicxml` writes `.mxl` when `--out` ends with `.mxl`
 - for file output, `--to musescore` writes `.mscz` when `--out` ends with `.mscz`
 - `stdin` / `stdout` remain text-only for `musicxml` and `musescore`
+- plain-text CLI decode for `musicxml` / `musescore` is kept on UTF-8 `TextDecoder` rather than Node-only `Buffer`, so the same entrypoint can be runtime-compiled in isolated bundle environments
 
 Examples:
 
