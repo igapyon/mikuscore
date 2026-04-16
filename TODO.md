@@ -2,7 +2,7 @@
 
 ## CLI
 
-- [ ] Document `convert`-first CLI naming consistently in all current-facing docs.
+- [x] Document `convert`-first CLI naming consistently in all current-facing docs.
   - Recheck `README.md`, `docs/spec/CLI_STEP1.md`, and future notes after the command surface stabilizes.
   - Keep `import/export` as internal facade wording only, not CLI wording.
 
@@ -26,17 +26,68 @@
   - Next checks:
     - decide whether CLI needs MIDI export options such as profile / metadata toggles
 
-- [ ] Implement Step 3 conversion/render pairs.
+- [x] Implement Step 3 conversion/render pairs.
   - Current first cut exists for:
     - `mikuscore convert --from musescore --to musicxml`
     - `mikuscore convert --from musicxml --to musescore`
     - `mikuscore render svg`
   - Next checks:
-    - add explicit CLI support decision/work for compressed `.mscz`
-    - decide whether CLI should handle compressed `.mscz` directly or remain `.mscx`-text only
+    - expand file I/O support so `--from musicxml` can read `.mxl`
+    - expand file I/O support so `--from musescore` can read `.mscz`
+    - expand file I/O support so `--to musicxml` can write `.mxl` when `--out` ends with `.mxl`
+    - expand file I/O support so `--to musescore` can write `.mscz` when `--out` ends with `.mscz`
+    - keep `stdin` / `stdout` text-only for `musicxml` and `musescore`; ZIP support should apply to file paths only
+    - move ZIP read/write behavior into reusable non-CLI helpers instead of adding ad hoc CLI-only logic
     - decide whether render options such as scale / page size should become CLI flags
 
-- [ ] Expand CLI tests together with each new conversion pair.
+- [x] Formalize CLI ZIP file I/O support for MusicXML and MuseScore.
+  - Goal:
+    - support `.mxl` and `.mscz` in CLI file input/output without changing the text-only `stdin` / `stdout` contract
+  - Work breakdown:
+    - [x] Freeze the CLI ZIP I/O contract in docs/TODO notes before code movement.
+      - ZIP behavior applies only when `--in` / `--out` are file paths.
+      - `stdin` / `stdout` stay text-only for `musicxml` and `musescore`.
+      - extension-based handling is limited to `.mxl` and `.mscz`, not generic format auto-detection.
+    - [x] Extract ZIP container primitives from UI-oriented code into reusable helpers.
+      - split reusable ZIP read/write logic away from browser/download-specific payload code
+      - keep helpers suitable for both app-side and CLI-side callers
+    - [x] Make ZIP import helpers explicitly reusable for CLI file reads.
+      - cover `.mxl -> MusicXML text`
+      - cover `.mscz -> MuseScore text`
+      - keep plain `.musicxml` / `.xml` / `.mscx` reads unchanged
+    - [x] Make ZIP export helpers explicitly reusable for CLI file writes.
+      - cover `MusicXML text -> .mxl bytes`
+      - cover `MuseScore text -> .mscz bytes`
+      - keep plain `.musicxml` / `.xml` / `.mscx` writes unchanged
+    - [x] Refactor the CLI script to route file input through extension-aware readers.
+      - `mikuscore convert --from musicxml --in score.mxl ...`
+      - `mikuscore convert --from musescore --in score.mscz ...`
+      - keep stdin path on the current text-only reader
+    - [x] Refactor the CLI script to route file output through extension-aware writers.
+      - `mikuscore convert --to musicxml --out score.mxl ...`
+      - `mikuscore convert --to musescore --out score.mscz ...`
+      - keep stdout path on the current text/binary writer behavior
+    - [x] Add focused facade/API coverage around reusable ZIP helpers if the seam moves into `src/ts`.
+      - avoid pushing ZIP branching back into `scripts/mikuscore-cli.mjs`
+      - keep conversion/business logic in reusable modules, not in the shell entrypoint
+    - [x] Add CLI regression tests for ZIP file input.
+      - `.mxl -> musicxml`
+      - `.mscz -> musicxml`
+      - representative invalid ZIP / missing entry failure cases if practical
+    - [x] Add CLI regression tests for ZIP file output.
+      - `musicxml -> .mxl`
+      - `musicxml -> .mscz`
+      - verify archive contents, not only file extension
+    - [ ] Add bounded roundtrip checks where they provide signal without making the suite too heavy.
+      - `musicxml -> .mxl -> musicxml`
+      - `musicxml -> .mscz -> musicxml`
+    - [x] Align current-facing docs after behavior lands.
+      - `docs/spec/CLI_STEP1.md`
+      - `docs/DEVELOPMENT.md`
+      - `docs/future/CLI_ROADMAP.md`
+      - `README.md`
+
+- [x] Expand CLI tests together with each new conversion pair.
   - Cover file input, `stdin`, `--out`, and representative failure cases.
   - Keep `stdout` for payload and `stderr` for diagnostics only.
 
@@ -61,11 +112,22 @@
     - `typecheck` and `build:dist` are relatively small, but `test:build:full` dominates total time
     - `tests/unit/playback-flow.spec.ts` currently shows a 5-second timeout failure in the full path
     - heavy suites currently include `playback-flow`, `lilypond-io`, and `midi-roundtrip-golden`
+    - `npm run test:all` also exposed a timeout in a heavy `musescore-io` roundtrip case under full-suite load
   - Next work:
     - profile `test:build:full` more deliberately and identify the longest suites/tests
     - decide whether more suites should move between `test:build`, `test:slow`, and `test:build:full`
     - investigate whether the `playback-flow` timeout is an actual regression, a flaky test, or a timeout-budget issue
     - consider Vitest worker/timeout settings only after the heavy-suite split is reasonably settled
+
+- [ ] Re-evaluate heavy `musescore-io` roundtrip tests for full-suite runtime stability.
+  - Current observation:
+    - `tests/unit/musescore-io.spec.ts` roundtrip case `keeps sample7 measure 3-4 pitch spelling and accidentals on roundtrip` passed in isolation at about 6.6s but timed out at 10s during `npm run test:all`
+    - the neighboring `sample7` roundtrip case also takes about 6.6s in isolation
+    - recent CLI ZIP coverage increases total suite load, which may make marginal `musescore-io` tests fail under parallel contention
+  - Next work:
+    - first check whether the assertion can be narrowed so the test keeps its signal with less end-to-end work
+    - consider moving the heaviest `sample7` roundtrip cases to a slower lane if they remain expensive
+    - only raise per-test timeout after checking whether the case can be made cheaper or better isolated
 
 ## ABC
 

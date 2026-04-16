@@ -56,7 +56,11 @@ Input/output contract:
 - omitted `--out` writes to `stdout`
 - text conversions use text input/output
 - MIDI input/output uses binary input/output
-- current MuseScore CLI scope is `.mscx`-style text, not compressed `.mscz`
+- for file input, `--from musicxml` accepts `.musicxml`, `.xml`, and `.mxl`
+- for file input, `--from musescore` accepts `.mscx` and `.mscz`
+- for file output, `--to musicxml` writes `.mxl` when `--out` ends with `.mxl`
+- for file output, `--to musescore` writes `.mscz` when `--out` ends with `.mscz`
+- `stdin` / `stdout` remain text-only for `musicxml` and `musescore`
 
 Examples:
 
@@ -68,6 +72,9 @@ Examples:
 - `npm run cli -- convert --from musicxml --to midi --in score.musicxml --out score.mid`
 - `npm run cli -- convert --from musescore --to musicxml --in score.mscx --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscx`
+- `npm run cli -- convert --from musicxml --to abc --in score.mxl --out score.abc`
+- `npm run cli -- convert --from musescore --to musicxml --in score.mscz --out score.mxl`
+- `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscz`
 - `npm run cli -- render svg --in score.musicxml --out score.svg`
 - `cat score.abc | npm run cli -- convert --from abc --to musicxml`
 

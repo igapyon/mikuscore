@@ -18,6 +18,14 @@ import {
 import { normalizeImportedMusicXmlText, parseMusicXmlDocument } from "./musicxml-io";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
 import { renderMusicXmlDomToSvg } from "./verovio-out";
+import {
+  bytesToArrayBuffer,
+  extractMusicXmlTextFromMxl,
+  extractTextFromZipByExtensions,
+  formatXmlWithTwoSpaceIndent,
+  makeMsczBytes,
+  makeMxlBytes,
+} from "./zip-io";
 
 export type CliResult =
   | {
@@ -31,6 +39,81 @@ export type CliResult =
     warnings: string[];
     diagnostics: string[];
   };
+
+const lowerFileName = (fileName: string | undefined): string => {
+  return String(fileName || "").trim().toLowerCase();
+};
+
+const textResult = (output: string): CliResult => ({
+  ok: true,
+  output,
+  warnings: [],
+  diagnostics: [],
+});
+
+const bytesResult = (output: Uint8Array): CliResult => ({
+  ok: true,
+  output,
+  warnings: [],
+  diagnostics: [],
+});
+
+const failureResult = (message: string): CliResult => ({
+  ok: false,
+  warnings: [],
+  diagnostics: [message],
+});
+
+export const decodeCliMusicXmlInput = async (inputBytes: Uint8Array, inputPath?: string): Promise<CliResult> => {
+  const name = lowerFileName(inputPath);
+  try {
+    if (name.endsWith(".mxl")) {
+      return textResult(await extractMusicXmlTextFromMxl(bytesToArrayBuffer(inputBytes)));
+    }
+    return textResult(Buffer.from(inputBytes).toString("utf8"));
+  } catch (error) {
+    return failureResult(`Failed to read MusicXML input: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+export const decodeCliMuseScoreInput = async (inputBytes: Uint8Array, inputPath?: string): Promise<CliResult> => {
+  const name = lowerFileName(inputPath);
+  try {
+    if (name.endsWith(".mscz")) {
+      return textResult(await extractTextFromZipByExtensions(
+        bytesToArrayBuffer(inputBytes),
+        [".mscx"]
+      ));
+    }
+    return textResult(Buffer.from(inputBytes).toString("utf8"));
+  } catch (error) {
+    return failureResult(`Failed to read MuseScore input: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+export const encodeCliMusicXmlOutput = async (xmlText: string, outputPath?: string): Promise<CliResult> => {
+  const name = lowerFileName(outputPath);
+  try {
+    if (name.endsWith(".mxl")) {
+      return bytesResult(await makeMxlBytes(xmlText));
+    }
+    return textResult(xmlText);
+  } catch (error) {
+    return failureResult(`Failed to encode MusicXML output: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+export const encodeCliMuseScoreOutput = async (musescoreText: string, outputPath?: string): Promise<CliResult> => {
+  const name = lowerFileName(outputPath);
+  try {
+    if (name.endsWith(".mscz")) {
+      return bytesResult(await makeMsczBytes(formatXmlWithTwoSpaceIndent(musescoreText)));
+    }
+    return textResult(musescoreText);
+  } catch (error) {
+    return failureResult(`Failed to encode MuseScore output: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
 
 export const importAbcToMusicXml = (abcText: string): CliResult => {
   try {
@@ -241,6 +324,16 @@ export const cliApi = {
   abc: {
     importToMusicXml: importAbcToMusicXml,
     exportFromMusicXml: exportMusicXmlToAbc,
+  },
+  fileIO: {
+    musicxml: {
+      decodeInput: decodeCliMusicXmlInput,
+      encodeOutput: encodeCliMusicXmlOutput,
+    },
+    musescore: {
+      decodeInput: decodeCliMuseScoreInput,
+      encodeOutput: encodeCliMuseScoreOutput,
+    },
   },
   midi: {
     importToMusicXml: importMidiToMusicXml,

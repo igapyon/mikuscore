@@ -78,6 +78,9 @@ Examples:
 - `npm run cli -- convert --from musicxml --to midi --in score.musicxml --out score.mid`
 - `npm run cli -- convert --from musescore --to musicxml --in score.mscx --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscx`
+- `npm run cli -- convert --from musicxml --to abc --in score.mxl --out score.abc`
+- `npm run cli -- convert --from musescore --to musicxml --in score.mscz --out score.mxl`
+- `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscz`
 - `npm run cli -- render svg --in score.musicxml --out score.svg`
 
 For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.

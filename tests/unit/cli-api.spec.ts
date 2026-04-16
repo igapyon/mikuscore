@@ -6,6 +6,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decodeCliMuseScoreInput,
+  decodeCliMusicXmlInput,
+  encodeCliMuseScoreOutput,
+  encodeCliMusicXmlOutput,
   exportMusicXmlToAbc,
   exportMusicXmlToMidi,
   exportMusicXmlToMuseScore,
@@ -13,6 +17,7 @@ import {
   importMidiToMusicXml,
   importMuseScoreToMusicXml,
 } from "../../src/ts/cli-api";
+import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../../src/ts/zip-io";
 
 describe("cli-api", () => {
   it("imports ABC to MusicXML", () => {
@@ -102,6 +107,52 @@ describe("cli-api", () => {
     expect(typeof result.output).toBe("string");
     expect(result.output).toContain("<museScore version=\"4.0\">");
     expect(result.output).toContain("<metaTag name=\"workTitle\">Muse export</metaTag>");
+  });
+
+  it("decodes .mxl input for CLI file reads", async () => {
+    const encoded = await encodeCliMusicXmlOutput(validMusicXml("CLI MXL"), "score.mxl");
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok || typeof encoded.output === "string") return;
+
+    const decoded = await decodeCliMusicXmlInput(encoded.output, "score.mxl");
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok || typeof decoded.output !== "string") return;
+    expect(decoded.output).toContain("<work-title>CLI MXL</work-title>");
+  });
+
+  it("encodes .mxl output for CLI file writes", async () => {
+    const result = await encodeCliMusicXmlOutput(validMusicXml("CLI MXL out"), "score.mxl");
+    expect(result.ok).toBe(true);
+    if (!result.ok || typeof result.output === "string") return;
+    const extracted = await extractMusicXmlTextFromMxl(result.output.buffer.slice(
+      result.output.byteOffset,
+      result.output.byteOffset + result.output.byteLength
+    ));
+    expect(extracted).toContain("<work-title>CLI MXL out</work-title>");
+  });
+
+  it("decodes .mscz input for CLI file reads", async () => {
+    const encoded = await encodeCliMuseScoreOutput(validMuseScoreXml("CLI MSCZ"), "score.mscz");
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok || typeof encoded.output === "string") return;
+
+    const decoded = await decodeCliMuseScoreInput(encoded.output, "score.mscz");
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok || typeof decoded.output !== "string") return;
+    expect(decoded.output).toContain("<museScore version=\"4.0\">");
+    expect(decoded.output).toContain("\n  <Score>");
+  });
+
+  it("encodes .mscz output for CLI file writes", async () => {
+    const result = await encodeCliMuseScoreOutput(validMuseScoreXml("CLI MSCZ out"), "score.mscz");
+    expect(result.ok).toBe(true);
+    if (!result.ok || typeof result.output === "string") return;
+    const extracted = await extractTextFromZipByExtensions(
+      result.output.buffer.slice(result.output.byteOffset, result.output.byteOffset + result.output.byteLength),
+      [".mscx"]
+    );
+    expect(extracted).toContain("<museScore version=\"4.0\">");
+    expect(extracted).toContain("\n  <Score>");
   });
 });
 
