@@ -184,6 +184,10 @@ Candidate optional JSON extension fields:
 
 These are optional first-cut extensions, not yet required minimum fields.
 
+Current first-cut implementation note:
+
+- one-shot `render svg --from abc` now emits `stages` in JSON diagnostics so tool callers can see the internal `ABC -> MusicXML -> SVG` path without changing the primary artifact contract
+
 ## "Kept vs Dropped" Direction
 
 One important future diagnostics goal is to make `mikuscore` more trustworthy as a converter by making conversion loss easier to notice.

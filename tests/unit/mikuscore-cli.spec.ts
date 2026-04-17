@@ -56,6 +56,7 @@ describe("mikuscore cli", () => {
     expect(stateHelp.stdout).toContain("validate-command");
     expect(stateHelp.stdout).toContain("apply-command");
     expect(stateHelp.stdout).toContain("diff");
+    expect(stateHelp.stdout).toContain("selector/anchor_selector");
     expect(stateHelp.stderr).toBe("");
   }, 10000);
 
@@ -194,6 +195,35 @@ describe("mikuscore cli", () => {
     expect(validation.affected_measure_numbers).toEqual(["1"]);
   });
 
+  it("validates one bounded MusicXML command via selector", () => {
+    const result = runCli(
+      [
+        "state",
+        "validate-command",
+        "--command",
+        JSON.stringify({
+          type: "change_to_pitch",
+          selector: {
+            part_id: "P1",
+            measure_number: "1",
+            measure_note_index: 1,
+            voice: "1",
+          },
+          pitch: { step: "G", octave: 4 },
+        }),
+      ],
+      {
+        input: validEditableMusicXml("Validate selector command"),
+      }
+    );
+
+    expect(result.status).toBe(0);
+    const validation = JSON.parse(result.stdout);
+    expect(validation.kind).toBe("musicxml_command_validation");
+    expect(validation.ok).toBe(true);
+    expect(validation.changed_node_ids).toEqual(["n1"]);
+  });
+
   it("inspects one measure for edit targeting", () => {
     const result = runCli(["state", "inspect-measure", "--measure", "1"], {
       input: validEditableMusicXml("Inspect measure"),
@@ -240,6 +270,64 @@ describe("mikuscore cli", () => {
     expect(result.stdout).toContain("<octave>4</octave>");
   });
 
+  it("applies one bounded MusicXML command via selector", () => {
+    const result = runCli(
+      [
+        "state",
+        "apply-command",
+        "--command",
+        JSON.stringify({
+          type: "change_to_pitch",
+          selector: {
+            part_id: "P1",
+            measure_number: "1",
+            measure_note_index: 1,
+            voice: "1",
+          },
+          pitch: { step: "A", octave: 4 },
+        }),
+      ],
+      {
+        input: validEditableMusicXml("Apply selector command"),
+      }
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<step>A</step>");
+    expect(result.stdout).toContain("<octave>4</octave>");
+  });
+
+  it("applies insert_note_after via anchor_selector", () => {
+    const result = runCli(
+      [
+        "state",
+        "apply-command",
+        "--command",
+        JSON.stringify({
+          type: "insert_note_after",
+          anchor_selector: {
+            part_id: "P1",
+            measure_number: "1",
+            measure_note_index: 1,
+            voice: "1",
+          },
+          note: {
+            duration: 1,
+            pitch: { step: "A", octave: 4 },
+          },
+        }),
+      ],
+      {
+        input: validInsertableMusicXml("Apply anchor selector command"),
+      }
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<step>A</step>");
+    expect(result.stdout).toContain("<step>D</step>");
+    expect(result.stdout.match(/<note>/g)?.length).toBe(4);
+  });
+
   it("diffs two canonical MusicXML states", () => {
     const beforePath = writeTempFile("before.musicxml", validEditableMusicXml("Before title"));
     const afterPath = writeTempFile("after.musicxml", validEditableMusicXml("After title").replace("<step>C</step>", "<step>G</step>"));
@@ -251,6 +339,15 @@ describe("mikuscore cli", () => {
     expect(diff.kind).toBe("musicxml_state_diff");
     expect(diff.changed).toBe(true);
     expect(diff.changed_fields).toContain("title");
+    expect(diff.changed_measure_numbers).toEqual(["1"]);
+    expect(diff.changed_measures).toEqual([
+      {
+        part_id: "P1",
+        measure_number: "1",
+        before_note_count: 4,
+        after_note_count: 4,
+      },
+    ]);
     expect(diff.before.title).toBe("Before title");
     expect(diff.after.title).toBe("After title");
   });
@@ -270,6 +367,32 @@ describe("mikuscore cli", () => {
     expect(diagnostics.exit_code).toBe(0);
     expect(diagnostics.output?.mode).toBeUndefined();
     expect(diagnostics.io.output).toEqual({ mode: "stdout" });
+    expect(diagnostics.stages).toBeUndefined();
+  });
+
+  it("writes stage-aware diagnostics for one-shot render json output", () => {
+    const inputPath = writeTempFile("score.abc", "X:1\nT:Stage diagnostics\nM:4/4\nL:1/4\nK:C\nC D E F|\n");
+    const result = runCli(["render", "svg", "--from", "abc", "--in", inputPath, "--diagnostics", "json"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<svg");
+    const diagnostics = JSON.parse(result.stderr);
+    expect(diagnostics.ok).toBe(true);
+    expect(diagnostics.command).toBe("render svg");
+    expect(diagnostics.stages).toEqual([
+      {
+        name: "abc_to_musicxml",
+        status: "success",
+        warning_count: 0,
+        error_count: 0,
+      },
+      {
+        name: "musicxml_to_svg",
+        status: "success",
+        warning_count: 0,
+        error_count: 0,
+      },
+    ]);
   });
 
   it("writes structured usage diagnostics for usage failures when requested", () => {
@@ -303,6 +426,25 @@ describe("mikuscore cli", () => {
     const missingCommandPayload = runCli(["state", "validate-command"], {
       input: validEditableMusicXml("Missing command"),
     });
+    const unresolvedSelector = runCli(
+      [
+        "state",
+        "validate-command",
+        "--command",
+        JSON.stringify({
+          type: "change_to_pitch",
+          selector: {
+            part_id: "P1",
+            measure_number: "99",
+            measure_note_index: 1,
+          },
+          pitch: { step: "G", octave: 4 },
+        }),
+      ],
+      {
+        input: validEditableMusicXml("Bad selector"),
+      }
+    );
     const missingMeasureOption = runCli(["state", "inspect-measure"], {
       input: validEditableMusicXml("Missing measure"),
     });
@@ -322,6 +464,8 @@ describe("mikuscore cli", () => {
     expect(unsupportedRenderSource.stderr).toContain("Unsupported render source");
     expect(missingCommandPayload.status).toBe(2);
     expect(missingCommandPayload.stderr).toContain("requires exactly one of --command");
+    expect(unresolvedSelector.status).toBe(1);
+    expect(unresolvedSelector.stderr).toContain("Failed to resolve CLI command selector");
     expect(missingMeasureOption.status).toBe(2);
     expect(missingMeasureOption.stderr).toContain("requires --measure");
     expect(missingDiffInputs.status).toBe(2);
@@ -402,6 +546,29 @@ function validEditableMusicXml(title: string) {
    <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
    <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
    <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
+  </measure>
+ </part>
+</score-partwise>`;
+}
+
+function validInsertableMusicXml(title: string) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+ <work><work-title>${title}</work-title></work>
+ <part-list>
+  <score-part id="P1"><part-name>Music</part-name></score-part>
+ </part-list>
+ <part id="P1">
+  <measure number="1">
+   <attributes>
+    <divisions>1</divisions>
+    <key><fifths>0</fifths></key>
+    <time><beats>4</beats><beat-type>4</beat-type></time>
+    <clef><sign>G</sign><line>2</line></clef>
+   </attributes>
+   <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
+   <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
+   <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>
   </measure>
  </part>
 </score-partwise>`;

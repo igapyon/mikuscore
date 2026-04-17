@@ -91,6 +91,8 @@ Examples:
 - `npm run cli -- state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml`
 - `npm run cli -- state diff --before score.before.musicxml --after score.after.musicxml`
 
+For `state validate-command` / `state apply-command`, command payloads may target notes either by `targetNodeId` / `anchorNodeId` or by `selector` / `anchor_selector` derived from `state inspect-measure`.
+
 For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.
 
 ## Screenshots

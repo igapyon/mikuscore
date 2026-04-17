@@ -71,6 +71,170 @@ const decodeUtf8Text = (bytes: Uint8Array): string => {
   return new TextDecoder("utf-8").decode(bytes);
 };
 
+type MeasureNoteSelector = {
+  part_id?: string | null;
+  measure_number?: string | null;
+  measure_note_index?: number | null;
+  voice?: string | null;
+  voice_note_index?: number | null;
+};
+
+type IndexedMeasureNote = {
+  nodeId: string;
+  selector: {
+    part_id: string | null;
+    measure_number: string;
+    measure_note_index: number;
+    voice: string | null;
+    voice_note_index: number;
+  };
+};
+
+type CliCommandNormalizationResult =
+  | {
+    ok: true;
+    command: CoreCommand;
+  }
+  | {
+    ok: false;
+    message: string;
+  };
+
+const buildIndexedMeasureNotes = (xmlText: string): IndexedMeasureNote[] => {
+  const doc = parseCoreXml(xmlText);
+  const nodeToId = new WeakMap();
+  const idToNode = new Map();
+  let sequence = 0;
+  reindexNodeIds(doc, nodeToId, idToNode, () => {
+    sequence += 1;
+    return `n${sequence}`;
+  });
+
+  return Array.from(doc.querySelectorAll("score-partwise > part > measure")).flatMap((measure) => {
+    const part = measure.parentElement;
+    const partId = part?.getAttribute("id")?.trim() ?? null;
+    const measureNumber = measure.getAttribute("number")?.trim() ?? "";
+    const voiceNoteCounts = new Map<string, number>();
+    return Array.from(measure.querySelectorAll(":scope > note")).flatMap((note, noteIndex) => {
+      const nodeId = nodeToId.get(note);
+      if (!nodeId) return [];
+      const voice = getVoiceText(note);
+      const voiceKey = voice ?? "__none__";
+      const nextVoiceNoteIndex = (voiceNoteCounts.get(voiceKey) ?? 0) + 1;
+      voiceNoteCounts.set(voiceKey, nextVoiceNoteIndex);
+      return [{
+        nodeId,
+        selector: {
+          part_id: partId,
+          measure_number: measureNumber,
+          measure_note_index: noteIndex + 1,
+          voice,
+          voice_note_index: nextVoiceNoteIndex,
+        },
+      }];
+    });
+  });
+};
+
+const resolveMeasureNoteSelector = (
+  selector: MeasureNoteSelector | undefined,
+  indexedNotes: IndexedMeasureNote[],
+  selectorName: string
+): { ok: true; nodeId: string; voice?: string | null } | { ok: false; message: string } => {
+  if (!selector || typeof selector !== "object") {
+    return {
+      ok: false,
+      message: `${selectorName} must be an object when provided.`,
+    };
+  }
+
+  const normalized = {
+    part_id: selector.part_id == null ? undefined : String(selector.part_id),
+    measure_number: selector.measure_number == null ? undefined : String(selector.measure_number),
+    measure_note_index: Number.isInteger(selector.measure_note_index) ? Number(selector.measure_note_index) : undefined,
+    voice: selector.voice == null ? undefined : String(selector.voice),
+    voice_note_index: Number.isInteger(selector.voice_note_index) ? Number(selector.voice_note_index) : undefined,
+  };
+
+  const activeKeys = Object.entries(normalized).filter(([, value]) => value !== undefined);
+  if (activeKeys.length === 0) {
+    return {
+      ok: false,
+      message: `${selectorName} must include at least one selector field.`,
+    };
+  }
+
+  const matches = indexedNotes.filter((note) => {
+    return activeKeys.every(([key, value]) => note.selector[key as keyof typeof note.selector] === value);
+  });
+
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      message: `${selectorName} did not match any note in the current MusicXML state.`,
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      message: `${selectorName} matched multiple notes; add more selector fields to disambiguate.`,
+    };
+  }
+
+  return {
+    ok: true,
+    nodeId: matches[0].nodeId,
+    voice: matches[0].selector.voice,
+  };
+};
+
+const normalizeCliCommandSelectors = (xmlText: string, command: CoreCommand): CliCommandNormalizationResult => {
+  const commandObject = command as Record<string, unknown>;
+  const indexedNotes = buildIndexedMeasureNotes(xmlText);
+  const nextCommand = { ...commandObject };
+
+  if ("selector" in nextCommand && !("targetNodeId" in nextCommand)) {
+    const resolved = resolveMeasureNoteSelector(nextCommand.selector as MeasureNoteSelector | undefined, indexedNotes, "selector");
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        message: `Failed to resolve CLI command selector: ${resolved.message}`,
+      };
+    }
+    nextCommand.targetNodeId = resolved.nodeId;
+    if (!("voice" in nextCommand) && resolved.voice != null) {
+      nextCommand.voice = resolved.voice;
+    }
+  }
+
+  if ("anchor_selector" in nextCommand && !("anchorNodeId" in nextCommand)) {
+    const resolved = resolveMeasureNoteSelector(
+      nextCommand.anchor_selector as MeasureNoteSelector | undefined,
+      indexedNotes,
+      "anchor_selector"
+    );
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        message: `Failed to resolve CLI command selector: ${resolved.message}`,
+      };
+    }
+    nextCommand.anchorNodeId = resolved.nodeId;
+    if (!("voice" in nextCommand) && resolved.voice != null) {
+      nextCommand.voice = resolved.voice;
+    }
+  }
+
+  delete nextCommand.selector;
+  delete nextCommand.anchor_selector;
+
+  return {
+    ok: true,
+    command: nextCommand as CoreCommand,
+  };
+};
+
 export const decodeCliMusicXmlInput = async (inputBytes: Uint8Array, inputPath?: string): Promise<CliResult> => {
   const name = lowerFileName(inputPath);
   try {
@@ -382,9 +546,11 @@ export const summarizeMusicXmlState = (xmlText: string): CliResult => {
 
 export const validateMusicXmlCommand = (xmlText: string, command: CoreCommand): CliResult => {
   try {
+    const normalized = normalizeCliCommandSelectors(xmlText, command);
+    if (!normalized.ok) return failureResult(normalized.message);
     const core = new ScoreCore();
     core.load(xmlText);
-    const result = core.dispatch(command);
+    const result = core.dispatch(normalized.command);
     return {
       ok: true,
       output: `${JSON.stringify(
@@ -414,9 +580,11 @@ export const validateMusicXmlCommand = (xmlText: string, command: CoreCommand): 
 
 export const applyMusicXmlCommand = (xmlText: string, command: CoreCommand): CliResult => {
   try {
+    const normalized = normalizeCliCommandSelectors(xmlText, command);
+    if (!normalized.ok) return failureResult(normalized.message);
     const core = new ScoreCore();
     core.load(xmlText);
-    const result = core.dispatch(command);
+    const result = core.dispatch(normalized.command);
     if (!result.ok) {
       return {
         ok: true,
@@ -463,43 +631,36 @@ export const applyMusicXmlCommand = (xmlText: string, command: CoreCommand): Cli
 
 export const inspectMusicXmlMeasure = (xmlText: string, measureNumber: string): CliResult => {
   try {
+    const indexedNotes = buildIndexedMeasureNotes(xmlText);
     const doc = parseCoreXml(xmlText);
-    const nodeToId = new WeakMap();
-    const idToNode = new Map();
-    let sequence = 0;
-    reindexNodeIds(doc, nodeToId, idToNode, () => {
-      sequence += 1;
-      return `n${sequence}`;
-    });
-
-    const measures = Array.from(doc.querySelectorAll("score-partwise > part > measure"))
+    const matchingMeasures = Array.from(doc.querySelectorAll("score-partwise > part > measure"))
       .filter((measure) => (measure.getAttribute("number")?.trim() ?? "") === measureNumber);
 
     const summary = {
       kind: "musicxml_measure_inspection",
       measure_number: measureNumber,
-      measures: measures.map((measure) => {
+      measures: matchingMeasures.map((measure) => {
         const part = measure.parentElement;
         const partId = part?.getAttribute("id")?.trim() ?? null;
-        const voiceNoteCounts = new Map<string, number>();
         const notes = Array.from(measure.querySelectorAll(":scope > note")).map((note, noteIndex) => {
-          const nodeId = nodeToId.get(note) ?? null;
+          const indexed = indexedNotes.find((item) =>
+            item.selector.part_id === partId &&
+            item.selector.measure_number === measureNumber &&
+            item.selector.measure_note_index === noteIndex + 1
+          );
           const voice = getVoiceText(note);
           const step = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? null;
           const octaveText = note.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? null;
           const alterText = note.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? null;
           const alter = alterText === null ? null : Number(alterText);
-          const voiceKey = voice ?? "__none__";
-          const nextVoiceNoteIndex = (voiceNoteCounts.get(voiceKey) ?? 0) + 1;
-          voiceNoteCounts.set(voiceKey, nextVoiceNoteIndex);
           return {
-            node_id: nodeId,
-            selector: {
+            node_id: indexed?.nodeId ?? null,
+            selector: indexed?.selector ?? {
               part_id: partId,
               measure_number: measureNumber,
               measure_note_index: noteIndex + 1,
               voice,
-              voice_note_index: nextVoiceNoteIndex,
+              voice_note_index: null,
             },
             voice,
             duration: getDurationValue(note),
@@ -558,22 +719,81 @@ const buildMusicXmlStateSummaryObject = (doc: Document) => {
   };
 };
 
+const buildMeasureDiffSignatures = (doc: Document) => {
+  return Array.from(doc.querySelectorAll("score-partwise > part > measure")).map((measure) => {
+    const partId = measure.parentElement?.getAttribute("id")?.trim() ?? null;
+    const measureNumber = measure.getAttribute("number")?.trim() ?? "";
+    const noteSummary = Array.from(measure.querySelectorAll(":scope > note")).map((note) => {
+      const voice = getVoiceText(note);
+      const duration = getDurationValue(note);
+      const isRest = note.querySelector(":scope > rest") !== null;
+      const step = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? null;
+      const octave = note.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? null;
+      const alter = note.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? null;
+      return {
+        voice,
+        duration,
+        is_rest: isRest,
+        pitch: isRest || !step || !octave
+          ? null
+          : {
+            step,
+            alter: alter == null ? null : Number(alter),
+            octave: Number(octave),
+          },
+      };
+    });
+    return {
+      part_id: partId,
+      measure_number: measureNumber,
+      note_count: noteSummary.length,
+      signature: JSON.stringify(noteSummary),
+    };
+  });
+};
+
 export const diffMusicXmlState = (beforeXml: string, afterXml: string): CliResult => {
   try {
     const beforeDoc = parseCoreXml(beforeXml);
     const afterDoc = parseCoreXml(afterXml);
     const beforeSummary = buildMusicXmlStateSummaryObject(beforeDoc);
     const afterSummary = buildMusicXmlStateSummaryObject(afterDoc);
+    const beforeMeasures = buildMeasureDiffSignatures(beforeDoc);
+    const afterMeasures = buildMeasureDiffSignatures(afterDoc);
 
     const changedFields = Object.keys(beforeSummary).filter((key) => {
       return JSON.stringify(beforeSummary[key as keyof typeof beforeSummary]) !==
         JSON.stringify(afterSummary[key as keyof typeof afterSummary]);
     });
 
+    const beforeMeasureMap = new Map(beforeMeasures.map((item) => [`${item.part_id ?? ""}:${item.measure_number}`, item]));
+    const afterMeasureMap = new Map(afterMeasures.map((item) => [`${item.part_id ?? ""}:${item.measure_number}`, item]));
+    const changedMeasureKeys = Array.from(new Set([...beforeMeasureMap.keys(), ...afterMeasureMap.keys()])).filter((key) => {
+      const beforeItem = beforeMeasureMap.get(key);
+      const afterItem = afterMeasureMap.get(key);
+      if (!beforeItem || !afterItem) return true;
+      return beforeItem.signature !== afterItem.signature;
+    });
+
     const diff = {
       kind: "musicxml_state_diff",
-      changed: changedFields.length > 0,
+      changed: changedFields.length > 0 || changedMeasureKeys.length > 0,
       changed_fields: changedFields,
+      changed_measure_numbers: changedMeasureKeys
+        .map((key) => afterMeasureMap.get(key) ?? beforeMeasureMap.get(key))
+        .filter((item): item is NonNullable<typeof item> => item != null)
+        .map((item) => item.measure_number),
+      changed_measures: changedMeasureKeys
+        .map((key) => {
+          const beforeItem = beforeMeasureMap.get(key);
+          const afterItem = afterMeasureMap.get(key);
+          return {
+            part_id: afterItem?.part_id ?? beforeItem?.part_id ?? null,
+            measure_number: afterItem?.measure_number ?? beforeItem?.measure_number ?? "",
+            before_note_count: beforeItem?.note_count ?? 0,
+            after_note_count: afterItem?.note_count ?? 0,
+          };
+        }),
       before: beforeSummary,
       after: afterSummary,
     };

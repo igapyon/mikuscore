@@ -143,6 +143,7 @@ Behavior:
 - MUST NOT invent a separate whole-measure rewrite contract
 - MUST return success or failure with diagnostics
 - MUST keep mutation semantics aligned with `docs/spec/COMMAND_CATALOG.md`
+- current CLI implementation may also accept selector-style targeting hints and resolve them to bounded core node ids before dispatch
 
 Candidate command payloads include:
 
@@ -169,6 +170,7 @@ Behavior:
 - MUST emit the next canonical `MusicXML` state on success
 - MUST fail atomically when command execution fails
 - MUST preserve the existing save/serialization policy defined in core specs
+- current CLI implementation may also accept selector-style targeting hints and resolve them to bounded core node ids before dispatch
 
 ### 5. `state diff`
 
@@ -185,7 +187,7 @@ Behavior:
 
 - SHOULD produce a compact difference summary rather than a raw textual XML diff
 - SHOULD focus on user-relevant score changes when practical
-- MAY remain intentionally shallow in first cut if a deeper music-aware diff is not yet stable
+- first cut may stay compact, but should still try to surface changed measure hints when they are cheap to derive
 
 ## Relationship To Core Command Catalog
 
