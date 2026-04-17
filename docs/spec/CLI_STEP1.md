@@ -7,8 +7,14 @@ This document defines the first-cut CLI scope for `mikuscore`.
 Scope note:
 
 - This file defines only the initial CLI contract.
+- Current implementation has already grown beyond this initial contract.
 - It does not define future AI JSON or patch-based workflows.
 - It does not replace the canonical MusicXML-centered architecture.
+
+For current repository-facing behavior, also see:
+
+- `README.md`
+- `docs/DEVELOPMENT.md`
 
 ## Positioning
 
@@ -238,3 +244,11 @@ If the CLI grows later, it SHOULD still preserve the same principles:
 - narrowly scoped command families
 
 Any later expansion beyond `ABC` SHOULD be justified by concrete workflow need, not by symmetry with another project.
+
+Current future-facing first-cut notes are tracked separately in:
+
+- `docs/spec/CLI_TAXONOMY_FIRSTCUT.md`
+- `docs/spec/CLI_RENDER_FIRSTCUT.md`
+- `docs/spec/CLI_STATE_FIRSTCUT.md`
+- `docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md`
+- `docs/spec/CLI_HELP_FIRSTCUT.md`
