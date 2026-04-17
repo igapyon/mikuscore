@@ -91,7 +91,7 @@
   - Cover file input, `stdin`, `--out`, and representative failure cases.
   - Keep `stdout` for payload and `stderr` for diagnostics only.
 
-- [ ] Record a future-facing CLI design note for AI-mediated workflows.
+- [x] Record a future-facing CLI design note for AI-mediated workflows.
   - Motivation:
     - `mikuproject` shows that a CLI can be designed simultaneously for human operators, Agent Skills, and the downstream generative-AI interaction layer
     - the valuable lesson is not only "add AI commands", but "design the CLI contract so each layer can use it safely"
@@ -105,7 +105,7 @@
     - `docs/future/CLI_ROADMAP.md`
     - `docs/future/AI_JSON_INTERFACE.md`
 
-- [ ] Rebuild CLI taxonomy around `convert` / `render` / `state` while compatibility cost is still low.
+- [x] Rebuild CLI taxonomy around `convert` / `render` / `state` while compatibility cost is still low.
   - Rationale:
     - current real-world CLI usage appears low enough that command-surface reconstruction is still feasible
     - `mikuproject` suggests that clearer top-level responsibility split can scale well
@@ -123,7 +123,7 @@
     - define help-text shape for top-level `convert` / `render` / `state`
     - decide migration wording from the current `convert`-first CLI to the rebuilt taxonomy
 
-- [ ] Add a user-facing one-shot `ABC -> SVG` CLI flow without breaking the internal `MusicXML`-first pipeline.
+- [x] Add a user-facing one-shot `ABC -> SVG` CLI flow without breaking the internal `MusicXML`-first pipeline.
   - Intended shape:
     - external UX should allow a direct score-rendering path for ABC input
     - internal flow should still remain `ABC -> MusicXML -> SVG`
@@ -132,7 +132,7 @@
     - whether `render` should accept only selected non-MusicXML inputs or remain narrow
     - how diagnostics should describe both the conversion and render stages when one-shot mode is used
 
-- [ ] Improve CLI failure handling so uncaught runtime errors stop leaking as raw JavaScript failures.
+- [x] Improve CLI failure handling so uncaught runtime errors stop leaking as raw JavaScript failures.
   - Goal:
     - turn current unhandled exception behavior into stable CLI-facing usage/processing failures
   - First slices:
@@ -140,7 +140,7 @@
     - ensure stderr messages are human-readable by default
     - ensure `--diagnostics json` can still describe failure cases structurally
 
-- [ ] Define a first-cut CLI diagnostics contract modeled after the successful direction proven in `mikuproject`.
+- [x] Define a first-cut CLI diagnostics contract modeled after the successful direction proven in `mikuproject`.
   - Scope:
     - `convert`
     - `render`
@@ -151,7 +151,7 @@
     - define whether multi-stage commands such as one-shot `ABC -> SVG` should report stage summaries
     - decide how much "kept vs dropped" conversion information can be surfaced briefly without becoming noisy
 
-- [ ] Align future `state` CLI naming with the existing core command catalog instead of inventing a second edit model.
+- [x] Align future `state` CLI naming with the existing core command catalog instead of inventing a second edit model.
   - Preserve:
     - existing bounded core commands such as `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, and `split_note`
   - Prefer:
@@ -161,7 +161,7 @@
     - exposing each core command as its own top-level CLI verb
     - introducing a whole-measure rewrite contract when a bounded command contract is sufficient
 
-- [ ] Define the `state` first cut around canonical `MusicXML` inspection and bounded mutation.
+- [x] Define the `state` first cut around canonical `MusicXML` inspection and bounded mutation.
   - Candidate initial commands:
     - `state summarize`
     - `state inspect-measure`
@@ -173,7 +173,7 @@
     - what minimum inspect output is needed to support note-targeted edits reliably
     - whether tempo-level light edits should enter through the same bounded command path
 
-- [ ] Preserve "small edit" work as `MusicXML`-centered bounded mutation, not as a separate editing product line.
+- [x] Preserve "small edit" work as `MusicXML`-centered bounded mutation, not as a separate editing product line.
   - Scope:
     - pitch change
     - duration change
@@ -182,7 +182,7 @@
   - Editorial note:
     - treat "small edit feature", "`MusicXML`-centered light edit", and "diff-based edit" as the same theme seen from different layers
 
-- [ ] Explicitly keep some user suggestions out of near-term CLI scope.
+- [x] Explicitly keep some user suggestions out of near-term CLI scope.
   - Defer or omit for now:
     - batch conversion in CLI itself
     - lyrics/melody alignment diagnostics

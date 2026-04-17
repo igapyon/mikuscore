@@ -121,6 +121,10 @@ const HELP_TEXT = {
     "  apply-command   Apply one bounded command and emit the next canonical MusicXML state",
     "  diff   Emit a compact JSON summary of differences between two canonical MusicXML states",
     "",
+    "Command payload note:",
+    "  state validate-command/apply-command accept core command JSON.",
+    "  Targeting may use targetNodeId/anchorNodeId directly or selector/anchor_selector from inspect-measure output.",
+    "",
     "Options:",
     "  --diagnostics text|json  Select diagnostics format",
     "  --help                   Show help",
@@ -273,12 +277,7 @@ async function runCommand(command, options, api) {
     }
 
     if (from === "musicxml" && to === "abc") {
-      const inputBytes = await readBinaryInput(options.in);
-      const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-      if (!decoded.ok || typeof decoded.output !== "string") {
-        throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-      }
-      const inputText = decoded.output;
+      const inputText = await readMusicXmlInputText(options.in, api);
       const result = api.abc.exportFromMusicXml(inputText);
       if (!result.ok) {
         throw new CliCommandFailure(result, "MusicXML to ABC conversion failed.");
@@ -296,12 +295,7 @@ async function runCommand(command, options, api) {
     }
 
     if (from === "musicxml" && to === "midi") {
-      const inputBytes = await readBinaryInput(options.in);
-      const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-      if (!decoded.ok || typeof decoded.output !== "string") {
-        throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-      }
-      const inputText = decoded.output;
+      const inputText = await readMusicXmlInputText(options.in, api);
       const result = api.midi.exportFromMusicXml(inputText);
       if (!result.ok) {
         throw new CliCommandFailure(result, "MusicXML to MIDI conversion failed.");
@@ -323,12 +317,7 @@ async function runCommand(command, options, api) {
     }
 
     if (from === "musicxml" && to === "musescore") {
-      const inputBytes = await readBinaryInput(options.in);
-      const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-      if (!decoded.ok || typeof decoded.output !== "string") {
-        throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-      }
-      const inputText = decoded.output;
+      const inputText = await readMusicXmlInputText(options.in, api);
       const result = api.musescore.exportFromMusicXml(inputText);
       if (!result.ok) {
         throw new CliCommandFailure(result, "MusicXML to MuseScore conversion failed.");
@@ -359,6 +348,20 @@ async function runCommand(command, options, api) {
         ...rendered,
         warnings: [...imported.warnings, ...rendered.warnings],
         diagnostics: [...imported.diagnostics, ...rendered.diagnostics],
+        stages: [
+          {
+            name: "abc_to_musicxml",
+            status: imported.diagnostics.length > 0 ? "warning" : "success",
+            warning_count: imported.warnings.length,
+            error_count: imported.diagnostics.length,
+          },
+          {
+            name: "musicxml_to_svg",
+            status: rendered.diagnostics.length > 0 ? "warning" : "success",
+            warning_count: rendered.warnings.length,
+            error_count: rendered.diagnostics.length,
+          },
+        ],
       };
     }
 
@@ -368,12 +371,7 @@ async function runCommand(command, options, api) {
       });
     }
 
-    const inputBytes = await readBinaryInput(options.in);
-    const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-    if (!decoded.ok || typeof decoded.output !== "string") {
-      throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-    }
-    const inputText = decoded.output;
+    const inputText = await readMusicXmlInputText(options.in, api);
     const result = await api.render.svgFromMusicXml(inputText);
     if (!result.ok) {
       throw new CliCommandFailure(result, "SVG render failed.");
@@ -382,16 +380,12 @@ async function runCommand(command, options, api) {
   }
 
   if (isCommand(command, ["state", "summarize"])) {
-    const inputBytes = await readBinaryInput(options.in);
-    const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-    if (!decoded.ok || typeof decoded.output !== "string") {
-      throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-    }
-    const result = api.state.summarizeFromMusicXml(decoded.output);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "Failed to summarize MusicXML state.");
-    }
-    return result;
+    return runStateMusicXmlCommand(
+      options.in,
+      api,
+      (inputText) => api.state.summarizeFromMusicXml(inputText),
+      "Failed to summarize MusicXML state."
+    );
   }
 
   if (isCommand(command, ["state", "inspect-measure"])) {
@@ -399,44 +393,32 @@ async function runCommand(command, options, api) {
     if (!measure) {
       throw new CliUsageError("state inspect-measure requires --measure <number>.", "missing_measure_option");
     }
-    const inputBytes = await readBinaryInput(options.in);
-    const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-    if (!decoded.ok || typeof decoded.output !== "string") {
-      throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-    }
-    const result = api.state.inspectMeasureFromMusicXml(decoded.output, measure);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "Failed to inspect MusicXML measure.");
-    }
-    return result;
+    return runStateMusicXmlCommand(
+      options.in,
+      api,
+      (inputText) => api.state.inspectMeasureFromMusicXml(inputText, measure),
+      "Failed to inspect MusicXML measure."
+    );
   }
 
   if (isCommand(command, ["state", "validate-command"])) {
-    const inputBytes = await readBinaryInput(options.in);
-    const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-    if (!decoded.ok || typeof decoded.output !== "string") {
-      throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-    }
     const commandPayload = await readCommandPayload(options);
-    const result = api.state.validateCommandFromMusicXml(decoded.output, commandPayload);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "Failed to validate MusicXML command.");
-    }
-    return result;
+    return runStateMusicXmlCommand(
+      options.in,
+      api,
+      (inputText) => api.state.validateCommandFromMusicXml(inputText, commandPayload),
+      "Failed to validate MusicXML command."
+    );
   }
 
   if (isCommand(command, ["state", "apply-command"])) {
-    const inputBytes = await readBinaryInput(options.in);
-    const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, options.in);
-    if (!decoded.ok || typeof decoded.output !== "string") {
-      throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
-    }
     const commandPayload = await readCommandPayload(options);
-    const result = api.state.applyCommandFromMusicXml(decoded.output, commandPayload);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "Failed to apply MusicXML command.");
-    }
-    return result;
+    return runStateMusicXmlCommand(
+      options.in,
+      api,
+      (inputText) => api.state.applyCommandFromMusicXml(inputText, commandPayload),
+      "Failed to apply MusicXML command."
+    );
   }
 
   if (isCommand(command, ["state", "diff"])) {
@@ -461,6 +443,24 @@ async function runCommand(command, options, api) {
   }
 
   throw new CliUsageError(`Unsupported command: ${command.join(" ")}`, "unsupported_command");
+}
+
+async function readMusicXmlInputText(inputPath, api) {
+  const inputBytes = await readBinaryInput(inputPath);
+  const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, inputPath);
+  if (!decoded.ok || typeof decoded.output !== "string") {
+    throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
+  }
+  return decoded.output;
+}
+
+async function runStateMusicXmlCommand(inputPath, api, run, fallbackMessage) {
+  const inputText = await readMusicXmlInputText(inputPath, api);
+  const result = await run(inputText);
+  if (!result.ok) {
+    throw new CliCommandFailure(result, fallbackMessage);
+  }
+  return result;
 }
 
 async function encodeOutputForTarget(result, outPath, api, to) {
@@ -558,7 +558,7 @@ function buildSuccessDiagnostics(command, options, result) {
   const warnings = Array.isArray(result.warnings) ? result.warnings : [];
   const errors = Array.isArray(result.diagnostics) ? result.diagnostics : [];
   const status = errors.length > 0 ? "error" : warnings.length > 0 ? "warning" : "success";
-  return {
+  const diagnostics = {
     ok: result.ok && errors.length === 0,
     diagnostics_version: DIAGNOSTICS_VERSION,
     command: command.join(" "),
@@ -571,6 +571,10 @@ function buildSuccessDiagnostics(command, options, result) {
     warnings,
     errors,
   };
+  if (Array.isArray(result.stages) && result.stages.length > 0) {
+    diagnostics.stages = result.stages;
+  }
+  return diagnostics;
 }
 
 function buildErrorDiagnostics(argv, error, exitCode) {

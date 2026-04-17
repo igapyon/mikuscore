@@ -129,6 +129,10 @@ Examples:
   mikuscore state validate-command --in score.musicxml --command-file command.json
   mikuscore state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml
   mikuscore state diff --before score.before.musicxml --after score.after.musicxml
+
+Notes:
+  Command payloads may target notes either by targetNodeId/anchorNodeId
+  or by selector/anchor_selector values derived from state inspect-measure.
 ```
 
 ## Help Tone

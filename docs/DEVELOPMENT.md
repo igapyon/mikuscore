@@ -70,6 +70,7 @@ Input/output contract:
 - `stdin` / `stdout` remain text-only for `musicxml` and `musescore`
 - `render svg` also accepts `--from abc` as a one-shot path while still routing internally through canonical `MusicXML`
 - `state` commands operate on canonical `MusicXML`
+- `state validate-command` / `state apply-command` accept command payloads that target notes either by `targetNodeId` / `anchorNodeId` or by `selector` / `anchor_selector`
 - `--diagnostics text|json` is available across current command families
 - plain-text CLI decode for `musicxml` / `musescore` is kept on UTF-8 `TextDecoder` rather than Node-only `Buffer`, so the same entrypoint can be runtime-compiled in isolated bundle environments
 - usage failures now use a distinct CLI error path from processing failures
@@ -96,6 +97,7 @@ Examples:
 - `npm run cli -- state validate-command --in score.musicxml --command-file command.json`
 - `npm run cli -- state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml`
 - `npm run cli -- state diff --before score.before.musicxml --after score.after.musicxml`
+- `state inspect-measure` output can be fed back into `state validate-command` / `state apply-command` via `selector` / `anchor_selector` payload fields
 - `cat score.abc | npm run cli -- convert --from abc --to musicxml`
 
 Observed sibling-project direction:
