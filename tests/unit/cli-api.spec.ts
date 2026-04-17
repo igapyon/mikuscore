@@ -154,6 +154,37 @@ describe("cli-api", () => {
     expect(extracted).toContain("<museScore version=\"4.0\">");
     expect(extracted).toContain("\n  <Score>");
   });
+
+  it("roundtrips MusicXML through .mxl helper I/O", async () => {
+    const encoded = await encodeCliMusicXmlOutput(validMusicXml("Roundtrip MXL"), "score.mxl");
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok || typeof encoded.output === "string") return;
+
+    const decoded = await decodeCliMusicXmlInput(encoded.output, "score.mxl");
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok || typeof decoded.output !== "string") return;
+    expect(decoded.output).toContain("<work-title>Roundtrip MXL</work-title>");
+  });
+
+  it("roundtrips MusicXML through .mscz helper I/O via MuseScore facade", async () => {
+    const exported = exportMusicXmlToMuseScore(validMusicXml("Roundtrip MSCZ"));
+    expect(exported.ok).toBe(true);
+    if (!exported.ok || typeof exported.output !== "string") return;
+
+    const encoded = await encodeCliMuseScoreOutput(exported.output, "score.mscz");
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok || typeof encoded.output === "string") return;
+
+    const decoded = await decodeCliMuseScoreInput(encoded.output, "score.mscz");
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok || typeof decoded.output !== "string") return;
+
+    const imported = importMuseScoreToMusicXml(decoded.output);
+    expect(imported.ok).toBe(true);
+    if (!imported.ok || typeof imported.output !== "string") return;
+    expect(imported.output).toContain("<score-partwise");
+    expect(imported.output).toContain("<work-title>Roundtrip MSCZ</work-title>");
+  });
 });
 
 function buildSimpleMidi() {

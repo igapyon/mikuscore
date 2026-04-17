@@ -445,6 +445,39 @@ describe("mikuscore cli", () => {
         input: validEditableMusicXml("Bad selector"),
       }
     );
+    const ambiguousSelector = runCli(
+      [
+        "state",
+        "validate-command",
+        "--command",
+        JSON.stringify({
+          type: "change_to_pitch",
+          selector: {
+            part_id: "P1",
+            measure_number: "1",
+          },
+          pitch: { step: "G", octave: 4 },
+        }),
+      ],
+      {
+        input: validEditableMusicXml("Ambiguous selector"),
+      }
+    );
+    const invalidSelectorPayload = runCli(
+      [
+        "state",
+        "validate-command",
+        "--command",
+        JSON.stringify({
+          type: "change_to_pitch",
+          selector: "n1",
+          pitch: { step: "G", octave: 4 },
+        }),
+      ],
+      {
+        input: validEditableMusicXml("Invalid selector payload"),
+      }
+    );
     const missingMeasureOption = runCli(["state", "inspect-measure"], {
       input: validEditableMusicXml("Missing measure"),
     });
@@ -466,6 +499,10 @@ describe("mikuscore cli", () => {
     expect(missingCommandPayload.stderr).toContain("requires exactly one of --command");
     expect(unresolvedSelector.status).toBe(1);
     expect(unresolvedSelector.stderr).toContain("Failed to resolve CLI command selector");
+    expect(ambiguousSelector.status).toBe(1);
+    expect(ambiguousSelector.stderr).toContain("matched multiple notes");
+    expect(invalidSelectorPayload.status).toBe(1);
+    expect(invalidSelectorPayload.stderr).toContain("selector must be an object");
     expect(missingMeasureOption.status).toBe(2);
     expect(missingMeasureOption.stderr).toContain("requires --measure");
     expect(missingDiffInputs.status).toBe(2);
