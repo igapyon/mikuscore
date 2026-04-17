@@ -110,19 +110,20 @@ const buildIndexedMeasureNotes = (xmlText: string): IndexedMeasureNote[] => {
     return `n${sequence}`;
   });
 
-  return Array.from(doc.querySelectorAll("score-partwise > part > measure")).flatMap((measure) => {
+  const indexedNotes: IndexedMeasureNote[] = [];
+  for (const measure of Array.from(doc.querySelectorAll("score-partwise > part > measure"))) {
     const part = measure.parentElement;
     const partId = part?.getAttribute("id")?.trim() ?? null;
     const measureNumber = measure.getAttribute("number")?.trim() ?? "";
     const voiceNoteCounts = new Map<string, number>();
-    return Array.from(measure.querySelectorAll(":scope > note")).flatMap((note, noteIndex) => {
+    for (const [noteIndex, note] of Array.from(measure.querySelectorAll(":scope > note")).entries()) {
       const nodeId = nodeToId.get(note);
-      if (!nodeId) return [];
+      if (!nodeId) continue;
       const voice = getVoiceText(note);
       const voiceKey = voice ?? "__none__";
       const nextVoiceNoteIndex = (voiceNoteCounts.get(voiceKey) ?? 0) + 1;
       voiceNoteCounts.set(voiceKey, nextVoiceNoteIndex);
-      return [{
+      indexedNotes.push({
         nodeId,
         selector: {
           part_id: partId,
@@ -131,9 +132,10 @@ const buildIndexedMeasureNotes = (xmlText: string): IndexedMeasureNote[] => {
           voice,
           voice_note_index: nextVoiceNoteIndex,
         },
-      }];
-    });
-  });
+      });
+    }
+  }
+  return indexedNotes;
 };
 
 const resolveMeasureNoteSelector = (

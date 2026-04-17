@@ -2,6 +2,13 @@
 
 ## CLI
 
+- [ ] Upstream the remaining downstream compatibility adjustments around `src/ts/cli-api.ts`.
+  - Scope:
+    - stabilize CLI selector resolution behavior so downstream-specific guard code is no longer needed
+    - remove `Array.prototype.flatMap` usage from indexed measure-note building so the current `ES2018`-based isolated bundle path remains compatible
+  - Expected follow-up:
+    - add focused regression coverage for selector resolution edge cases
+
 - [x] Document `convert`-first CLI naming consistently in all current-facing docs.
   - Recheck `README.md`, `docs/spec/CLI_STEP1.md`, and future notes after the command surface stabilizes.
   - Keep `import/export` as internal facade wording only, not CLI wording.
@@ -24,7 +31,8 @@
     - `mikuscore convert --from midi --to musicxml`
     - `mikuscore convert --from musicxml --to midi`
   - Next checks:
-    - decide whether CLI needs MIDI export options such as profile / metadata toggles
+    - keep MIDI export options internal for now; do not expose CLI flags yet
+    - revisit CLI-level MIDI export options such as profile / metadata toggles only after the current fixed defaults prove insufficient
 
 - [x] Implement Step 3 conversion/render pairs.
   - Current first cut exists for:
@@ -207,6 +215,12 @@
   - Do not move conversion facade code into `core/` without a concrete need.
 
 ## Build
+
+- [ ] Keep landing page CLI wording aligned with the current `convert` / `render` / `state` command split.
+  - Current source of truth:
+    - `index-src.html`
+    - generated `index.html`
+  - Remove stale `convert-first` wording from current-facing landing-page copy.
 
 - [ ] Shorten and stabilize `npm run build:full`.
   - Current observation:
