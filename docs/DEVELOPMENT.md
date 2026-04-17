@@ -34,7 +34,7 @@ Generated HTML note:
 
 ## CLI Notes
 
-Current CLI uses a `convert`-first command surface.
+Current CLI uses a `convert` / `render` / initial `state` command surface.
 
 Available commands:
 
@@ -42,9 +42,19 @@ Available commands:
 - `mikuscore convert --from musicxml --to abc`
 - `mikuscore convert --from midi --to musicxml`
 - `mikuscore convert --from musicxml --to midi`
+- `mikuscore convert --from mei --to musicxml`
+- `mikuscore convert --from musicxml --to mei`
+- `mikuscore convert --from lilypond --to musicxml`
+- `mikuscore convert --from musicxml --to lilypond`
 - `mikuscore convert --from musescore --to musicxml`
 - `mikuscore convert --from musicxml --to musescore`
 - `mikuscore render svg`
+- `mikuscore render svg --from abc ...`
+- `mikuscore state summarize`
+- `mikuscore state inspect-measure`
+- `mikuscore state validate-command`
+- `mikuscore state apply-command`
+- `mikuscore state diff`
 
 Input/output contract:
 
@@ -54,22 +64,58 @@ Input/output contract:
 - omitted `--in` reads from `stdin`
 - `--out <file>` writes to file
 - omitted `--out` writes to `stdout`
+- `--out -` writes to `stdout` explicitly
 - text conversions use text input/output
 - MIDI input/output uses binary input/output
-- current MuseScore CLI scope is `.mscx`-style text, not compressed `.mscz`
+- for file input, `--from musicxml` accepts `.musicxml`, `.xml`, and `.mxl`
+- for file input, `--from musescore` accepts `.mscx` and `.mscz`
+- for file output, `--to musicxml` writes `.mxl` when `--out` ends with `.mxl`
+- for file output, `--to musescore` writes `.mscz` when `--out` ends with `.mscz`
+- `stdin` / `stdout` remain text-only for `musicxml` and `musescore`
+- `render svg` also accepts `--from abc` as a one-shot path while still routing internally through canonical `MusicXML`
+- `state` commands operate on canonical `MusicXML`
+- `state validate-command` / `state apply-command` accept command payloads that target notes either by `targetNodeId` / `anchorNodeId` or by `selector` / `anchor_selector`
+- `--diagnostics text|json` is available across current command families
+- plain-text CLI decode for `musicxml` / `musescore` is kept on UTF-8 `TextDecoder` rather than Node-only `Buffer`, so the same entrypoint can be runtime-compiled in isolated bundle environments
+- usage failures now use a distinct CLI error path from processing failures
 
 Examples:
 
 - `npm run cli -- --help`
 - `npm run cli -- convert --help`
+- `npm run cli -- render --help`
+- `npm run cli -- state --help`
 - `npm run cli -- convert --from abc --to musicxml --in score.abc --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to abc --in score.musicxml --out score.abc`
 - `npm run cli -- convert --from midi --to musicxml --in score.mid --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to midi --in score.musicxml --out score.mid`
+- `npm run cli -- convert --from mei --to musicxml --in score.mei --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to mei --in score.musicxml --out score.mei`
+- `npm run cli -- convert --from lilypond --to musicxml --in score.ly --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to lilypond --in score.musicxml --out score.ly`
 - `npm run cli -- convert --from musescore --to musicxml --in score.mscx --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscx`
+- `npm run cli -- convert --from musicxml --to abc --in score.mxl --out score.abc`
+- `npm run cli -- convert --from musescore --to musicxml --in score.mscz --out score.mxl`
+- `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscz`
 - `npm run cli -- render svg --in score.musicxml --out score.svg`
+- `npm run cli -- render svg --from abc --in score.abc --out score.svg`
+- `npm run cli -- state summarize --in score.musicxml`
+- `npm run cli -- state inspect-measure --measure 12 --in score.musicxml`
+- `npm run cli -- state validate-command --in score.musicxml --command-file command.json`
+- `npm run cli -- state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml`
+- `npm run cli -- state diff --before score.before.musicxml --after score.after.musicxml`
+- `state inspect-measure` output can be fed back into `state validate-command` / `state apply-command` via `selector` / `anchor_selector` payload fields
 - `cat score.abc | npm run cli -- convert --from abc --to musicxml`
+
+Observed sibling-project direction:
+
+- `mikuproject` CLI grew in a way that intentionally resembles the earlier `mikuscore` CLI surface
+- because of that, similarities are expected and should be read as family resemblance, not accidental convergence
+- `mikuproject` has also evolved beyond the earlier `mikuscore` baseline, and that direction contains many reusable ideas
+- the parts most worth reusing back into `mikuscore` are infrastructure patterns first, not the larger command count itself
+- initial reuse is now present in the current CLI via centralized help output, `CliUsageError` / `CliProcessingError`, explicit `--out -`, optional `--diagnostics text|json`, and the first `state` family entrypoints
+- if `mikuscore` CLI behavior changes in those areas, update `mikuscore-skills` assumptions as well because downstream agent workflows are sensitive to stderr/stdout and exit-code contracts
 
 ## Documentation Map
 
@@ -105,6 +151,12 @@ Specification docs:
 - `docs/spec/MIDI_IO.md`
 - `docs/spec/ABC_IO.md`
 - `docs/spec/CLI_STEP1.md`
+- `docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md`
+- `docs/spec/CLI_HELP_FIRSTCUT.md`
+- `docs/spec/CLI_REBUILD_PLAN.md`
+- `docs/spec/CLI_RENDER_FIRSTCUT.md`
+- `docs/spec/CLI_TAXONOMY_FIRSTCUT.md`
+- `docs/spec/CLI_STATE_FIRSTCUT.md`
 - `docs/spec/TEST_MATRIX.md`
 
 Future notes:

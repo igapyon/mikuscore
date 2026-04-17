@@ -2,7 +2,21 @@
 
 ## CLI
 
-- [ ] Document `convert`-first CLI naming consistently in all current-facing docs.
+- [ ] Add a CLI surface sync check whenever `src/ts/cli-api.ts` grows new or newly composable entry points.
+  - Scope:
+    - verify command/help/test coverage stays aligned across `src/ts/cli-api.ts`, `scripts/mikuscore-cli.mjs`, and `tests/unit/mikuscore-cli.spec.ts`
+    - explicitly review newly composable one-shot routes such as `abc -> midi`, not only direct one-function facade additions
+  - Expected follow-up:
+    - add a lightweight maintenance checklist or coverage table so CLI-exposed routes do not get missed during future facade expansion
+
+- [ ] Upstream the remaining downstream compatibility adjustments around `src/ts/cli-api.ts`.
+  - Scope:
+    - stabilize CLI selector resolution behavior so downstream-specific guard code is no longer needed
+    - remove `Array.prototype.flatMap` usage from indexed measure-note building so the current `ES2018`-based isolated bundle path remains compatible
+  - Expected follow-up:
+    - add focused regression coverage for selector resolution edge cases
+
+- [x] Document `convert`-first CLI naming consistently in all current-facing docs.
   - Recheck `README.md`, `docs/spec/CLI_STEP1.md`, and future notes after the command surface stabilizes.
   - Keep `import/export` as internal facade wording only, not CLI wording.
 
@@ -24,21 +38,202 @@
     - `mikuscore convert --from midi --to musicxml`
     - `mikuscore convert --from musicxml --to midi`
   - Next checks:
-    - decide whether CLI needs MIDI export options such as profile / metadata toggles
+    - keep MIDI export options internal for now; do not expose CLI flags yet
+    - revisit CLI-level MIDI export options such as profile / metadata toggles only after the current fixed defaults prove insufficient
 
-- [ ] Implement Step 3 conversion/render pairs.
+- [ ] Prepare VSQX CLI support by requesting upstream/integration-side changes to the vendored bridge first.
+  - Current blocker:
+    - current `vsqx` support depends on the vendored `utaformatix3-ts-plus` browser-oriented bridge shape, so the existing CLI cannot call it as a normal non-UI facade
+  - Required external ask:
+    - request a non-browser callable entrypoint or equivalent runtime shape from the integration/upstream side before wiring `musicxml <-> vsqx` into the CLI
+  - Intended follow-up after that lands:
+    - add `mikuscore convert --from vsqx --to musicxml`
+    - add `mikuscore convert --from musicxml --to vsqx`
+    - add matching CLI help and regression tests
+
+- [ ] Add MEI CLI conversion pairs around the existing reusable format I/O.
+  - Target pairs:
+    - `mikuscore convert --from mei --to musicxml`
+    - `mikuscore convert --from musicxml --to mei`
+  - Implementation slices:
+    - extend `src/ts/cli-api.ts` with `mei` facade entries
+    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - add CLI regression tests for stdin/file input, `--out`, and representative failures
+
+- [ ] Add LilyPond CLI conversion pairs around the existing reusable format I/O.
+  - Target pairs:
+    - `mikuscore convert --from lilypond --to musicxml`
+    - `mikuscore convert --from musicxml --to lilypond`
+  - Implementation slices:
+    - extend `src/ts/cli-api.ts` with `lilypond` facade entries
+    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - add CLI regression tests for stdin/file input, `--out`, and representative failures
+
+- [x] Implement Step 3 conversion/render pairs.
   - Current first cut exists for:
     - `mikuscore convert --from musescore --to musicxml`
     - `mikuscore convert --from musicxml --to musescore`
     - `mikuscore render svg`
   - Next checks:
-    - add explicit CLI support decision/work for compressed `.mscz`
-    - decide whether CLI should handle compressed `.mscz` directly or remain `.mscx`-text only
+    - expand file I/O support so `--from musicxml` can read `.mxl`
+    - expand file I/O support so `--from musescore` can read `.mscz`
+    - expand file I/O support so `--to musicxml` can write `.mxl` when `--out` ends with `.mxl`
+    - expand file I/O support so `--to musescore` can write `.mscz` when `--out` ends with `.mscz`
+    - keep `stdin` / `stdout` text-only for `musicxml` and `musescore`; ZIP support should apply to file paths only
+    - move ZIP read/write behavior into reusable non-CLI helpers instead of adding ad hoc CLI-only logic
     - decide whether render options such as scale / page size should become CLI flags
 
-- [ ] Expand CLI tests together with each new conversion pair.
+- [x] Formalize CLI ZIP file I/O support for MusicXML and MuseScore.
+  - Goal:
+    - support `.mxl` and `.mscz` in CLI file input/output without changing the text-only `stdin` / `stdout` contract
+  - Work breakdown:
+    - [x] Freeze the CLI ZIP I/O contract in docs/TODO notes before code movement.
+      - ZIP behavior applies only when `--in` / `--out` are file paths.
+      - `stdin` / `stdout` stay text-only for `musicxml` and `musescore`.
+      - extension-based handling is limited to `.mxl` and `.mscz`, not generic format auto-detection.
+    - [x] Extract ZIP container primitives from UI-oriented code into reusable helpers.
+      - split reusable ZIP read/write logic away from browser/download-specific payload code
+      - keep helpers suitable for both app-side and CLI-side callers
+    - [x] Make ZIP import helpers explicitly reusable for CLI file reads.
+      - cover `.mxl -> MusicXML text`
+      - cover `.mscz -> MuseScore text`
+      - keep plain `.musicxml` / `.xml` / `.mscx` reads unchanged
+    - [x] Make ZIP export helpers explicitly reusable for CLI file writes.
+      - cover `MusicXML text -> .mxl bytes`
+      - cover `MuseScore text -> .mscz bytes`
+      - keep plain `.musicxml` / `.xml` / `.mscx` writes unchanged
+    - [x] Refactor the CLI script to route file input through extension-aware readers.
+      - `mikuscore convert --from musicxml --in score.mxl ...`
+      - `mikuscore convert --from musescore --in score.mscz ...`
+      - keep stdin path on the current text-only reader
+    - [x] Refactor the CLI script to route file output through extension-aware writers.
+      - `mikuscore convert --to musicxml --out score.mxl ...`
+      - `mikuscore convert --to musescore --out score.mscz ...`
+      - keep stdout path on the current text/binary writer behavior
+    - [x] Add focused facade/API coverage around reusable ZIP helpers if the seam moves into `src/ts`.
+      - avoid pushing ZIP branching back into `scripts/mikuscore-cli.mjs`
+      - keep conversion/business logic in reusable modules, not in the shell entrypoint
+    - [x] Add CLI regression tests for ZIP file input.
+      - `.mxl -> musicxml`
+      - `.mscz -> musicxml`
+      - representative invalid ZIP / missing entry failure cases if practical
+    - [x] Add CLI regression tests for ZIP file output.
+      - `musicxml -> .mxl`
+      - `musicxml -> .mscz`
+      - verify archive contents, not only file extension
+    - [ ] Add bounded roundtrip checks where they provide signal without making the suite too heavy.
+      - `musicxml -> .mxl -> musicxml`
+      - `musicxml -> .mscz -> musicxml`
+    - [x] Align current-facing docs after behavior lands.
+      - `docs/spec/CLI_STEP1.md`
+      - `docs/DEVELOPMENT.md`
+      - `docs/future/CLI_ROADMAP.md`
+      - `README.md`
+
+- [x] Expand CLI tests together with each new conversion pair.
   - Cover file input, `stdin`, `--out`, and representative failure cases.
   - Keep `stdout` for payload and `stderr` for diagnostics only.
+
+- [x] Record a future-facing CLI design note for AI-mediated workflows.
+  - Motivation:
+    - `mikuproject` shows that a CLI can be designed simultaneously for human operators, Agent Skills, and the downstream generative-AI interaction layer
+    - the valuable lesson is not only "add AI commands", but "design the CLI contract so each layer can use it safely"
+  - Preserve these candidate principles for future `mikuscore` discussion:
+    - keep human-readable command naming and composable stdio behavior
+    - keep the main artifact on `stdout` and diagnostics on `stderr`
+    - support machine-readable diagnostics when the caller is an agent or another tool
+    - prefer bounded export / validate / apply-style phases over direct opaque mutation
+    - design payload units that are small enough for AI handoff, not only for human CLI use
+  - Likely document homes:
+    - `docs/future/CLI_ROADMAP.md`
+    - `docs/future/AI_JSON_INTERFACE.md`
+
+- [x] Rebuild CLI taxonomy around `convert` / `render` / `state` while compatibility cost is still low.
+  - Rationale:
+    - current real-world CLI usage appears low enough that command-surface reconstruction is still feasible
+    - `mikuproject` suggests that clearer top-level responsibility split can scale well
+    - `mikuscore` should keep `convert --from ... --to ...` inside `convert`, rather than multiplying fixed pair commands
+  - Intended role split:
+    - `convert`: interchange with external formats
+    - `render`: derived outputs such as SVG, including user-facing one-shot flows like `ABC -> SVG` even if implemented internally as `ABC -> MusicXML -> SVG`
+    - `state`: canonical `MusicXML` inspection, validation, patch-style mutation, and other light edit-oriented workflows
+  - First specification questions:
+    - whether `state summarize` / `state validate` / `state diff` / `state apply-patch` should be the initial reserved names
+    - whether `render` should accept non-MusicXML user input and absorb internal conversion stages
+    - how `--diagnostics text|json` should be shared consistently across all three families
+  - Concrete next slices:
+    - write a first-cut CLI taxonomy spec under `docs/spec/`
+    - define help-text shape for top-level `convert` / `render` / `state`
+    - decide migration wording from the current `convert`-first CLI to the rebuilt taxonomy
+
+- [x] Add a user-facing one-shot `ABC -> SVG` CLI flow without breaking the internal `MusicXML`-first pipeline.
+  - Intended shape:
+    - external UX should allow a direct score-rendering path for ABC input
+    - internal flow should still remain `ABC -> MusicXML -> SVG`
+  - Specification questions:
+    - whether this belongs under `render svg` with `--from abc`
+    - whether `render` should accept only selected non-MusicXML inputs or remain narrow
+    - how diagnostics should describe both the conversion and render stages when one-shot mode is used
+
+- [x] Improve CLI failure handling so uncaught runtime errors stop leaking as raw JavaScript failures.
+  - Goal:
+    - turn current unhandled exception behavior into stable CLI-facing usage/processing failures
+  - First slices:
+    - define exit-code policy for usage error vs processing error
+    - ensure stderr messages are human-readable by default
+    - ensure `--diagnostics json` can still describe failure cases structurally
+
+- [x] Define a first-cut CLI diagnostics contract modeled after the successful direction proven in `mikuproject`.
+  - Scope:
+    - `convert`
+    - `render`
+    - future `state`
+  - First slices:
+    - define the minimum shared JSON fields
+    - decide how warnings vs errors appear in text mode
+    - define whether multi-stage commands such as one-shot `ABC -> SVG` should report stage summaries
+    - decide how much "kept vs dropped" conversion information can be surfaced briefly without becoming noisy
+
+- [x] Align future `state` CLI naming with the existing core command catalog instead of inventing a second edit model.
+  - Preserve:
+    - existing bounded core commands such as `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, and `split_note`
+  - Prefer:
+    - workflow-phase CLI names like `state inspect-*`, `state validate-command`, `state apply-command`, `state diff`
+    - optional patch envelopes if multiple core commands should be validated/applied together
+  - Avoid:
+    - exposing each core command as its own top-level CLI verb
+    - introducing a whole-measure rewrite contract when a bounded command contract is sufficient
+
+- [x] Define the `state` first cut around canonical `MusicXML` inspection and bounded mutation.
+  - Candidate initial commands:
+    - `state summarize`
+    - `state inspect-measure`
+    - `state validate-command`
+    - `state apply-command`
+    - `state diff`
+  - First specification questions:
+    - whether first cut should expose single-command apply before patch envelopes
+    - what minimum inspect output is needed to support note-targeted edits reliably
+    - whether tempo-level light edits should enter through the same bounded command path
+
+- [x] Preserve "small edit" work as `MusicXML`-centered bounded mutation, not as a separate editing product line.
+  - Scope:
+    - pitch change
+    - duration change
+    - note insertion / deletion / split
+    - likely future tempo-level light edits on canonical `MusicXML`
+  - Editorial note:
+    - treat "small edit feature", "`MusicXML`-centered light edit", and "diff-based edit" as the same theme seen from different layers
+
+- [x] Explicitly keep some user suggestions out of near-term CLI scope.
+  - Defer or omit for now:
+    - batch conversion in CLI itself
+    - lyrics/melody alignment diagnostics
+    - MIDI-expression-specific CLI expansion as a priority over `MusicXML`-centered light edits
+  - Rationale:
+    - batch orchestration can live outside the CLI if single-shot behavior is composable
+    - lyrics diagnostics is interesting but currently too heavy for the current first-cut scope
+    - `mikuscore` should strengthen canonical `MusicXML` editing before expanding MIDI-side tuning controls
 
 ## Facade
 
@@ -56,16 +251,33 @@
 
 ## Build
 
+- [ ] Keep landing page CLI wording aligned with the current `convert` / `render` / `state` command split.
+  - Current source of truth:
+    - `index-src.html`
+    - generated `index.html`
+  - Remove stale `convert-first` wording from current-facing landing-page copy.
+
 - [ ] Shorten and stabilize `npm run build:full`.
   - Current observation:
     - `typecheck` and `build:dist` are relatively small, but `test:build:full` dominates total time
     - `tests/unit/playback-flow.spec.ts` currently shows a 5-second timeout failure in the full path
     - heavy suites currently include `playback-flow`, `lilypond-io`, and `midi-roundtrip-golden`
+    - `npm run test:all` also exposed a timeout in a heavy `musescore-io` roundtrip case under full-suite load
   - Next work:
     - profile `test:build:full` more deliberately and identify the longest suites/tests
     - decide whether more suites should move between `test:build`, `test:slow`, and `test:build:full`
     - investigate whether the `playback-flow` timeout is an actual regression, a flaky test, or a timeout-budget issue
     - consider Vitest worker/timeout settings only after the heavy-suite split is reasonably settled
+
+- [ ] Re-evaluate heavy `musescore-io` roundtrip tests for full-suite runtime stability.
+  - Current observation:
+    - `tests/unit/musescore-io.spec.ts` roundtrip case `keeps sample7 measure 3-4 pitch spelling and accidentals on roundtrip` passed in isolation at about 6.6s but timed out at 10s during `npm run test:all`
+    - the neighboring `sample7` roundtrip case also takes about 6.6s in isolation
+    - recent CLI ZIP coverage increases total suite load, which may make marginal `musescore-io` tests fail under parallel contention
+  - Next work:
+    - first check whether the assertion can be narrowed so the test keeps its signal with less end-to-end work
+    - consider moving the heaviest `sample7` roundtrip cases to a slower lane if they remain expensive
+    - only raise per-test timeout after checking whether the case can be made cheaper or better isolated
 
 ## ABC
 
