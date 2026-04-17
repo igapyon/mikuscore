@@ -91,6 +91,107 @@
   - Cover file input, `stdin`, `--out`, and representative failure cases.
   - Keep `stdout` for payload and `stderr` for diagnostics only.
 
+- [ ] Record a future-facing CLI design note for AI-mediated workflows.
+  - Motivation:
+    - `mikuproject` shows that a CLI can be designed simultaneously for human operators, Agent Skills, and the downstream generative-AI interaction layer
+    - the valuable lesson is not only "add AI commands", but "design the CLI contract so each layer can use it safely"
+  - Preserve these candidate principles for future `mikuscore` discussion:
+    - keep human-readable command naming and composable stdio behavior
+    - keep the main artifact on `stdout` and diagnostics on `stderr`
+    - support machine-readable diagnostics when the caller is an agent or another tool
+    - prefer bounded export / validate / apply-style phases over direct opaque mutation
+    - design payload units that are small enough for AI handoff, not only for human CLI use
+  - Likely document homes:
+    - `docs/future/CLI_ROADMAP.md`
+    - `docs/future/AI_JSON_INTERFACE.md`
+
+- [ ] Rebuild CLI taxonomy around `convert` / `render` / `state` while compatibility cost is still low.
+  - Rationale:
+    - current real-world CLI usage appears low enough that command-surface reconstruction is still feasible
+    - `mikuproject` suggests that clearer top-level responsibility split can scale well
+    - `mikuscore` should keep `convert --from ... --to ...` inside `convert`, rather than multiplying fixed pair commands
+  - Intended role split:
+    - `convert`: interchange with external formats
+    - `render`: derived outputs such as SVG, including user-facing one-shot flows like `ABC -> SVG` even if implemented internally as `ABC -> MusicXML -> SVG`
+    - `state`: canonical `MusicXML` inspection, validation, patch-style mutation, and other light edit-oriented workflows
+  - First specification questions:
+    - whether `state summarize` / `state validate` / `state diff` / `state apply-patch` should be the initial reserved names
+    - whether `render` should accept non-MusicXML user input and absorb internal conversion stages
+    - how `--diagnostics text|json` should be shared consistently across all three families
+  - Concrete next slices:
+    - write a first-cut CLI taxonomy spec under `docs/spec/`
+    - define help-text shape for top-level `convert` / `render` / `state`
+    - decide migration wording from the current `convert`-first CLI to the rebuilt taxonomy
+
+- [ ] Add a user-facing one-shot `ABC -> SVG` CLI flow without breaking the internal `MusicXML`-first pipeline.
+  - Intended shape:
+    - external UX should allow a direct score-rendering path for ABC input
+    - internal flow should still remain `ABC -> MusicXML -> SVG`
+  - Specification questions:
+    - whether this belongs under `render svg` with `--from abc`
+    - whether `render` should accept only selected non-MusicXML inputs or remain narrow
+    - how diagnostics should describe both the conversion and render stages when one-shot mode is used
+
+- [ ] Improve CLI failure handling so uncaught runtime errors stop leaking as raw JavaScript failures.
+  - Goal:
+    - turn current unhandled exception behavior into stable CLI-facing usage/processing failures
+  - First slices:
+    - define exit-code policy for usage error vs processing error
+    - ensure stderr messages are human-readable by default
+    - ensure `--diagnostics json` can still describe failure cases structurally
+
+- [ ] Define a first-cut CLI diagnostics contract modeled after the successful direction proven in `mikuproject`.
+  - Scope:
+    - `convert`
+    - `render`
+    - future `state`
+  - First slices:
+    - define the minimum shared JSON fields
+    - decide how warnings vs errors appear in text mode
+    - define whether multi-stage commands such as one-shot `ABC -> SVG` should report stage summaries
+    - decide how much "kept vs dropped" conversion information can be surfaced briefly without becoming noisy
+
+- [ ] Align future `state` CLI naming with the existing core command catalog instead of inventing a second edit model.
+  - Preserve:
+    - existing bounded core commands such as `change_to_pitch`, `change_duration`, `insert_note_after`, `delete_note`, and `split_note`
+  - Prefer:
+    - workflow-phase CLI names like `state inspect-*`, `state validate-command`, `state apply-command`, `state diff`
+    - optional patch envelopes if multiple core commands should be validated/applied together
+  - Avoid:
+    - exposing each core command as its own top-level CLI verb
+    - introducing a whole-measure rewrite contract when a bounded command contract is sufficient
+
+- [ ] Define the `state` first cut around canonical `MusicXML` inspection and bounded mutation.
+  - Candidate initial commands:
+    - `state summarize`
+    - `state inspect-measure`
+    - `state validate-command`
+    - `state apply-command`
+    - `state diff`
+  - First specification questions:
+    - whether first cut should expose single-command apply before patch envelopes
+    - what minimum inspect output is needed to support note-targeted edits reliably
+    - whether tempo-level light edits should enter through the same bounded command path
+
+- [ ] Preserve "small edit" work as `MusicXML`-centered bounded mutation, not as a separate editing product line.
+  - Scope:
+    - pitch change
+    - duration change
+    - note insertion / deletion / split
+    - likely future tempo-level light edits on canonical `MusicXML`
+  - Editorial note:
+    - treat "small edit feature", "`MusicXML`-centered light edit", and "diff-based edit" as the same theme seen from different layers
+
+- [ ] Explicitly keep some user suggestions out of near-term CLI scope.
+  - Defer or omit for now:
+    - batch conversion in CLI itself
+    - lyrics/melody alignment diagnostics
+    - MIDI-expression-specific CLI expansion as a priority over `MusicXML`-centered light edits
+  - Rationale:
+    - batch orchestration can live outside the CLI if single-shot behavior is composable
+    - lyrics diagnostics is interesting but currently too heavy for the current first-cut scope
+    - `mikuscore` should strengthen canonical `MusicXML` editing before expanding MIDI-side tuning controls
+
 ## Facade
 
 - [ ] Keep the non-UI CLI facade small and format-oriented.

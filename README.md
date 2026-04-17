@@ -68,7 +68,7 @@ mikuscore is for converting, inspecting, and handing score data off.
 
 ### CLI
 
-Current CLI is `convert`-first.
+Current CLI centers on `convert`, `render`, and an initial `state` family.
 
 For `musicxml` and `musescore`, plain-text `stdin` / `stdout` paths are handled as UTF-8 text, while `.mxl` / `.mscz` compression stays on file-path I/O.
 
@@ -84,6 +84,12 @@ Examples:
 - `npm run cli -- convert --from musescore --to musicxml --in score.mscz --out score.mxl`
 - `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscz`
 - `npm run cli -- render svg --in score.musicxml --out score.svg`
+- `npm run cli -- render svg --from abc --in score.abc --out score.svg`
+- `npm run cli -- state summarize --in score.musicxml`
+- `npm run cli -- state inspect-measure --measure 1 --in score.musicxml`
+- `npm run cli -- state validate-command --in score.musicxml --command-file command.json`
+- `npm run cli -- state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml`
+- `npm run cli -- state diff --before score.before.musicxml --after score.after.musicxml`
 
 For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.
 
