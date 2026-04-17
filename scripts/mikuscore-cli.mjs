@@ -176,24 +176,10 @@ main().catch((error) => {
 
 async function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
+  const helpTopic = resolveHelpTopic(command, options);
 
-  if (command.length === 0 || (options.help && !options.helpCommand)) {
-    writeHelp(process.stdout, "top");
-    return;
-  }
-
-  if (isCommand(command, ["convert"]) && options.helpCommand) {
-    writeHelp(process.stdout, "convert");
-    return;
-  }
-
-  if (isCommand(command, ["render"]) && options.helpCommand) {
-    writeHelp(process.stdout, "render");
-    return;
-  }
-
-  if (isCommand(command, ["state"]) && options.helpCommand) {
-    writeHelp(process.stdout, "state");
+  if (helpTopic) {
+    writeHelp(process.stdout, helpTopic);
     return;
   }
 
@@ -224,24 +210,9 @@ function parseArgs(argv) {
       continue;
     }
 
+    const value = readOptionValue(argv, index, token);
     if (key === "diagnostics") {
-      const diagnosticsValue = argv[index + 1];
-      if (!diagnosticsValue || diagnosticsValue.startsWith("--")) {
-        throw new CliUsageError(`Option ${token} requires a value.`, "missing_option_value", { option: token });
-      }
-      if (diagnosticsValue !== "text" && diagnosticsValue !== "json") {
-        throw new CliUsageError("--diagnostics must be either text or json.", "invalid_diagnostics_option", {
-          option: "--diagnostics",
-        });
-      }
-      options.diagnostics = diagnosticsValue;
-      index += 1;
-      continue;
-    }
-
-    const value = argv[index + 1];
-    if (value === undefined || value.startsWith("--")) {
-      throw new CliUsageError(`Option ${token} requires a value.`, "missing_option_value", { option: token });
+      validateDiagnosticsOption(value);
     }
     options[key] = value;
     index += 1;
@@ -258,209 +229,310 @@ function isCommand(actual, expected) {
   return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
 }
 
+function readOptionValue(argv, index, token) {
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new CliUsageError(`Option ${token} requires a value.`, "missing_option_value", { option: token });
+  }
+  return value;
+}
+
+function validateDiagnosticsOption(value) {
+  if (value !== "text" && value !== "json") {
+    throw new CliUsageError("--diagnostics must be either text or json.", "invalid_diagnostics_option", {
+      option: "--diagnostics",
+    });
+  }
+}
+
+function resolveHelpTopic(command, options) {
+  if (command.length === 0 || (options.help && !options.helpCommand)) {
+    return "top";
+  }
+
+  const helpTopics = {
+    convert: "convert",
+    render: "render",
+    state: "state",
+  };
+
+  if (options.helpCommand && command.length === 1) {
+    return helpTopics[command[0]];
+  }
+
+  return undefined;
+}
+
 async function runCommand(command, options, api) {
   if (isCommand(command, ["convert"])) {
-    const from = String(options.from || "").trim().toLowerCase();
-    const to = String(options.to || "").trim().toLowerCase();
-
-    if (!from || !to) {
-      throw new CliUsageError("convert requires both --from <format> and --to <format>.", "missing_from_to");
-    }
-
-    if (from === "abc" && to === "musicxml") {
-      const inputText = await readTextInput(options.in);
-      const result = api.abc.importToMusicXml(inputText);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "ABC to MusicXML conversion failed.");
-      }
-      return options.out ? await encodeOutputForTarget(result, options.out, api, to) : result;
-    }
-
-    if (from === "musicxml" && to === "abc") {
-      const inputText = await readMusicXmlInputText(options.in, api);
-      const result = api.abc.exportFromMusicXml(inputText);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "MusicXML to ABC conversion failed.");
-      }
-      return result;
-    }
-
-    if (from === "midi" && to === "musicxml") {
-      const inputBytes = await readBinaryInput(options.in);
-      const result = api.midi.importToMusicXml(inputBytes);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "MIDI to MusicXML conversion failed.");
-      }
-      return options.out ? await encodeOutputForTarget(result, options.out, api, to) : result;
-    }
-
-    if (from === "musicxml" && to === "midi") {
-      const inputText = await readMusicXmlInputText(options.in, api);
-      const result = api.midi.exportFromMusicXml(inputText);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "MusicXML to MIDI conversion failed.");
-      }
-      return result;
-    }
-
-    if (from === "musescore" && to === "musicxml") {
-      const inputBytes = await readBinaryInput(options.in);
-      const decoded = await api.fileIO.musescore.decodeInput(inputBytes, options.in);
-      if (!decoded.ok || typeof decoded.output !== "string") {
-        throw new CliCommandFailure(decoded, "Failed to read MuseScore input.");
-      }
-      const result = api.musescore.importToMusicXml(decoded.output);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "MuseScore to MusicXML conversion failed.");
-      }
-      return options.out ? await encodeOutputForTarget(result, options.out, api, to) : result;
-    }
-
-    if (from === "musicxml" && to === "musescore") {
-      const inputText = await readMusicXmlInputText(options.in, api);
-      const result = api.musescore.exportFromMusicXml(inputText);
-      if (!result.ok) {
-        throw new CliCommandFailure(result, "MusicXML to MuseScore conversion failed.");
-      }
-      return options.out ? await encodeOutputForTarget(result, options.out, api, to) : result;
-    }
-
-    throw new CliUsageError(`Unsupported conversion pair: --from ${from} --to ${to}`, "unsupported_conversion_pair", {
-      from,
-      to,
-    });
+    return runConvertCommand(options, api);
   }
 
   if (isCommand(command, ["render", "svg"])) {
-    const from = String(options.from || "musicxml").trim().toLowerCase();
-
-    if (from === "abc") {
-      const inputText = await readTextInput(options.in);
-      const imported = api.abc.importToMusicXml(inputText);
-      if (!imported.ok || typeof imported.output !== "string") {
-        throw new CliCommandFailure(imported, "ABC to MusicXML conversion failed.");
-      }
-      const rendered = await api.render.svgFromMusicXml(imported.output);
-      if (!rendered.ok) {
-        throw new CliCommandFailure(rendered, "SVG render failed.");
-      }
-      return {
-        ...rendered,
-        warnings: [...imported.warnings, ...rendered.warnings],
-        diagnostics: [...imported.diagnostics, ...rendered.diagnostics],
-        stages: [
-          {
-            name: "abc_to_musicxml",
-            status: imported.diagnostics.length > 0 ? "warning" : "success",
-            warning_count: imported.warnings.length,
-            error_count: imported.diagnostics.length,
-          },
-          {
-            name: "musicxml_to_svg",
-            status: rendered.diagnostics.length > 0 ? "warning" : "success",
-            warning_count: rendered.warnings.length,
-            error_count: rendered.diagnostics.length,
-          },
-        ],
-      };
-    }
-
-    if (from !== "musicxml") {
-      throw new CliUsageError(`Unsupported render source: --from ${from}`, "unsupported_render_source", {
-        from,
-      });
-    }
-
-    const inputText = await readMusicXmlInputText(options.in, api);
-    const result = await api.render.svgFromMusicXml(inputText);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "SVG render failed.");
-    }
-    return result;
+    return runRenderCommand(options, api);
   }
 
-  if (isCommand(command, ["state", "summarize"])) {
-    return runStateMusicXmlCommand(
-      options.in,
-      api,
-      (inputText) => api.state.summarizeFromMusicXml(inputText),
-      "Failed to summarize MusicXML state."
-    );
-  }
-
-  if (isCommand(command, ["state", "inspect-measure"])) {
-    const measure = String(options.measure || "").trim();
-    if (!measure) {
-      throw new CliUsageError("state inspect-measure requires --measure <number>.", "missing_measure_option");
-    }
-    return runStateMusicXmlCommand(
-      options.in,
-      api,
-      (inputText) => api.state.inspectMeasureFromMusicXml(inputText, measure),
-      "Failed to inspect MusicXML measure."
-    );
-  }
-
-  if (isCommand(command, ["state", "validate-command"])) {
-    const commandPayload = await readCommandPayload(options);
-    return runStateMusicXmlCommand(
-      options.in,
-      api,
-      (inputText) => api.state.validateCommandFromMusicXml(inputText, commandPayload),
-      "Failed to validate MusicXML command."
-    );
-  }
-
-  if (isCommand(command, ["state", "apply-command"])) {
-    const commandPayload = await readCommandPayload(options);
-    return runStateMusicXmlCommand(
-      options.in,
-      api,
-      (inputText) => api.state.applyCommandFromMusicXml(inputText, commandPayload),
-      "Failed to apply MusicXML command."
-    );
-  }
-
-  if (isCommand(command, ["state", "diff"])) {
-    if (!options.before || !options.after) {
-      throw new CliUsageError("state diff requires both --before <file> and --after <file>.", "missing_diff_inputs");
-    }
-    const beforeBytes = await readBinaryInput(options.before);
-    const afterBytes = await readBinaryInput(options.after);
-    const beforeDecoded = await api.fileIO.musicxml.decodeInput(beforeBytes, options.before);
-    const afterDecoded = await api.fileIO.musicxml.decodeInput(afterBytes, options.after);
-    if (!beforeDecoded.ok || typeof beforeDecoded.output !== "string") {
-      throw new CliCommandFailure(beforeDecoded, "Failed to read before MusicXML input.");
-    }
-    if (!afterDecoded.ok || typeof afterDecoded.output !== "string") {
-      throw new CliCommandFailure(afterDecoded, "Failed to read after MusicXML input.");
-    }
-    const result = api.state.diffMusicXmlState(beforeDecoded.output, afterDecoded.output);
-    if (!result.ok) {
-      throw new CliCommandFailure(result, "Failed to diff MusicXML state.");
-    }
-    return result;
+  if (command[0] === "state" && command.length >= 2) {
+    return runStateCommand(command.slice(1).join(" "), options, api);
   }
 
   throw new CliUsageError(`Unsupported command: ${command.join(" ")}`, "unsupported_command");
 }
 
-async function readMusicXmlInputText(inputPath, api) {
-  const inputBytes = await readBinaryInput(inputPath);
-  const decoded = await api.fileIO.musicxml.decodeInput(inputBytes, inputPath);
-  if (!decoded.ok || typeof decoded.output !== "string") {
-    throw new CliCommandFailure(decoded, "Failed to read MusicXML input.");
+function runConvertCommand(options, api) {
+  const from = String(options.from || "").trim().toLowerCase();
+  const to = String(options.to || "").trim().toLowerCase();
+
+  if (!from || !to) {
+    throw new CliUsageError("convert requires both --from <format> and --to <format>.", "missing_from_to");
   }
-  return decoded.output;
+
+  const convertHandler = buildConvertHandlers(options, api)[`${from}:${to}`];
+  if (convertHandler) {
+    return convertHandler();
+  }
+
+  throw new CliUsageError(`Unsupported conversion pair: --from ${from} --to ${to}`, "unsupported_conversion_pair", {
+    from,
+    to,
+  });
 }
 
-async function runStateMusicXmlCommand(inputPath, api, run, fallbackMessage) {
+function runRenderCommand(options, api) {
+  const from = String(options.from || "musicxml").trim().toLowerCase();
+  const renderHandler = buildRenderHandlers(options, api)[from];
+  if (renderHandler) {
+    return renderHandler();
+  }
+  throw new CliUsageError(`Unsupported render source: --from ${from}`, "unsupported_render_source", {
+    from,
+  });
+}
+
+function runStateCommand(stateKey, options, api) {
+  const stateHandler = buildStateHandlers(options, api)[stateKey];
+  if (stateHandler) {
+    return stateHandler();
+  }
+  throw new CliUsageError(`Unsupported command: state ${stateKey}`, "unsupported_command");
+}
+
+function buildConvertHandlers(options, api) {
+  const to = String(options.to || "").trim().toLowerCase();
+  return {
+    "abc:musicxml": async () =>
+      runEncodedImportCommand(options.in, options.out, api, to, (inputPath) =>
+        runTextImportCommand(
+          inputPath,
+          (inputText) => api.abc.importToMusicXml(inputText),
+          "ABC to MusicXML conversion failed."
+        )
+      ),
+    "musicxml:abc": async () =>
+      runMusicXmlExportCommand(
+        options.in,
+        api,
+        (inputText) => api.abc.exportFromMusicXml(inputText),
+        "MusicXML to ABC conversion failed."
+      ),
+    "midi:musicxml": async () =>
+      runEncodedImportCommand(options.in, options.out, api, to, (inputPath) =>
+        runBinaryImportCommand(
+          inputPath,
+          (inputBytes) => api.midi.importToMusicXml(inputBytes),
+          "MIDI to MusicXML conversion failed."
+        )
+      ),
+    "musicxml:midi": async () =>
+      runMusicXmlExportCommand(
+        options.in,
+        api,
+        (inputText) => api.midi.exportFromMusicXml(inputText),
+        "MusicXML to MIDI conversion failed."
+      ),
+    "musescore:musicxml": async () =>
+      runEncodedImportCommand(options.in, options.out, api, to, async (inputPath) => {
+        const result = await runDecodedTextImportCommand(
+          inputPath,
+          (inputText) => api.musescore.importToMusicXml(inputText),
+          (inputBytes, sourcePath) => api.fileIO.musescore.decodeInput(inputBytes, sourcePath),
+          "Failed to read MuseScore input."
+        );
+        if (!result.ok) {
+          throw new CliCommandFailure(result, "MuseScore to MusicXML conversion failed.");
+        }
+        return result;
+      }),
+    "musicxml:musescore": async () =>
+      runEncodedMusicXmlExportCommand(
+        options.in,
+        options.out,
+        api,
+        to,
+        (inputText) => api.musescore.exportFromMusicXml(inputText),
+        "MusicXML to MuseScore conversion failed."
+      ),
+  };
+}
+
+function buildRenderHandlers(options, api) {
+  return {
+    abc: async () => runAbcToSvgRenderCommand(options.in, api),
+    musicxml: async () =>
+      runMusicXmlTextCommand(
+        options.in,
+        api,
+        (inputText) => api.render.svgFromMusicXml(inputText),
+        "SVG render failed."
+      ),
+  };
+}
+
+function buildStateHandlers(options, api) {
+  return {
+    summarize: async () => {
+      return runMusicXmlTextCommand(
+        options.in,
+        api,
+        (inputText) => api.state.summarizeFromMusicXml(inputText),
+        "Failed to summarize MusicXML state."
+      );
+    },
+    "inspect-measure": async () => {
+      const measure = String(options.measure || "").trim();
+      if (!measure) {
+        throw new CliUsageError("state inspect-measure requires --measure <number>.", "missing_measure_option");
+      }
+      return runMusicXmlTextCommand(
+        options.in,
+        api,
+        (inputText) => api.state.inspectMeasureFromMusicXml(inputText, measure),
+        "Failed to inspect MusicXML measure."
+      );
+    },
+    "validate-command": async () => {
+      const commandPayload = await readCommandPayload(options);
+      return runMusicXmlTextCommand(
+        options.in,
+        api,
+        (inputText) => api.state.validateCommandFromMusicXml(inputText, commandPayload),
+        "Failed to validate MusicXML command."
+      );
+    },
+    "apply-command": async () => {
+      const commandPayload = await readCommandPayload(options);
+      return runMusicXmlTextCommand(
+        options.in,
+        api,
+        (inputText) => api.state.applyCommandFromMusicXml(inputText, commandPayload),
+        "Failed to apply MusicXML command."
+      );
+    },
+    diff: async () => {
+      if (!options.before || !options.after) {
+        throw new CliUsageError("state diff requires both --before <file> and --after <file>.", "missing_diff_inputs");
+      }
+      const beforeText = await readDecodedTextInput(
+        options.before,
+        (inputBytes, inputPath) => api.fileIO.musicxml.decodeInput(inputBytes, inputPath),
+        "Failed to read before MusicXML input."
+      );
+      const afterText = await readDecodedTextInput(
+        options.after,
+        (inputBytes, inputPath) => api.fileIO.musicxml.decodeInput(inputBytes, inputPath),
+        "Failed to read after MusicXML input."
+      );
+      const result = api.state.diffMusicXmlState(beforeText, afterText);
+      if (!result.ok) {
+        throw new CliCommandFailure(result, "Failed to diff MusicXML state.");
+      }
+      return result;
+    },
+  };
+}
+
+async function readMusicXmlInputText(inputPath, api) {
+  return readDecodedTextInput(
+    inputPath,
+    (inputBytes, inputFilePath) => api.fileIO.musicxml.decodeInput(inputBytes, inputFilePath),
+    "Failed to read MusicXML input."
+  );
+}
+
+async function runMusicXmlTextCommand(inputPath, api, run, fallbackMessage) {
   const inputText = await readMusicXmlInputText(inputPath, api);
   const result = await run(inputText);
   if (!result.ok) {
     throw new CliCommandFailure(result, fallbackMessage);
   }
   return result;
+}
+
+async function runMusicXmlExportCommand(inputPath, api, run, fallbackMessage) {
+  return runMusicXmlTextCommand(inputPath, api, run, fallbackMessage);
+}
+
+async function runEncodedMusicXmlExportCommand(inputPath, outPath, api, to, run, fallbackMessage) {
+  const result = await runMusicXmlExportCommand(inputPath, api, run, fallbackMessage);
+  return outPath ? encodeOutputForTarget(result, outPath, api, to) : result;
+}
+
+async function runTextImportCommand(inputPath, run, fallbackMessage) {
+  const inputText = await readTextInput(inputPath);
+  const result = await run(inputText);
+  if (!result.ok) {
+    throw new CliCommandFailure(result, fallbackMessage);
+  }
+  return result;
+}
+
+async function runBinaryImportCommand(inputPath, run, fallbackMessage) {
+  const inputBytes = await readBinaryInput(inputPath);
+  const result = await run(inputBytes);
+  if (!result.ok) {
+    throw new CliCommandFailure(result, fallbackMessage);
+  }
+  return result;
+}
+
+async function runDecodedTextImportCommand(inputPath, run, decode, decodeFailureMessage) {
+  const inputText = await readDecodedTextInput(inputPath, decode, decodeFailureMessage);
+  return run(inputText);
+}
+
+async function runEncodedImportCommand(inputPath, outPath, api, to, run) {
+  const result = await run(inputPath);
+  return outPath ? encodeOutputForTarget(result, outPath, api, to) : result;
+}
+
+async function runAbcToSvgRenderCommand(inputPath, api) {
+  const inputText = await readTextInput(inputPath);
+  const imported = api.abc.importToMusicXml(inputText);
+  if (!imported.ok || typeof imported.output !== "string") {
+    throw new CliCommandFailure(imported, "ABC to MusicXML conversion failed.");
+  }
+  const rendered = await api.render.svgFromMusicXml(imported.output);
+  if (!rendered.ok) {
+    throw new CliCommandFailure(rendered, "SVG render failed.");
+  }
+  return {
+    ...rendered,
+    warnings: [...imported.warnings, ...rendered.warnings],
+    diagnostics: [...imported.diagnostics, ...rendered.diagnostics],
+    stages: [
+      buildStageDiagnostics("abc_to_musicxml", imported),
+      buildStageDiagnostics("musicxml_to_svg", rendered),
+    ],
+  };
+}
+
+function buildStageDiagnostics(name, result) {
+  return {
+    name,
+    status: result.diagnostics.length > 0 ? "warning" : "success",
+    warning_count: result.warnings.length,
+    error_count: result.diagnostics.length,
+  };
 }
 
 async function encodeOutputForTarget(result, outPath, api, to) {
@@ -477,6 +549,15 @@ async function encodeOutputForTarget(result, outPath, api, to) {
 async function readTextInput(inputPath) {
   const bytes = await readBinaryInput(inputPath);
   return Buffer.from(bytes).toString("utf8");
+}
+
+async function readDecodedTextInput(inputPath, decode, fallbackMessage) {
+  const inputBytes = await readBinaryInput(inputPath);
+  const decoded = await decode(inputBytes, inputPath);
+  if (!decoded.ok || typeof decoded.output !== "string") {
+    throw new CliCommandFailure(decoded, fallbackMessage);
+  }
+  return decoded.output;
 }
 
 async function readBinaryInput(inputPath) {
@@ -554,23 +635,39 @@ function detectRequestedDiagnosticsFormat(argv) {
   return "text";
 }
 
-function buildSuccessDiagnostics(command, options, result) {
-  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
-  const errors = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+function summarizeDiagnosticOutcome(warnings, errors) {
   const status = errors.length > 0 ? "error" : warnings.length > 0 ? "warning" : "success";
-  const diagnostics = {
-    ok: result.ok && errors.length === 0,
-    diagnostics_version: DIAGNOSTICS_VERSION,
-    command: command.join(" "),
-    context: command.join(" "),
+  return {
     status,
+    ok: errors.length === 0,
     exit_code: status === "error" ? 1 : 0,
     warning_count: warnings.length,
     error_count: errors.length,
-    io: buildIoDiagnostics(options),
+  };
+}
+
+function buildBaseDiagnostics(command, io, warnings, errors) {
+  const outcome = summarizeDiagnosticOutcome(warnings, errors);
+  return {
+    ok: outcome.ok,
+    diagnostics_version: DIAGNOSTICS_VERSION,
+    command,
+    context: command,
+    status: outcome.status,
+    exit_code: outcome.exit_code,
+    warning_count: outcome.warning_count,
+    error_count: outcome.error_count,
+    io,
     warnings,
     errors,
   };
+}
+
+function buildSuccessDiagnostics(command, options, result) {
+  const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+  const errors = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+  const diagnostics = buildBaseDiagnostics(command.join(" "), buildIoDiagnostics(options), warnings, errors);
+  diagnostics.ok = result.ok && diagnostics.ok;
   if (Array.isArray(result.stages) && result.stages.length > 0) {
     diagnostics.stages = result.stages;
   }
@@ -578,39 +675,37 @@ function buildSuccessDiagnostics(command, options, result) {
 }
 
 function buildErrorDiagnostics(argv, error, exitCode) {
-  const command = summarizeCommandFromArgv(argv);
+  const argvSummary = summarizeArgv(argv);
   const message = error instanceof Error ? error.message : String(error);
-  return {
-    ok: false,
-    diagnostics_version: DIAGNOSTICS_VERSION,
-    command,
-    context: command,
-    status: "error",
-    exit_code: exitCode,
-    warning_count: 0,
-    error_count: 1,
-    io: buildIoDiagnosticsFromArgv(argv),
-    error_type: error instanceof CliUsageError ? "usage_error" : "processing_error",
-    error_code: typeof error?.code === "string" ? error.code : "processing_error",
-    error_details: error?.details,
-    warnings: [],
-    errors: [message],
-  };
+  const diagnostics = buildBaseDiagnostics(argvSummary.command, buildIoDiagnostics(argvSummary.options), [], [message]);
+  diagnostics.ok = false;
+  diagnostics.exit_code = exitCode;
+  diagnostics.error_type = error instanceof CliUsageError ? "usage_error" : "processing_error";
+  diagnostics.error_code = typeof error?.code === "string" ? error.code : "processing_error";
+  diagnostics.error_details = error?.details;
+  return diagnostics;
 }
 
-function summarizeCommandFromArgv(argv) {
+function summarizeArgv(argv) {
   const command = [];
+  const options = {};
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     if (!token.startsWith("--")) {
       command.push(token);
       continue;
     }
-    if (token !== "--help") {
-      index += 1;
+    const key = token.slice(2);
+    if (key === "help") {
+      continue;
     }
+    options[key] = argv[index + 1];
+    index += 1;
   }
-  return command.join(" ") || "cli";
+  return {
+    command: command.join(" ") || "cli",
+    options,
+  };
 }
 
 function buildIoDiagnostics(options) {
@@ -618,19 +713,6 @@ function buildIoDiagnostics(options) {
     inputs: buildInputListFromOptions(options),
     output: buildOutputFromValue(options.out),
   };
-}
-
-function buildIoDiagnosticsFromArgv(argv) {
-  const options = {};
-  for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (!token.startsWith("--")) continue;
-    const key = token.slice(2);
-    if (key === "help") continue;
-    options[key] = argv[index + 1];
-    index += 1;
-  }
-  return buildIoDiagnostics(options);
 }
 
 function buildInputListFromOptions(options) {
