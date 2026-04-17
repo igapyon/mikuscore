@@ -4,6 +4,8 @@
  */
 
 import { convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
+import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
+import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import {
   buildMidiBytesForPlayback,
   buildPlaybackEventsFromMusicXmlDoc,
@@ -454,6 +456,92 @@ export const importMuseScoreToMusicXml = (musescoreText: string): CliResult => {
   }
 };
 
+export const importMeiToMusicXml = (meiText: string): CliResult => {
+  try {
+    return {
+      ok: true,
+      output: normalizeImportedMusicXmlText(convertMeiToMusicXml(meiText)),
+      warnings: [],
+      diagnostics: [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: [`Failed to parse MEI: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+};
+
+export const exportMusicXmlToMei = (xmlText: string): CliResult => {
+  const doc = parseMusicXmlDocument(xmlText);
+  if (!doc) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
+    };
+  }
+
+  try {
+    return {
+      ok: true,
+      output: exportMusicXmlDomToMei(doc),
+      warnings: [],
+      diagnostics: [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: [`Failed to export MEI: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+};
+
+export const importLilyPondToMusicXml = (lilypondText: string): CliResult => {
+  try {
+    return {
+      ok: true,
+      output: normalizeImportedMusicXmlText(convertLilyPondToMusicXml(lilypondText)),
+      warnings: [],
+      diagnostics: [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: [`Failed to parse LilyPond: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+};
+
+export const exportMusicXmlToLilyPond = (xmlText: string): CliResult => {
+  const doc = parseMusicXmlDocument(xmlText);
+  if (!doc) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
+    };
+  }
+
+  try {
+    return {
+      ok: true,
+      output: exportMusicXmlDomToLilyPond(doc),
+      warnings: [],
+      diagnostics: [],
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      warnings: [],
+      diagnostics: [`Failed to export LilyPond: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+};
+
 export const exportMusicXmlToMuseScore = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
@@ -856,6 +944,14 @@ export const cliApi = {
   midi: {
     importToMusicXml: importMidiToMusicXml,
     exportFromMusicXml: exportMusicXmlToMidi,
+  },
+  mei: {
+    importToMusicXml: importMeiToMusicXml,
+    exportFromMusicXml: exportMusicXmlToMei,
+  },
+  lilypond: {
+    importToMusicXml: importLilyPondToMusicXml,
+    exportFromMusicXml: exportMusicXmlToLilyPond,
   },
   musescore: {
     importToMusicXml: importMuseScoreToMusicXml,

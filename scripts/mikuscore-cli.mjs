@@ -15,9 +15,14 @@ const HELP_TEXT = {
   top: [
     "Usage:",
     "  mikuscore convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from midi --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from musicxml --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore render svg [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
@@ -47,7 +52,12 @@ const HELP_TEXT = {
   convert: [
     "Usage:",
     "  mikuscore convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  mikuscore convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
     "  mikuscore convert --help",
     "",
     "Description:",
@@ -55,9 +65,14 @@ const HELP_TEXT = {
     "",
     "Supported pairs:",
     "  --from abc --to musicxml",
+    "  --from abc --to midi",
     "  --from musicxml --to abc",
     "  --from midi --to musicxml",
     "  --from musicxml --to midi",
+    "  --from mei --to musicxml",
+    "  --from musicxml --to mei",
+    "  --from lilypond --to musicxml",
+    "  --from musicxml --to lilypond",
     "  --from musescore --to musicxml",
     "  --from musicxml --to musescore",
     "",
@@ -328,6 +343,8 @@ function buildConvertHandlers(options, api) {
           "ABC to MusicXML conversion failed."
         )
       ),
+    "abc:midi": async () =>
+      runAbcToMidiConvertCommand(options.in, api),
     "musicxml:abc": async () =>
       runMusicXmlExportCommand(
         options.in,
@@ -349,6 +366,36 @@ function buildConvertHandlers(options, api) {
         api,
         (inputText) => api.midi.exportFromMusicXml(inputText),
         "MusicXML to MIDI conversion failed."
+      ),
+    "mei:musicxml": async () =>
+      runEncodedImportCommand(options.in, options.out, api, to, (inputPath) =>
+        runTextImportCommand(
+          inputPath,
+          (inputText) => api.mei.importToMusicXml(inputText),
+          "MEI to MusicXML conversion failed."
+        )
+      ),
+    "musicxml:mei": async () =>
+      runMusicXmlExportCommand(
+        options.in,
+        api,
+        (inputText) => api.mei.exportFromMusicXml(inputText),
+        "MusicXML to MEI conversion failed."
+      ),
+    "lilypond:musicxml": async () =>
+      runEncodedImportCommand(options.in, options.out, api, to, (inputPath) =>
+        runTextImportCommand(
+          inputPath,
+          (inputText) => api.lilypond.importToMusicXml(inputText),
+          "LilyPond to MusicXML conversion failed."
+        )
+      ),
+    "musicxml:lilypond": async () =>
+      runMusicXmlExportCommand(
+        options.in,
+        api,
+        (inputText) => api.lilypond.exportFromMusicXml(inputText),
+        "MusicXML to LilyPond conversion failed."
       ),
     "musescore:musicxml": async () =>
       runEncodedImportCommand(options.in, options.out, api, to, async (inputPath) => {
@@ -522,6 +569,27 @@ async function runAbcToSvgRenderCommand(inputPath, api) {
     stages: [
       buildStageDiagnostics("abc_to_musicxml", imported),
       buildStageDiagnostics("musicxml_to_svg", rendered),
+    ],
+  };
+}
+
+async function runAbcToMidiConvertCommand(inputPath, api) {
+  const inputText = await readTextInput(inputPath);
+  const imported = api.abc.importToMusicXml(inputText);
+  if (!imported.ok || typeof imported.output !== "string") {
+    throw new CliCommandFailure(imported, "ABC to MusicXML conversion failed.");
+  }
+  const exported = api.midi.exportFromMusicXml(imported.output);
+  if (!exported.ok) {
+    throw new CliCommandFailure(exported, "MusicXML to MIDI conversion failed.");
+  }
+  return {
+    ...exported,
+    warnings: [...imported.warnings, ...exported.warnings],
+    diagnostics: [...imported.diagnostics, ...exported.diagnostics],
+    stages: [
+      buildStageDiagnostics("abc_to_musicxml", imported),
+      buildStageDiagnostics("musicxml_to_midi", exported),
     ],
   };
 }

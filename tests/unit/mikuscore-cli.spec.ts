@@ -34,7 +34,10 @@ describe("mikuscore cli", () => {
 
     expect(topLevel.status).toBe(0);
     expect(topLevel.stdout).toContain("mikuscore convert --from abc --to musicxml");
+    expect(topLevel.stdout).toContain("mikuscore convert --from abc --to midi");
     expect(topLevel.stdout).toContain("mikuscore convert --from midi --to musicxml");
+    expect(topLevel.stdout).toContain("mikuscore convert --from mei --to musicxml");
+    expect(topLevel.stdout).toContain("mikuscore convert --from lilypond --to musicxml");
     expect(topLevel.stdout).toContain("mikuscore convert --from musescore --to musicxml");
     expect(topLevel.stdout).toContain("mikuscore render svg");
     expect(topLevel.stdout).toContain("mikuscore state summarize");
@@ -67,6 +70,54 @@ describe("mikuscore cli", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("<work-title>STDIN</work-title>");
+  });
+
+  it("converts ABC directly to MIDI", () => {
+    const result = runCli(["convert", "--from", "abc", "--to", "midi"], {
+      input: "X:1\nT:ABC MIDI\nM:4/4\nL:1/4\nK:C\nC D E F|\n",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(0);
+  });
+
+  it("converts MEI directly to MusicXML", () => {
+    const result = runCli(["convert", "--from", "mei", "--to", "musicxml"], {
+      input: validMei("MEI import"),
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<score-partwise");
+    expect(result.stdout).toContain("<work-title>MEI import</work-title>");
+  });
+
+  it("converts MusicXML directly to MEI", () => {
+    const result = runCli(["convert", "--from", "musicxml", "--to", "mei"], {
+      input: validMusicXml("MEI export"),
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<mei");
+    expect(result.stdout).toContain("<title>MEI export</title>");
+  });
+
+  it("converts LilyPond directly to MusicXML", () => {
+    const result = runCli(["convert", "--from", "lilypond", "--to", "musicxml"], {
+      input: validLilyPond(),
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("<score-partwise");
+  });
+
+  it("converts MusicXML directly to LilyPond", () => {
+    const result = runCli(["convert", "--from", "musicxml", "--to", "lilypond"], {
+      input: validMusicXml("Lily export"),
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("\\version");
+    expect(result.stdout).toContain("\\score");
   });
 
   it("writes output via --out", () => {
@@ -414,7 +465,11 @@ describe("mikuscore cli", () => {
     const invalidAbc = runCli(["convert", "--from", "abc", "--to", "musicxml", "--in", inputPath]);
     const invalidMusicXmlPath = writeTempFile("invalid.musicxml", "<not-xml");
     const invalidMusicXml = runCli(["convert", "--from", "musicxml", "--to", "abc", "--in", invalidMusicXmlPath]);
-    const unsupportedPair = runCli(["convert", "--from", "abc", "--to", "midi"], {
+    const invalidMeiPath = writeTempFile("invalid.mei", "<mei");
+    const invalidMei = runCli(["convert", "--from", "mei", "--to", "musicxml", "--in", invalidMeiPath]);
+    const invalidLilyPath = writeTempFile("invalid.ly", "\\score { }");
+    const invalidLilyPond = runCli(["convert", "--from", "lilypond", "--to", "musicxml", "--in", invalidLilyPath]);
+    const unsupportedPair = runCli(["convert", "--from", "midi", "--to", "abc"], {
       input: "X:1\nT:Bad\nM:4/4\nL:1/4\nK:C\nC D E F|\n",
     });
     const missingFromTo = runCli(["convert", "--from", "abc"], {
@@ -489,6 +544,10 @@ describe("mikuscore cli", () => {
     expect(invalidAbc.stderr).toContain("Failed to parse ABC");
     expect(invalidMusicXml.status).toBe(1);
     expect(invalidMusicXml.stderr).toContain("Failed to parse MusicXML");
+    expect(invalidMei.status).toBe(1);
+    expect(invalidMei.stderr).toContain("Failed to parse MEI");
+    expect(invalidLilyPond.status).toBe(1);
+    expect(invalidLilyPond.stderr).toContain("Failed to parse LilyPond");
     expect(unsupportedPair.status).toBe(2);
     expect(unsupportedPair.stderr).toContain("Unsupported conversion pair");
     expect(missingFromTo.status).toBe(2);
@@ -609,4 +668,49 @@ function validInsertableMusicXml(title: string) {
   </measure>
  </part>
 </score-partwise>`;
+}
+
+function validMei(title: string) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="5.0">
+ <meiHead>
+  <fileDesc>
+   <titleStmt>
+    <title>${title}</title>
+   </titleStmt>
+  </fileDesc>
+ </meiHead>
+ <music>
+  <body>
+   <mdiv>
+    <score>
+     <scoreDef meter.count="4" meter.unit="4" key.sig="0">
+      <staffGrp>
+       <staffDef n="1" lines="5" clef.shape="G" clef.line="2"/>
+      </staffGrp>
+     </scoreDef>
+     <section>
+      <measure n="1">
+       <staff n="1">
+        <layer n="1">
+         <note pname="c" oct="4" dur="4"/>
+         <note pname="d" oct="4" dur="4"/>
+         <note pname="e" oct="4" dur="4"/>
+         <note pname="f" oct="4" dur="4"/>
+        </layer>
+       </staff>
+      </measure>
+     </section>
+    </score>
+   </mdiv>
+  </body>
+ </music>
+</mei>`;
+}
+
+function validLilyPond() {
+  return `\\version "2.24.0"
+\\score {
+  \\new Staff { c'4 d'4 e'4 f'4 }
+}`;
 }

@@ -2,6 +2,13 @@
 
 ## CLI
 
+- [ ] Add a CLI surface sync check whenever `src/ts/cli-api.ts` grows new or newly composable entry points.
+  - Scope:
+    - verify command/help/test coverage stays aligned across `src/ts/cli-api.ts`, `scripts/mikuscore-cli.mjs`, and `tests/unit/mikuscore-cli.spec.ts`
+    - explicitly review newly composable one-shot routes such as `abc -> midi`, not only direct one-function facade additions
+  - Expected follow-up:
+    - add a lightweight maintenance checklist or coverage table so CLI-exposed routes do not get missed during future facade expansion
+
 - [ ] Upstream the remaining downstream compatibility adjustments around `src/ts/cli-api.ts`.
   - Scope:
     - stabilize CLI selector resolution behavior so downstream-specific guard code is no longer needed
@@ -33,6 +40,34 @@
   - Next checks:
     - keep MIDI export options internal for now; do not expose CLI flags yet
     - revisit CLI-level MIDI export options such as profile / metadata toggles only after the current fixed defaults prove insufficient
+
+- [ ] Prepare VSQX CLI support by requesting upstream/integration-side changes to the vendored bridge first.
+  - Current blocker:
+    - current `vsqx` support depends on the vendored `utaformatix3-ts-plus` browser-oriented bridge shape, so the existing CLI cannot call it as a normal non-UI facade
+  - Required external ask:
+    - request a non-browser callable entrypoint or equivalent runtime shape from the integration/upstream side before wiring `musicxml <-> vsqx` into the CLI
+  - Intended follow-up after that lands:
+    - add `mikuscore convert --from vsqx --to musicxml`
+    - add `mikuscore convert --from musicxml --to vsqx`
+    - add matching CLI help and regression tests
+
+- [ ] Add MEI CLI conversion pairs around the existing reusable format I/O.
+  - Target pairs:
+    - `mikuscore convert --from mei --to musicxml`
+    - `mikuscore convert --from musicxml --to mei`
+  - Implementation slices:
+    - extend `src/ts/cli-api.ts` with `mei` facade entries
+    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - add CLI regression tests for stdin/file input, `--out`, and representative failures
+
+- [ ] Add LilyPond CLI conversion pairs around the existing reusable format I/O.
+  - Target pairs:
+    - `mikuscore convert --from lilypond --to musicxml`
+    - `mikuscore convert --from musicxml --to lilypond`
+  - Implementation slices:
+    - extend `src/ts/cli-api.ts` with `lilypond` facade entries
+    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - add CLI regression tests for stdin/file input, `--out`, and representative failures
 
 - [x] Implement Step 3 conversion/render pairs.
   - Current first cut exists for:
