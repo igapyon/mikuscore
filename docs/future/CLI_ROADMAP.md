@@ -29,6 +29,10 @@ Current implemented Step 1 scope:
 - `mikuscore convert --from musicxml --to abc`
 - `mikuscore convert --from midi --to musicxml`
 - `mikuscore convert --from musicxml --to midi`
+- `mikuscore convert --from mei --to musicxml`
+- `mikuscore convert --from musicxml --to mei`
+- `mikuscore convert --from lilypond --to musicxml`
+- `mikuscore convert --from musicxml --to lilypond`
 - `mikuscore convert --from musescore --to musicxml`
 - `mikuscore convert --from musicxml --to musescore`
 - `mikuscore render svg`

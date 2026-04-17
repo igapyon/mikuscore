@@ -42,6 +42,10 @@ Available commands:
 - `mikuscore convert --from musicxml --to abc`
 - `mikuscore convert --from midi --to musicxml`
 - `mikuscore convert --from musicxml --to midi`
+- `mikuscore convert --from mei --to musicxml`
+- `mikuscore convert --from musicxml --to mei`
+- `mikuscore convert --from lilypond --to musicxml`
+- `mikuscore convert --from musicxml --to lilypond`
 - `mikuscore convert --from musescore --to musicxml`
 - `mikuscore convert --from musicxml --to musescore`
 - `mikuscore render svg`
@@ -85,6 +89,10 @@ Examples:
 - `npm run cli -- convert --from musicxml --to abc --in score.musicxml --out score.abc`
 - `npm run cli -- convert --from midi --to musicxml --in score.mid --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to midi --in score.musicxml --out score.mid`
+- `npm run cli -- convert --from mei --to musicxml --in score.mei --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to mei --in score.musicxml --out score.mei`
+- `npm run cli -- convert --from lilypond --to musicxml --in score.ly --out score.musicxml`
+- `npm run cli -- convert --from musicxml --to lilypond --in score.musicxml --out score.ly`
 - `npm run cli -- convert --from musescore --to musicxml --in score.mscx --out score.musicxml`
 - `npm run cli -- convert --from musicxml --to musescore --in score.musicxml --out score.mscx`
 - `npm run cli -- convert --from musicxml --to abc --in score.mxl --out score.abc`
