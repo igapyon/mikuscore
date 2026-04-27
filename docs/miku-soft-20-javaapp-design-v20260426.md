@@ -1,4 +1,4 @@
-# Miku Software Java Application Design v20260425
+# Miku Software Java Application Design v20260426
 
 This memo organizes design characteristics commonly expected for Java application versions in the `miku` software series.
 
@@ -302,9 +302,12 @@ Java applications package local runtime use explicitly.
 
 The default runtime artifact is a single executable fat jar.
 
+The normal Maven package should also attach a sources jar, such as `<artifactId>-<version>-sources.jar`. The sources jar is a traceability and publication artifact, not the executable runtime artifact.
+
 When a distribution zip is useful, it should contain the minimal runtime-user-facing items such as:
 
 - runtime jar
+- sources jar when publishing or downstream traceability needs it
 - `README.md`
 - `LICENSE`
 - CLI or runtime docs where useful
@@ -316,6 +319,7 @@ The basic naming direction is:
 - Maven `groupId`: `jp.igapyon`
 - Maven `artifactId`: product-derived artifact name
 - jar name: `<artifactId>-<version>.jar`
+- sources jar name: `<artifactId>-<version>-sources.jar`
 - distribution zip name: `<artifactId>-dist-<version>.zip` or a similarly traceable form
 
 Runtime artifacts should not depend on source-tree-relative paths. If runtime markdown, prompt specs, or templates are needed inside the jar, copy them to classpath resources and read them through `getResourceAsStream` or an equivalent jar-safe mechanism.
@@ -842,9 +846,10 @@ The repository currently uses a single Maven project.
 The expected runtime artifacts are:
 
 - `target/mikuproject.jar`
+- `target/mikuproject-sources.jar`
 - `target/mikuproject-dist.zip`
 
-The distribution zip contains the runtime jar and minimal runtime-facing documentation such as `README.md`, `LICENSE`, and CLI documentation.
+The distribution zip contains the runtime jar, sources jar, and minimal runtime-facing documentation such as `README.md`, `LICENSE`, and CLI documentation.
 
 This single-module shape should remain acceptable while there is no Maven plugin deliverable. If a Maven plugin is added later, the repository should be reconsidered as a multi-module Maven reactor so that plugin code remains a thin adapter over the runtime / core API rather than a second implementation.
 
