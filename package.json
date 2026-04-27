@@ -9,12 +9,13 @@
   "scripts": {
     "build": "npm run typecheck && npm run test:build && npm run build:dist",
     "build:all": "npm run build:full",
-    "build:dist": "node scripts/build.mjs",
+    "build:cli-runtime": "node scripts/build-cli-runtime.mjs",
+    "build:dist": "node scripts/build.mjs && node scripts/build-cli-runtime.mjs",
     "build:full": "npm run typecheck && npm run test:build:full && npm run build:dist",
     "cli": "node scripts/mikuscore-cli.mjs",
     "check:all": "npm run typecheck && npm run test:all && npm run build:dist",
     "build:vendor:utaformatix3": "bash scripts/sync-utaformatix3-vendor.sh",
-    "clean": "rm -rf mikuscore.html src/js/main.js .tsbuildinfo .mikuscore-build",
+    "clean": "rm -rf mikuscore.html src/js/main.js bundle/mikuscore.mjs .tsbuildinfo .mikuscore-build",
     "test:build": "vitest run tests/unit --exclude tests/unit/cffp-series.spec.ts --exclude tests/unit/mei-io.spec.ts --exclude tests/unit/musescore-io.spec.ts --exclude tests/unit/lilypond-io.spec.ts --exclude tests/unit/playback-flow.spec.ts --exclude tests/unit/midi-roundtrip-golden.spec.ts",
     "test:build:full": "vitest run tests/unit --exclude tests/unit/cffp-series.spec.ts --exclude tests/unit/mei-io.spec.ts --exclude tests/unit/musescore-io.spec.ts",
     "test:integration": "vitest run tests/unit/cffp-series.spec.ts tests/unit/mei-io.spec.ts tests/unit/musescore-io.spec.ts",
@@ -27,8 +28,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "esbuild": "^0.27.7",
+    "jsdom": "^26.1.0",
     "typescript": "5.9.3",
-    "vitest": "^3.2.0",
-    "jsdom": "^26.1.0"
+    "vitest": "^3.2.0"
   }
 }

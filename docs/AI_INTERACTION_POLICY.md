@@ -31,6 +31,7 @@ This sits inside the broader product role of moving score data between tools and
 - Humans may still explicitly choose `ABC` when working with external generative models.
 - `mikuscore` does not currently claim a supported AI-facing JSON workflow.
 - Existing JSON-related notes and examples should be treated as deferred design material, not current behavior guarantees.
+- If older cross-repository design memos mention AI JSON, measure-detail JSON, or projection/patch style score workflows for `mikuscore`, read those references as future-direction material unless this document or a current product spec explicitly reactivates them.
 
 ## Deferred future note
 

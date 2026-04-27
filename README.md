@@ -99,6 +99,9 @@ For `state validate-command` / `state apply-command`, command payloads may targe
 
 For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.
 
+For downstream packaging, `npm run build:cli-runtime` generates
+`bundle/mikuscore.mjs`, a single-file Node.js CLI runtime artifact.
+
 ## Screenshots
 
 ![mikuscore screenshot 1](screenshots/screen1.png)
