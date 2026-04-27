@@ -279,6 +279,22 @@
     - consider moving the heaviest `sample7` roundtrip cases to a slower lane if they remain expensive
     - only raise per-test timeout after checking whether the case can be made cheaper or better isolated
 
+## Refactoring Priorities
+
+- [ ] Start the next refactoring pass from the format I/O modules before expanding format coverage.
+  - Priority order:
+    - `src/ts/abc-io.ts`: highest priority because ABC layout work is already waiting on cleaner parse/layout/emission boundaries.
+    - `src/ts/musescore-io.ts`: next priority because MuseScore import/export/helper logic is still concentrated in one large module.
+    - `src/ts/musicxml-io.ts`: watch only; keep it under light review unless helper growth accelerates.
+  - Explicit non-targets for this pass:
+    - `bundle/mikuscore.mjs` is a generated bundle and should not be refactored directly.
+    - `src/js/main.js` is generated output; change TypeScript sources instead.
+  - Start checklist:
+    - run `npm run typecheck` and `npm run test:unit` before structural edits to establish the baseline
+    - keep public conversion entry points stable while moving internals
+    - move one responsibility boundary at a time, then rerun focused tests for that format
+    - prefer characterization coverage before moving behavior that is not already covered
+
 ## ABC
 
 - [ ] Refactor `src/ts/abc-io.ts` before continuing larger ABC layout expansion.
@@ -300,6 +316,13 @@
     - separate ABC parse / compatibility / intermediate-model / MusicXML-render responsibilities more clearly
     - reduce the amount of layout-specific branching embedded directly in MusicXML emission
     - avoid continuing to grow the current `optional field on existing structure` pattern without a cleaner model
+  - Immediate start:
+    - first add or confirm focused characterization coverage for grouped-staff lyrics and grouped key/meter/tempo changes
+    - then continue the existing in-file cleanup around export helper ordering / section boundaries
+    - after the next cleanup slice, re-evaluate whether the first small helper module can be extracted safely
+  - Focused verification:
+    - `npm run typecheck`
+    - `npx vitest run tests/unit/abc-io.spec.ts tests/unit/abc-roundtrip-golden.spec.ts tests/unit/abc-inline-voice-switch.spec.ts`
 
 - [ ] Refactoring series 1: freeze current ABC behavior with characterization coverage before moving code.
   - Expand focused tests around:
@@ -460,6 +483,13 @@
   - Refactor goals:
     - separate MuseScore import, MuseScore export, and shared helper responsibilities more clearly
     - reduce the amount of deeply interleaved notation/duration/direction logic in one module
+  - Immediate start:
+    - first freeze or confirm characterization coverage around multi-staff parts, tuplets/beams/slurs, tempo/directions, and clef/key handling
+    - then split import-side parsing helpers from export-side generation helpers inside the current file
+    - only extract new files after the shared helper boundaries are simple enough to avoid circular dependencies
+  - Focused verification:
+    - `npm run typecheck`
+    - `npx vitest run tests/unit/musescore-io.spec.ts`
 
 - [ ] MuseScore refactoring series 1: freeze current behavior with characterization coverage around fragile areas.
   - Focus especially on:
