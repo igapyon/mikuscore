@@ -17,7 +17,7 @@ Scope note:
 ## Target Artifact
 
 - Development templates: `mikuscore-src.html`, `index-src.html` (editable source templates)
-- Distribution artifacts: `mikuscore.html`, `index.html` (generated files, do not edit directly)
+- Distribution artifacts: `mikuscore.html`, `index.html`, `bundle/mikuscore.mjs` (generated files, do not edit directly)
 
 ## Suggested Project Layout (MVP)
 
@@ -45,6 +45,7 @@ npm run build
 3. Inline local CSS and JS into `mikuscore.html`
 4. Render static landing templates such as `index-src.html`
 5. Output generated HTML artifacts
+6. Output the single-file Node.js CLI runtime artifact
 
 ## Related Commands
 
@@ -70,10 +71,12 @@ For verification and daily commands (`typecheck`, `test:*`, `check:all`, `clean`
 - `mikuscore.html` MUST NOT fetch external CDN/resources at runtime
 - all required scripts/styles MUST be embedded or locally bundled
 - behavior of generated `mikuscore.html` MUST match development source behavior
+- `bundle/mikuscore.mjs` MUST NOT depend on source-tree-relative TypeScript files at runtime
+- `bundle/mikuscore.mjs` SHOULD bundle Node.js runtime package dependencies needed for normal CLI execution, while leaving Node built-ins external
 
 ## Editing Rules
 
-- `mikuscore.html` and `index.html` are generated; do not edit them directly
+- `mikuscore.html`, `index.html`, and `bundle/mikuscore.mjs` are generated; do not edit them directly
 - edit `mikuscore-src.html`, `index-src.html`, and files under `src/`
 - PRs SHOULD include regenerated `mikuscore.html` when behavior changes
 

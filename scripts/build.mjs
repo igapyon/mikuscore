@@ -23,9 +23,11 @@ const SAMPLE6_TS_PATH = "src/ts/sampleXml6.ts";
 const SAMPLE7_TS_PATH = "src/ts/sampleXml7.ts";
 const TOKEN_CSS_PATH = "src/css/md3/token-spec.css";
 const CORE_CSS_PATH = "src/css/md3/core-spec.css";
+const LHT_CMN_CSS_PATH = "lht-cmn/css/components.css";
 const CSS_PATH = "src/css/app.css";
 const VEROVIO_JS_PATH = "src/js/verovio.js";
 const MIDI_WRITER_JS_PATH = "src/js/midi-writer.js";
+const LHT_CMN_JS_PATH = "lht-cmn/js/components.js";
 const UF3P_MIKUSCORE_IIFE_JS_PATH = "src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js";
 const JS_OUT = "src/js/main.js";
 const TMP_DIR = ".mikuscore-build";
@@ -230,13 +232,18 @@ const bundle = (tsModules) => {
 
 const inlineTemplate = (jsBundle) => {
   const template = readText(TEMPLATE);
+  const lhtCmnCss = readText(LHT_CMN_CSS_PATH);
   const css = readText(CSS_PATH);
   const verovioJs = readText(VEROVIO_JS_PATH);
   const midiWriterJs = readText(MIDI_WRITER_JS_PATH);
+  const lhtCmnJs = readText(LHT_CMN_JS_PATH);
   const uf3pMikuscoreIifeJs = readText(UF3P_MIKUSCORE_IIFE_JS_PATH);
   const hasTokenCssLink = template.includes(`href="${TOKEN_CSS_PATH}"`);
   const hasCoreCssLink = template.includes("href=\"src/css/md3/core-spec.css\"");
 
+  if (!template.includes(`href="${LHT_CMN_CSS_PATH}"`)) {
+    throw new Error("Template must include lht-cmn/css/components.css link tag.");
+  }
   if (!template.includes("href=\"src/css/app.css\"")) {
     throw new Error("Template must include src/css/app.css link tag.");
   }
@@ -248,6 +255,9 @@ const inlineTemplate = (jsBundle) => {
   }
   if (!template.includes("src=\"src/js/midi-writer.js\"")) {
     throw new Error("Template must include src/js/midi-writer.js script tag.");
+  }
+  if (!template.includes("src=\"lht-cmn/js/components.js\"")) {
+    throw new Error("Template must include lht-cmn/js/components.js script tag.");
   }
   if (!template.includes("src=\"src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js\"")) {
     throw new Error("Template must include src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js script tag.");
@@ -267,7 +277,12 @@ const inlineTemplate = (jsBundle) => {
       )
     : withTokenCss;
 
-  const withCss = withCoreCss.replace(
+  const withLhtCmnCss = withCoreCss.replace(
+    /<link[^>]*href="lht-cmn\/css\/components\.css"[^>]*>/,
+    `<style>\n${lhtCmnCss}\n</style>`
+  );
+
+  const withCss = withLhtCmnCss.replace(
     /<link[^>]*href="src\/css\/app\.css"[^>]*>/,
     `<style>\n${css}\n</style>`
   );
@@ -282,7 +297,12 @@ const inlineTemplate = (jsBundle) => {
     `<script>\n${midiWriterJs}\n</script>`
   );
 
-  const withUf3pMikuscoreIifeJs = withMidiWriterJs.replace(
+  const withLhtCmnJs = withMidiWriterJs.replace(
+    /<script\s+src="lht-cmn\/js\/components\.js"><\/script>/,
+    `<script>\n${lhtCmnJs}\n</script>`
+  );
+
+  const withUf3pMikuscoreIifeJs = withLhtCmnJs.replace(
     /<script\s+src="src\/vendor\/utaformatix3\/utaformatix3-ts-plus\.mikuscore\.iife\.js"><\/script>/,
     `<script>\n${uf3pMikuscoreIifeJs}\n</script>`
   );

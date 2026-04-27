@@ -6,6 +6,7 @@ This page collects repository-facing notes that are useful for contributors and 
 
 - `npm run build`
 - `npm run build:full`
+- `npm run build:cli-runtime`
 - `npm run test:build`
 - `npm run test:build:full`
 - `npm run test:slow`
@@ -22,6 +23,7 @@ Practical command split:
 
 - `npm run build`: faster day-to-day build (`typecheck` + `test:build` + `build:dist`)
 - `npm run build:full`: fuller build path (`typecheck` + `test:build:full` + `build:dist`)
+- `npm run build:cli-runtime`: generate the single-file Node.js CLI runtime artifact
 - `npm run test:slow`: heavy suites currently split out of the day-to-day build path
 - `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
 - `npm run check:all`: full verification (`typecheck` + full `test:all` + `build:dist`)
@@ -30,11 +32,20 @@ Generated HTML note:
 
 - `mikuscore.html` is generated from `mikuscore-src.html`
 - `index.html` is generated from `index-src.html`
+- `bundle/mikuscore.mjs` is generated from the CLI entrypoint and CLI API graph
 - `{{BUILD_DATE}}` placeholders are filled during the build
 
 ## CLI Notes
 
 Current CLI uses a `convert` / `render` / initial `state` command surface.
+
+The repository CLI entrypoint is `scripts/mikuscore-cli.mjs`. The generated
+single-file runtime artifact is `bundle/mikuscore.mjs`; it is intended for
+downstream packaging and local agent runtimes that need one JavaScript CLI file
+instead of a source-tree lookup path.
+The artifact is bundled for Node.js and includes the CLI runtime dependency
+graph such as `jsdom`; it should not require repository `src/` files or
+`node_modules/jsdom` at runtime.
 
 Available commands:
 
