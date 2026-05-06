@@ -80,16 +80,23 @@ const bridge = (): UtaFormatixBridge | null => {
   return window.UtaFormatix3TsPlusMikuscore ?? null;
 };
 
-const isBlankText = (value: unknown): boolean => {
-  return !String(value || "").trim();
+const textOrEmpty = (value: unknown): string => {
+  return String(value || "");
 };
 
-const bridgeUnavailableDiagnostic = (): VsqxDiagnostic => ({
-  code: VSQX_BRIDGE_UNAVAILABLE,
-  message: MSG_BRIDGE_UNAVAILABLE,
-});
+const trimmedTextOrEmpty = (value: unknown): string => {
+  return textOrEmpty(value).trim();
+};
+
+const isBlankText = (value: unknown): boolean => {
+  return !trimmedTextOrEmpty(value);
+};
 
 const diagnostic = (code: string, message: string): VsqxDiagnostic => ({ code, message });
+
+const bridgeUnavailableDiagnostic = (): VsqxDiagnostic => {
+  return diagnostic(VSQX_BRIDGE_UNAVAILABLE, MSG_BRIDGE_UNAVAILABLE);
+};
 
 const vsqxExportErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : MSG_EXPORT_FAILED;
@@ -124,7 +131,7 @@ const failedMusicXmlToVsqxResult = (diagnostic: VsqxDiagnostic): MusicXmlToVsqxR
 });
 
 const issueLevel = (issue: VsqxIssue): string => {
-  return String(issue.level || "").toLowerCase();
+  return trimmedTextOrEmpty(issue.level).toLowerCase();
 };
 
 const isVsqxConversionErrorIssue = (issue: VsqxIssue): boolean => {
@@ -137,12 +144,12 @@ const isVsqxConversionWarningIssue = (issue: VsqxIssue): boolean => {
 };
 
 const issueCode = (issue: VsqxIssue, fallback: string): string => {
-  const raw = String(issue.code || "").trim();
+  const raw = trimmedTextOrEmpty(issue.code);
   return raw || fallback;
 };
 
 const issueMessage = (issue: VsqxIssue, fallback: string): string => {
-  const raw = String(issue.message || "").trim();
+  const raw = trimmedTextOrEmpty(issue.message);
   return raw || fallback;
 };
 
@@ -195,7 +202,7 @@ export const convertVsqxToMusicXml = (
   const report = runtime.convertVsqxToMusicXmlWithReport(vsqxText, options);
   const { diagnostics, warnings } = collectVsqxConversionIssues(reportIssues(report));
 
-  const xml = String(report?.musicXml || "");
+  const xml = textOrEmpty(report?.musicXml);
   if (isBlankText(xml)) {
     const fallbackDiagnostics = diagnostics.length
       ? diagnostics

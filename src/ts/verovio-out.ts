@@ -19,6 +19,8 @@ type VerovioRuntime = {
   toolkit?: new () => VerovioToolkitApi;
 };
 
+type OpenSlurStacks = Map<string, Element[]>;
+
 const DEFAULT_SLUR_NUMBER = "1";
 const VEROVIO_INIT_TIMEOUT_MS = 8000;
 
@@ -57,41 +59,52 @@ const getSlurType = (slur: Element): string => {
   return (slur.getAttribute("type") ?? "").trim().toLowerCase();
 };
 
+const openSlurStack = (openSlurs: OpenSlurStacks, number: string): Element[] => {
+  const stack = openSlurs.get(number) ?? [];
+  openSlurs.set(number, stack);
+  return stack;
+};
+
+const processSlurForRender = (slur: Element, openSlurs: OpenSlurStacks): void => {
+  const number = getSlurNumber(slur);
+  const type = getSlurType(slur);
+  const stack = openSlurStack(openSlurs, number);
+
+  if (type === "start") {
+    stack.push(slur);
+    return;
+  }
+
+  if (type === "stop") {
+    if (stack.length > 0) {
+      stack.pop();
+    } else {
+      removeSlurAndPruneNotations(slur);
+    }
+    return;
+  }
+
+  if (type === "continue") {
+    if (stack.length === 0) {
+      removeSlurAndPruneNotations(slur);
+      return;
+    }
+    stack.pop();
+    stack.push(slur);
+  }
+};
+
 const sanitizeSlursForRender = (doc: Document): void => {
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   for (const part of parts) {
-    const openSlurs = new Map<string, Element[]>();
+    const openSlurs: OpenSlurStacks = new Map();
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
     for (const measure of measures) {
       const notes = Array.from(measure.querySelectorAll(":scope > note"));
       for (const note of notes) {
         const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
         for (const slur of slurs) {
-          const number = getSlurNumber(slur);
-          const type = getSlurType(slur);
-          const stack = openSlurs.get(number) ?? [];
-          if (type === "start") {
-            stack.push(slur);
-            openSlurs.set(number, stack);
-            continue;
-          }
-          if (type === "stop") {
-            if (stack.length > 0) {
-              stack.pop();
-            } else {
-              removeSlurAndPruneNotations(slur);
-            }
-            continue;
-          }
-          if (type === "continue") {
-            if (stack.length === 0) {
-              removeSlurAndPruneNotations(slur);
-              continue;
-            }
-            stack.pop();
-            stack.push(slur);
-            openSlurs.set(number, stack);
-          }
+          processSlurForRender(slur, openSlurs);
         }
       }
     }
