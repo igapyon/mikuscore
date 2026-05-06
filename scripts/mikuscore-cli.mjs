@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
 const DIAGNOSTICS_VERSION = 1;
+const PACKAGE_VERSION = "__MIKUSCORE_PACKAGE_VERSION__";
 
 const HELP_TEXT = {
   top: [
@@ -34,6 +35,7 @@ const HELP_TEXT = {
     "  mikuscore render --help",
     "  mikuscore state --help",
     "  mikuscore convert --help",
+    "  mikuscore --version",
     "  mikuscore --help",
     "",
     "Commands:",
@@ -47,6 +49,7 @@ const HELP_TEXT = {
     "  --in <file>|-            Read input from file or stdin",
     "  --out <file>|-           Write output to file or stdout",
     "  --diagnostics text|json  Select diagnostics format",
+    "  --version                Show version",
     "  --help                   Show help",
   ].join("\n"),
   convert: [
@@ -191,6 +194,11 @@ main().catch((error) => {
 
 async function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
+  if (command.length === 0 && options.version) {
+    process.stdout.write(`${getPackageVersion()}\n`);
+    return;
+  }
+
   const helpTopic = resolveHelpTopic(command, options);
 
   if (helpTopic) {
@@ -224,6 +232,10 @@ function parseArgs(argv) {
       options.help = true;
       continue;
     }
+    if (key === "version") {
+      options.version = true;
+      continue;
+    }
 
     const value = readOptionValue(argv, index, token);
     if (key === "diagnostics") {
@@ -238,6 +250,15 @@ function parseArgs(argv) {
   }
 
   return { command, options };
+}
+
+function getPackageVersion() {
+  if (PACKAGE_VERSION !== "__MIKUSCORE_PACKAGE_VERSION__") {
+    return PACKAGE_VERSION;
+  }
+  const packageJsonPath = path.join(repoRoot, "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  return String(packageJson.version);
 }
 
 function isCommand(actual, expected) {

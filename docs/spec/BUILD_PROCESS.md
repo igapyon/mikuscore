@@ -18,6 +18,7 @@ Scope note:
 
 - Development templates: `mikuscore-src.html`, `index-src.html` (editable source templates)
 - Distribution artifacts: `mikuscore.html`, `index.html`, `bundle/mikuscore.mjs` (generated files, do not edit directly)
+- Release staging artifacts: `release-assets/` (generated local output, do not commit)
 
 ## Suggested Project Layout (MVP)
 
@@ -46,6 +47,8 @@ npm run build
 4. Render static landing templates such as `index-src.html`
 5. Output generated HTML artifacts
 6. Output the single-file Node.js CLI runtime artifact
+
+Release asset staging is handled by a separate command after build when `TAG_NAME` is supplied.
 
 ## Related Commands
 
@@ -77,6 +80,7 @@ For verification and daily commands (`typecheck`, `test:*`, `check:all`, `clean`
 ## Editing Rules
 
 - `mikuscore.html`, `index.html`, and `bundle/mikuscore.mjs` are generated; do not edit them directly
+- `release-assets/` is generated staging output; do not edit or commit it
 - edit `mikuscore-src.html`, `index-src.html`, and files under `src/`
 - PRs SHOULD include regenerated `mikuscore.html` when behavior changes
 

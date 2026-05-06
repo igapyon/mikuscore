@@ -14,6 +14,8 @@
     "build:full": "npm run typecheck && npm run test:build:full && npm run build:dist",
     "cli": "node scripts/mikuscore-cli.mjs",
     "check:all": "npm run typecheck && npm run test:all && npm run build:dist",
+    "prepare:release-assets": "node scripts/prepare-release-assets.mjs",
+    "smoke:bundle": "node scripts/smoke-bundle.mjs",
     "build:vendor:utaformatix3": "bash scripts/sync-utaformatix3-vendor.sh",
     "clean": "rm -rf mikuscore.html src/js/main.js bundle/mikuscore.mjs .tsbuildinfo .mikuscore-build",
     "test:build": "vitest run tests/unit --exclude tests/unit/cffp-series.spec.ts --exclude tests/unit/mei-io.spec.ts --exclude tests/unit/musescore-io.spec.ts --exclude tests/unit/lilypond-io.spec.ts --exclude tests/unit/playback-flow.spec.ts --exclude tests/unit/midi-roundtrip-golden.spec.ts",
