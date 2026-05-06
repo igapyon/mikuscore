@@ -20,6 +20,11 @@ import {
   extractZipEntryBytesByPath,
   listZipRootEntryPathsByExtensions,
 } from "../../src/ts/mxl-io";
+import { bytesToArrayBuffer, makeZipBytes } from "../../src/ts/zip-io";
+
+const encodeUtf8 = (text: string): Uint8Array => {
+  return new TextEncoder().encode(text);
+};
 
 const readBlobAsArrayBuffer = async (blob: Blob): Promise<ArrayBuffer> => {
   const reader = new FileReader();
@@ -139,6 +144,78 @@ describe("download-flow compressed export", () => {
     const extracted = await extractZipEntryBytesByPath(archiveBuffer, rootEntries[0]);
     const extractedText = new TextDecoder().decode(extracted);
     expect(extractedText).toContain("<museScore");
+  });
+
+  it("rejects archives without a ZIP end of central directory", async () => {
+    await expect(
+      extractTextFromZipByExtensions(bytesToArrayBuffer(new Uint8Array([0x50, 0x4b, 0x03, 0x04])), [".xml"])
+    ).rejects.toThrow("Invalid ZIP: end of central directory was not found.");
+  });
+
+  it("rejects empty ZIP archives for extension extraction", async () => {
+    const archiveBytes = await makeZipBytes([], false);
+
+    await expect(
+      extractTextFromZipByExtensions(bytesToArrayBuffer(archiveBytes), [".xml"])
+    ).rejects.toThrow("The ZIP archive is empty.");
+  });
+
+  it("ignores directory entries when listing ZIP root entries", async () => {
+    const archiveBytes = await makeZipBytes([
+      { path: "score.musicxml", bytes: encodeUtf8("<score-partwise/>") },
+      { path: "nested/score.musicxml", bytes: encodeUtf8("<score-partwise/>") },
+      { path: "nested/", bytes: new Uint8Array() },
+    ], false);
+
+    const rootEntries = await listZipRootEntryPathsByExtensions(bytesToArrayBuffer(archiveBytes), [".musicxml"]);
+
+    expect(rootEntries).toEqual(["score.musicxml"]);
+  });
+
+  it("falls back to a likely MusicXML entry when MXL has no container rootfile", async () => {
+    const archiveBytes = await makeZipBytes([
+      { path: "score.xml", bytes: encodeUtf8("<score-partwise><part-list/></score-partwise>") },
+    ], false);
+
+    const extracted = await extractMusicXmlTextFromMxl(bytesToArrayBuffer(archiveBytes));
+
+    expect(extracted).toContain("<score-partwise>");
+  });
+
+  it("rejects exact ZIP entry extraction when the path does not exist", async () => {
+    const archiveBytes = await makeZipBytes([
+      { path: "score.musicxml", bytes: encodeUtf8("<score-partwise/>") },
+    ], false);
+
+    await expect(
+      extractZipEntryBytesByPath(bytesToArrayBuffer(archiveBytes), "missing.musicxml")
+    ).rejects.toThrow("ZIP entry not found: missing.musicxml");
+  });
+
+  it("rejects extension extraction when no ZIP entry matches", async () => {
+    const archiveBytes = await makeZipBytes([
+      { path: "score.musicxml", bytes: encodeUtf8("<score-partwise/>") },
+    ], false);
+
+    await expect(
+      extractTextFromZipByExtensions(bytesToArrayBuffer(archiveBytes), [".mscx"])
+    ).rejects.toThrow("No matching entry was found for extensions: .mscx");
+  });
+
+  it("rejects MXL when container rootfile points to a missing entry", async () => {
+    const containerXml =
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
+      `<rootfiles><rootfile full-path="missing.musicxml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles>` +
+      `</container>`;
+    const archiveBytes = await makeZipBytes([
+      { path: "META-INF/container.xml", bytes: encodeUtf8(containerXml) },
+      { path: "score.musicxml", bytes: encodeUtf8("<score-partwise/>") },
+    ], false);
+
+    await expect(
+      extractMusicXmlTextFromMxl(bytesToArrayBuffer(archiveBytes))
+    ).rejects.toThrow("MusicXML root file was not found in archive: missing.musicxml");
   });
 
   it("returns null when text-format conversion throws", () => {
