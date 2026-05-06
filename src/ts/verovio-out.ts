@@ -19,6 +19,9 @@ type VerovioRuntime = {
   toolkit?: new () => VerovioToolkitApi;
 };
 
+const DEFAULT_SLUR_NUMBER = "1";
+const VEROVIO_INIT_TIMEOUT_MS = 8000;
+
 export type VerovioRenderResult = {
   svg: string;
   pageCount: number;
@@ -40,6 +43,20 @@ const pruneEmptyNotations = (notations: Element | null): void => {
   notations.remove();
 };
 
+const removeSlurAndPruneNotations = (slur: Element): void => {
+  const notations = slur.parentElement;
+  slur.remove();
+  pruneEmptyNotations(notations);
+};
+
+const getSlurNumber = (slur: Element): string => {
+  return (slur.getAttribute("number") ?? DEFAULT_SLUR_NUMBER).trim() || DEFAULT_SLUR_NUMBER;
+};
+
+const getSlurType = (slur: Element): string => {
+  return (slur.getAttribute("type") ?? "").trim().toLowerCase();
+};
+
 const sanitizeSlursForRender = (doc: Document): void => {
   const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
   for (const part of parts) {
@@ -50,8 +67,8 @@ const sanitizeSlursForRender = (doc: Document): void => {
       for (const note of notes) {
         const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
         for (const slur of slurs) {
-          const number = (slur.getAttribute("number") ?? "1").trim() || "1";
-          const type = (slur.getAttribute("type") ?? "").trim().toLowerCase();
+          const number = getSlurNumber(slur);
+          const type = getSlurType(slur);
           const stack = openSlurs.get(number) ?? [];
           if (type === "start") {
             stack.push(slur);
@@ -62,17 +79,13 @@ const sanitizeSlursForRender = (doc: Document): void => {
             if (stack.length > 0) {
               stack.pop();
             } else {
-              const notations = slur.parentElement;
-              slur.remove();
-              pruneEmptyNotations(notations);
+              removeSlurAndPruneNotations(slur);
             }
             continue;
           }
           if (type === "continue") {
             if (stack.length === 0) {
-              const notations = slur.parentElement;
-              slur.remove();
-              pruneEmptyNotations(notations);
+              removeSlurAndPruneNotations(slur);
               continue;
             }
             stack.pop();
@@ -84,9 +97,7 @@ const sanitizeSlursForRender = (doc: Document): void => {
     }
     for (const danglingStarts of openSlurs.values()) {
       for (const startSlur of danglingStarts) {
-        const notations = startSlur.parentElement;
-        startSlur.remove();
-        pruneEmptyNotations(notations);
+        removeSlurAndPruneNotations(startSlur);
       }
     }
   }
@@ -121,7 +132,7 @@ const ensureVerovioToolkit = async (): Promise<VerovioToolkitApi | null> => {
           if (settled) return;
           settled = true;
           reject(new Error("Timed out while waiting for verovio initialization."));
-        }, 8000);
+        }, VEROVIO_INIT_TIMEOUT_MS);
 
         const complete = () => {
           if (settled) return;

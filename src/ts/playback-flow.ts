@@ -740,6 +740,14 @@ const isImplicitMeasure = (measure: Element | null | undefined): boolean => {
   return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
 };
 
+const hasPreviousMeasureSibling = (measure: Element): boolean => {
+  for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
+    const prevName = (prev.localName || prev.tagName || "").toLowerCase();
+    if (prevName === "measure") return true;
+  }
+  return false;
+};
+
 const resolveMeasureAdvanceDiv = (
   measure: Element,
   measureMaxDiv: number,
@@ -749,24 +757,11 @@ const resolveMeasureAdvanceDiv = (
   nextMeasureIsImplicit = false,
   firstMeasureUnderfullAsPickup = false
 ): number => {
-  const safeDivisions = Math.max(1, Math.round(currentDivisions));
-  const safeBeats = Math.max(1, Math.round(currentBeats));
-  const safeBeatType = Math.max(1, Math.round(currentBeatType));
-  const capacityDiv = Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
-  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
-  const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
-  if (isImplicit) {
+  const capacityDiv = measureCapacityDivFromContext(currentDivisions, currentBeats, currentBeatType);
+  if (isImplicitMeasure(measure)) {
     return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
   }
-  let hasPreviousMeasure = false;
-  for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
-    const prevName = (prev.localName || prev.tagName || "").toLowerCase();
-    if (prevName === "measure") {
-      hasPreviousMeasure = true;
-      break;
-    }
-  }
-  const isFirstMeasureInPart = !hasPreviousMeasure;
+  const isFirstMeasureInPart = !hasPreviousMeasureSibling(measure);
   if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
     return measureMaxDiv;
   }

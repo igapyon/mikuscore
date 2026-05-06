@@ -6,8 +6,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import {
+  createAbcDownloadPayload,
+  createJsonDownloadPayload,
+  createLilyPondDownloadPayload,
   createMuseScoreDownloadPayload,
   createMusicXmlDownloadPayload,
+  createSvgDownloadPayload,
   createVsqxDownloadPayload,
 } from "../../src/ts/download-flow";
 import {
@@ -100,6 +104,16 @@ describe("download-flow compressed export", () => {
     expect(text).toContain("\n    <vVoice/>");
   });
 
+  it("sets stable MIME types for direct SVG and JSON downloads", () => {
+    const svgPayload = createSvgDownloadPayload("<svg/>");
+    const jsonPayload = createJsonDownloadPayload("{\"ok\":true}");
+
+    expect(svgPayload.fileName.endsWith(".svg")).toBe(true);
+    expect(svgPayload.blob.type).toBe("image/svg+xml;charset=utf-8");
+    expect(jsonPayload.fileName.endsWith(".json")).toBe(true);
+    expect(jsonPayload.blob.type).toBe("application/json;charset=utf-8");
+  });
+
   it("lists only ZIP root entries by extension", async () => {
     const payload = await createMusicXmlDownloadPayload(
       `<score-partwise version="4.0"><part-list/></score-partwise>`,
@@ -125,5 +139,24 @@ describe("download-flow compressed export", () => {
     const extracted = await extractZipEntryBytesByPath(archiveBuffer, rootEntries[0]);
     const extractedText = new TextDecoder().decode(extracted);
     expect(extractedText).toContain("<museScore");
+  });
+
+  it("returns null when text-format conversion throws", () => {
+    const xml = `<score-partwise version="4.0"><part-list/></score-partwise>`;
+
+    const abcPayload = createAbcDownloadPayload(xml, () => {
+      throw new Error("ABC export failed");
+    });
+    const lilyPayload = createLilyPondDownloadPayload(xml, () => {
+      throw new Error("LilyPond export failed");
+    });
+
+    expect(abcPayload).toBeNull();
+    expect(lilyPayload).toBeNull();
+  });
+
+  it("returns null when MuseScore export receives invalid MusicXML", async () => {
+    const payload = await createMuseScoreDownloadPayload(`<not-musicxml`, () => "<museScore/>");
+    expect(payload).toBeNull();
   });
 });

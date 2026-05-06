@@ -6,6 +6,41 @@
 import type { RenderDocBundle } from "./musicxml-io";
 import { renderMusicXmlDomToSvg } from "./verovio-out";
 
+type PreviewRenderBundle = RenderDocBundle | {
+  renderDoc: Document | null;
+  svgIdToNodeId: Map<string, string>;
+  noteCount: number;
+};
+
+export type PreviewSvgIdMapMode = "direct" | "fallback-seq";
+
+export type PreviewSvgIdMapResult = {
+  map: Map<string, string>;
+  mapMode: PreviewSvgIdMapMode;
+};
+
+const hasEmbeddedMikuscoreNoteIds = (renderedNoteIds: string[]): boolean => {
+  return renderedNoteIds.some((id) => id.startsWith("mks-"));
+};
+
+export const preparePreviewSvgIdMap = (
+  renderBundle: Pick<PreviewRenderBundle, "svgIdToNodeId">,
+  sourceNoteNodeIds: string[],
+  renderedNoteIds: string[],
+  buildFallbackSvgIdMap: (noteNodeIds: string[], renderedNoteIds: string[]) => Map<string, string>
+): PreviewSvgIdMapResult => {
+  if (renderedNoteIds.length > 0 && !hasEmbeddedMikuscoreNoteIds(renderedNoteIds)) {
+    return {
+      map: buildFallbackSvgIdMap(sourceNoteNodeIds, renderedNoteIds),
+      mapMode: "fallback-seq",
+    };
+  }
+  return {
+    map: renderBundle.svgIdToNodeId,
+    mapMode: "direct",
+  };
+};
+
 export type RenderScorePreviewParams = {
   renderSeq: number;
   isRenderSeqCurrent: (renderSeq: number) => boolean;
@@ -14,7 +49,7 @@ export type RenderScorePreviewParams = {
   setMetaText: (text: string) => void;
   setSvgHtml: (svgHtml: string) => void;
   setSvgIdMap: (map: Map<string, string>) => void;
-  buildRenderXmlForVerovio: (xml: string) => RenderDocBundle | { renderDoc: Document | null; svgIdToNodeId: Map<string, string>; noteCount: number };
+  buildRenderXmlForVerovio: (xml: string) => PreviewRenderBundle;
   deriveRenderedNoteIds: (root: Element) => string[];
   buildFallbackSvgIdMap: (noteNodeIds: string[], renderedNoteIds: string[]) => Map<string, string>;
   onRendered: () => void;
@@ -57,12 +92,12 @@ export const renderScorePreview = async (params: RenderScorePreviewParams): Prom
     params.setSvgHtml(svg);
 
     const renderedNoteIds = params.deriveRenderedNoteIds(params.renderedRoot);
-    let mapMode = "direct";
-    let map = renderBundle.svgIdToNodeId;
-    if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-      map = params.buildFallbackSvgIdMap(params.noteNodeIds, renderedNoteIds);
-      mapMode = "fallback-seq";
-    }
+    const { map, mapMode } = preparePreviewSvgIdMap(
+      renderBundle,
+      params.noteNodeIds,
+      renderedNoteIds,
+      params.buildFallbackSvgIdMap
+    );
     params.setSvgIdMap(map);
     if (params.debugLog) {
       console.warn("[mikuscore][click-map] render map prepared:", {
@@ -148,10 +183,12 @@ export const renderMeasureEditorPreview = async (
     params.setHtml(svg);
 
     const renderedNoteIds = params.deriveRenderedNoteIds(params.renderedRoot);
-    let map = renderBundle.svgIdToNodeId;
-    if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-      map = params.buildFallbackSvgIdMap(params.draftNoteNodeIds, renderedNoteIds);
-    }
+    const { map } = preparePreviewSvgIdMap(
+      renderBundle,
+      params.draftNoteNodeIds,
+      renderedNoteIds,
+      params.buildFallbackSvgIdMap
+    );
     params.setSvgIdMap(map);
     params.onRendered();
   } catch (error: unknown) {
