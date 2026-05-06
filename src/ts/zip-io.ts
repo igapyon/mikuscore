@@ -25,6 +25,11 @@ type EncodedZipEntry = {
   uncompressedSize: number;
 };
 
+type ZipDosDateTime = {
+  dosTime: number;
+  dosDate: number;
+};
+
 const ZIP_EOCD_SIG = 0x06054b50;
 const ZIP_CDFH_SIG = 0x02014b50;
 const ZIP_LFH_SIG = 0x04034b50;
@@ -48,6 +53,14 @@ const normalizeZipPath = (value: string): string => {
 
 const decodeUtf8 = (bytes: Uint8Array): string => {
   return new TextDecoder("utf-8").decode(bytes);
+};
+
+const encodeUtf8 = (text: string): Uint8Array => {
+  return new TextEncoder().encode(text);
+};
+
+const normalizeZipEntryPathForWrite = (path: string): string => {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "");
 };
 
 const decodeZipFileName = (bytes: Uint8Array, utf8Flag: boolean): string => {
@@ -164,6 +177,10 @@ const extractEntryBytes = async (archiveBytes: Uint8Array, entry: ZipEntry): Pro
   throw new Error(`Unsupported ZIP compression method: ${entry.compressionMethod}.`);
 };
 
+const extractEntryText = async (archiveBytes: Uint8Array, entry: ZipEntry): Promise<string> => {
+  return decodeUtf8(await extractEntryBytes(archiveBytes, entry));
+};
+
 const findEntryByPath = (entries: ZipEntry[], path: string): ZipEntry | null => {
   const normalized = normalizeZipPath(path);
   return entries.find((entry) => entry.path === normalized) ?? null;
@@ -248,7 +265,7 @@ const writeU32 = (target: Uint8Array, offset: number, value: number): void => {
   target[offset + 3] = (value >>> 24) & 0xff;
 };
 
-const toDosDateTime = (date: Date): { dosTime: number; dosDate: number } => {
+const toDosDateTime = (date: Date): ZipDosDateTime => {
   const year = Math.max(1980, Math.min(2107, date.getFullYear()));
   const month = Math.max(1, Math.min(12, date.getMonth() + 1));
   const day = Math.max(1, Math.min(31, date.getDate()));
@@ -258,6 +275,10 @@ const toDosDateTime = (date: Date): { dosTime: number; dosDate: number } => {
   const dosTime = ((hours & 0x1f) << 11) | ((minutes & 0x3f) << 5) | ((Math.floor(seconds / 2)) & 0x1f);
   const dosDate = (((year - 1980) & 0x7f) << 9) | ((month & 0x0f) << 5) | (day & 0x1f);
   return { dosTime, dosDate };
+};
+
+const sumByteLengths = (chunks: Uint8Array[]): number => {
+  return chunks.reduce((sum, chunk) => sum + chunk.length, 0);
 };
 
 const compressDeflateRaw = async (input: Uint8Array): Promise<Uint8Array | null> => {
@@ -303,10 +324,9 @@ const encodeZipEntries = async (
   entries: ZipEntryPayload[],
   preferCompression: boolean
 ): Promise<EncodedZipEntry[]> => {
-  const encoder = new TextEncoder();
   const encodedEntries: EncodedZipEntry[] = [];
   for (const entry of entries) {
-    const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
+    const pathBytes = encodeUtf8(normalizeZipEntryPathForWrite(entry.path));
     const uncompressed = entry.bytes;
     let data = uncompressed;
     let method: 0 | 8 = 0;
@@ -329,67 +349,79 @@ const encodeZipEntries = async (
   return encodedEntries;
 };
 
-export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boolean): Promise<Uint8Array> => {
-  const localChunks: Uint8Array[] = [];
-  const centralChunks: Uint8Array[] = [];
-  let localOffset = 0;
-  const nowDos = toDosDateTime(new Date());
-  const encodedEntries = await encodeZipEntries(entries, preferCompression);
+const buildZipLocalHeader = (
+  entry: EncodedZipEntry,
+  nowDos: ZipDosDateTime
+): Uint8Array => {
+  const { pathBytes, crc, method, compressedSize, uncompressedSize } = entry;
+  const localHeader = new Uint8Array(30 + pathBytes.length);
+  writeU32(localHeader, 0, ZIP_LFH_SIG);
+  writeU16(localHeader, 4, 20);
+  writeU16(localHeader, 6, 0x0800);
+  writeU16(localHeader, 8, method);
+  writeU16(localHeader, 10, nowDos.dosTime);
+  writeU16(localHeader, 12, nowDos.dosDate);
+  writeU32(localHeader, 14, crc);
+  writeU32(localHeader, 18, compressedSize);
+  writeU32(localHeader, 22, uncompressedSize);
+  writeU16(localHeader, 26, pathBytes.length);
+  writeU16(localHeader, 28, 0);
+  localHeader.set(pathBytes, 30);
+  return localHeader;
+};
 
-  for (const entry of encodedEntries) {
-    const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
+const buildZipCentralHeader = (
+  entry: EncodedZipEntry,
+  nowDos: ZipDosDateTime,
+  localOffset: number
+): Uint8Array => {
+  const { pathBytes, crc, method, compressedSize, uncompressedSize } = entry;
+  const centralHeader = new Uint8Array(46 + pathBytes.length);
+  writeU32(centralHeader, 0, ZIP_CDFH_SIG);
+  writeU16(centralHeader, 4, 20);
+  writeU16(centralHeader, 6, 20);
+  writeU16(centralHeader, 8, 0x0800);
+  writeU16(centralHeader, 10, method);
+  writeU16(centralHeader, 12, nowDos.dosTime);
+  writeU16(centralHeader, 14, nowDos.dosDate);
+  writeU32(centralHeader, 16, crc);
+  writeU32(centralHeader, 20, compressedSize);
+  writeU32(centralHeader, 24, uncompressedSize);
+  writeU16(centralHeader, 28, pathBytes.length);
+  writeU16(centralHeader, 30, 0);
+  writeU16(centralHeader, 32, 0);
+  writeU16(centralHeader, 34, 0);
+  writeU16(centralHeader, 36, 0);
+  writeU32(centralHeader, 38, 0);
+  writeU32(centralHeader, 42, localOffset);
+  centralHeader.set(pathBytes, 46);
+  return centralHeader;
+};
 
-    const localHeader = new Uint8Array(30 + pathBytes.length);
-    writeU32(localHeader, 0, ZIP_LFH_SIG);
-    writeU16(localHeader, 4, 20);
-    writeU16(localHeader, 6, 0x0800);
-    writeU16(localHeader, 8, method);
-    writeU16(localHeader, 10, nowDos.dosTime);
-    writeU16(localHeader, 12, nowDos.dosDate);
-    writeU32(localHeader, 14, crc);
-    writeU32(localHeader, 18, compressedSize);
-    writeU32(localHeader, 22, uncompressedSize);
-    writeU16(localHeader, 26, pathBytes.length);
-    writeU16(localHeader, 28, 0);
-    localHeader.set(pathBytes, 30);
-    localChunks.push(localHeader, data);
-
-    const centralHeader = new Uint8Array(46 + pathBytes.length);
-    writeU32(centralHeader, 0, ZIP_CDFH_SIG);
-    writeU16(centralHeader, 4, 20);
-    writeU16(centralHeader, 6, 20);
-    writeU16(centralHeader, 8, 0x0800);
-    writeU16(centralHeader, 10, method);
-    writeU16(centralHeader, 12, nowDos.dosTime);
-    writeU16(centralHeader, 14, nowDos.dosDate);
-    writeU32(centralHeader, 16, crc);
-    writeU32(centralHeader, 20, compressedSize);
-    writeU32(centralHeader, 24, uncompressedSize);
-    writeU16(centralHeader, 28, pathBytes.length);
-    writeU16(centralHeader, 30, 0);
-    writeU16(centralHeader, 32, 0);
-    writeU16(centralHeader, 34, 0);
-    writeU16(centralHeader, 36, 0);
-    writeU32(centralHeader, 38, 0);
-    writeU32(centralHeader, 42, localOffset);
-    centralHeader.set(pathBytes, 46);
-    centralChunks.push(centralHeader);
-
-    localOffset += localHeader.length + compressedSize;
-  }
-
-  const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
-  const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
+const buildZipEndOfCentralDirectory = (
+  entryCount: number,
+  centralSize: number,
+  localSize: number
+): Uint8Array => {
   const eocd = new Uint8Array(22);
   writeU32(eocd, 0, ZIP_EOCD_SIG);
   writeU16(eocd, 4, 0);
   writeU16(eocd, 6, 0);
-  writeU16(eocd, 8, entries.length);
-  writeU16(eocd, 10, entries.length);
+  writeU16(eocd, 8, entryCount);
+  writeU16(eocd, 10, entryCount);
   writeU32(eocd, 12, centralSize);
   writeU32(eocd, 16, localSize);
   writeU16(eocd, 20, 0);
+  return eocd;
+};
 
+const concatZipChunks = (
+  localChunks: Uint8Array[],
+  centralChunks: Uint8Array[],
+  eocd: Uint8Array
+): Uint8Array => {
+  const localSize = sumByteLengths(localChunks);
+  const centralSize = sumByteLengths(centralChunks);
   const out = new Uint8Array(localSize + centralSize + eocd.length);
   let cursor = 0;
   for (const chunk of localChunks) {
@@ -404,22 +436,43 @@ export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression
   return out;
 };
 
+export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boolean): Promise<Uint8Array> => {
+  const localChunks: Uint8Array[] = [];
+  const centralChunks: Uint8Array[] = [];
+  let localOffset = 0;
+  const nowDos = toDosDateTime(new Date());
+  const encodedEntries = await encodeZipEntries(entries, preferCompression);
+
+  for (const entry of encodedEntries) {
+    const { data, compressedSize } = entry;
+    const localHeader = buildZipLocalHeader(entry, nowDos);
+    localChunks.push(localHeader, data);
+
+    centralChunks.push(buildZipCentralHeader(entry, nowDos, localOffset));
+
+    localOffset += localHeader.length + compressedSize;
+  }
+
+  const localSize = sumByteLengths(localChunks);
+  const centralSize = sumByteLengths(centralChunks);
+  const eocd = buildZipEndOfCentralDirectory(entries.length, centralSize, localSize);
+  return concatZipChunks(localChunks, centralChunks, eocd);
+};
+
 export const makeMxlBytes = async (formattedXml: string): Promise<Uint8Array> => {
-  const encoder = new TextEncoder();
   const containerXml =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
     `<rootfiles><rootfile full-path="score.musicxml" media-type="application/vnd.recordare.musicxml+xml"/></rootfiles>` +
     `</container>`;
   return makeZipBytes([
-    { path: "META-INF/container.xml", bytes: encoder.encode(containerXml) },
-    { path: "score.musicxml", bytes: encoder.encode(formattedXml) },
+    { path: "META-INF/container.xml", bytes: encodeUtf8(containerXml) },
+    { path: "score.musicxml", bytes: encodeUtf8(formattedXml) },
   ], true);
 };
 
 export const makeMsczBytes = async (mscxText: string): Promise<Uint8Array> => {
-  const encoder = new TextEncoder();
-  return makeZipBytes([{ path: "score.mscx", bytes: encoder.encode(mscxText) }], true);
+  return makeZipBytes([{ path: "score.mscx", bytes: encodeUtf8(mscxText) }], true);
 };
 
 export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Promise<string> => {
@@ -431,16 +484,14 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
 
   const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
   if (containerEntry) {
-    const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
-    const containerText = decodeUtf8(containerBytes);
+    const containerText = await extractEntryText(archiveBytes, containerEntry);
     const rootPath = parseContainerRootFilePath(containerText);
     if (rootPath) {
       const rootEntry = findEntryByPath(entries, rootPath);
       if (!rootEntry) {
         throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
       }
-      const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
-      return decodeUtf8(xmlBytes);
+      return extractEntryText(archiveBytes, rootEntry);
     }
   }
 
@@ -448,8 +499,7 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
   if (!fallbackEntry) {
     throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
   }
-  const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
-  return decodeUtf8(xmlBytes);
+  return extractEntryText(archiveBytes, fallbackEntry);
 };
 
 export const extractTextFromZipByExtensions = async (
@@ -461,8 +511,7 @@ export const extractTextFromZipByExtensions = async (
   if (!entry) {
     throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
   }
-  const bytes = await extractEntryBytes(archiveBytes, entry);
-  return decodeUtf8(bytes);
+  return extractEntryText(archiveBytes, entry);
 };
 
 export const listZipRootEntryPathsByExtensions = async (
