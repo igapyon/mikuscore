@@ -69,6 +69,14 @@ const failureResult = (message: string): CliResult => ({
   diagnostics: [message],
 });
 
+const invalidMusicXmlResult = (): CliResult => {
+  return failureResult("Failed to parse MusicXML: input is not a valid MusicXML document.");
+};
+
+const caughtErrorMessage = (error: unknown): string => {
+  return error instanceof Error ? error.message : String(error);
+};
+
 const decodeUtf8Text = (bytes: Uint8Array): string => {
   return new TextDecoder("utf-8").decode(bytes);
 };
@@ -270,7 +278,7 @@ export const decodeCliMusicXmlInput = async (inputBytes: Uint8Array, inputPath?:
     }
     return textResult(decodeUtf8Text(inputBytes));
   } catch (error) {
-    return failureResult(`Failed to read MusicXML input: ${error instanceof Error ? error.message : String(error)}`);
+    return failureResult(`Failed to read MusicXML input: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -285,7 +293,7 @@ export const decodeCliMuseScoreInput = async (inputBytes: Uint8Array, inputPath?
     }
     return textResult(decodeUtf8Text(inputBytes));
   } catch (error) {
-    return failureResult(`Failed to read MuseScore input: ${error instanceof Error ? error.message : String(error)}`);
+    return failureResult(`Failed to read MuseScore input: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -297,7 +305,7 @@ export const encodeCliMusicXmlOutput = async (xmlText: string, outputPath?: stri
     }
     return textResult(xmlText);
   } catch (error) {
-    return failureResult(`Failed to encode MusicXML output: ${error instanceof Error ? error.message : String(error)}`);
+    return failureResult(`Failed to encode MusicXML output: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -309,51 +317,29 @@ export const encodeCliMuseScoreOutput = async (musescoreText: string, outputPath
     }
     return textResult(musescoreText);
   } catch (error) {
-    return failureResult(`Failed to encode MuseScore output: ${error instanceof Error ? error.message : String(error)}`);
+    return failureResult(`Failed to encode MuseScore output: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const importAbcToMusicXml = (abcText: string): CliResult => {
   try {
     const xmlText = normalizeImportedMusicXmlText(convertAbcToMusicXml(abcText));
-    return {
-      ok: true,
-      output: xmlText,
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(xmlText);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to parse ABC: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const exportMusicXmlToAbc = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
-    return {
-      ok: true,
-      output: exportMusicXmlDomToAbc(doc),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(exportMusicXmlDomToAbc(doc));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to export ABC: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to export ABC: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -377,11 +363,7 @@ export const importMidiToMusicXml = (midiBytes: Uint8Array): CliResult => {
 export const exportMusicXmlToMidi = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
@@ -424,158 +406,79 @@ export const exportMusicXmlToMidi = (xmlText: string): CliResult => {
         },
       }
     );
-    return {
-      ok: true,
-      output: midiBytes,
-      warnings: [],
-      diagnostics: [],
-    };
+    return bytesResult(midiBytes);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to export MIDI: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to export MIDI: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const importMuseScoreToMusicXml = (musescoreText: string): CliResult => {
   try {
-    return {
-      ok: true,
-      output: normalizeImportedMusicXmlText(convertMuseScoreToMusicXml(musescoreText)),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(normalizeImportedMusicXmlText(convertMuseScoreToMusicXml(musescoreText)));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to parse MuseScore: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const importMeiToMusicXml = (meiText: string): CliResult => {
   try {
-    return {
-      ok: true,
-      output: normalizeImportedMusicXmlText(convertMeiToMusicXml(meiText)),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(normalizeImportedMusicXmlText(convertMeiToMusicXml(meiText)));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to parse MEI: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to parse MEI: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const exportMusicXmlToMei = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
-    return {
-      ok: true,
-      output: exportMusicXmlDomToMei(doc),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(exportMusicXmlDomToMei(doc));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to export MEI: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to export MEI: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const importLilyPondToMusicXml = (lilypondText: string): CliResult => {
   try {
-    return {
-      ok: true,
-      output: normalizeImportedMusicXmlText(convertLilyPondToMusicXml(lilypondText)),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(normalizeImportedMusicXmlText(convertLilyPondToMusicXml(lilypondText)));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to parse LilyPond: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to parse LilyPond: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const exportMusicXmlToLilyPond = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
-    return {
-      ok: true,
-      output: exportMusicXmlDomToLilyPond(doc),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(exportMusicXmlDomToLilyPond(doc));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to export LilyPond: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to export LilyPond: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const exportMusicXmlToMuseScore = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
-    return {
-      ok: true,
-      output: exportMusicXmlDomToMuseScore(doc),
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(exportMusicXmlDomToMuseScore(doc));
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to export MuseScore: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to export MuseScore: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const renderMusicXmlToSvg = async (xmlText: string): Promise<CliResult> => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
@@ -589,29 +492,16 @@ export const renderMusicXmlToSvg = async (xmlText: string): Promise<CliResult> =
       footer: "none",
       header: "none",
     });
-    return {
-      ok: true,
-      output: svg,
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(svg);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to render SVG: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to render SVG: ${caughtErrorMessage(error)}`);
   }
 };
 
 export const summarizeMusicXmlState = (xmlText: string): CliResult => {
   const doc = parseMusicXmlDocument(xmlText);
   if (!doc) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."],
-    };
+    return invalidMusicXmlResult();
   }
 
   try {
@@ -642,18 +532,9 @@ export const summarizeMusicXmlState = (xmlText: string): CliResult => {
       measure_numbers: measureNumbers,
       voices,
     };
-    return {
-      ok: true,
-      output: `${JSON.stringify(summary, null, 2)}\n`,
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(`${JSON.stringify(summary, null, 2)}\n`);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to summarize MusicXML state: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to summarize MusicXML state: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -683,11 +564,7 @@ export const validateMusicXmlCommand = (xmlText: string, command: CoreCommand): 
       diagnostics: [],
     };
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to validate MusicXML command: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to validate MusicXML command: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -734,11 +611,7 @@ export const applyMusicXmlCommand = (xmlText: string, command: CoreCommand): Cli
       diagnostics: [],
     };
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to apply MusicXML command: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to apply MusicXML command: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -795,18 +668,9 @@ export const inspectMusicXmlMeasure = (xmlText: string, measureNumber: string): 
       }),
     };
 
-    return {
-      ok: true,
-      output: `${JSON.stringify(summary, null, 2)}\n`,
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(`${JSON.stringify(summary, null, 2)}\n`);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to inspect MusicXML measure: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to inspect MusicXML measure: ${caughtErrorMessage(error)}`);
   }
 };
 
@@ -911,18 +775,9 @@ export const diffMusicXmlState = (beforeXml: string, afterXml: string): CliResul
       after: afterSummary,
     };
 
-    return {
-      ok: true,
-      output: `${JSON.stringify(diff, null, 2)}\n`,
-      warnings: [],
-      diagnostics: [],
-    };
+    return textResult(`${JSON.stringify(diff, null, 2)}\n`);
   } catch (error) {
-    return {
-      ok: false,
-      warnings: [],
-      diagnostics: [`Failed to diff MusicXML state: ${error instanceof Error ? error.message : String(error)}`],
-    };
+    return failureResult(`Failed to diff MusicXML state: ${caughtErrorMessage(error)}`);
   }
 };
 

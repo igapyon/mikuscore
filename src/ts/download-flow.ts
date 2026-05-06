@@ -36,6 +36,15 @@ export type DownloadFilePayload = {
   blob: Blob;
 };
 
+const MIME_MXL = "application/vnd.recordare.musicxml";
+const MIME_SVG = "image/svg+xml;charset=utf-8";
+const MIME_JSON = "application/json;charset=utf-8";
+const MIME_XML = "application/xml;charset=utf-8";
+const MIME_MIDI = "audio/midi";
+const MIME_TEXT = "text/plain;charset=utf-8";
+const MIME_MEI = "application/mei+xml;charset=utf-8";
+const MIME_ZIP = "application/zip";
+
 const pad2 = (value: number): string => String(value).padStart(2, "0");
 
 const buildFileTimestamp = (): string => {
@@ -47,6 +56,40 @@ const buildFileTimestamp = (): string => {
     pad2(now.getHours()),
     pad2(now.getMinutes()),
   ].join("");
+};
+
+const createDownloadPayload = (
+  fileName: string,
+  content: BlobPart,
+  type: string
+): DownloadFilePayload => {
+  return {
+    fileName,
+    blob: new Blob([content], { type }),
+  };
+};
+
+const createTimestampedDownloadPayload = (
+  extension: string,
+  content: BlobPart,
+  type: string,
+  stem = "mikuscore"
+): DownloadFilePayload => {
+  const ts = buildFileTimestamp();
+  return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
+};
+
+const convertMusicXmlForDownload = <T>(
+  xmlText: string,
+  convert: (doc: Document) => T
+): T | null => {
+  const musicXmlDoc = parseMusicXmlDocument(xmlText);
+  if (!musicXmlDoc) return null;
+  try {
+    return convert(musicXmlDoc);
+  } catch {
+    return null;
+  }
 };
 
 export const triggerFileDownload = (payload: DownloadFilePayload): void => {
@@ -66,41 +109,27 @@ export const createMusicXmlDownloadPayload = async (
   const formattedXml = prettyPrintMusicXmlText(xmlText);
   if (options.compressed === true) {
     const mxlBytes = await makeMxlBytes(formattedXml);
-    return {
-      fileName: `mikuscore-${ts}.mxl`,
-      blob: new Blob([bytesToArrayBuffer(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
-    };
+    return createDownloadPayload(
+      `mikuscore-${ts}.mxl`,
+      bytesToArrayBuffer(mxlBytes),
+      MIME_MXL
+    );
   }
   const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-  return {
-    fileName: `mikuscore-${ts}.${extension}`,
-    blob: new Blob([formattedXml], { type: "application/xml;charset=utf-8" }),
-  };
+  return createDownloadPayload(`mikuscore-${ts}.${extension}`, formattedXml, MIME_XML);
 };
 
 export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload => {
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${ts}.svg`,
-    blob: new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }),
-  };
+  return createTimestampedDownloadPayload("svg", svgText, MIME_SVG);
 };
 
 export const createJsonDownloadPayload = (jsonText: string, stem = "measure-detail"): DownloadFilePayload => {
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${stem}-${ts}.json`,
-    blob: new Blob([jsonText], { type: "application/json;charset=utf-8" }),
-  };
+  return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `mikuscore-${stem}`);
 };
 
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
-  const ts = buildFileTimestamp();
   const formattedVsqx = formatXmlWithTwoSpaceIndent(vsqxText);
-  return {
-    fileName: `mikuscore-${ts}.vsqx`,
-    blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
-  };
+  return createTimestampedDownloadPayload("vsqx", formattedVsqx, MIME_XML);
 };
 
 export const createMidiDownloadPayload = (
@@ -181,34 +210,16 @@ export const createMidiDownloadPayload = (
     return null;
   }
 
-  const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
-  new Uint8Array(midiArrayBuffer).set(midiBytes);
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${ts}.mid`,
-    blob: new Blob([midiArrayBuffer], { type: "audio/midi" }),
-  };
+  return createTimestampedDownloadPayload("mid", bytesToArrayBuffer(midiBytes), MIME_MIDI);
 };
 
 export const createAbcDownloadPayload = (
   xmlText: string,
   convertMusicXmlToAbc: (doc: Document) => string
 ): DownloadFilePayload | null => {
-  const musicXmlDoc = parseMusicXmlDocument(xmlText);
-  if (!musicXmlDoc) return null;
-
-  let abcText = "";
-  try {
-    abcText = convertMusicXmlToAbc(musicXmlDoc);
-  } catch {
-    return null;
-  }
-
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${ts}.abc`,
-    blob: new Blob([abcText], { type: "text/plain;charset=utf-8" }),
-  };
+  const abcText = convertMusicXmlForDownload(xmlText, convertMusicXmlToAbc);
+  if (abcText === null) return null;
+  return createTimestampedDownloadPayload("abc", abcText, MIME_TEXT);
 };
 
 export const createMeiDownloadPayload = (
@@ -219,43 +230,22 @@ export const createMeiDownloadPayload = (
   ) => string,
   options: { meiVersion?: string } = {}
 ): DownloadFilePayload | null => {
-  const musicXmlDoc = parseMusicXmlDocument(xmlText);
-  if (!musicXmlDoc) return null;
-
-  let meiText = "";
-  try {
-    meiText = convertMusicXmlToMei(musicXmlDoc, options);
-  } catch {
-    return null;
-  }
+  const meiText = convertMusicXmlForDownload(xmlText, (musicXmlDoc) =>
+    convertMusicXmlToMei(musicXmlDoc, options)
+  );
+  if (meiText === null) return null;
   const formattedMei = prettyPrintMusicXmlText(meiText);
 
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${ts}.mei`,
-    blob: new Blob([formattedMei], { type: "application/mei+xml;charset=utf-8" }),
-  };
+  return createTimestampedDownloadPayload("mei", formattedMei, MIME_MEI);
 };
 
 export const createLilyPondDownloadPayload = (
   xmlText: string,
   convertMusicXmlToLilyPond: (doc: Document) => string
 ): DownloadFilePayload | null => {
-  const musicXmlDoc = parseMusicXmlDocument(xmlText);
-  if (!musicXmlDoc) return null;
-
-  let lilyText = "";
-  try {
-    lilyText = convertMusicXmlToLilyPond(musicXmlDoc);
-  } catch {
-    return null;
-  }
-
-  const ts = buildFileTimestamp();
-  return {
-    fileName: `mikuscore-${ts}.ly`,
-    blob: new Blob([lilyText], { type: "text/plain;charset=utf-8" }),
-  };
+  const lilyText = convertMusicXmlForDownload(xmlText, convertMusicXmlToLilyPond);
+  if (lilyText === null) return null;
+  return createTimestampedDownloadPayload("ly", lilyText, MIME_TEXT);
 };
 
 export const createMuseScoreDownloadPayload = async (
@@ -263,29 +253,16 @@ export const createMuseScoreDownloadPayload = async (
   convertMusicXmlToMuseScore: (doc: Document) => string,
   options: { compressed?: boolean } = {}
 ): Promise<DownloadFilePayload | null> => {
-  const musicXmlDoc = parseMusicXmlDocument(xmlText);
-  if (!musicXmlDoc) return null;
-
-  let mscxText = "";
-  try {
-    mscxText = convertMusicXmlToMuseScore(musicXmlDoc);
-  } catch {
-    return null;
-  }
+  const mscxText = convertMusicXmlForDownload(xmlText, convertMusicXmlToMuseScore);
+  if (mscxText === null) return null;
   const formattedMscx = formatXmlWithTwoSpaceIndent(mscxText);
 
   const ts = buildFileTimestamp();
   if (options.compressed === true) {
     const msczBytes = await makeMsczBytes(formattedMscx);
-    return {
-      fileName: `mikuscore-${ts}.mscz`,
-      blob: new Blob([bytesToArrayBuffer(msczBytes)], { type: "application/zip" }),
-    };
+    return createDownloadPayload(`mikuscore-${ts}.mscz`, bytesToArrayBuffer(msczBytes), MIME_ZIP);
   }
-  return {
-    fileName: `mikuscore-${ts}.mscx`,
-    blob: new Blob([formattedMscx], { type: "application/xml;charset=utf-8" }),
-  };
+  return createDownloadPayload(`mikuscore-${ts}.mscx`, formattedMscx, MIME_XML);
 };
 
 export const createZipBundleDownloadPayload = async (
@@ -302,8 +279,5 @@ export const createZipBundleDownloadPayload = async (
     zipEntries.push({ path: fileName, bytes });
   }
   const zipBytes = await makeZipBytes(zipEntries, options.compressed !== false);
-  return {
-    fileName: `${safeBase}-${ts}.zip`,
-    blob: new Blob([bytesToArrayBuffer(zipBytes)], { type: "application/zip" }),
-  };
+  return createDownloadPayload(`${safeBase}-${ts}.zip`, bytesToArrayBuffer(zipBytes), MIME_ZIP);
 };

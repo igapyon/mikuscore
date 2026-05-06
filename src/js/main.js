@@ -8027,8 +8027,24 @@ exports.sampleXml1 = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE scor
  * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderMeasureEditorPreview = exports.renderScorePreview = void 0;
+exports.renderMeasureEditorPreview = exports.renderScorePreview = exports.preparePreviewSvgIdMap = void 0;
 const verovio_out_1 = require("./verovio-out");
+const hasEmbeddedMikuscoreNoteIds = (renderedNoteIds) => {
+    return renderedNoteIds.some((id) => id.startsWith("mks-"));
+};
+const preparePreviewSvgIdMap = (renderBundle, sourceNoteNodeIds, renderedNoteIds, buildFallbackSvgIdMap) => {
+    if (renderedNoteIds.length > 0 && !hasEmbeddedMikuscoreNoteIds(renderedNoteIds)) {
+        return {
+            map: buildFallbackSvgIdMap(sourceNoteNodeIds, renderedNoteIds),
+            mapMode: "fallback-seq",
+        };
+    }
+    return {
+        map: renderBundle.svgIdToNodeId,
+        mapMode: "direct",
+    };
+};
+exports.preparePreviewSvgIdMap = preparePreviewSvgIdMap;
 const renderScorePreview = async (params) => {
     if (!params.xml) {
         params.setMetaText("No XML to render.");
@@ -8061,12 +8077,7 @@ const renderScorePreview = async (params) => {
         const measures = renderDoc.querySelectorAll("part > measure").length;
         params.setSvgHtml(svg);
         const renderedNoteIds = params.deriveRenderedNoteIds(params.renderedRoot);
-        let mapMode = "direct";
-        let map = renderBundle.svgIdToNodeId;
-        if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-            map = params.buildFallbackSvgIdMap(params.noteNodeIds, renderedNoteIds);
-            mapMode = "fallback-seq";
-        }
+        const { map, mapMode } = (0, exports.preparePreviewSvgIdMap)(renderBundle, params.noteNodeIds, renderedNoteIds, params.buildFallbackSvgIdMap);
         params.setSvgIdMap(map);
         if (params.debugLog) {
             console.warn("[mikuscore][click-map] render map prepared:", {
@@ -8127,10 +8138,7 @@ const renderMeasureEditorPreview = async (params) => {
         });
         params.setHtml(svg);
         const renderedNoteIds = params.deriveRenderedNoteIds(params.renderedRoot);
-        let map = renderBundle.svgIdToNodeId;
-        if (renderedNoteIds.length > 0 && !renderedNoteIds.some((id) => id.startsWith("mks-"))) {
-            map = params.buildFallbackSvgIdMap(params.draftNoteNodeIds, renderedNoteIds);
-        }
+        const { map } = (0, exports.preparePreviewSvgIdMap)(renderBundle, params.draftNoteNodeIds, renderedNoteIds, params.buildFallbackSvgIdMap);
         params.setSvgIdMap(map);
         params.onRendered();
     }
@@ -8150,6 +8158,8 @@ exports.renderMeasureEditorPreview = renderMeasureEditorPreview;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMusicXmlDomToSvg = void 0;
+const DEFAULT_SLUR_NUMBER = "1";
+const VEROVIO_INIT_TIMEOUT_MS = 8000;
 let verovioToolkit = null;
 let verovioInitPromise = null;
 const cloneXmlDocument = (doc) => {
@@ -8165,8 +8175,21 @@ const pruneEmptyNotations = (notations) => {
         return;
     notations.remove();
 };
+const removeSlurAndPruneNotations = (slur) => {
+    const notations = slur.parentElement;
+    slur.remove();
+    pruneEmptyNotations(notations);
+};
+const getSlurNumber = (slur) => {
+    var _a;
+    return ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : DEFAULT_SLUR_NUMBER).trim() || DEFAULT_SLUR_NUMBER;
+};
+const getSlurType = (slur) => {
+    var _a;
+    return ((_a = slur.getAttribute("type")) !== null && _a !== void 0 ? _a : "").trim().toLowerCase();
+};
 const sanitizeSlursForRender = (doc) => {
-    var _a, _b, _c;
+    var _a;
     const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
     for (const part of parts) {
         const openSlurs = new Map();
@@ -8176,9 +8199,9 @@ const sanitizeSlursForRender = (doc) => {
             for (const note of notes) {
                 const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
                 for (const slur of slurs) {
-                    const number = ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : "1").trim() || "1";
-                    const type = ((_b = slur.getAttribute("type")) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
-                    const stack = (_c = openSlurs.get(number)) !== null && _c !== void 0 ? _c : [];
+                    const number = getSlurNumber(slur);
+                    const type = getSlurType(slur);
+                    const stack = (_a = openSlurs.get(number)) !== null && _a !== void 0 ? _a : [];
                     if (type === "start") {
                         stack.push(slur);
                         openSlurs.set(number, stack);
@@ -8189,17 +8212,13 @@ const sanitizeSlursForRender = (doc) => {
                             stack.pop();
                         }
                         else {
-                            const notations = slur.parentElement;
-                            slur.remove();
-                            pruneEmptyNotations(notations);
+                            removeSlurAndPruneNotations(slur);
                         }
                         continue;
                     }
                     if (type === "continue") {
                         if (stack.length === 0) {
-                            const notations = slur.parentElement;
-                            slur.remove();
-                            pruneEmptyNotations(notations);
+                            removeSlurAndPruneNotations(slur);
                             continue;
                         }
                         stack.pop();
@@ -8211,9 +8230,7 @@ const sanitizeSlursForRender = (doc) => {
         }
         for (const danglingStarts of openSlurs.values()) {
             for (const startSlur of danglingStarts) {
-                const notations = startSlur.parentElement;
-                startSlur.remove();
-                pruneEmptyNotations(notations);
+                removeSlurAndPruneNotations(startSlur);
             }
         }
     }
@@ -8246,7 +8263,7 @@ const ensureVerovioToolkit = async () => {
                         return;
                     settled = true;
                     reject(new Error("Timed out while waiting for verovio initialization."));
-                }, 8000);
+                }, VEROVIO_INIT_TIMEOUT_MS);
                 const complete = () => {
                     if (settled)
                         return;
@@ -9545,25 +9562,20 @@ const isImplicitMeasure = (measure) => {
     const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
     return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
 };
-const resolveMeasureAdvanceDiv = (measure, measureMaxDiv, currentDivisions, currentBeats, currentBeatType, nextMeasureIsImplicit = false, firstMeasureUnderfullAsPickup = false) => {
-    const safeDivisions = Math.max(1, Math.round(currentDivisions));
-    const safeBeats = Math.max(1, Math.round(currentBeats));
-    const safeBeatType = Math.max(1, Math.round(currentBeatType));
-    const capacityDiv = Math.max(1, Math.round((safeDivisions * 4 * safeBeats) / safeBeatType));
-    const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
-    const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
-    if (isImplicit) {
-        return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
-    }
-    let hasPreviousMeasure = false;
+const hasPreviousMeasureSibling = (measure) => {
     for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
         const prevName = (prev.localName || prev.tagName || "").toLowerCase();
-        if (prevName === "measure") {
-            hasPreviousMeasure = true;
-            break;
-        }
+        if (prevName === "measure")
+            return true;
     }
-    const isFirstMeasureInPart = !hasPreviousMeasure;
+    return false;
+};
+const resolveMeasureAdvanceDiv = (measure, measureMaxDiv, currentDivisions, currentBeats, currentBeatType, nextMeasureIsImplicit = false, firstMeasureUnderfullAsPickup = false) => {
+    const capacityDiv = measureCapacityDivFromContext(currentDivisions, currentBeats, currentBeatType);
+    if (isImplicitMeasure(measure)) {
+        return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
+    }
+    const isFirstMeasureInPart = !hasPreviousMeasureSibling(measure);
     if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
         return measureMaxDiv;
     }
@@ -9918,9 +9930,12 @@ const readU32 = (bytes, offset) => {
 const normalizeZipPath = (value) => {
     return value.replace(/\\/g, "/").replace(/^\.?\//, "");
 };
+const decodeUtf8 = (bytes) => {
+    return new TextDecoder("utf-8").decode(bytes);
+};
 const decodeZipFileName = (bytes, utf8Flag) => {
     if (utf8Flag)
-        return new TextDecoder("utf-8").decode(bytes);
+        return decodeUtf8(bytes);
     let out = "";
     for (const b of bytes)
         out += String.fromCharCode(b);
@@ -9987,6 +10002,14 @@ const readZipEntries = (bytes) => {
     }
     return entries;
 };
+const readNonEmptyZipArchive = (archiveBuffer) => {
+    const archiveBytes = new Uint8Array(archiveBuffer);
+    const entries = readZipEntries(archiveBytes);
+    if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+    }
+    return { archiveBytes, entries };
+};
 const inflateDeflateRaw = async (compressed) => {
     const DS = globalThis.DecompressionStream;
     if (!DS) {
@@ -10031,26 +10054,31 @@ const findLikelyMusicXmlEntry = (entries) => {
     }
     return null;
 };
+const normalizeZipExtensions = (extensions) => {
+    return extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+};
+const zipEntryPathHasAnyExtension = (entry, extensions) => {
+    const p = entry.path.toLowerCase();
+    return extensions.some((ext) => p.endsWith(ext));
+};
 const findFirstEntryByExtensions = (entries, extensions) => {
-    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    const normalized = normalizeZipExtensions(extensions);
     if (!normalized.length)
         return null;
     for (const entry of entries) {
-        const p = entry.path.toLowerCase();
-        if (normalized.some((ext) => p.endsWith(ext)))
+        if (zipEntryPathHasAnyExtension(entry, normalized))
             return entry;
     }
     return null;
 };
 const listRootEntriesByExtensions = (entries, extensions) => {
-    const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    const normalized = normalizeZipExtensions(extensions);
     if (!normalized.length)
         return [];
     return entries.filter((entry) => {
         if (entry.path.includes("/"))
             return false;
-        const p = entry.path.toLowerCase();
-        return normalized.some((ext) => p.endsWith(ext));
+        return zipEntryPathHasAnyExtension(entry, normalized);
     });
 };
 const parseContainerRootFilePath = (containerXmlText) => {
@@ -10145,12 +10173,8 @@ const bytesToArrayBuffer = (bytes) => {
     return out;
 };
 exports.bytesToArrayBuffer = bytesToArrayBuffer;
-const makeZipBytes = async (entries, preferCompression) => {
+const encodeZipEntries = async (entries, preferCompression) => {
     const encoder = new TextEncoder();
-    const localChunks = [];
-    const centralChunks = [];
-    let localOffset = 0;
-    const nowDos = toDosDateTime(new Date());
     const encodedEntries = [];
     for (const entry of entries) {
         const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
@@ -10173,10 +10197,18 @@ const makeZipBytes = async (entries, preferCompression) => {
             uncompressedSize: uncompressed.length,
         });
     }
+    return encodedEntries;
+};
+const makeZipBytes = async (entries, preferCompression) => {
+    const localChunks = [];
+    const centralChunks = [];
+    let localOffset = 0;
+    const nowDos = toDosDateTime(new Date());
+    const encodedEntries = await encodeZipEntries(entries, preferCompression);
     for (const entry of encodedEntries) {
         const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
         const localHeader = new Uint8Array(30 + pathBytes.length);
-        writeU32(localHeader, 0, 0x04034b50);
+        writeU32(localHeader, 0, ZIP_LFH_SIG);
         writeU16(localHeader, 4, 20);
         writeU16(localHeader, 6, 0x0800);
         writeU16(localHeader, 8, method);
@@ -10190,7 +10222,7 @@ const makeZipBytes = async (entries, preferCompression) => {
         localHeader.set(pathBytes, 30);
         localChunks.push(localHeader, data);
         const centralHeader = new Uint8Array(46 + pathBytes.length);
-        writeU32(centralHeader, 0, 0x02014b50);
+        writeU32(centralHeader, 0, ZIP_CDFH_SIG);
         writeU16(centralHeader, 4, 20);
         writeU16(centralHeader, 6, 20);
         writeU16(centralHeader, 8, 0x0800);
@@ -10214,7 +10246,7 @@ const makeZipBytes = async (entries, preferCompression) => {
     const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
     const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
     const eocd = new Uint8Array(22);
-    writeU32(eocd, 0, 0x06054b50);
+    writeU32(eocd, 0, ZIP_EOCD_SIG);
     writeU16(eocd, 4, 0);
     writeU16(eocd, 6, 0);
     writeU16(eocd, 8, entries.length);
@@ -10262,7 +10294,7 @@ const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
     const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
     if (containerEntry) {
         const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
-        const containerText = new TextDecoder("utf-8").decode(containerBytes);
+        const containerText = decodeUtf8(containerBytes);
         const rootPath = parseContainerRootFilePath(containerText);
         if (rootPath) {
             const rootEntry = findEntryByPath(entries, rootPath);
@@ -10270,7 +10302,7 @@ const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
                 throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
             }
             const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
-            return new TextDecoder("utf-8").decode(xmlBytes);
+            return decodeUtf8(xmlBytes);
         }
     }
     const fallbackEntry = findLikelyMusicXmlEntry(entries);
@@ -10278,38 +10310,26 @@ const extractMusicXmlTextFromMxl = async (archiveBuffer) => {
         throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
     }
     const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
-    return new TextDecoder("utf-8").decode(xmlBytes);
+    return decodeUtf8(xmlBytes);
 };
 exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
 const extractTextFromZipByExtensions = async (archiveBuffer, extensions) => {
-    const archiveBytes = new Uint8Array(archiveBuffer);
-    const entries = readZipEntries(archiveBytes);
-    if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-    }
+    const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
     const entry = findFirstEntryByExtensions(entries, extensions);
     if (!entry) {
         throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
     }
     const bytes = await extractEntryBytes(archiveBytes, entry);
-    return new TextDecoder("utf-8").decode(bytes);
+    return decodeUtf8(bytes);
 };
 exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
 const listZipRootEntryPathsByExtensions = async (archiveBuffer, extensions) => {
-    const archiveBytes = new Uint8Array(archiveBuffer);
-    const entries = readZipEntries(archiveBytes);
-    if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-    }
+    const { entries } = readNonEmptyZipArchive(archiveBuffer);
     return listRootEntriesByExtensions(entries, extensions).map((entry) => entry.path);
 };
 exports.listZipRootEntryPathsByExtensions = listZipRootEntryPathsByExtensions;
 const extractZipEntryBytesByPath = async (archiveBuffer, entryPath) => {
-    const archiveBytes = new Uint8Array(archiveBuffer);
-    const entries = readZipEntries(archiveBytes);
-    if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-    }
+    const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
     const entry = findEntryByPath(entries, entryPath);
     if (!entry) {
         throw new Error(`ZIP entry not found: ${entryPath}`);
@@ -10797,6 +10817,14 @@ const midi_io_1 = require("./midi-io");
 const midi_musescore_io_1 = require("./midi-musescore-io");
 const musicxml_io_1 = require("./musicxml-io");
 const zip_io_1 = require("./zip-io");
+const MIME_MXL = "application/vnd.recordare.musicxml";
+const MIME_SVG = "image/svg+xml;charset=utf-8";
+const MIME_JSON = "application/json;charset=utf-8";
+const MIME_XML = "application/xml;charset=utf-8";
+const MIME_MIDI = "audio/midi";
+const MIME_TEXT = "text/plain;charset=utf-8";
+const MIME_MEI = "application/mei+xml;charset=utf-8";
+const MIME_ZIP = "application/zip";
 const pad2 = (value) => String(value).padStart(2, "0");
 const buildFileTimestamp = () => {
     const now = new Date();
@@ -10807,6 +10835,27 @@ const buildFileTimestamp = () => {
         pad2(now.getHours()),
         pad2(now.getMinutes()),
     ].join("");
+};
+const createDownloadPayload = (fileName, content, type) => {
+    return {
+        fileName,
+        blob: new Blob([content], { type }),
+    };
+};
+const createTimestampedDownloadPayload = (extension, content, type, stem = "mikuscore") => {
+    const ts = buildFileTimestamp();
+    return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
+};
+const convertMusicXmlForDownload = (xmlText, convert) => {
+    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!musicXmlDoc)
+        return null;
+    try {
+        return convert(musicXmlDoc);
+    }
+    catch (_a) {
+        return null;
+    }
 };
 const triggerFileDownload = (payload) => {
     const url = URL.createObjectURL(payload.blob);
@@ -10822,41 +10871,23 @@ const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
     const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
     if (options.compressed === true) {
         const mxlBytes = await (0, zip_io_1.makeMxlBytes)(formattedXml);
-        return {
-            fileName: `mikuscore-${ts}.mxl`,
-            blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(mxlBytes)], { type: "application/vnd.recordare.musicxml" }),
-        };
+        return createDownloadPayload(`mikuscore-${ts}.mxl`, (0, zip_io_1.bytesToArrayBuffer)(mxlBytes), MIME_MXL);
     }
     const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-    return {
-        fileName: `mikuscore-${ts}.${extension}`,
-        blob: new Blob([formattedXml], { type: "application/xml;charset=utf-8" }),
-    };
+    return createDownloadPayload(`mikuscore-${ts}.${extension}`, formattedXml, MIME_XML);
 };
 exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
 const createSvgDownloadPayload = (svgText) => {
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${ts}.svg`,
-        blob: new Blob([svgText], { type: "image/svg+xml;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("svg", svgText, MIME_SVG);
 };
 exports.createSvgDownloadPayload = createSvgDownloadPayload;
 const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${stem}-${ts}.json`,
-        blob: new Blob([jsonText], { type: "application/json;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `mikuscore-${stem}`);
 };
 exports.createJsonDownloadPayload = createJsonDownloadPayload;
 const createVsqxDownloadPayload = (vsqxText) => {
-    const ts = buildFileTimestamp();
     const formattedVsqx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
-    return {
-        fileName: `mikuscore-${ts}.vsqx`,
-        blob: new Blob([formattedVsqx], { type: "application/xml;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("vsqx", formattedVsqx, MIME_XML);
 };
 exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
 const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle", exportProfile = "safe", keepRoundtripMetadata = true) => {
@@ -10910,94 +10941,42 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "el
     catch (_r) {
         return null;
     }
-    const midiArrayBuffer = new ArrayBuffer(midiBytes.byteLength);
-    new Uint8Array(midiArrayBuffer).set(midiBytes);
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${ts}.mid`,
-        blob: new Blob([midiArrayBuffer], { type: "audio/midi" }),
-    };
+    return createTimestampedDownloadPayload("mid", (0, zip_io_1.bytesToArrayBuffer)(midiBytes), MIME_MIDI);
 };
 exports.createMidiDownloadPayload = createMidiDownloadPayload;
 const createAbcDownloadPayload = (xmlText, convertMusicXmlToAbc) => {
-    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-    if (!musicXmlDoc)
+    const abcText = convertMusicXmlForDownload(xmlText, convertMusicXmlToAbc);
+    if (abcText === null)
         return null;
-    let abcText = "";
-    try {
-        abcText = convertMusicXmlToAbc(musicXmlDoc);
-    }
-    catch (_a) {
-        return null;
-    }
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${ts}.abc`,
-        blob: new Blob([abcText], { type: "text/plain;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("abc", abcText, MIME_TEXT);
 };
 exports.createAbcDownloadPayload = createAbcDownloadPayload;
 const createMeiDownloadPayload = (xmlText, convertMusicXmlToMei, options = {}) => {
-    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-    if (!musicXmlDoc)
+    const meiText = convertMusicXmlForDownload(xmlText, (musicXmlDoc) => convertMusicXmlToMei(musicXmlDoc, options));
+    if (meiText === null)
         return null;
-    let meiText = "";
-    try {
-        meiText = convertMusicXmlToMei(musicXmlDoc, options);
-    }
-    catch (_a) {
-        return null;
-    }
     const formattedMei = (0, musicxml_io_1.prettyPrintMusicXmlText)(meiText);
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${ts}.mei`,
-        blob: new Blob([formattedMei], { type: "application/mei+xml;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("mei", formattedMei, MIME_MEI);
 };
 exports.createMeiDownloadPayload = createMeiDownloadPayload;
 const createLilyPondDownloadPayload = (xmlText, convertMusicXmlToLilyPond) => {
-    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-    if (!musicXmlDoc)
+    const lilyText = convertMusicXmlForDownload(xmlText, convertMusicXmlToLilyPond);
+    if (lilyText === null)
         return null;
-    let lilyText = "";
-    try {
-        lilyText = convertMusicXmlToLilyPond(musicXmlDoc);
-    }
-    catch (_a) {
-        return null;
-    }
-    const ts = buildFileTimestamp();
-    return {
-        fileName: `mikuscore-${ts}.ly`,
-        blob: new Blob([lilyText], { type: "text/plain;charset=utf-8" }),
-    };
+    return createTimestampedDownloadPayload("ly", lilyText, MIME_TEXT);
 };
 exports.createLilyPondDownloadPayload = createLilyPondDownloadPayload;
 const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
-    const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-    if (!musicXmlDoc)
+    const mscxText = convertMusicXmlForDownload(xmlText, convertMusicXmlToMuseScore);
+    if (mscxText === null)
         return null;
-    let mscxText = "";
-    try {
-        mscxText = convertMusicXmlToMuseScore(musicXmlDoc);
-    }
-    catch (_a) {
-        return null;
-    }
     const formattedMscx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(mscxText);
     const ts = buildFileTimestamp();
     if (options.compressed === true) {
         const msczBytes = await (0, zip_io_1.makeMsczBytes)(formattedMscx);
-        return {
-            fileName: `mikuscore-${ts}.mscz`,
-            blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(msczBytes)], { type: "application/zip" }),
-        };
+        return createDownloadPayload(`mikuscore-${ts}.mscz`, (0, zip_io_1.bytesToArrayBuffer)(msczBytes), MIME_ZIP);
     }
-    return {
-        fileName: `mikuscore-${ts}.mscx`,
-        blob: new Blob([formattedMscx], { type: "application/xml;charset=utf-8" }),
-    };
+    return createDownloadPayload(`mikuscore-${ts}.mscx`, formattedMscx, MIME_XML);
 };
 exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
 const createZipBundleDownloadPayload = async (entries, options = {}) => {
@@ -11012,10 +10991,7 @@ const createZipBundleDownloadPayload = async (entries, options = {}) => {
         zipEntries.push({ path: fileName, bytes });
     }
     const zipBytes = await (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
-    return {
-        fileName: `${safeBase}-${ts}.zip`,
-        blob: new Blob([(0, zip_io_1.bytesToArrayBuffer)(zipBytes)], { type: "application/zip" }),
-    };
+    return createDownloadPayload(`${safeBase}-${ts}.zip`, (0, zip_io_1.bytesToArrayBuffer)(zipBytes), MIME_ZIP);
 };
 exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;
 
@@ -11028,11 +11004,47 @@ exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertMusicXmlToVsqx = exports.convertVsqxToMusicXml = exports.isVsqxBridgeAvailable = exports.installVsqxMusicXmlNormalizationHook = void 0;
+const VSQX_BRIDGE_UNAVAILABLE = "VSQX_BRIDGE_UNAVAILABLE";
+const VSQX_CONVERT_EMPTY_RESULT = "VSQX_CONVERT_EMPTY_RESULT";
+const VSQX_EXPORT_EMPTY_RESULT = "VSQX_EXPORT_EMPTY_RESULT";
+const VSQX_EXPORT_FAILED = "VSQX_EXPORT_FAILED";
+const MSG_BRIDGE_UNAVAILABLE = "VSQX converter bundle is not loaded.";
+const MSG_CONVERT_FAILED = "VSQX to MusicXML conversion failed.";
+const MSG_CONVERT_WARNING = "VSQX to MusicXML conversion emitted a warning.";
+const MSG_CONVERT_EMPTY_RESULT = "VSQX converter returned empty MusicXML.";
+const MSG_EXPORT_EMPTY_RESULT = "MusicXML to VSQX conversion returned empty output.";
+const MSG_EXPORT_FAILED = "MusicXML to VSQX conversion failed.";
 const bridge = () => {
     var _a;
     if (typeof window === "undefined")
         return null;
     return (_a = window.UtaFormatix3TsPlusMikuscore) !== null && _a !== void 0 ? _a : null;
+};
+const bridgeUnavailableDiagnostic = () => ({
+    code: VSQX_BRIDGE_UNAVAILABLE,
+    message: MSG_BRIDGE_UNAVAILABLE,
+});
+const failedVsqxToMusicXmlResult = (diagnostics, warnings = []) => ({
+    ok: false,
+    xml: "",
+    diagnostics,
+    warnings,
+});
+const failedMusicXmlToVsqxResult = (diagnostic) => ({
+    ok: false,
+    vsqx: "",
+    diagnostic,
+});
+const diagnostic = (code, message) => ({ code, message });
+const issueLevel = (issue) => {
+    return String(issue.level || "").toLowerCase();
+};
+const isVsqxConversionErrorIssue = (issue) => {
+    return issueLevel(issue) === "error";
+};
+const isVsqxConversionWarningIssue = (issue) => {
+    const level = issueLevel(issue);
+    return level === "warning" || level === "info";
 };
 const issueCode = (issue, fallback) => {
     const raw = String(issue.code || "").trim();
@@ -11041,6 +11053,21 @@ const issueCode = (issue, fallback) => {
 const issueMessage = (issue, fallback) => {
     const raw = String(issue.message || "").trim();
     return raw || fallback;
+};
+const issueDiagnostic = (issue, fallbackCode, fallbackMessage) => {
+    return diagnostic(issueCode(issue, fallbackCode), issueMessage(issue, fallbackMessage));
+};
+const reportIssues = (report) => {
+    return Array.isArray(report === null || report === void 0 ? void 0 : report.issues) ? report.issues : [];
+};
+const collectVsqxConversionIssues = (issues) => {
+    const diagnostics = issues
+        .filter(isVsqxConversionErrorIssue)
+        .map((issue, index) => issueDiagnostic(issue, `VSQX_CONVERT_ERROR_${index + 1}`, MSG_CONVERT_FAILED));
+    const warnings = issues
+        .filter(isVsqxConversionWarningIssue)
+        .map((issue, index) => issueDiagnostic(issue, `VSQX_CONVERT_WARNING_${index + 1}`, MSG_CONVERT_WARNING));
+    return { diagnostics, warnings };
 };
 const installVsqxMusicXmlNormalizationHook = (normalizeImportedMusicXmlText) => {
     var _a;
@@ -11060,51 +11087,18 @@ exports.isVsqxBridgeAvailable = isVsqxBridgeAvailable;
 const convertVsqxToMusicXml = (vsqxText, options) => {
     const runtime = bridge();
     if (!runtime) {
-        return {
-            ok: false,
-            xml: "",
-            diagnostics: [
-                {
-                    code: "VSQX_BRIDGE_UNAVAILABLE",
-                    message: "VSQX converter bundle is not loaded.",
-                },
-            ],
-            warnings: [],
-        };
+        return failedVsqxToMusicXmlResult([bridgeUnavailableDiagnostic()]);
     }
     const report = runtime.convertVsqxToMusicXmlWithReport(vsqxText, options);
-    const issues = Array.isArray(report === null || report === void 0 ? void 0 : report.issues) ? report.issues : [];
-    const diagnostics = issues
-        .filter((issue) => String(issue.level || "").toLowerCase() === "error")
-        .map((issue, index) => ({
-        code: issueCode(issue, `VSQX_CONVERT_ERROR_${index + 1}`),
-        message: issueMessage(issue, "VSQX to MusicXML conversion failed."),
-    }));
-    const warnings = issues
-        .filter((issue) => {
-        const level = String(issue.level || "").toLowerCase();
-        return level === "warning" || level === "info";
-    })
-        .map((issue, index) => ({
-        code: issueCode(issue, `VSQX_CONVERT_WARNING_${index + 1}`),
-        message: issueMessage(issue, "VSQX to MusicXML conversion emitted a warning."),
-    }));
+    const { diagnostics, warnings } = collectVsqxConversionIssues(reportIssues(report));
     const xml = String((report === null || report === void 0 ? void 0 : report.musicXml) || "");
     if (!xml.trim()) {
         const fallbackDiagnostics = diagnostics.length
             ? diagnostics
             : [
-                {
-                    code: "VSQX_CONVERT_EMPTY_RESULT",
-                    message: "VSQX converter returned empty MusicXML.",
-                },
+                diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT),
             ];
-        return {
-            ok: false,
-            xml: "",
-            diagnostics: fallbackDiagnostics,
-            warnings,
-        };
+        return failedVsqxToMusicXmlResult(fallbackDiagnostics, warnings);
     }
     return {
         ok: diagnostics.length === 0,
@@ -11117,38 +11111,17 @@ exports.convertVsqxToMusicXml = convertVsqxToMusicXml;
 const convertMusicXmlToVsqx = (musicXmlText, options) => {
     const runtime = bridge();
     if (!runtime) {
-        return {
-            ok: false,
-            vsqx: "",
-            diagnostic: {
-                code: "VSQX_BRIDGE_UNAVAILABLE",
-                message: "VSQX converter bundle is not loaded.",
-            },
-        };
+        return failedMusicXmlToVsqxResult(bridgeUnavailableDiagnostic());
     }
     try {
         const vsqx = runtime.convertMusicXmlToVsqx(musicXmlText, options);
         if (!String(vsqx || "").trim()) {
-            return {
-                ok: false,
-                vsqx: "",
-                diagnostic: {
-                    code: "VSQX_EXPORT_EMPTY_RESULT",
-                    message: "MusicXML to VSQX conversion returned empty output.",
-                },
-            };
+            return failedMusicXmlToVsqxResult(diagnostic(VSQX_EXPORT_EMPTY_RESULT, MSG_EXPORT_EMPTY_RESULT));
         }
         return { ok: true, vsqx };
     }
     catch (error) {
-        return {
-            ok: false,
-            vsqx: "",
-            diagnostic: {
-                code: "VSQX_EXPORT_FAILED",
-                message: error instanceof Error ? error.message : "MusicXML to VSQX conversion failed.",
-            },
-        };
+        return failedMusicXmlToVsqxResult(diagnostic(VSQX_EXPORT_FAILED, error instanceof Error ? error.message : MSG_EXPORT_FAILED));
     }
 };
 exports.convertMusicXmlToVsqx = convertMusicXmlToVsqx;
@@ -21711,6 +21684,7 @@ exports.convertAbcToMusicXml = exports.clefXmlFromAbcClef = exports.exportMusicX
 // @ts-nocheck
 const beam_common_1 = require("./beam-common");
 const abc_parser_1 = require("./abc-parser");
+const abc_layout_1 = require("./abc-layout");
 const staffClefPolicy_1 = require("../../core/staffClefPolicy");
 const DEFAULT_UNIT = { num: 1, den: 8 };
 const DEFAULT_RATIO = { num: 1, den: 1 };
@@ -21914,52 +21888,6 @@ const readInitialTempoFromMusicXml = (doc) => {
     if (!candidates.length)
         return null;
     return (_g = candidates[candidates.length - 1]) !== null && _g !== void 0 ? _g : null;
-};
-const parseAbcScoreLayout = (raw, declaredVoiceIds) => {
-    const baseOrder = Array.from(declaredVoiceIds || []);
-    const ordered = [];
-    const groups = [];
-    const seen = new Set();
-    const appendGroup = (ids) => {
-        const normalized = ids
-            .map((v) => String(v || "").trim())
-            .filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
-        if (normalized.length === 0)
-            return;
-        const group = [];
-        for (const id of normalized) {
-            if (seen.has(id))
-                continue;
-            seen.add(id);
-            ordered.push(id);
-            group.push(id);
-        }
-        if (group.length > 0) {
-            groups.push(group);
-        }
-    };
-    if (raw) {
-        const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
-        let m;
-        while ((m = groupRegex.exec(raw)) !== null) {
-            const chunk = m[1] || m[2] || "";
-            appendGroup(chunk.split(/\s+/));
-        }
-    }
-    for (const id of baseOrder) {
-        if (!seen.has(id)) {
-            seen.add(id);
-            ordered.push(id);
-            groups.push([id]);
-        }
-    }
-    if (ordered.length === 0) {
-        return { orderedVoiceIds: ["1"], groups: [["1"]] };
-    }
-    return { orderedVoiceIds: ordered, groups };
-};
-const parseAbcScoreVoiceOrder = (raw, declaredVoiceIds) => {
-    return parseAbcScoreLayout(raw, declaredVoiceIds).orderedVoiceIds;
 };
 const ensureAbcDeclaredVoice = (registry, voiceId) => {
     if (!registry.declaredVoiceIds.includes(voiceId)) {
@@ -22305,62 +22233,6 @@ const buildAbcNormalizedVoiceDataById = (orderedVoiceIds, voiceRegistry, measure
     }
     return normalizedVoiceDataById;
 };
-const createFallbackAbcNormalizedVoiceData = (voiceId) => ({
-    partName: "Voice " + voiceId,
-    clef: "",
-    transpose: null,
-    voiceId,
-    keyByMeasure: {},
-    meterByMeasure: {},
-    tempoByMeasure: {},
-    measureMetaByIndex: {},
-    measures: [[]],
-});
-const resolveAbcPrimaryVoiceData = (normalizedVoiceDataById, primaryVoiceId) => {
-    return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
-};
-const resolveAbcGroupedPartName = (groupVoiceIds, normalizedVoiceDataById, fallbackPartName) => {
-    if (groupVoiceIds.length <= 1) {
-        return fallbackPartName;
-    }
-    const names = groupVoiceIds
-        .map((voiceId) => { var _a; return ((_a = normalizedVoiceDataById.get(voiceId)) === null || _a === void 0 ? void 0 : _a.partName) || ("Voice " + voiceId); })
-        .filter((name, idx, arr) => name && arr.indexOf(name) === idx);
-    return names.length <= 1 ? (names[0] || fallbackPartName) : names.join(" / ");
-};
-const buildAbcParsedStaffVoice = (voiceId, staffIndex, voiceData) => ({
-    staff: staffIndex + 1,
-    voiceId,
-    clef: voiceData.clef,
-    transpose: voiceData.transpose,
-    measures: (voiceData.measures || [[]]).map((measure) => (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 }))),
-});
-const buildAbcParsedPartBase = (primary, index, partName) => ({
-    partId: "P" + String(index + 1),
-    partName,
-    clef: primary.clef,
-    transpose: primary.transpose,
-    voiceId: primary.voiceId,
-    keyByMeasure: primary.keyByMeasure,
-    meterByMeasure: primary.meterByMeasure,
-    tempoByMeasure: primary.tempoByMeasure,
-    measureMetaByIndex: primary.measureMetaByIndex,
-    measures: primary.measures,
-});
-const hasAbcGroupedStaffVoices = (part) => Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
-const buildAbcGroupedStaffMeasureNotesXml = (staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) => {
-    return staffVoices
-        .map((staffVoice, staffIndex) => {
-        var _a, _b;
-        const staffNotes = (_b = (_a = staffVoice.measures) === null || _a === void 0 ? void 0 : _a[measureIndex]) !== null && _b !== void 0 ? _b : [];
-        const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
-        if (staffIndex <= 0) {
-            return xml;
-        }
-        return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
-    })
-        .join("");
-};
 const buildAbcGroupedStaffClefXml = (staffVoices) => {
     return staffVoices
         .map((staffVoice) => {
@@ -22397,11 +22269,11 @@ const buildAbcMeasureHeaderXml = (part, partIndex, measureIndex, currentPartFift
             "<divisions>960</divisions>",
             `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
             `<time><beats>${Math.round(currentPartMeter.beats)}</beats><beat-type>${Math.round(currentPartMeter.beatType)}</beat-type></time>`,
-            hasAbcGroupedStaffVoices(part)
+            (0, abc_layout_1.hasAbcGroupedStaffVoices)(part)
                 ? `<staves>${part.staffVoices.length}</staves>`
                 : "",
             buildAbcPartTransposeXml(part.transpose),
-            hasAbcGroupedStaffVoices(part)
+            (0, abc_layout_1.hasAbcGroupedStaffVoices)(part)
                 ? buildAbcGroupedStaffClefXml(part.staffVoices)
                 : (0, exports.clefXmlFromAbcClef)(part.clef),
             "</attributes>",
@@ -22496,8 +22368,8 @@ const buildAbcRenderedPartMeasureXml = (context) => {
     const { part, partIndex, measureIndex, measureNo, notes, measureMeta, hintedFifths, hintedMeter, hintedTempo, currentPartFifths, currentPartMeter, currentPartTempo, currentMeasureDurationDiv, inferredImplicitPickup, debugMetadata, sourceMetadata, diagnostics, abcSource, buildMeasureNotesXml, } = context;
     const { headerXml, tempoDirectionXml: headerTempoDirectionXml } = buildAbcMeasureHeaderXml(part, partIndex, measureIndex, currentPartFifths, currentPartMeter, currentPartTempo, hintedFifths, hintedMeter);
     const tempoDirectionXml = headerTempoDirectionXml || buildAbcMeasureTempoDirectionXml(hintedTempo, partIndex, measureIndex);
-    const notesXml = hasAbcGroupedStaffVoices(part)
-        ? buildAbcGroupedStaffMeasureNotesXml(part.staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml)
+    const notesXml = (0, abc_layout_1.hasAbcGroupedStaffVoices)(part)
+        ? (0, abc_layout_1.buildAbcGroupedStaffMeasureNotesXml)(part.staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml)
         : buildMeasureNotesXml(notes);
     const repeatStartXml = buildAbcMeasureRepeatStartXml(measureMeta);
     const repeatEndXml = buildAbcMeasureRepeatEndXml(measureMeta);
@@ -22936,24 +22808,6 @@ const buildAbcMeasureNotesXml = (notes, measureDurationDiv, emptyMeasureRestType
     return notes
         .map((note, noteIndex) => buildAbcNoteXml(note, noteIndex, staffOverride, beamXmlByNoteIndex))
         .join("");
-};
-const buildAbcParsedPartsFromLayout = (scoreLayout, normalizedVoiceDataById) => {
-    return scoreLayout.groups.map((groupVoiceIds, index) => {
-        const primaryVoiceId = groupVoiceIds[0] || "1";
-        const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
-        const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
-        const part = buildAbcParsedPartBase(primary, index, partName);
-        if (groupVoiceIds.length <= 1) {
-            return part;
-        }
-        return {
-            ...part,
-            staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
-                const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
-                return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
-            }),
-        };
-    });
 };
 const createAbcVoiceStores = () => {
     return {
@@ -24755,13 +24609,13 @@ function parseForMusicXml(source, settings) {
     if (noteCount === 0) {
         throw new Error("No notes or rests were found. (line 1)");
     }
-    const scoreLayout = parseAbcScoreLayout(lineState.scoreDirective, voiceRegistry.declaredVoiceIds);
+    const scoreLayout = (0, abc_layout_1.parseAbcScoreLayout)(lineState.scoreDirective, voiceRegistry.declaredVoiceIds);
     const orderedVoiceIds = scoreLayout.orderedVoiceIds;
     const measureCapacity = Math.max(1, Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960));
     const importDiagnostics = [];
     const overfullCompatibilityMode = (settings === null || settings === void 0 ? void 0 : settings.overfullCompatibilityMode) !== false;
     const normalizedVoiceDataById = buildAbcNormalizedVoiceDataById(orderedVoiceIds, voiceRegistry, voiceStores.measuresByVoice, measureCapacity, overfullCompatibilityMode, settings, transposeHintByVoiceId, keyHintFifthsByKey, voiceStores.notationMeasureMetaByVoice, measureMetaByKey, voiceStores.meterByMeasureByVoice, voiceStores.tempoByMeasureByVoice, importDiagnostics);
-    const parts = buildAbcParsedPartsFromLayout(scoreLayout, normalizedVoiceDataById);
+    const parts = (0, abc_layout_1.buildAbcParsedPartsFromLayout)(scoreLayout, normalizedVoiceDataById);
     const measureCount = parts.reduce((acc, part) => Math.max(acc, part.measures.length), 0);
     const warningDiagnostics = warnings.map((message) => ({
         level: "warn",
@@ -26251,6 +26105,155 @@ const convertAbcToMusicXml = (abcSource, options = {}) => {
     return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };
 exports.convertAbcToMusicXml = convertAbcToMusicXml;
+
+  },
+  "src/ts/abc-layout.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildAbcGroupedStaffMeasureNotesXml = exports.hasAbcGroupedStaffVoices = exports.buildAbcParsedPartsFromLayout = exports.parseAbcScoreLayout = void 0;
+const ABC_SCORE_VOICE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
+const parseAbcScoreLayoutChunks = (raw) => {
+    const chunks = [];
+    const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
+    let m;
+    while ((m = groupRegex.exec(raw)) !== null) {
+        const chunk = m[1] || m[2] || "";
+        chunks.push(chunk.split(/\s+/));
+    }
+    return chunks;
+};
+const normalizeAbcScoreLayoutVoiceIds = (ids) => {
+    return ids
+        .map((v) => String(v || "").trim())
+        .filter((v) => ABC_SCORE_VOICE_ID_PATTERN.test(v));
+};
+const appendAbcScoreLayoutGroup = (accumulator, ids) => {
+    const normalized = normalizeAbcScoreLayoutVoiceIds(ids);
+    if (normalized.length === 0)
+        return;
+    const group = [];
+    for (const id of normalized) {
+        if (accumulator.seen.has(id))
+            continue;
+        accumulator.seen.add(id);
+        accumulator.ordered.push(id);
+        group.push(id);
+    }
+    if (group.length > 0) {
+        accumulator.groups.push(group);
+    }
+};
+const appendAbcScoreLayoutFallbackVoices = (accumulator, declaredVoiceIds) => {
+    for (const id of declaredVoiceIds) {
+        if (!accumulator.seen.has(id)) {
+            accumulator.seen.add(id);
+            accumulator.ordered.push(id);
+            accumulator.groups.push([id]);
+        }
+    }
+};
+const parseAbcScoreLayout = (raw, declaredVoiceIds) => {
+    const baseOrder = Array.from(declaredVoiceIds || []);
+    const accumulator = {
+        ordered: [],
+        groups: [],
+        seen: new Set(),
+    };
+    if (raw) {
+        for (const ids of parseAbcScoreLayoutChunks(raw)) {
+            appendAbcScoreLayoutGroup(accumulator, ids);
+        }
+    }
+    appendAbcScoreLayoutFallbackVoices(accumulator, baseOrder);
+    if (accumulator.ordered.length === 0) {
+        return { orderedVoiceIds: ["1"], groups: [["1"]] };
+    }
+    return { orderedVoiceIds: accumulator.ordered, groups: accumulator.groups };
+};
+exports.parseAbcScoreLayout = parseAbcScoreLayout;
+const createFallbackAbcNormalizedVoiceData = (voiceId) => ({
+    partName: "Voice " + voiceId,
+    clef: "",
+    transpose: null,
+    voiceId,
+    keyByMeasure: {},
+    meterByMeasure: {},
+    tempoByMeasure: {},
+    measureMetaByIndex: {},
+    measures: [[]],
+});
+const resolveAbcPrimaryVoiceData = (normalizedVoiceDataById, primaryVoiceId) => {
+    return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
+};
+const resolveAbcGroupedPartName = (groupVoiceIds, normalizedVoiceDataById, fallbackPartName) => {
+    if (groupVoiceIds.length <= 1) {
+        return fallbackPartName;
+    }
+    const names = groupVoiceIds
+        .map((voiceId) => { var _a; return ((_a = normalizedVoiceDataById.get(voiceId)) === null || _a === void 0 ? void 0 : _a.partName) || ("Voice " + voiceId); })
+        .filter((name, idx, arr) => name && arr.indexOf(name) === idx);
+    return names.length <= 1 ? (names[0] || fallbackPartName) : names.join(" / ");
+};
+const buildAbcParsedStaffVoice = (voiceId, staffIndex, voiceData) => ({
+    staff: staffIndex + 1,
+    voiceId,
+    clef: voiceData.clef,
+    transpose: voiceData.transpose,
+    measures: (voiceData.measures || [[]]).map((measure) => (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 }))),
+});
+const buildAbcParsedPartBase = (primary, index, partName) => ({
+    partId: "P" + String(index + 1),
+    partName,
+    clef: primary.clef,
+    transpose: primary.transpose,
+    voiceId: primary.voiceId,
+    keyByMeasure: primary.keyByMeasure,
+    meterByMeasure: primary.meterByMeasure,
+    tempoByMeasure: primary.tempoByMeasure,
+    measureMetaByIndex: primary.measureMetaByIndex,
+    measures: primary.measures,
+});
+const buildAbcParsedPartsFromLayout = (scoreLayout, normalizedVoiceDataById) => {
+    return scoreLayout.groups.map((groupVoiceIds, index) => {
+        const primaryVoiceId = groupVoiceIds[0] || "1";
+        const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
+        const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
+        const part = buildAbcParsedPartBase(primary, index, partName);
+        if (groupVoiceIds.length <= 1) {
+            return part;
+        }
+        return {
+            ...part,
+            staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
+                const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
+                return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
+            }),
+        };
+    });
+};
+exports.buildAbcParsedPartsFromLayout = buildAbcParsedPartsFromLayout;
+const hasAbcGroupedStaffVoices = (part) => {
+    return Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
+};
+exports.hasAbcGroupedStaffVoices = hasAbcGroupedStaffVoices;
+const buildAbcGroupedStaffMeasureNotesXml = (staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) => {
+    return staffVoices
+        .map((staffVoice, staffIndex) => {
+        var _a, _b;
+        const staffNotes = (_b = (_a = staffVoice.measures) === null || _a === void 0 ? void 0 : _a[measureIndex]) !== null && _b !== void 0 ? _b : [];
+        const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
+        if (staffIndex <= 0) {
+            return xml;
+        }
+        return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
+    })
+        .join("");
+};
+exports.buildAbcGroupedStaffMeasureNotesXml = buildAbcGroupedStaffMeasureNotesXml;
 
   },
   "src/ts/abc-parser.js": function (require, module, exports) {

@@ -134155,6 +134155,12 @@ var BUNDLED_CLI_MODULES = {
       warnings: [],
       diagnostics: [message]
     });
+    const invalidMusicXmlResult = () => {
+      return failureResult("Failed to parse MusicXML: input is not a valid MusicXML document.");
+    };
+    const caughtErrorMessage = (error) => {
+      return error instanceof Error ? error.message : String(error);
+    };
     const decodeUtf8Text = (bytes) => {
       return new TextDecoder("utf-8").decode(bytes);
     };
@@ -134289,7 +134295,7 @@ var BUNDLED_CLI_MODULES = {
         }
         return textResult(decodeUtf8Text(inputBytes));
       } catch (error) {
-        return failureResult(`Failed to read MusicXML input: ${error instanceof Error ? error.message : String(error)}`);
+        return failureResult(`Failed to read MusicXML input: ${caughtErrorMessage(error)}`);
       }
     };
     exports.decodeCliMusicXmlInput = decodeCliMusicXmlInput;
@@ -134301,7 +134307,7 @@ var BUNDLED_CLI_MODULES = {
         }
         return textResult(decodeUtf8Text(inputBytes));
       } catch (error) {
-        return failureResult(`Failed to read MuseScore input: ${error instanceof Error ? error.message : String(error)}`);
+        return failureResult(`Failed to read MuseScore input: ${caughtErrorMessage(error)}`);
       }
     };
     exports.decodeCliMuseScoreInput = decodeCliMuseScoreInput;
@@ -134313,7 +134319,7 @@ var BUNDLED_CLI_MODULES = {
         }
         return textResult(xmlText);
       } catch (error) {
-        return failureResult(`Failed to encode MusicXML output: ${error instanceof Error ? error.message : String(error)}`);
+        return failureResult(`Failed to encode MusicXML output: ${caughtErrorMessage(error)}`);
       }
     };
     exports.encodeCliMusicXmlOutput = encodeCliMusicXmlOutput;
@@ -134325,50 +134331,28 @@ var BUNDLED_CLI_MODULES = {
         }
         return textResult(musescoreText);
       } catch (error) {
-        return failureResult(`Failed to encode MuseScore output: ${error instanceof Error ? error.message : String(error)}`);
+        return failureResult(`Failed to encode MuseScore output: ${caughtErrorMessage(error)}`);
       }
     };
     exports.encodeCliMuseScoreOutput = encodeCliMuseScoreOutput;
     const importAbcToMusicXml = (abcText) => {
       try {
         const xmlText = (0, musicxml_io_1.normalizeImportedMusicXmlText)((0, abc_io_1.convertAbcToMusicXml)(abcText));
-        return {
-          ok: true,
-          output: xmlText,
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult(xmlText);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to parse ABC: ${caughtErrorMessage(error)}`);
       }
     };
     exports.importAbcToMusicXml = importAbcToMusicXml;
     const exportMusicXmlToAbc = (xmlText) => {
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
-        return {
-          ok: true,
-          output: (0, abc_io_1.exportMusicXmlDomToAbc)(doc),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, abc_io_1.exportMusicXmlDomToAbc)(doc));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to export ABC: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to export ABC: ${caughtErrorMessage(error)}`);
       }
     };
     exports.exportMusicXmlToAbc = exportMusicXmlToAbc;
@@ -134393,11 +134377,7 @@ var BUNDLED_CLI_MODULES = {
       var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
         const ticksPerQuarter = 480;
@@ -134423,155 +134403,76 @@ var BUNDLED_CLI_MODULES = {
             pickupTicks: (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(doc, ticksPerQuarter)
           }
         });
-        return {
-          ok: true,
-          output: midiBytes,
-          warnings: [],
-          diagnostics: []
-        };
+        return bytesResult(midiBytes);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to export MIDI: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to export MIDI: ${caughtErrorMessage(error)}`);
       }
     };
     exports.exportMusicXmlToMidi = exportMusicXmlToMidi;
     const importMuseScoreToMusicXml = (musescoreText) => {
       try {
-        return {
-          ok: true,
-          output: (0, musicxml_io_1.normalizeImportedMusicXmlText)((0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreText)),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, musicxml_io_1.normalizeImportedMusicXmlText)((0, musescore_io_1.convertMuseScoreToMusicXml)(musescoreText)));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to parse MuseScore: ${caughtErrorMessage(error)}`);
       }
     };
     exports.importMuseScoreToMusicXml = importMuseScoreToMusicXml;
     const importMeiToMusicXml = (meiText) => {
       try {
-        return {
-          ok: true,
-          output: (0, musicxml_io_1.normalizeImportedMusicXmlText)((0, mei_io_1.convertMeiToMusicXml)(meiText)),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, musicxml_io_1.normalizeImportedMusicXmlText)((0, mei_io_1.convertMeiToMusicXml)(meiText)));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to parse MEI: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to parse MEI: ${caughtErrorMessage(error)}`);
       }
     };
     exports.importMeiToMusicXml = importMeiToMusicXml;
     const exportMusicXmlToMei = (xmlText) => {
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
-        return {
-          ok: true,
-          output: (0, mei_io_1.exportMusicXmlDomToMei)(doc),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, mei_io_1.exportMusicXmlDomToMei)(doc));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to export MEI: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to export MEI: ${caughtErrorMessage(error)}`);
       }
     };
     exports.exportMusicXmlToMei = exportMusicXmlToMei;
     const importLilyPondToMusicXml = (lilypondText) => {
       try {
-        return {
-          ok: true,
-          output: (0, musicxml_io_1.normalizeImportedMusicXmlText)((0, lilypond_io_1.convertLilyPondToMusicXml)(lilypondText)),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, musicxml_io_1.normalizeImportedMusicXmlText)((0, lilypond_io_1.convertLilyPondToMusicXml)(lilypondText)));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to parse LilyPond: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to parse LilyPond: ${caughtErrorMessage(error)}`);
       }
     };
     exports.importLilyPondToMusicXml = importLilyPondToMusicXml;
     const exportMusicXmlToLilyPond = (xmlText) => {
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
-        return {
-          ok: true,
-          output: (0, lilypond_io_1.exportMusicXmlDomToLilyPond)(doc),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, lilypond_io_1.exportMusicXmlDomToLilyPond)(doc));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to export LilyPond: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to export LilyPond: ${caughtErrorMessage(error)}`);
       }
     };
     exports.exportMusicXmlToLilyPond = exportMusicXmlToLilyPond;
     const exportMusicXmlToMuseScore = (xmlText) => {
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
-        return {
-          ok: true,
-          output: (0, musescore_io_1.exportMusicXmlDomToMuseScore)(doc),
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult((0, musescore_io_1.exportMusicXmlDomToMuseScore)(doc));
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to export MuseScore: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to export MuseScore: ${caughtErrorMessage(error)}`);
       }
     };
     exports.exportMusicXmlToMuseScore = exportMusicXmlToMuseScore;
     const renderMusicXmlToSvg = async (xmlText) => {
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
         const { svg } = await (0, verovio_out_1.renderMusicXmlDomToSvg)(doc, {
@@ -134584,18 +134485,9 @@ var BUNDLED_CLI_MODULES = {
           footer: "none",
           header: "none"
         });
-        return {
-          ok: true,
-          output: svg,
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult(svg);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to render SVG: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to render SVG: ${caughtErrorMessage(error)}`);
       }
     };
     exports.renderMusicXmlToSvg = renderMusicXmlToSvg;
@@ -134603,11 +134495,7 @@ var BUNDLED_CLI_MODULES = {
       var _a, _b, _c, _d, _e, _f;
       const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
       if (!doc) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: ["Failed to parse MusicXML: input is not a valid MusicXML document."]
-        };
+        return invalidMusicXmlResult();
       }
       try {
         const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
@@ -134628,19 +134516,10 @@ var BUNDLED_CLI_MODULES = {
           measure_numbers: measureNumbers,
           voices
         };
-        return {
-          ok: true,
-          output: `${JSON.stringify(summary, null, 2)}
-`,
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult(`${JSON.stringify(summary, null, 2)}
+`);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to summarize MusicXML state: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to summarize MusicXML state: ${caughtErrorMessage(error)}`);
       }
     };
     exports.summarizeMusicXmlState = summarizeMusicXmlState;
@@ -134668,11 +134547,7 @@ var BUNDLED_CLI_MODULES = {
           diagnostics: []
         };
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to validate MusicXML command: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to validate MusicXML command: ${caughtErrorMessage(error)}`);
       }
     };
     exports.validateMusicXmlCommand = validateMusicXmlCommand;
@@ -134715,11 +134590,7 @@ var BUNDLED_CLI_MODULES = {
           diagnostics: []
         };
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to apply MusicXML command: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to apply MusicXML command: ${caughtErrorMessage(error)}`);
       }
     };
     exports.applyMusicXmlCommand = applyMusicXmlCommand;
@@ -134772,19 +134643,10 @@ var BUNDLED_CLI_MODULES = {
             };
           })
         };
-        return {
-          ok: true,
-          output: `${JSON.stringify(summary, null, 2)}
-`,
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult(`${JSON.stringify(summary, null, 2)}
+`);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to inspect MusicXML measure: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to inspect MusicXML measure: ${caughtErrorMessage(error)}`);
       }
     };
     exports.inspectMusicXmlMeasure = inspectMusicXmlMeasure;
@@ -134884,19 +134746,10 @@ var BUNDLED_CLI_MODULES = {
           before: beforeSummary,
           after: afterSummary
         };
-        return {
-          ok: true,
-          output: `${JSON.stringify(diff, null, 2)}
-`,
-          warnings: [],
-          diagnostics: []
-        };
+        return textResult(`${JSON.stringify(diff, null, 2)}
+`);
       } catch (error) {
-        return {
-          ok: false,
-          warnings: [],
-          diagnostics: [`Failed to diff MusicXML state: ${error instanceof Error ? error.message : String(error)}`]
-        };
+        return failureResult(`Failed to diff MusicXML state: ${caughtErrorMessage(error)}`);
       }
     };
     exports.diffMusicXmlState = diffMusicXmlState;
@@ -136283,9 +136136,12 @@ var BUNDLED_CLI_MODULES = {
     const normalizeZipPath = (value) => {
       return value.replace(/\\/g, "/").replace(/^\.?\//, "");
     };
+    const decodeUtf8 = (bytes) => {
+      return new TextDecoder("utf-8").decode(bytes);
+    };
     const decodeZipFileName = (bytes, utf8Flag) => {
       if (utf8Flag)
-        return new TextDecoder("utf-8").decode(bytes);
+        return decodeUtf8(bytes);
       let out = "";
       for (const b of bytes)
         out += String.fromCharCode(b);
@@ -136352,6 +136208,14 @@ var BUNDLED_CLI_MODULES = {
       }
       return entries;
     };
+    const readNonEmptyZipArchive = (archiveBuffer) => {
+      const archiveBytes = new Uint8Array(archiveBuffer);
+      const entries = readZipEntries(archiveBytes);
+      if (!entries.length) {
+        throw new Error("The ZIP archive is empty.");
+      }
+      return { archiveBytes, entries };
+    };
     const inflateDeflateRaw = async (compressed) => {
       const DS = globalThis.DecompressionStream;
       if (!DS) {
@@ -136396,26 +136260,31 @@ var BUNDLED_CLI_MODULES = {
       }
       return null;
     };
+    const normalizeZipExtensions = (extensions) => {
+      return extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+    };
+    const zipEntryPathHasAnyExtension = (entry, extensions) => {
+      const p = entry.path.toLowerCase();
+      return extensions.some((ext) => p.endsWith(ext));
+    };
     const findFirstEntryByExtensions = (entries, extensions) => {
-      const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+      const normalized = normalizeZipExtensions(extensions);
       if (!normalized.length)
         return null;
       for (const entry of entries) {
-        const p = entry.path.toLowerCase();
-        if (normalized.some((ext) => p.endsWith(ext)))
+        if (zipEntryPathHasAnyExtension(entry, normalized))
           return entry;
       }
       return null;
     };
     const listRootEntriesByExtensions = (entries, extensions) => {
-      const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+      const normalized = normalizeZipExtensions(extensions);
       if (!normalized.length)
         return [];
       return entries.filter((entry) => {
         if (entry.path.includes("/"))
           return false;
-        const p = entry.path.toLowerCase();
-        return normalized.some((ext) => p.endsWith(ext));
+        return zipEntryPathHasAnyExtension(entry, normalized);
       });
     };
     const parseContainerRootFilePath = (containerXmlText) => {
@@ -136509,12 +136378,8 @@ var BUNDLED_CLI_MODULES = {
       return out;
     };
     exports.bytesToArrayBuffer = bytesToArrayBuffer;
-    const makeZipBytes = async (entries, preferCompression) => {
+    const encodeZipEntries = async (entries, preferCompression) => {
       const encoder = new TextEncoder();
-      const localChunks = [];
-      const centralChunks = [];
-      let localOffset = 0;
-      const nowDos = toDosDateTime(/* @__PURE__ */ new Date());
       const encodedEntries = [];
       for (const entry of entries) {
         const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
@@ -136537,10 +136402,18 @@ var BUNDLED_CLI_MODULES = {
           uncompressedSize: uncompressed.length
         });
       }
+      return encodedEntries;
+    };
+    const makeZipBytes = async (entries, preferCompression) => {
+      const localChunks = [];
+      const centralChunks = [];
+      let localOffset = 0;
+      const nowDos = toDosDateTime(/* @__PURE__ */ new Date());
+      const encodedEntries = await encodeZipEntries(entries, preferCompression);
       for (const entry of encodedEntries) {
         const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
         const localHeader = new Uint8Array(30 + pathBytes.length);
-        writeU32(localHeader, 0, 67324752);
+        writeU32(localHeader, 0, ZIP_LFH_SIG);
         writeU16(localHeader, 4, 20);
         writeU16(localHeader, 6, 2048);
         writeU16(localHeader, 8, method);
@@ -136554,7 +136427,7 @@ var BUNDLED_CLI_MODULES = {
         localHeader.set(pathBytes, 30);
         localChunks.push(localHeader, data);
         const centralHeader = new Uint8Array(46 + pathBytes.length);
-        writeU32(centralHeader, 0, 33639248);
+        writeU32(centralHeader, 0, ZIP_CDFH_SIG);
         writeU16(centralHeader, 4, 20);
         writeU16(centralHeader, 6, 20);
         writeU16(centralHeader, 8, 2048);
@@ -136578,7 +136451,7 @@ var BUNDLED_CLI_MODULES = {
       const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
       const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
       const eocd = new Uint8Array(22);
-      writeU32(eocd, 0, 101010256);
+      writeU32(eocd, 0, ZIP_EOCD_SIG);
       writeU16(eocd, 4, 0);
       writeU16(eocd, 6, 0);
       writeU16(eocd, 8, entries.length);
@@ -136623,7 +136496,7 @@ var BUNDLED_CLI_MODULES = {
       const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
       if (containerEntry) {
         const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
-        const containerText = new TextDecoder("utf-8").decode(containerBytes);
+        const containerText = decodeUtf8(containerBytes);
         const rootPath = parseContainerRootFilePath(containerText);
         if (rootPath) {
           const rootEntry = findEntryByPath(entries, rootPath);
@@ -136631,7 +136504,7 @@ var BUNDLED_CLI_MODULES = {
             throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
           }
           const xmlBytes2 = await extractEntryBytes(archiveBytes, rootEntry);
-          return new TextDecoder("utf-8").decode(xmlBytes2);
+          return decodeUtf8(xmlBytes2);
         }
       }
       const fallbackEntry = findLikelyMusicXmlEntry(entries);
@@ -136639,38 +136512,26 @@ var BUNDLED_CLI_MODULES = {
         throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
       }
       const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
-      return new TextDecoder("utf-8").decode(xmlBytes);
+      return decodeUtf8(xmlBytes);
     };
     exports.extractMusicXmlTextFromMxl = extractMusicXmlTextFromMxl;
     const extractTextFromZipByExtensions = async (archiveBuffer, extensions) => {
-      const archiveBytes = new Uint8Array(archiveBuffer);
-      const entries = readZipEntries(archiveBytes);
-      if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-      }
+      const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
       const entry = findFirstEntryByExtensions(entries, extensions);
       if (!entry) {
         throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
       }
       const bytes = await extractEntryBytes(archiveBytes, entry);
-      return new TextDecoder("utf-8").decode(bytes);
+      return decodeUtf8(bytes);
     };
     exports.extractTextFromZipByExtensions = extractTextFromZipByExtensions;
     const listZipRootEntryPathsByExtensions = async (archiveBuffer, extensions) => {
-      const archiveBytes = new Uint8Array(archiveBuffer);
-      const entries = readZipEntries(archiveBytes);
-      if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-      }
+      const { entries } = readNonEmptyZipArchive(archiveBuffer);
       return listRootEntriesByExtensions(entries, extensions).map((entry) => entry.path);
     };
     exports.listZipRootEntryPathsByExtensions = listZipRootEntryPathsByExtensions;
     const extractZipEntryBytesByPath = async (archiveBuffer, entryPath) => {
-      const archiveBytes = new Uint8Array(archiveBuffer);
-      const entries = readZipEntries(archiveBytes);
-      if (!entries.length) {
-        throw new Error("The ZIP archive is empty.");
-      }
+      const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
       const entry = findEntryByPath(entries, entryPath);
       if (!entry) {
         throw new Error(`ZIP entry not found: ${entryPath}`);
@@ -136683,6 +136544,8 @@ var BUNDLED_CLI_MODULES = {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.renderMusicXmlDomToSvg = void 0;
+    const DEFAULT_SLUR_NUMBER = "1";
+    const VEROVIO_INIT_TIMEOUT_MS = 8e3;
     let verovioToolkit = null;
     let verovioInitPromise = null;
     const cloneXmlDocument = (doc) => {
@@ -136698,8 +136561,21 @@ var BUNDLED_CLI_MODULES = {
         return;
       notations.remove();
     };
+    const removeSlurAndPruneNotations = (slur) => {
+      const notations = slur.parentElement;
+      slur.remove();
+      pruneEmptyNotations(notations);
+    };
+    const getSlurNumber = (slur) => {
+      var _a;
+      return ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : DEFAULT_SLUR_NUMBER).trim() || DEFAULT_SLUR_NUMBER;
+    };
+    const getSlurType = (slur) => {
+      var _a;
+      return ((_a = slur.getAttribute("type")) !== null && _a !== void 0 ? _a : "").trim().toLowerCase();
+    };
     const sanitizeSlursForRender = (doc) => {
-      var _a, _b, _c;
+      var _a;
       const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
       for (const part of parts) {
         const openSlurs = /* @__PURE__ */ new Map();
@@ -136709,9 +136585,9 @@ var BUNDLED_CLI_MODULES = {
           for (const note of notes) {
             const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
             for (const slur of slurs) {
-              const number = ((_a = slur.getAttribute("number")) !== null && _a !== void 0 ? _a : "1").trim() || "1";
-              const type = ((_b = slur.getAttribute("type")) !== null && _b !== void 0 ? _b : "").trim().toLowerCase();
-              const stack = (_c = openSlurs.get(number)) !== null && _c !== void 0 ? _c : [];
+              const number = getSlurNumber(slur);
+              const type = getSlurType(slur);
+              const stack = (_a = openSlurs.get(number)) !== null && _a !== void 0 ? _a : [];
               if (type === "start") {
                 stack.push(slur);
                 openSlurs.set(number, stack);
@@ -136721,17 +136597,13 @@ var BUNDLED_CLI_MODULES = {
                 if (stack.length > 0) {
                   stack.pop();
                 } else {
-                  const notations = slur.parentElement;
-                  slur.remove();
-                  pruneEmptyNotations(notations);
+                  removeSlurAndPruneNotations(slur);
                 }
                 continue;
               }
               if (type === "continue") {
                 if (stack.length === 0) {
-                  const notations = slur.parentElement;
-                  slur.remove();
-                  pruneEmptyNotations(notations);
+                  removeSlurAndPruneNotations(slur);
                   continue;
                 }
                 stack.pop();
@@ -136743,9 +136615,7 @@ var BUNDLED_CLI_MODULES = {
         }
         for (const danglingStarts of openSlurs.values()) {
           for (const startSlur of danglingStarts) {
-            const notations = startSlur.parentElement;
-            startSlur.remove();
-            pruneEmptyNotations(notations);
+            removeSlurAndPruneNotations(startSlur);
           }
         }
       }
@@ -136778,7 +136648,7 @@ var BUNDLED_CLI_MODULES = {
                 return;
               settled = true;
               reject(new Error("Timed out while waiting for verovio initialization."));
-            }, 8e3);
+            }, VEROVIO_INIT_TIMEOUT_MS);
             const complete = () => {
               if (settled)
                 return;
@@ -151558,6 +151428,7 @@ var BUNDLED_CLI_MODULES = {
     exports.convertAbcToMusicXml = exports.clefXmlFromAbcClef = exports.exportMusicXmlDomToAbc = exports.AbcCompatParser = exports.AbcCommon = void 0;
     const beam_common_1 = require2("./beam-common");
     const abc_parser_1 = require2("./abc-parser");
+    const abc_layout_1 = require2("./abc-layout");
     const staffClefPolicy_1 = require2("../../core/staffClefPolicy");
     const DEFAULT_UNIT = { num: 1, den: 8 };
     const DEFAULT_RATIO = { num: 1, den: 1 };
@@ -151761,50 +151632,6 @@ var BUNDLED_CLI_MODULES = {
       if (!candidates.length)
         return null;
       return (_g = candidates[candidates.length - 1]) !== null && _g !== void 0 ? _g : null;
-    };
-    const parseAbcScoreLayout = (raw, declaredVoiceIds) => {
-      const baseOrder = Array.from(declaredVoiceIds || []);
-      const ordered = [];
-      const groups = [];
-      const seen = /* @__PURE__ */ new Set();
-      const appendGroup = (ids) => {
-        const normalized = ids.map((v) => String(v || "").trim()).filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
-        if (normalized.length === 0)
-          return;
-        const group = [];
-        for (const id of normalized) {
-          if (seen.has(id))
-            continue;
-          seen.add(id);
-          ordered.push(id);
-          group.push(id);
-        }
-        if (group.length > 0) {
-          groups.push(group);
-        }
-      };
-      if (raw) {
-        const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
-        let m;
-        while ((m = groupRegex.exec(raw)) !== null) {
-          const chunk = m[1] || m[2] || "";
-          appendGroup(chunk.split(/\s+/));
-        }
-      }
-      for (const id of baseOrder) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          ordered.push(id);
-          groups.push([id]);
-        }
-      }
-      if (ordered.length === 0) {
-        return { orderedVoiceIds: ["1"], groups: [["1"]] };
-      }
-      return { orderedVoiceIds: ordered, groups };
-    };
-    const parseAbcScoreVoiceOrder = (raw, declaredVoiceIds) => {
-      return parseAbcScoreLayout(raw, declaredVoiceIds).orderedVoiceIds;
     };
     const ensureAbcDeclaredVoice = (registry, voiceId) => {
       if (!registry.declaredVoiceIds.includes(voiceId)) {
@@ -152127,61 +151954,6 @@ var BUNDLED_CLI_MODULES = {
       }
       return normalizedVoiceDataById;
     };
-    const createFallbackAbcNormalizedVoiceData = (voiceId) => ({
-      partName: "Voice " + voiceId,
-      clef: "",
-      transpose: null,
-      voiceId,
-      keyByMeasure: {},
-      meterByMeasure: {},
-      tempoByMeasure: {},
-      measureMetaByIndex: {},
-      measures: [[]]
-    });
-    const resolveAbcPrimaryVoiceData = (normalizedVoiceDataById, primaryVoiceId) => {
-      return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
-    };
-    const resolveAbcGroupedPartName = (groupVoiceIds, normalizedVoiceDataById, fallbackPartName) => {
-      if (groupVoiceIds.length <= 1) {
-        return fallbackPartName;
-      }
-      const names = groupVoiceIds.map((voiceId) => {
-        var _a;
-        return ((_a = normalizedVoiceDataById.get(voiceId)) === null || _a === void 0 ? void 0 : _a.partName) || "Voice " + voiceId;
-      }).filter((name, idx, arr) => name && arr.indexOf(name) === idx);
-      return names.length <= 1 ? names[0] || fallbackPartName : names.join(" / ");
-    };
-    const buildAbcParsedStaffVoice = (voiceId, staffIndex, voiceData) => ({
-      staff: staffIndex + 1,
-      voiceId,
-      clef: voiceData.clef,
-      transpose: voiceData.transpose,
-      measures: (voiceData.measures || [[]]).map((measure) => (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 })))
-    });
-    const buildAbcParsedPartBase = (primary, index, partName) => ({
-      partId: "P" + String(index + 1),
-      partName,
-      clef: primary.clef,
-      transpose: primary.transpose,
-      voiceId: primary.voiceId,
-      keyByMeasure: primary.keyByMeasure,
-      meterByMeasure: primary.meterByMeasure,
-      tempoByMeasure: primary.tempoByMeasure,
-      measureMetaByIndex: primary.measureMetaByIndex,
-      measures: primary.measures
-    });
-    const hasAbcGroupedStaffVoices = (part) => Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
-    const buildAbcGroupedStaffMeasureNotesXml = (staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) => {
-      return staffVoices.map((staffVoice, staffIndex) => {
-        var _a, _b;
-        const staffNotes = (_b = (_a = staffVoice.measures) === null || _a === void 0 ? void 0 : _a[measureIndex]) !== null && _b !== void 0 ? _b : [];
-        const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
-        if (staffIndex <= 0) {
-          return xml;
-        }
-        return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
-      }).join("");
-    };
     const buildAbcGroupedStaffClefXml = (staffVoices) => {
       return staffVoices.map((staffVoice) => {
         const clefXml = (0, exports.clefXmlFromAbcClef)(staffVoice.clef || "");
@@ -152212,9 +151984,9 @@ var BUNDLED_CLI_MODULES = {
           "<divisions>960</divisions>",
           `<key><fifths>${Math.round(currentPartFifths)}</fifths></key>`,
           `<time><beats>${Math.round(currentPartMeter.beats)}</beats><beat-type>${Math.round(currentPartMeter.beatType)}</beat-type></time>`,
-          hasAbcGroupedStaffVoices(part) ? `<staves>${part.staffVoices.length}</staves>` : "",
+          (0, abc_layout_1.hasAbcGroupedStaffVoices)(part) ? `<staves>${part.staffVoices.length}</staves>` : "",
           buildAbcPartTransposeXml(part.transpose),
-          hasAbcGroupedStaffVoices(part) ? buildAbcGroupedStaffClefXml(part.staffVoices) : (0, exports.clefXmlFromAbcClef)(part.clef),
+          (0, abc_layout_1.hasAbcGroupedStaffVoices)(part) ? buildAbcGroupedStaffClefXml(part.staffVoices) : (0, exports.clefXmlFromAbcClef)(part.clef),
           "</attributes>",
           buildAbcTempoDirectionXml(currentPartTempo, partIndex === 0)
         ].join("");
@@ -152288,7 +152060,7 @@ var BUNDLED_CLI_MODULES = {
       const { part, partIndex, measureIndex, measureNo, notes, measureMeta, hintedFifths, hintedMeter, hintedTempo, currentPartFifths, currentPartMeter, currentPartTempo, currentMeasureDurationDiv, inferredImplicitPickup, debugMetadata, sourceMetadata, diagnostics, abcSource, buildMeasureNotesXml } = context;
       const { headerXml, tempoDirectionXml: headerTempoDirectionXml } = buildAbcMeasureHeaderXml(part, partIndex, measureIndex, currentPartFifths, currentPartMeter, currentPartTempo, hintedFifths, hintedMeter);
       const tempoDirectionXml = headerTempoDirectionXml || buildAbcMeasureTempoDirectionXml(hintedTempo, partIndex, measureIndex);
-      const notesXml = hasAbcGroupedStaffVoices(part) ? buildAbcGroupedStaffMeasureNotesXml(part.staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) : buildMeasureNotesXml(notes);
+      const notesXml = (0, abc_layout_1.hasAbcGroupedStaffVoices)(part) ? (0, abc_layout_1.buildAbcGroupedStaffMeasureNotesXml)(part.staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) : buildMeasureNotesXml(notes);
       const repeatStartXml = buildAbcMeasureRepeatStartXml(measureMeta);
       const repeatEndXml = buildAbcMeasureRepeatEndXml(measureMeta);
       const { debugMiscXml, diagMiscXml, sourceMiscXml } = buildAbcRenderedMeasureMiscXml({
@@ -152699,24 +152471,6 @@ var BUNDLED_CLI_MODULES = {
       }
       const beamXmlByNoteIndex = buildAbcBeamXmlByNoteIndex(notes, beatDiv);
       return notes.map((note, noteIndex) => buildAbcNoteXml(note, noteIndex, staffOverride, beamXmlByNoteIndex)).join("");
-    };
-    const buildAbcParsedPartsFromLayout = (scoreLayout, normalizedVoiceDataById) => {
-      return scoreLayout.groups.map((groupVoiceIds, index) => {
-        const primaryVoiceId = groupVoiceIds[0] || "1";
-        const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
-        const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
-        const part = buildAbcParsedPartBase(primary, index, partName);
-        if (groupVoiceIds.length <= 1) {
-          return part;
-        }
-        return {
-          ...part,
-          staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
-            const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
-            return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
-          })
-        };
-      });
     };
     const createAbcVoiceStores = () => {
       return {
@@ -154671,13 +154425,13 @@ var BUNDLED_CLI_MODULES = {
       if (noteCount === 0) {
         throw new Error("No notes or rests were found. (line 1)");
       }
-      const scoreLayout = parseAbcScoreLayout(lineState.scoreDirective, voiceRegistry.declaredVoiceIds);
+      const scoreLayout = (0, abc_layout_1.parseAbcScoreLayout)(lineState.scoreDirective, voiceRegistry.declaredVoiceIds);
       const orderedVoiceIds = scoreLayout.orderedVoiceIds;
       const measureCapacity = Math.max(1, Math.round((Number(meter.beats) || 4) * (4 / (Number(meter.beatType) || 4)) * 960));
       const importDiagnostics = [];
       const overfullCompatibilityMode = (settings === null || settings === void 0 ? void 0 : settings.overfullCompatibilityMode) !== false;
       const normalizedVoiceDataById = buildAbcNormalizedVoiceDataById(orderedVoiceIds, voiceRegistry, voiceStores.measuresByVoice, measureCapacity, overfullCompatibilityMode, settings, transposeHintByVoiceId, keyHintFifthsByKey, voiceStores.notationMeasureMetaByVoice, measureMetaByKey, voiceStores.meterByMeasureByVoice, voiceStores.tempoByMeasureByVoice, importDiagnostics);
-      const parts = buildAbcParsedPartsFromLayout(scoreLayout, normalizedVoiceDataById);
+      const parts = (0, abc_layout_1.buildAbcParsedPartsFromLayout)(scoreLayout, normalizedVoiceDataById);
       const measureCount = parts.reduce((acc, part) => Math.max(acc, part.measures.length), 0);
       const warningDiagnostics = warnings.map((message) => ({
         level: "warn",
@@ -156035,6 +155789,147 @@ ${bodyLines.join("\n")}${metaBlock}`;
       return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
     };
     exports.convertAbcToMusicXml = convertAbcToMusicXml;
+  },
+  "src/ts/abc-layout.js": function(require2, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.buildAbcGroupedStaffMeasureNotesXml = exports.hasAbcGroupedStaffVoices = exports.buildAbcParsedPartsFromLayout = exports.parseAbcScoreLayout = void 0;
+    const ABC_SCORE_VOICE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/;
+    const parseAbcScoreLayoutChunks = (raw) => {
+      const chunks = [];
+      const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
+      let m;
+      while ((m = groupRegex.exec(raw)) !== null) {
+        const chunk = m[1] || m[2] || "";
+        chunks.push(chunk.split(/\s+/));
+      }
+      return chunks;
+    };
+    const normalizeAbcScoreLayoutVoiceIds = (ids) => {
+      return ids.map((v) => String(v || "").trim()).filter((v) => ABC_SCORE_VOICE_ID_PATTERN.test(v));
+    };
+    const appendAbcScoreLayoutGroup = (accumulator, ids) => {
+      const normalized = normalizeAbcScoreLayoutVoiceIds(ids);
+      if (normalized.length === 0)
+        return;
+      const group = [];
+      for (const id of normalized) {
+        if (accumulator.seen.has(id))
+          continue;
+        accumulator.seen.add(id);
+        accumulator.ordered.push(id);
+        group.push(id);
+      }
+      if (group.length > 0) {
+        accumulator.groups.push(group);
+      }
+    };
+    const appendAbcScoreLayoutFallbackVoices = (accumulator, declaredVoiceIds) => {
+      for (const id of declaredVoiceIds) {
+        if (!accumulator.seen.has(id)) {
+          accumulator.seen.add(id);
+          accumulator.ordered.push(id);
+          accumulator.groups.push([id]);
+        }
+      }
+    };
+    const parseAbcScoreLayout = (raw, declaredVoiceIds) => {
+      const baseOrder = Array.from(declaredVoiceIds || []);
+      const accumulator = {
+        ordered: [],
+        groups: [],
+        seen: /* @__PURE__ */ new Set()
+      };
+      if (raw) {
+        for (const ids of parseAbcScoreLayoutChunks(raw)) {
+          appendAbcScoreLayoutGroup(accumulator, ids);
+        }
+      }
+      appendAbcScoreLayoutFallbackVoices(accumulator, baseOrder);
+      if (accumulator.ordered.length === 0) {
+        return { orderedVoiceIds: ["1"], groups: [["1"]] };
+      }
+      return { orderedVoiceIds: accumulator.ordered, groups: accumulator.groups };
+    };
+    exports.parseAbcScoreLayout = parseAbcScoreLayout;
+    const createFallbackAbcNormalizedVoiceData = (voiceId) => ({
+      partName: "Voice " + voiceId,
+      clef: "",
+      transpose: null,
+      voiceId,
+      keyByMeasure: {},
+      meterByMeasure: {},
+      tempoByMeasure: {},
+      measureMetaByIndex: {},
+      measures: [[]]
+    });
+    const resolveAbcPrimaryVoiceData = (normalizedVoiceDataById, primaryVoiceId) => {
+      return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
+    };
+    const resolveAbcGroupedPartName = (groupVoiceIds, normalizedVoiceDataById, fallbackPartName) => {
+      if (groupVoiceIds.length <= 1) {
+        return fallbackPartName;
+      }
+      const names = groupVoiceIds.map((voiceId) => {
+        var _a;
+        return ((_a = normalizedVoiceDataById.get(voiceId)) === null || _a === void 0 ? void 0 : _a.partName) || "Voice " + voiceId;
+      }).filter((name, idx, arr) => name && arr.indexOf(name) === idx);
+      return names.length <= 1 ? names[0] || fallbackPartName : names.join(" / ");
+    };
+    const buildAbcParsedStaffVoice = (voiceId, staffIndex, voiceData) => ({
+      staff: staffIndex + 1,
+      voiceId,
+      clef: voiceData.clef,
+      transpose: voiceData.transpose,
+      measures: (voiceData.measures || [[]]).map((measure) => (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 })))
+    });
+    const buildAbcParsedPartBase = (primary, index, partName) => ({
+      partId: "P" + String(index + 1),
+      partName,
+      clef: primary.clef,
+      transpose: primary.transpose,
+      voiceId: primary.voiceId,
+      keyByMeasure: primary.keyByMeasure,
+      meterByMeasure: primary.meterByMeasure,
+      tempoByMeasure: primary.tempoByMeasure,
+      measureMetaByIndex: primary.measureMetaByIndex,
+      measures: primary.measures
+    });
+    const buildAbcParsedPartsFromLayout = (scoreLayout, normalizedVoiceDataById) => {
+      return scoreLayout.groups.map((groupVoiceIds, index) => {
+        const primaryVoiceId = groupVoiceIds[0] || "1";
+        const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
+        const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
+        const part = buildAbcParsedPartBase(primary, index, partName);
+        if (groupVoiceIds.length <= 1) {
+          return part;
+        }
+        return {
+          ...part,
+          staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
+            const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
+            return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
+          })
+        };
+      });
+    };
+    exports.buildAbcParsedPartsFromLayout = buildAbcParsedPartsFromLayout;
+    const hasAbcGroupedStaffVoices = (part) => {
+      return Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
+    };
+    exports.hasAbcGroupedStaffVoices = hasAbcGroupedStaffVoices;
+    const buildAbcGroupedStaffMeasureNotesXml = (staffVoices, measureIndex, currentMeasureDurationDiv, buildMeasureNotesXml) => {
+      return staffVoices.map((staffVoice, staffIndex) => {
+        var _a, _b;
+        const staffNotes = (_b = (_a = staffVoice.measures) === null || _a === void 0 ? void 0 : _a[measureIndex]) !== null && _b !== void 0 ? _b : [];
+        const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
+        if (staffIndex <= 0) {
+          return xml;
+        }
+        return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
+      }).join("");
+    };
+    exports.buildAbcGroupedStaffMeasureNotesXml = buildAbcGroupedStaffMeasureNotesXml;
   },
   "src/ts/abc-parser.js": function(require2, module, exports) {
     "use strict";

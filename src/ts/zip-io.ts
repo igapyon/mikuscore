@@ -46,8 +46,12 @@ const normalizeZipPath = (value: string): string => {
   return value.replace(/\\/g, "/").replace(/^\.?\//, "");
 };
 
+const decodeUtf8 = (bytes: Uint8Array): string => {
+  return new TextDecoder("utf-8").decode(bytes);
+};
+
 const decodeZipFileName = (bytes: Uint8Array, utf8Flag: boolean): string => {
-  if (utf8Flag) return new TextDecoder("utf-8").decode(bytes);
+  if (utf8Flag) return decodeUtf8(bytes);
   let out = "";
   for (const b of bytes) out += String.fromCharCode(b);
   return out;
@@ -122,6 +126,15 @@ const readZipEntries = (bytes: Uint8Array): ZipEntry[] => {
   return entries;
 };
 
+const readNonEmptyZipArchive = (archiveBuffer: ArrayBuffer): { archiveBytes: Uint8Array; entries: ZipEntry[] } => {
+  const archiveBytes = new Uint8Array(archiveBuffer);
+  const entries = readZipEntries(archiveBytes);
+  if (!entries.length) {
+    throw new Error("The ZIP archive is empty.");
+  }
+  return { archiveBytes, entries };
+};
+
 const inflateDeflateRaw = async (compressed: Uint8Array): Promise<Uint8Array> => {
   const DS = (globalThis as { DecompressionStream?: new (format: string) => unknown }).DecompressionStream;
   if (!DS) {
@@ -168,23 +181,30 @@ const findLikelyMusicXmlEntry = (entries: ZipEntry[]): ZipEntry | null => {
   return null;
 };
 
+const normalizeZipExtensions = (extensions: string[]): string[] => {
+  return extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+};
+
+const zipEntryPathHasAnyExtension = (entry: ZipEntry, extensions: string[]): boolean => {
+  const p = entry.path.toLowerCase();
+  return extensions.some((ext) => p.endsWith(ext));
+};
+
 const findFirstEntryByExtensions = (entries: ZipEntry[], extensions: string[]): ZipEntry | null => {
-  const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+  const normalized = normalizeZipExtensions(extensions);
   if (!normalized.length) return null;
   for (const entry of entries) {
-    const p = entry.path.toLowerCase();
-    if (normalized.some((ext) => p.endsWith(ext))) return entry;
+    if (zipEntryPathHasAnyExtension(entry, normalized)) return entry;
   }
   return null;
 };
 
 const listRootEntriesByExtensions = (entries: ZipEntry[], extensions: string[]): ZipEntry[] => {
-  const normalized = extensions.map((ext) => ext.trim().toLowerCase()).filter((ext) => ext.length > 0);
+  const normalized = normalizeZipExtensions(extensions);
   if (!normalized.length) return [];
   return entries.filter((entry) => {
     if (entry.path.includes("/")) return false;
-    const p = entry.path.toLowerCase();
-    return normalized.some((ext) => p.endsWith(ext));
+    return zipEntryPathHasAnyExtension(entry, normalized);
   });
 };
 
@@ -279,13 +299,11 @@ export const bytesToArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
   return out;
 };
 
-export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boolean): Promise<Uint8Array> => {
+const encodeZipEntries = async (
+  entries: ZipEntryPayload[],
+  preferCompression: boolean
+): Promise<EncodedZipEntry[]> => {
   const encoder = new TextEncoder();
-  const localChunks: Uint8Array[] = [];
-  const centralChunks: Uint8Array[] = [];
-  let localOffset = 0;
-  const nowDos = toDosDateTime(new Date());
-
   const encodedEntries: EncodedZipEntry[] = [];
   for (const entry of entries) {
     const pathBytes = encoder.encode(entry.path.replace(/\\/g, "/").replace(/^\/+/, ""));
@@ -308,12 +326,21 @@ export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression
       uncompressedSize: uncompressed.length,
     });
   }
+  return encodedEntries;
+};
+
+export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression: boolean): Promise<Uint8Array> => {
+  const localChunks: Uint8Array[] = [];
+  const centralChunks: Uint8Array[] = [];
+  let localOffset = 0;
+  const nowDos = toDosDateTime(new Date());
+  const encodedEntries = await encodeZipEntries(entries, preferCompression);
 
   for (const entry of encodedEntries) {
     const { pathBytes, data, crc, method, compressedSize, uncompressedSize } = entry;
 
     const localHeader = new Uint8Array(30 + pathBytes.length);
-    writeU32(localHeader, 0, 0x04034b50);
+    writeU32(localHeader, 0, ZIP_LFH_SIG);
     writeU16(localHeader, 4, 20);
     writeU16(localHeader, 6, 0x0800);
     writeU16(localHeader, 8, method);
@@ -328,7 +355,7 @@ export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression
     localChunks.push(localHeader, data);
 
     const centralHeader = new Uint8Array(46 + pathBytes.length);
-    writeU32(centralHeader, 0, 0x02014b50);
+    writeU32(centralHeader, 0, ZIP_CDFH_SIG);
     writeU16(centralHeader, 4, 20);
     writeU16(centralHeader, 6, 20);
     writeU16(centralHeader, 8, 0x0800);
@@ -354,7 +381,7 @@ export const makeZipBytes = async (entries: ZipEntryPayload[], preferCompression
   const localSize = localChunks.reduce((sum, b) => sum + b.length, 0);
   const centralSize = centralChunks.reduce((sum, b) => sum + b.length, 0);
   const eocd = new Uint8Array(22);
-  writeU32(eocd, 0, 0x06054b50);
+  writeU32(eocd, 0, ZIP_EOCD_SIG);
   writeU16(eocd, 4, 0);
   writeU16(eocd, 6, 0);
   writeU16(eocd, 8, entries.length);
@@ -405,7 +432,7 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
   const containerEntry = findEntryByPath(entries, "META-INF/container.xml");
   if (containerEntry) {
     const containerBytes = await extractEntryBytes(archiveBytes, containerEntry);
-    const containerText = new TextDecoder("utf-8").decode(containerBytes);
+    const containerText = decodeUtf8(containerBytes);
     const rootPath = parseContainerRootFilePath(containerText);
     if (rootPath) {
       const rootEntry = findEntryByPath(entries, rootPath);
@@ -413,7 +440,7 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
         throw new Error(`MusicXML root file was not found in archive: ${rootPath}`);
       }
       const xmlBytes = await extractEntryBytes(archiveBytes, rootEntry);
-      return new TextDecoder("utf-8").decode(xmlBytes);
+      return decodeUtf8(xmlBytes);
     }
   }
 
@@ -422,35 +449,27 @@ export const extractMusicXmlTextFromMxl = async (archiveBuffer: ArrayBuffer): Pr
     throw new Error("No MusicXML file (.musicxml or .xml) was found in the MXL archive.");
   }
   const xmlBytes = await extractEntryBytes(archiveBytes, fallbackEntry);
-  return new TextDecoder("utf-8").decode(xmlBytes);
+  return decodeUtf8(xmlBytes);
 };
 
 export const extractTextFromZipByExtensions = async (
   archiveBuffer: ArrayBuffer,
   extensions: string[]
 ): Promise<string> => {
-  const archiveBytes = new Uint8Array(archiveBuffer);
-  const entries = readZipEntries(archiveBytes);
-  if (!entries.length) {
-    throw new Error("The ZIP archive is empty.");
-  }
+  const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
   const entry = findFirstEntryByExtensions(entries, extensions);
   if (!entry) {
     throw new Error(`No matching entry was found for extensions: ${extensions.join(", ")}`);
   }
   const bytes = await extractEntryBytes(archiveBytes, entry);
-  return new TextDecoder("utf-8").decode(bytes);
+  return decodeUtf8(bytes);
 };
 
 export const listZipRootEntryPathsByExtensions = async (
   archiveBuffer: ArrayBuffer,
   extensions: string[]
 ): Promise<string[]> => {
-  const archiveBytes = new Uint8Array(archiveBuffer);
-  const entries = readZipEntries(archiveBytes);
-  if (!entries.length) {
-    throw new Error("The ZIP archive is empty.");
-  }
+  const { entries } = readNonEmptyZipArchive(archiveBuffer);
   return listRootEntriesByExtensions(entries, extensions).map((entry) => entry.path);
 };
 
@@ -458,11 +477,7 @@ export const extractZipEntryBytesByPath = async (
   archiveBuffer: ArrayBuffer,
   entryPath: string
 ): Promise<Uint8Array> => {
-  const archiveBytes = new Uint8Array(archiveBuffer);
-  const entries = readZipEntries(archiveBytes);
-  if (!entries.length) {
-    throw new Error("The ZIP archive is empty.");
-  }
+  const { archiveBytes, entries } = readNonEmptyZipArchive(archiveBuffer);
   const entry = findEntryByPath(entries, entryPath);
   if (!entry) {
     throw new Error(`ZIP entry not found: ${entryPath}`);

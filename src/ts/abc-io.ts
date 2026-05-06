@@ -16,6 +16,17 @@ import {
   parseAbcPlayableEventAt,
   parseAbcSingleCharShorthandAt,
 } from "./abc-parser";
+import {
+  buildAbcGroupedStaffMeasureNotesXml,
+  buildAbcParsedPartsFromLayout,
+  hasAbcGroupedStaffVoices,
+  parseAbcScoreLayout,
+} from "./abc-layout";
+import type {
+  AbcNormalizedVoiceData as LayoutAbcNormalizedVoiceData,
+  AbcParsedPart as LayoutAbcParsedPart,
+  AbcParsedStaffVoice as LayoutAbcParsedStaffVoice,
+} from "./abc-layout";
 import { chooseSingleClefByKeys } from "../../core/staffClefPolicy";
 
 export type Fraction = { num: number; den: number };
@@ -222,11 +233,6 @@ const readInitialTempoFromMusicXml = (doc: Document): { bpm: number; unit: Fract
   return candidates[candidates.length - 1] ?? null;
 };
 
-type AbcScoreLayout = {
-  orderedVoiceIds: string[];
-  groups: string[][];
-};
-
 type AbcImportVoiceRegistry = {
   declaredVoiceIds: string[];
   voiceNameById: Record<string, string>;
@@ -260,17 +266,7 @@ type AbcMeasureMeta = {
   endingStopType: "" | "stop" | "discontinue";
 };
 
-type AbcNormalizedVoiceData = {
-  partName: string;
-  clef: string;
-  transpose: { chromatic?: number; diatonic?: number } | null;
-  voiceId: string;
-  keyByMeasure: Record<number, number>;
-  meterByMeasure: Record<number, { beats: number; beatType: number }>;
-  tempoByMeasure: Record<number, number>;
-  measureMetaByIndex: Record<number, AbcMeasureMeta>;
-  measures: AbcParsedNote[][];
-};
+type AbcNormalizedVoiceData = LayoutAbcNormalizedVoiceData<AbcParsedNote, AbcMeasureMeta>;
 
 type AbcImportLineProcessorContext = {
   lineState: AbcImportLineState;
@@ -494,55 +490,6 @@ type AbcPendingNoteArrayContext = {
   values: any[];
   apply: (values: any[]) => void;
   clear: () => void;
-};
-
-const parseAbcScoreLayout = (raw: string, declaredVoiceIds: string[]): AbcScoreLayout => {
-  const baseOrder = Array.from(declaredVoiceIds || []);
-  const ordered: string[] = [];
-  const groups: string[][] = [];
-  const seen = new Set<string>();
-  const appendGroup = (ids: string[]): void => {
-    const normalized = ids
-      .map((v) => String(v || "").trim())
-      .filter((v) => /^[A-Za-z0-9_.-]+$/.test(v));
-    if (normalized.length === 0) return;
-    const group: string[] = [];
-    for (const id of normalized) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      ordered.push(id);
-      group.push(id);
-    }
-    if (group.length > 0) {
-      groups.push(group);
-    }
-  };
-
-  if (raw) {
-    const groupRegex = /\(([^)]*)\)|([^\s()]+)/g;
-    let m: RegExpExecArray | null;
-    while ((m = groupRegex.exec(raw)) !== null) {
-      const chunk = m[1] || m[2] || "";
-      appendGroup(chunk.split(/\s+/));
-    }
-  }
-
-  for (const id of baseOrder) {
-    if (!seen.has(id)) {
-      seen.add(id);
-      ordered.push(id);
-      groups.push([id]);
-    }
-  }
-
-  if (ordered.length === 0) {
-    return { orderedVoiceIds: ["1"], groups: [["1"]] };
-  }
-  return { orderedVoiceIds: ordered, groups };
-};
-
-const parseAbcScoreVoiceOrder = (raw: string, declaredVoiceIds: string[]): string[] => {
-  return parseAbcScoreLayout(raw, declaredVoiceIds).orderedVoiceIds;
 };
 
 const ensureAbcDeclaredVoice = (
@@ -1084,91 +1031,6 @@ const buildAbcNormalizedVoiceDataById = (
     });
   }
   return normalizedVoiceDataById;
-};
-
-const createFallbackAbcNormalizedVoiceData = (voiceId: string): AbcNormalizedVoiceData => ({
-  partName: "Voice " + voiceId,
-  clef: "",
-  transpose: null,
-  voiceId,
-  keyByMeasure: {},
-  meterByMeasure: {},
-  tempoByMeasure: {},
-  measureMetaByIndex: {},
-  measures: [[]],
-});
-
-const resolveAbcPrimaryVoiceData = (
-  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>,
-  primaryVoiceId: string
-): AbcNormalizedVoiceData => {
-  return normalizedVoiceDataById.get(primaryVoiceId) || createFallbackAbcNormalizedVoiceData(primaryVoiceId);
-};
-
-const resolveAbcGroupedPartName = (
-  groupVoiceIds: string[],
-  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>,
-  fallbackPartName: string
-): string => {
-  if (groupVoiceIds.length <= 1) {
-    return fallbackPartName;
-  }
-  const names = groupVoiceIds
-    .map((voiceId) => normalizedVoiceDataById.get(voiceId)?.partName || ("Voice " + voiceId))
-    .filter((name, idx, arr) => name && arr.indexOf(name) === idx);
-  return names.length <= 1 ? (names[0] || fallbackPartName) : names.join(" / ");
-};
-
-const buildAbcParsedStaffVoice = (
-  voiceId: string,
-  staffIndex: number,
-  voiceData: AbcNormalizedVoiceData
-): AbcParsedStaffVoice => ({
-  staff: staffIndex + 1,
-  voiceId,
-  clef: voiceData.clef,
-  transpose: voiceData.transpose,
-  measures: (voiceData.measures || [[]]).map((measure) =>
-    (Array.isArray(measure) ? measure : []).map((note) => ({ ...note, staff: staffIndex + 1 }))
-  ),
-});
-
-const buildAbcParsedPartBase = (
-  primary: AbcNormalizedVoiceData,
-  index: number,
-  partName: string
-): AbcParsedPart => ({
-  partId: "P" + String(index + 1),
-  partName,
-  clef: primary.clef,
-  transpose: primary.transpose,
-  voiceId: primary.voiceId,
-  keyByMeasure: primary.keyByMeasure,
-  meterByMeasure: primary.meterByMeasure,
-  tempoByMeasure: primary.tempoByMeasure,
-  measureMetaByIndex: primary.measureMetaByIndex,
-  measures: primary.measures,
-});
-
-const hasAbcGroupedStaffVoices = (part: AbcParsedPart): boolean =>
-  Array.isArray(part.staffVoices) && part.staffVoices.length > 1;
-
-const buildAbcGroupedStaffMeasureNotesXml = (
-  staffVoices: AbcParsedStaffVoice[],
-  measureIndex: number,
-  currentMeasureDurationDiv: number,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffNumber?: number) => string
-): string => {
-  return staffVoices
-    .map((staffVoice, staffIndex) => {
-      const staffNotes = staffVoice.measures?.[measureIndex] ?? [];
-      const xml = buildMeasureNotesXml(staffNotes, staffVoice.staff);
-      if (staffIndex <= 0) {
-        return xml;
-      }
-      return `<backup><duration>${currentMeasureDurationDiv}</duration></backup>${xml}`;
-    })
-    .join("");
 };
 
 const buildAbcGroupedStaffClefXml = (staffVoices: AbcParsedStaffVoice[]): string => {
@@ -1931,28 +1793,6 @@ const buildAbcMeasureNotesXml = (
   return notes
     .map((note, noteIndex) => buildAbcNoteXml(note, noteIndex, staffOverride, beamXmlByNoteIndex))
     .join("");
-};
-
-const buildAbcParsedPartsFromLayout = (
-  scoreLayout: AbcScoreLayout,
-  normalizedVoiceDataById: Map<string, AbcNormalizedVoiceData>
-): AbcParsedPart[] => {
-  return scoreLayout.groups.map((groupVoiceIds, index) => {
-    const primaryVoiceId = groupVoiceIds[0] || "1";
-    const primary = resolveAbcPrimaryVoiceData(normalizedVoiceDataById, primaryVoiceId);
-    const partName = resolveAbcGroupedPartName(groupVoiceIds, normalizedVoiceDataById, primary.partName);
-    const part = buildAbcParsedPartBase(primary, index, partName);
-    if (groupVoiceIds.length <= 1) {
-      return part;
-    }
-    return {
-      ...part,
-      staffVoices: groupVoiceIds.map((voiceId, staffIndex) => {
-        const voiceData = normalizedVoiceDataById.get(voiceId) || primary;
-        return buildAbcParsedStaffVoice(voiceId, staffIndex, voiceData);
-      }),
-    };
-  });
 };
 
 const createAbcVoiceStores = (): AbcVoiceStores => {
@@ -5445,28 +5285,7 @@ type AbcParsedNote = {
   voice?: string;
 };
 
-type AbcParsedPart = {
-  partId: string;
-  partName: string;
-  clef?: string;
-  transpose?: { chromatic?: number; diatonic?: number } | null;
-  voiceId?: string;
-  staffVoices?: AbcParsedStaffVoice[];
-  keyByMeasure?: Record<number, number>;
-  meterByMeasure?: Record<number, { beats: number; beatType: number }>;
-  tempoByMeasure?: Record<number, number>;
-  measureMetaByIndex?: Record<number, {
-    number: string;
-    implicit: boolean;
-    repeatStart: boolean;
-    repeatEnd: boolean;
-    repeatTimes: number | null;
-    endingStart: string;
-    endingStop: string;
-    endingStopType: "" | "stop" | "discontinue";
-  }>;
-  measures: AbcParsedNote[][];
-};
+type AbcParsedPart = LayoutAbcParsedPart<AbcParsedNote, AbcMeasureMeta>;
 
 type AbcParsedResult = {
   meta: AbcParsedMeta;
@@ -5484,13 +5303,7 @@ type AbcParsedResult = {
   }>;
 };
 
-type AbcParsedStaffVoice = {
-  staff: number;
-  voiceId: string;
-  clef?: string;
-  transpose?: { chromatic?: number; diatonic?: number } | null;
-  measures: AbcParsedNote[][];
-};
+type AbcParsedStaffVoice = LayoutAbcParsedStaffVoice<AbcParsedNote>;
 
 type AbcPartRenderState = {
   currentPartFifths: number;
