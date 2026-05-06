@@ -7,6 +7,8 @@ This page collects repository-facing notes that are useful for contributors and 
 - `npm run build`
 - `npm run build:full`
 - `npm run build:cli-runtime`
+- `npm run prepare:release-assets`
+- `npm run smoke:bundle`
 - `npm run test:build`
 - `npm run test:build:full`
 - `npm run test:slow`
@@ -24,6 +26,8 @@ Practical command split:
 - `npm run build`: faster day-to-day build (`typecheck` + `test:build` + `build:dist`)
 - `npm run build:full`: fuller build path (`typecheck` + `test:build:full` + `build:dist`)
 - `npm run build:cli-runtime`: generate the single-file Node.js CLI runtime artifact
+- `npm run prepare:release-assets`: stage versioned GitHub Release assets under `release-assets/` for a `TAG_NAME` such as `v0.5.0`
+- `npm run smoke:bundle`: verify the staged CLI release asset, or `bundle/mikuscore.mjs` when no staged asset exists
 - `npm run test:slow`: heavy suites currently split out of the day-to-day build path
 - `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
 - `npm run check:all`: full verification (`typecheck` + full `test:all` + `build:dist`)
@@ -93,6 +97,7 @@ Input/output contract:
 Examples:
 
 - `npm run cli -- --help`
+- `npm run cli -- --version`
 - `npm run cli -- convert --help`
 - `npm run cli -- render --help`
 - `npm run cli -- state --help`
@@ -118,6 +123,18 @@ Examples:
 - `npm run cli -- state diff --before score.before.musicxml --after score.after.musicxml`
 - `state inspect-measure` output can be fed back into `state validate-command` / `state apply-command` via `selector` / `anchor_selector` payload fields
 - `cat score.abc | npm run cli -- convert --from abc --to musicxml`
+
+## Release Assets
+
+GitHub Actions release automation is limited to `v*` tag pushes. It does not add a pull-request or ordinary-push CI workflow.
+
+Local release asset preparation uses the same scripts that the tag workflow calls:
+
+- `npm run build`
+- `TAG_NAME=v0.5.0 npm run prepare:release-assets`
+- `npm run smoke:bundle`
+
+The release staging command checks `TAG_NAME` against `package.json` version, then writes prepared assets under `release-assets/`. The staged directory is local generated output and is ignored by Git.
 
 Observed sibling-project direction:
 

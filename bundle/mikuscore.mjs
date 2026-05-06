@@ -133970,6 +133970,7 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var repoRoot = path.resolve(__dirname, "..");
 var DIAGNOSTICS_VERSION = 1;
+var PACKAGE_VERSION = "0.5.0";
 var HELP_TEXT = {
   top: [
     "Usage:",
@@ -133993,6 +133994,7 @@ var HELP_TEXT = {
     "  mikuscore render --help",
     "  mikuscore state --help",
     "  mikuscore convert --help",
+    "  mikuscore --version",
     "  mikuscore --help",
     "",
     "Commands:",
@@ -134006,6 +134008,7 @@ var HELP_TEXT = {
     "  --in <file>|-            Read input from file or stdin",
     "  --out <file>|-           Write output to file or stdout",
     "  --diagnostics text|json  Select diagnostics format",
+    "  --version                Show version",
     "  --help                   Show help"
   ].join("\n"),
   convert: [
@@ -157090,6 +157093,11 @@ main().catch((error) => {
 });
 async function main() {
   const { command, options } = parseArgs(process.argv.slice(2));
+  if (command.length === 0 && options.version) {
+    process.stdout.write(`${getPackageVersion()}
+`);
+    return;
+  }
   const helpTopic = resolveHelpTopic(command, options);
   if (helpTopic) {
     writeHelp(process.stdout, helpTopic);
@@ -157118,6 +157126,10 @@ function parseArgs(argv) {
       options.help = true;
       continue;
     }
+    if (key === "version") {
+      options.version = true;
+      continue;
+    }
     const value = readOptionValue(argv, index, token);
     if (key === "diagnostics") {
       validateDiagnosticsOption(value);
@@ -157129,6 +157141,14 @@ function parseArgs(argv) {
     options.helpCommand = true;
   }
   return { command, options };
+}
+function getPackageVersion() {
+  if (PACKAGE_VERSION !== "__MIKUSCORE_PACKAGE_VERSION__") {
+    return PACKAGE_VERSION;
+  }
+  const packageJsonPath = path.join(repoRoot, "package.json");
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+  return String(packageJson.version);
 }
 function isCommand(actual, expected) {
   return actual.length === expected.length && actual.every((value, index) => value === expected[index]);

@@ -63,6 +63,14 @@ describe("mikuscore cli", () => {
     expect(stateHelp.stderr).toBe("");
   }, 10000);
 
+  it("prints the package version", () => {
+    const result = runCli(["--version"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("0.5.0");
+    expect(result.stderr).toBe("");
+  }, 10000);
+
   it("converts stdin to stdout for a supported pair", () => {
     const result = runCli(["convert", "--from", "abc", "--to", "musicxml"], {
       input: "X:1\nT:STDIN\nM:4/4\nL:1/4\nK:C\nC D E F|\n",
