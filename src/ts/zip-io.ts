@@ -30,6 +30,16 @@ type ZipDosDateTime = {
   dosDate: number;
 };
 
+type ReadZipEntryResult = {
+  entry: ZipEntry | null;
+  nextOffset: number;
+};
+
+type ZipCentralDirectoryBounds = {
+  offset: number;
+  end: number;
+};
+
 const ZIP_EOCD_SIG = 0x06054b50;
 const ZIP_CDFH_SIG = 0x02014b50;
 const ZIP_LFH_SIG = 0x04034b50;
@@ -63,6 +73,25 @@ const normalizeZipEntryPathForWrite = (path: string): string => {
   return path.replace(/\\/g, "/").replace(/^\/+/, "");
 };
 
+const copyBytes = (bytes: Uint8Array): ArrayBuffer => {
+  const copied = new Uint8Array(bytes.length);
+  copied.set(bytes);
+  return copied.buffer;
+};
+
+const responseBodyFromBytes = (bytes: Uint8Array, unavailableMessage: string): ReadableStream<Uint8Array> => {
+  const body = new Response(copyBytes(bytes)).body;
+  if (!body) {
+    throw new Error(unavailableMessage);
+  }
+  return body;
+};
+
+const responseStreamToBytes = async (stream: BodyInit): Promise<Uint8Array> => {
+  const arrayBuffer = await new Response(stream).arrayBuffer();
+  return new Uint8Array(arrayBuffer);
+};
+
 const decodeZipFileName = (bytes: Uint8Array, utf8Flag: boolean): string => {
   if (utf8Flag) return decodeUtf8(bytes);
   let out = "";
@@ -78,62 +107,77 @@ const findEndOfCentralDirectoryOffset = (bytes: Uint8Array): number => {
   return -1;
 };
 
-const readZipEntries = (bytes: Uint8Array): ZipEntry[] => {
+const readCentralDirectoryBounds = (bytes: Uint8Array): ZipCentralDirectoryBounds => {
   const eocdOffset = findEndOfCentralDirectoryOffset(bytes);
   if (eocdOffset < 0) throw new Error("Invalid ZIP: end of central directory was not found.");
 
-  const centralDirectorySize = readU32(bytes, eocdOffset + 12);
-  const centralDirectoryOffset = readU32(bytes, eocdOffset + 16);
-  const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
-  if (centralDirectoryEnd > bytes.length) {
+  const size = readU32(bytes, eocdOffset + 12);
+  const offset = readU32(bytes, eocdOffset + 16);
+  const end = offset + size;
+  if (end > bytes.length) {
     throw new Error("Invalid ZIP: central directory is out of range.");
   }
+  return { offset, end };
+};
+
+const readCentralDirectoryEntry = (bytes: Uint8Array, offset: number): ReadZipEntryResult => {
+  if (readU32(bytes, offset) !== ZIP_CDFH_SIG) {
+    throw new Error("Invalid ZIP: central directory entry is malformed.");
+  }
+
+  const flags = readU16(bytes, offset + 8);
+  const compressionMethod = readU16(bytes, offset + 10);
+  const compressedSize = readU32(bytes, offset + 20);
+  const uncompressedSize = readU32(bytes, offset + 24);
+  const fileNameLength = readU16(bytes, offset + 28);
+  const extraLength = readU16(bytes, offset + 30);
+  const commentLength = readU16(bytes, offset + 32);
+  const localHeaderOffset = readU32(bytes, offset + 42);
+
+  const fileNameStart = offset + 46;
+  const fileNameEnd = fileNameStart + fileNameLength;
+  if (fileNameEnd > bytes.length) {
+    throw new Error("Invalid ZIP: entry filename is out of range.");
+  }
+  const fileName = decodeZipFileName(bytes.slice(fileNameStart, fileNameEnd), (flags & 0x0800) !== 0);
+  const normalizedPath = normalizeZipPath(fileName);
+
+  if (localHeaderOffset + 30 > bytes.length || readU32(bytes, localHeaderOffset) !== ZIP_LFH_SIG) {
+    throw new Error(`Invalid ZIP: local header is missing for "${normalizedPath}".`);
+  }
+  const localNameLength = readU16(bytes, localHeaderOffset + 26);
+  const localExtraLength = readU16(bytes, localHeaderOffset + 28);
+  const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
+  if (dataOffset + compressedSize > bytes.length) {
+    throw new Error(`Invalid ZIP: data is out of range for "${normalizedPath}".`);
+  }
+
+  const nextOffset = fileNameEnd + extraLength + commentLength;
+  if (!normalizedPath || normalizedPath.endsWith("/")) {
+    return { entry: null, nextOffset };
+  }
+
+  return {
+    entry: {
+      path: normalizedPath,
+      compressionMethod,
+      compressedSize,
+      uncompressedSize,
+      dataOffset,
+    },
+    nextOffset,
+  };
+};
+
+const readZipEntries = (bytes: Uint8Array): ZipEntry[] => {
+  const centralDirectory = readCentralDirectoryBounds(bytes);
 
   const entries: ZipEntry[] = [];
-  let offset = centralDirectoryOffset;
-  while (offset < centralDirectoryEnd) {
-    if (readU32(bytes, offset) !== ZIP_CDFH_SIG) {
-      throw new Error("Invalid ZIP: central directory entry is malformed.");
-    }
-
-    const flags = readU16(bytes, offset + 8);
-    const compressionMethod = readU16(bytes, offset + 10);
-    const compressedSize = readU32(bytes, offset + 20);
-    const uncompressedSize = readU32(bytes, offset + 24);
-    const fileNameLength = readU16(bytes, offset + 28);
-    const extraLength = readU16(bytes, offset + 30);
-    const commentLength = readU16(bytes, offset + 32);
-    const localHeaderOffset = readU32(bytes, offset + 42);
-
-    const fileNameStart = offset + 46;
-    const fileNameEnd = fileNameStart + fileNameLength;
-    if (fileNameEnd > bytes.length) {
-      throw new Error("Invalid ZIP: entry filename is out of range.");
-    }
-    const fileName = decodeZipFileName(bytes.slice(fileNameStart, fileNameEnd), (flags & 0x0800) !== 0);
-    const normalizedPath = normalizeZipPath(fileName);
-
-    if (localHeaderOffset + 30 > bytes.length || readU32(bytes, localHeaderOffset) !== ZIP_LFH_SIG) {
-      throw new Error(`Invalid ZIP: local header is missing for "${normalizedPath}".`);
-    }
-    const localNameLength = readU16(bytes, localHeaderOffset + 26);
-    const localExtraLength = readU16(bytes, localHeaderOffset + 28);
-    const dataOffset = localHeaderOffset + 30 + localNameLength + localExtraLength;
-    if (dataOffset + compressedSize > bytes.length) {
-      throw new Error(`Invalid ZIP: data is out of range for "${normalizedPath}".`);
-    }
-
-    if (normalizedPath && !normalizedPath.endsWith("/")) {
-      entries.push({
-        path: normalizedPath,
-        compressionMethod,
-        compressedSize,
-        uncompressedSize,
-        dataOffset,
-      });
-    }
-
-    offset = fileNameEnd + extraLength + commentLength;
+  let offset = centralDirectory.offset;
+  while (offset < centralDirectory.end) {
+    const result = readCentralDirectoryEntry(bytes, offset);
+    if (result.entry) entries.push(result.entry);
+    offset = result.nextOffset;
   }
 
   return entries;
@@ -154,15 +198,9 @@ const inflateDeflateRaw = async (compressed: Uint8Array): Promise<Uint8Array> =>
     throw new Error("DecompressionStream is not available in this runtime.");
   }
 
-  const copied = new Uint8Array(compressed.length);
-  copied.set(compressed);
-  const source = new Response(copied).body;
-  if (!source) {
-    throw new Error("DecompressionStream source body is not available in this runtime.");
-  }
+  const source = responseBodyFromBytes(compressed, "DecompressionStream source body is not available in this runtime.");
   const stream = source.pipeThrough(new DS("deflate-raw") as never);
-  const arrayBuffer = await new Response(stream).arrayBuffer();
-  return new Uint8Array(arrayBuffer);
+  return responseStreamToBytes(stream);
 };
 
 const extractEntryBytes = async (archiveBytes: Uint8Array, entry: ZipEntry): Promise<Uint8Array> => {
@@ -285,13 +323,9 @@ const compressDeflateRaw = async (input: Uint8Array): Promise<Uint8Array | null>
   const CS = (globalThis as { CompressionStream?: new (format: string) => unknown }).CompressionStream;
   if (!CS) return null;
   try {
-    const source = new Uint8Array(input.length);
-    source.set(input);
-    const body = new Response(source).body;
-    if (!body) return null;
+    const body = responseBodyFromBytes(input, "CompressionStream source body is not available in this runtime.");
     const stream = body.pipeThrough(new CS("deflate-raw") as never);
-    const compressedBuffer = await new Response(stream).arrayBuffer();
-    return new Uint8Array(compressedBuffer);
+    return responseStreamToBytes(stream);
   } catch {
     return null;
   }

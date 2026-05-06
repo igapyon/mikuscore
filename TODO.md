@@ -281,6 +281,17 @@
 
 ## Refactoring Priorities
 
+- [ ] Long-range: revisit the large format I/O modules with a review-first pass, not an immediate rewrite.
+  - Target modules:
+    - `src/ts/musescore-io.ts`
+    - `src/ts/musicxml-io.ts`
+  - Intended first step:
+    - map public entry points, responsibility blocks, and current test coverage before changing structure
+    - classify findings into low-risk cleanup, characterization-test-first work, and intentionally deferred ideas
+  - Current stance:
+    - do not start a broad split while the current ZIP / MXL cleanup is still being finalized
+    - treat this as a distant refactoring theme to return to when there is a concrete format-coverage or maintenance need
+
 - [ ] Start the next refactoring pass from the format I/O modules before expanding format coverage.
   - Priority order:
     - `src/ts/abc-io.ts`: highest priority because ABC layout work is already waiting on cleaner parse/layout/emission boundaries.

@@ -39,6 +39,10 @@ const cloneXmlDocument = (doc: Document): Document => {
   return cloned;
 };
 
+const childElementsBySelector = (parent: ParentNode, selector: string): Element[] => {
+  return Array.from(parent.querySelectorAll(selector));
+};
+
 const pruneEmptyNotations = (notations: Element | null): void => {
   if (!notations || notations.tagName !== "notations") return;
   if (notations.children.length > 0) return;
@@ -95,14 +99,14 @@ const processSlurForRender = (slur: Element, openSlurs: OpenSlurStacks): void =>
 };
 
 const sanitizeSlursForRender = (doc: Document): void => {
-  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+  const parts = childElementsBySelector(doc, "score-partwise > part");
   for (const part of parts) {
     const openSlurs: OpenSlurStacks = new Map();
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const measures = childElementsBySelector(part, ":scope > measure");
     for (const measure of measures) {
-      const notes = Array.from(measure.querySelectorAll(":scope > note"));
+      const notes = childElementsBySelector(measure, ":scope > note");
       for (const note of notes) {
-        const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
+        const slurs = childElementsBySelector(note, ":scope > notations > slur");
         for (const slur of slurs) {
           processSlurForRender(slur, openSlurs);
         }
