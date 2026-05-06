@@ -136624,6 +136624,39 @@ var BUNDLED_CLI_MODULES = {
       var _a;
       return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
     };
+    const isVerovioRuntimeReady = (moduleObj) => {
+      return Boolean(moduleObj.calledRun && typeof moduleObj.cwrap === "function");
+    };
+    const waitForVerovioRuntime = async (moduleObj) => {
+      if (isVerovioRuntimeReady(moduleObj))
+        return;
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+          if (settled)
+            return;
+          settled = true;
+          reject(new Error("Timed out while waiting for verovio initialization."));
+        }, VEROVIO_INIT_TIMEOUT_MS);
+        const complete = () => {
+          if (settled)
+            return;
+          settled = true;
+          window.clearTimeout(timeoutId);
+          resolve();
+        };
+        const previous = moduleObj.onRuntimeInitialized;
+        moduleObj.onRuntimeInitialized = () => {
+          if (typeof previous === "function") {
+            previous();
+          }
+          complete();
+        };
+        if (isVerovioRuntimeReady(moduleObj)) {
+          complete();
+        }
+      });
+    };
     const ensureVerovioToolkit = async () => {
       if (verovioToolkit) {
         return verovioToolkit;
@@ -136640,34 +136673,7 @@ var BUNDLED_CLI_MODULES = {
         if (!moduleObj) {
           throw new Error("verovio module was not found.");
         }
-        if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
-          await new Promise((resolve, reject) => {
-            let settled = false;
-            const timeoutId = window.setTimeout(() => {
-              if (settled)
-                return;
-              settled = true;
-              reject(new Error("Timed out while waiting for verovio initialization."));
-            }, VEROVIO_INIT_TIMEOUT_MS);
-            const complete = () => {
-              if (settled)
-                return;
-              settled = true;
-              window.clearTimeout(timeoutId);
-              resolve();
-            };
-            const previous = moduleObj.onRuntimeInitialized;
-            moduleObj.onRuntimeInitialized = () => {
-              if (typeof previous === "function") {
-                previous();
-              }
-              complete();
-            };
-            if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
-              complete();
-            }
-          });
-        }
+        await waitForVerovioRuntime(moduleObj);
         verovioToolkit = new runtime.toolkit();
         return verovioToolkit;
       })().catch((error) => {

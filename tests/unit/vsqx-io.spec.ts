@@ -150,4 +150,21 @@ describe("vsqx-io bridge diagnostics", () => {
       },
     });
   });
+
+  it("uses a stable fallback diagnostic when VSQX export throws a non-Error value", () => {
+    installVsqxExportBridge(() => {
+      throw "bad export";
+    });
+
+    const result = convertMusicXmlToVsqx("<score-partwise/>");
+
+    expect(result).toEqual({
+      ok: false,
+      vsqx: "",
+      diagnostic: {
+        code: "VSQX_EXPORT_FAILED",
+        message: "MusicXML to VSQX conversion failed.",
+      },
+    });
+  });
 });

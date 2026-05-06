@@ -8239,6 +8239,39 @@ const getVerovioRuntime = () => {
     var _a;
     return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
 };
+const isVerovioRuntimeReady = (moduleObj) => {
+    return Boolean(moduleObj.calledRun && typeof moduleObj.cwrap === "function");
+};
+const waitForVerovioRuntime = async (moduleObj) => {
+    if (isVerovioRuntimeReady(moduleObj))
+        return;
+    await new Promise((resolve, reject) => {
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+            if (settled)
+                return;
+            settled = true;
+            reject(new Error("Timed out while waiting for verovio initialization."));
+        }, VEROVIO_INIT_TIMEOUT_MS);
+        const complete = () => {
+            if (settled)
+                return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            resolve();
+        };
+        const previous = moduleObj.onRuntimeInitialized;
+        moduleObj.onRuntimeInitialized = () => {
+            if (typeof previous === "function") {
+                previous();
+            }
+            complete();
+        };
+        if (isVerovioRuntimeReady(moduleObj)) {
+            complete();
+        }
+    });
+};
 const ensureVerovioToolkit = async () => {
     if (verovioToolkit) {
         return verovioToolkit;
@@ -8255,34 +8288,7 @@ const ensureVerovioToolkit = async () => {
         if (!moduleObj) {
             throw new Error("verovio module was not found.");
         }
-        if (!moduleObj.calledRun || typeof moduleObj.cwrap !== "function") {
-            await new Promise((resolve, reject) => {
-                let settled = false;
-                const timeoutId = window.setTimeout(() => {
-                    if (settled)
-                        return;
-                    settled = true;
-                    reject(new Error("Timed out while waiting for verovio initialization."));
-                }, VEROVIO_INIT_TIMEOUT_MS);
-                const complete = () => {
-                    if (settled)
-                        return;
-                    settled = true;
-                    window.clearTimeout(timeoutId);
-                    resolve();
-                };
-                const previous = moduleObj.onRuntimeInitialized;
-                moduleObj.onRuntimeInitialized = () => {
-                    if (typeof previous === "function") {
-                        previous();
-                    }
-                    complete();
-                };
-                if (moduleObj.calledRun && typeof moduleObj.cwrap === "function") {
-                    complete();
-                }
-            });
-        }
+        await waitForVerovioRuntime(moduleObj);
         verovioToolkit = new runtime.toolkit();
         return verovioToolkit;
     })()
@@ -11020,10 +11026,26 @@ const bridge = () => {
         return null;
     return (_a = window.UtaFormatix3TsPlusMikuscore) !== null && _a !== void 0 ? _a : null;
 };
+const isBlankText = (value) => {
+    return !String(value || "").trim();
+};
 const bridgeUnavailableDiagnostic = () => ({
     code: VSQX_BRIDGE_UNAVAILABLE,
     message: MSG_BRIDGE_UNAVAILABLE,
 });
+const diagnostic = (code, message) => ({ code, message });
+const vsqxExportErrorMessage = (error) => {
+    return error instanceof Error ? error.message : MSG_EXPORT_FAILED;
+};
+const vsqxConvertEmptyResultDiagnostic = () => {
+    return diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT);
+};
+const vsqxExportEmptyResultDiagnostic = () => {
+    return diagnostic(VSQX_EXPORT_EMPTY_RESULT, MSG_EXPORT_EMPTY_RESULT);
+};
+const vsqxExportFailedDiagnostic = (error) => {
+    return diagnostic(VSQX_EXPORT_FAILED, vsqxExportErrorMessage(error));
+};
 const failedVsqxToMusicXmlResult = (diagnostics, warnings = []) => ({
     ok: false,
     xml: "",
@@ -11035,7 +11057,6 @@ const failedMusicXmlToVsqxResult = (diagnostic) => ({
     vsqx: "",
     diagnostic,
 });
-const diagnostic = (code, message) => ({ code, message });
 const issueLevel = (issue) => {
     return String(issue.level || "").toLowerCase();
 };
@@ -11092,11 +11113,11 @@ const convertVsqxToMusicXml = (vsqxText, options) => {
     const report = runtime.convertVsqxToMusicXmlWithReport(vsqxText, options);
     const { diagnostics, warnings } = collectVsqxConversionIssues(reportIssues(report));
     const xml = String((report === null || report === void 0 ? void 0 : report.musicXml) || "");
-    if (!xml.trim()) {
+    if (isBlankText(xml)) {
         const fallbackDiagnostics = diagnostics.length
             ? diagnostics
             : [
-                diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT),
+                vsqxConvertEmptyResultDiagnostic(),
             ];
         return failedVsqxToMusicXmlResult(fallbackDiagnostics, warnings);
     }
@@ -11115,13 +11136,13 @@ const convertMusicXmlToVsqx = (musicXmlText, options) => {
     }
     try {
         const vsqx = runtime.convertMusicXmlToVsqx(musicXmlText, options);
-        if (!String(vsqx || "").trim()) {
-            return failedMusicXmlToVsqxResult(diagnostic(VSQX_EXPORT_EMPTY_RESULT, MSG_EXPORT_EMPTY_RESULT));
+        if (isBlankText(vsqx)) {
+            return failedMusicXmlToVsqxResult(vsqxExportEmptyResultDiagnostic());
         }
         return { ok: true, vsqx };
     }
     catch (error) {
-        return failedMusicXmlToVsqxResult(diagnostic(VSQX_EXPORT_FAILED, error instanceof Error ? error.message : MSG_EXPORT_FAILED));
+        return failedMusicXmlToVsqxResult(vsqxExportFailedDiagnostic(error));
     }
 };
 exports.convertMusicXmlToVsqx = convertMusicXmlToVsqx;

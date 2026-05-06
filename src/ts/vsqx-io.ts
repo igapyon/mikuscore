@@ -80,10 +80,32 @@ const bridge = (): UtaFormatixBridge | null => {
   return window.UtaFormatix3TsPlusMikuscore ?? null;
 };
 
+const isBlankText = (value: unknown): boolean => {
+  return !String(value || "").trim();
+};
+
 const bridgeUnavailableDiagnostic = (): VsqxDiagnostic => ({
   code: VSQX_BRIDGE_UNAVAILABLE,
   message: MSG_BRIDGE_UNAVAILABLE,
 });
+
+const diagnostic = (code: string, message: string): VsqxDiagnostic => ({ code, message });
+
+const vsqxExportErrorMessage = (error: unknown): string => {
+  return error instanceof Error ? error.message : MSG_EXPORT_FAILED;
+};
+
+const vsqxConvertEmptyResultDiagnostic = (): VsqxDiagnostic => {
+  return diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT);
+};
+
+const vsqxExportEmptyResultDiagnostic = (): VsqxDiagnostic => {
+  return diagnostic(VSQX_EXPORT_EMPTY_RESULT, MSG_EXPORT_EMPTY_RESULT);
+};
+
+const vsqxExportFailedDiagnostic = (error: unknown): VsqxDiagnostic => {
+  return diagnostic(VSQX_EXPORT_FAILED, vsqxExportErrorMessage(error));
+};
 
 const failedVsqxToMusicXmlResult = (
   diagnostics: VsqxDiagnostic[],
@@ -100,8 +122,6 @@ const failedMusicXmlToVsqxResult = (diagnostic: VsqxDiagnostic): MusicXmlToVsqxR
   vsqx: "",
   diagnostic,
 });
-
-const diagnostic = (code: string, message: string): VsqxDiagnostic => ({ code, message });
 
 const issueLevel = (issue: VsqxIssue): string => {
   return String(issue.level || "").toLowerCase();
@@ -176,11 +196,11 @@ export const convertVsqxToMusicXml = (
   const { diagnostics, warnings } = collectVsqxConversionIssues(reportIssues(report));
 
   const xml = String(report?.musicXml || "");
-  if (!xml.trim()) {
+  if (isBlankText(xml)) {
     const fallbackDiagnostics = diagnostics.length
       ? diagnostics
       : [
-          diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT),
+          vsqxConvertEmptyResultDiagnostic(),
         ];
     return failedVsqxToMusicXmlResult(fallbackDiagnostics, warnings);
   }
@@ -204,21 +224,11 @@ export const convertMusicXmlToVsqx = (
 
   try {
     const vsqx = runtime.convertMusicXmlToVsqx(musicXmlText, options);
-    if (!String(vsqx || "").trim()) {
-      return failedMusicXmlToVsqxResult(
-        diagnostic(
-          VSQX_EXPORT_EMPTY_RESULT,
-          MSG_EXPORT_EMPTY_RESULT
-        )
-      );
+    if (isBlankText(vsqx)) {
+      return failedMusicXmlToVsqxResult(vsqxExportEmptyResultDiagnostic());
     }
     return { ok: true, vsqx };
   } catch (error) {
-    return failedMusicXmlToVsqxResult(
-      diagnostic(
-        VSQX_EXPORT_FAILED,
-        error instanceof Error ? error.message : MSG_EXPORT_FAILED
-      )
-    );
+    return failedMusicXmlToVsqxResult(vsqxExportFailedDiagnostic(error));
   }
 };
