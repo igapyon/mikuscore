@@ -10,6 +10,28 @@ import {
   serializeMusicXmlDocument,
 } from "./musicxml-io";
 import {
+  buildMusicXmlArticulationItemsXml,
+  extractMusicXmlArticulationKinds,
+} from "./score-features/articulations";
+import {
+  buildMusicXmlDirectionFeatureXml,
+  normalizeDynamicMark,
+} from "./score-features/dynamics";
+import { buildMusicXmlBarlineXml } from "./score-features/barlines";
+import { buildMusicXmlWordsDirectionXml } from "./score-features/direction-text";
+import {
+  buildMusicXmlOrnamentItemsXml,
+  extractMusicXmlOrnamentFeatures,
+} from "./score-features/ornaments";
+import {
+  buildMusicXmlSlursXml,
+  extractMusicXmlSlurFeatures,
+} from "./score-features/slurs";
+import {
+  buildMusicXmlTieItemsXml,
+  buildMusicXmlTiedItemsXml,
+} from "./score-features/ties";
+import {
   chooseSingleClefByKeys,
   pickStaffForClusterWithHysteresis,
   shouldUseGrandStaffByRange,
@@ -1630,20 +1652,21 @@ const parseLilyDirectBody = (
       pushEvent({
         kind: "direction",
         durationDiv: 0,
-        xml: `<barline location="left"><repeat direction="forward"/></barline>`,
+        xml: buildMusicXmlBarlineXml({ location: "left", repeats: ["forward"] }),
       });
       continue;
     }
     if (token.startsWith("@@MKS_RPT_BWD_")) {
       const timesText = token.replace(/^@@MKS_RPT_BWD_(\d+)@@$/, "$1");
       const times = Number.parseInt(timesText, 10);
-      const endingXml = Number.isFinite(times) && times > 1
-        ? `<ending number="${Math.round(times)}" type="stop"/>`
-        : "";
       pushEvent({
         kind: "direction",
         durationDiv: 0,
-        xml: `<barline location="right"><repeat direction="backward"/>${endingXml}</barline>`,
+        xml: buildMusicXmlBarlineXml({
+          location: "right",
+          repeats: ["backward"],
+          ...(Number.isFinite(times) && times > 1 ? { ending: { number: Math.round(times), type: "stop" } } : {}),
+        }),
       });
       continue;
     }
@@ -1654,7 +1677,7 @@ const parseLilyDirectBody = (
       pushEvent({
         kind: "direction",
         durationDiv: 0,
-        xml: `<barline location="left"><ending number="${numberAttr}" type="start"/></barline>`,
+        xml: buildMusicXmlBarlineXml({ location: "left", ending: { number: numberAttr, type: "start" } }),
       });
       continue;
     }
@@ -1665,7 +1688,7 @@ const parseLilyDirectBody = (
       pushEvent({
         kind: "direction",
         durationDiv: 0,
-        xml: `<barline location="right"><ending number="${numberAttr}" type="stop"/></barline>`,
+        xml: buildMusicXmlBarlineXml({ location: "right", ending: { number: numberAttr, type: "stop" } }),
       });
       continue;
     }
@@ -1695,12 +1718,12 @@ const parseLilyDirectBody = (
     }
     if (token.startsWith("\\")) {
       const dyn = token.slice(1).toLowerCase();
-      const dynamicKinds = new Set(["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "sfz"]);
-      if (dynamicKinds.has(dyn)) {
+      const dynamicMark = normalizeDynamicMark(dyn);
+      if (dynamicMark) {
         pushEvent({
           kind: "direction",
           durationDiv: 0,
-          xml: `<direction><direction-type><dynamics><${dyn}/></dynamics></direction-type></direction>`,
+          xml: buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: dynamicMark }),
         });
         continue;
       }
@@ -1709,7 +1732,7 @@ const parseLilyDirectBody = (
         pushEvent({
           kind: "direction",
           durationDiv: 0,
-          xml: `<direction><direction-type><wedge type="${wedgeType}"/></direction-type></direction>`,
+          xml: buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType }),
         });
         continue;
       }
@@ -1799,7 +1822,7 @@ const parseLilyDirectBody = (
           pushEvent({
             kind: "direction",
             durationDiv: 0,
-            xml: `<direction><direction-type><words>Sost. Ped.</words></direction-type></direction>`,
+            xml: buildMusicXmlWordsDirectionXml({ text: "Sost. Ped." }),
           });
         }
         const type = dyn === "sostenutoon" ? "start" : "stop";
@@ -1815,7 +1838,7 @@ const parseLilyDirectBody = (
         pushEvent({
           kind: "direction",
           durationDiv: 0,
-          xml: `<direction><direction-type><words>${words}</words></direction-type></direction>`,
+          xml: buildMusicXmlWordsDirectionXml({ text: words }),
         });
         const type = dyn === "unacorda" ? "start" : "stop";
         pushEvent({
@@ -2101,9 +2124,10 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         ? `<time-modification><actual-notes>${Math.round(event.tupletActual as number)}</actual-notes><normal-notes>${Math.round(event.tupletNormal as number)}</normal-notes></time-modification>`
         : "";
     const tokens = Array.from(new Set(event.articulationSubtypes ?? []));
-    const nodes: string[] = [];
-    if (tokens.includes("staccato")) nodes.push("<staccato/>");
-    if (tokens.includes("accent")) nodes.push("<accent/>");
+    const nodesXml = buildMusicXmlArticulationItemsXml(
+      tokens.filter((token) => token === "staccato" || token === "accent")
+    );
+    const nodes: string[] = nodesXml ? [nodesXml] : [];
     if (tokens.includes("up-bow")) nodes.push("<up-bow/>");
     if (tokens.includes("down-bow")) nodes.push("<down-bow/>");
     if (tokens.includes("snap-pizzicato")) nodes.push("<snap-pizzicato/>");
@@ -2117,13 +2141,8 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         : "";
     if (event.tupletStart) tupletNodes.push(`<tuplet type="start"${tupletNumberAttr}/>`);
     if (event.tupletStop) tupletNodes.push(`<tuplet type="stop"${tupletNumberAttr}/>`);
-    const slurNodes = (event.slurHints ?? []).map((slur) => {
-      const numberAttr = Number.isFinite(slur.number) && (slur.number as number) > 0
-        ? ` number="${Math.round(slur.number as number)}"`
-        : "";
-      const placementAttr = slur.type === "start" && slur.placement ? ` placement="${slur.placement}"` : "";
-      return `<slur type="${slur.type}"${numberAttr}${placementAttr}/>`;
-    });
+    const slurNodesXml = buildMusicXmlSlursXml(event.slurHints ?? []);
+    const slurNodes = slurNodesXml ? [slurNodesXml] : [];
     const glissNodes = (event.glissHints ?? []).map((gliss) => {
       const numberAttr = Number.isFinite(gliss.number) && (gliss.number as number) > 0
         ? ` number="${Math.round(gliss.number as number)}"`
@@ -2136,10 +2155,17 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         : "";
       return `<wavy-line type="${wavy.type}"${numberAttr}/>`;
     });
-    const tieXml = `${event.tieStart ? '<tie type="start"/>' : ""}${event.tieStop ? '<tie type="stop"/>' : ""}`;
-    const tiedXml = `${event.tieStart ? '<tied type="start"/>' : ""}${event.tieStop ? '<tied type="stop"/>' : ""}`;
-    const ornamentsXml = event.trillMark || wavyNodes.length
-      ? `<ornaments>${event.trillMark ? "<trill-mark/>" : ""}${wavyNodes.join("")}</ornaments>`
+    const tieXml = buildMusicXmlTieItemsXml({
+      tieStart: Boolean(event.tieStart),
+      tieStop: Boolean(event.tieStop),
+    });
+    const tiedXml = buildMusicXmlTiedItemsXml({
+      tiedStart: Boolean(event.tieStart),
+      tiedStop: Boolean(event.tieStop),
+    });
+    const ornamentItemsXml = event.trillMark ? buildMusicXmlOrnamentItemsXml([{ kind: "trill-mark" }]) : "";
+    const ornamentsXml = ornamentItemsXml || wavyNodes.length
+      ? `<ornaments>${ornamentItemsXml}${wavyNodes.join("")}</ornaments>`
       : "";
     const lyricXml = event.lyricText
       ? `<lyric><syllabic>single</syllabic><text>${xmlEscape(event.lyricText)}</text></lyric>`
@@ -2195,7 +2221,7 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
           body += `<attributes><time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time></attributes>`;
         }
         if (hint?.doubleBar === "left" || hint?.doubleBar === "both") {
-          body += `<barline location="left"><bar-style>light-light</bar-style></barline>`;
+          body += buildMusicXmlBarlineXml({ location: "left", barStyle: "light-light" });
         }
         const octaveShiftHints = staff.octaveShiftHintsByMeasure?.get(index1) ?? [];
         for (const octaveShiftHint of octaveShiftHints) {
@@ -2206,15 +2232,18 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         if (!events.length) {
           body += `<note><rest/><duration>${measureCapacity}</duration><voice>1</voice><type>whole</type></note>`;
           if (hint?.repeat === "forward") {
-            body = `<barline location="left"><repeat direction="forward"/></barline>${body}`;
+            body = `${buildMusicXmlBarlineXml({ location: "left", repeats: ["forward"] })}${body}`;
           } else if (hint?.repeat === "backward") {
-            const timesText = Number.isFinite(hint.times) && (hint.times as number) > 1
-              ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/><ending number="${Math.round(hint.times as number)}" type="stop"/>`
-              : `<repeat direction="backward"/>`;
-            body += `<barline location="right">${timesText}</barline>`;
+            body += buildMusicXmlBarlineXml({
+              location: "right",
+              repeats: ["backward"],
+              ...(Number.isFinite(hint.times) && (hint.times as number) > 1
+                ? { barStyle: "light-heavy", ending: { number: Math.round(hint.times as number), type: "stop" } }
+                : {}),
+            });
           }
           if (hint?.doubleBar === "right" || hint?.doubleBar === "both") {
-            body += `<barline location="right"><bar-style>light-light</bar-style></barline>`;
+            body += buildMusicXmlBarlineXml({ location: "right", barStyle: "light-light" });
           }
           currentBeats = measureBeats;
           currentBeatType = measureBeatType;
@@ -2251,15 +2280,18 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
           }
         }
         if (hint?.repeat === "forward") {
-          body = `<barline location="left"><repeat direction="forward"/></barline>${body}`;
+          body = `${buildMusicXmlBarlineXml({ location: "left", repeats: ["forward"] })}${body}`;
         } else if (hint?.repeat === "backward") {
-          const timesText = Number.isFinite(hint.times) && (hint.times as number) > 1
-            ? `<bar-style>light-heavy</bar-style><repeat direction="backward"/><ending number="${Math.round(hint.times as number)}" type="stop"/>`
-            : `<repeat direction="backward"/>`;
-          body += `<barline location="right">${timesText}</barline>`;
+          body += buildMusicXmlBarlineXml({
+            location: "right",
+            repeats: ["backward"],
+            ...(Number.isFinite(hint.times) && (hint.times as number) > 1
+              ? { barStyle: "light-heavy", ending: { number: Math.round(hint.times as number), type: "stop" } }
+              : {}),
+          });
         }
         if (hint?.doubleBar === "right" || hint?.doubleBar === "both") {
-          body += `<barline location="right"><bar-style>light-light</bar-style></barline>`;
+          body += buildMusicXmlBarlineXml({ location: "right", barStyle: "light-light" });
         }
         currentBeats = measureBeats;
         currentBeatType = measureBeatType;
@@ -3111,25 +3143,19 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
           if (child.querySelector(":scope > chord")) continue;
           if (child.querySelector(":scope > rest")) continue;
           eventNo += 1;
-          const kinds: string[] = [];
-          if (child.querySelector(":scope > notations > articulations > staccato")) kinds.push("staccato");
-          if (child.querySelector(":scope > notations > articulations > accent")) kinds.push("accent");
+          const kinds = extractMusicXmlArticulationKinds(child).filter((kind) => kind === "staccato" || kind === "accent");
           if (kinds.length) {
             out.push(`%@mks articul voice=${voiceId} measure=${mi + 1} event=${eventNo} kind=${kinds.join(",")}`);
           }
-          const slurs = Array.from(child.querySelectorAll(":scope > notations > slur"));
-          for (const slur of slurs) {
-            const slurType = (slur.getAttribute("type") || "").trim().toLowerCase();
-            if (slurType !== "start" && slurType !== "stop") continue;
+          for (const slur of extractMusicXmlSlurFeatures(child)) {
+            const slurType = slur.type;
             const slurFields = [`%@mks slur voice=${voiceId} measure=${mi + 1} event=${eventNo} type=${slurType}`];
-            const slurNumber = Number.parseInt(slur.getAttribute("number") || "", 10);
-            if (Number.isFinite(slurNumber) && slurNumber > 0) slurFields.push(`number=${Math.round(slurNumber)}`);
-            const slurPlacement = (slur.getAttribute("placement") || "").trim().toLowerCase();
-            if (slurPlacement === "above" || slurPlacement === "below") slurFields.push(`placement=${slurPlacement}`);
+            if (slur.number) slurFields.push(`number=${Math.round(slur.number)}`);
+            if (slur.placement) slurFields.push(`placement=${slur.placement}`);
             out.push(slurFields.join(" "));
           }
-          const trillMark = child.querySelector(":scope > notations > ornaments > trill-mark");
-          if (trillMark) {
+          const ornamentKinds = new Set(extractMusicXmlOrnamentFeatures(child).map((feature) => feature.kind));
+          if (ornamentKinds.has("trill-mark")) {
             out.push(`%@mks trill voice=${voiceId} measure=${mi + 1} event=${eventNo} mark=1`);
           }
           const wavyLines = Array.from(child.querySelectorAll(":scope > notations > ornaments > wavy-line"));

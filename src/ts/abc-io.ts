@@ -6,6 +6,34 @@
 // @ts-nocheck
 import { computeBeamAssignments } from "./beam-common";
 import {
+  buildMusicXmlArticulationItemsXml,
+  extractMusicXmlArticulationKinds,
+} from "./score-features/articulations";
+import {
+  buildMusicXmlDirectionFeatureXml,
+  extractMusicXmlDirectionFeatures,
+  normalizeDynamicMark,
+} from "./score-features/dynamics";
+import {
+  buildMusicXmlTempoDirectionXml,
+  buildMusicXmlWordsDirectionXml,
+  extractMusicXmlDirectionWords,
+} from "./score-features/direction-text";
+import {
+  buildMusicXmlOrnamentItemsXml,
+  buildMusicXmlOrnamentsXml,
+  extractMusicXmlOrnamentFeatures,
+} from "./score-features/ornaments";
+import {
+  buildMusicXmlSlursXml,
+  extractMusicXmlSlurFeatures,
+} from "./score-features/slurs";
+import {
+  buildMusicXmlTieItemsXml,
+  buildMusicXmlTiedItemsXml,
+  extractMusicXmlTieState,
+} from "./score-features/ties";
+import {
   parseAbcBodyEntryAt,
   parseAbcBracketTokenAt,
   parseAbcBrokenRhythmAt,
@@ -1067,7 +1095,7 @@ const buildAbcTempoDirectionXml = (
   if (!(include && tempo !== null)) {
     return "";
   }
-  return `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${tempo}</per-minute></metronome></direction-type><sound tempo="${tempo}"/></direction>`;
+  return buildMusicXmlTempoDirectionXml({ bpm: tempo, includeQuarterMetronome: true });
 };
 
 const buildAbcMeasureHeaderXml = (
@@ -1462,14 +1490,14 @@ const buildAbcNoteHarmonyAndWordsDirectionXml = (note: AbcParsedNote): string =>
       if (harmonyXml) {
         chunks.push(harmonyXml);
       } else {
-        chunks.push(`<direction><direction-type><words>${xmlEscape(String(chordSymbol))}</words></direction-type></direction>`);
+        chunks.push(buildMusicXmlWordsDirectionXml({ text: String(chordSymbol) }));
       }
     }
   }
   if (!note.chord && Array.isArray(note.annotations) && note.annotations.length > 0) {
     for (const annotation of note.annotations) {
       if (!annotation) continue;
-      chunks.push(`<direction><direction-type><words>${xmlEscape(String(annotation))}</words></direction-type></direction>`);
+      chunks.push(buildMusicXmlWordsDirectionXml({ text: String(annotation) }));
     }
   }
   return chunks.join("");
@@ -1486,16 +1514,17 @@ const buildAbcNoteControlDirectionXml = (note: AbcParsedNote): string => {
   if (!note.chord && note.daCapo) chunks.push('<direction><sound dacapo="yes"/></direction>');
   if (!note.chord && note.dalSegno) chunks.push('<direction><sound dalsegno="segno"/></direction>');
   if (!note.chord && note.toCoda) chunks.push('<direction><sound tocoda="coda"/></direction>');
-  if (!note.chord && note.crescendoStart) chunks.push('<direction><direction-type><wedge type="crescendo"/></direction-type></direction>');
-  if (!note.chord && note.diminuendoStart) chunks.push('<direction><direction-type><wedge type="diminuendo"/></direction-type></direction>');
+  if (!note.chord && note.crescendoStart) chunks.push(buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "crescendo" }));
+  if (!note.chord && note.diminuendoStart) chunks.push(buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "diminuendo" }));
   if (!note.chord && (note.crescendoStop || note.diminuendoStop)) {
-    chunks.push('<direction><direction-type><wedge type="stop"/></direction-type></direction>');
+    chunks.push(buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "stop" }));
   }
   if (!note.chord && note.dynamicMark) {
-    chunks.push(`<direction><direction-type><dynamics><${xmlEscape(String(note.dynamicMark))}/></dynamics></direction-type></direction>`);
+    const dynamicMark = normalizeDynamicMark(String(note.dynamicMark));
+    if (dynamicMark) chunks.push(buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: dynamicMark }));
   }
   if (!note.chord && note.sfz) {
-    chunks.push("<direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>");
+    chunks.push(buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: "sfz" }));
   }
   return chunks.join("");
 };
@@ -1586,16 +1615,17 @@ const buildAbcNoteCoreXml = (
   if (!note.chord && beamXmlByNoteIndex.has(noteIndex)) chunks.push(String(beamXmlByNoteIndex.get(noteIndex)));
   chunks.push(buildAbcNoteTimeModificationXml(note));
   chunks.push(buildAbcNoteAccidentalXml(note));
-  if (note.tieStart) chunks.push('<tie type="start"/>');
-  if (note.tieStop) chunks.push('<tie type="stop"/>');
+  chunks.push(buildMusicXmlTieItemsXml({
+    tieStart: Boolean(note.tieStart),
+    tieStop: Boolean(note.tieStop),
+  }));
   return chunks.join("");
 };
 
 const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string => {
   const chunks: string[] = [];
   if (note.trill || note.trillLineStop) {
-    const trillParts: string[] = [];
-    if (note.trill) trillParts.push("<trill-mark/>");
+    const trillParts: string[] = note.trill ? [buildMusicXmlOrnamentItemsXml([{ kind: "trill-mark" }])] : [];
     if (note.trillLineStop) {
       trillParts.push('<wavy-line type="stop"/>');
     } else if (note.trillLineStart) {
@@ -1605,40 +1635,47 @@ const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string => {
     chunks.push(`<ornaments>${trillParts.join("")}</ornaments>`);
   }
   if (note.turnType) {
-    const tag = note.turnType === "inverted-turn" ? "inverted-turn" : "turn";
-    const slashAttr = note.turnSlash ? ' slash="yes"' : "";
-    chunks.push(`<ornaments><${tag}${slashAttr}/>${note.delayedTurn ? "<delayed-turn/>" : ""}</ornaments>`);
+    chunks.push(buildMusicXmlOrnamentsXml([
+      { kind: note.turnType === "inverted-turn" ? "inverted-turn" : "turn", ...(note.turnSlash ? { slash: true } : {}) },
+      ...(note.delayedTurn ? [{ kind: "delayed-turn" as const }] : []),
+    ]));
   }
   if (note.mordentType) {
-    const tag = note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent";
-    chunks.push(`<ornaments><${tag}/></ornaments>`);
+    chunks.push(buildMusicXmlOrnamentsXml([
+      { kind: note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent" },
+    ]));
   }
   if (note.tremoloType) {
-    const marks = Math.max(1, Math.min(8, Math.round(Number(note.tremoloMarks) || 1)));
-    chunks.push(`<ornaments><tremolo type="${xmlEscape(String(note.tremoloType))}">${marks}</tremolo></ornaments>`);
+    chunks.push(buildMusicXmlOrnamentsXml([
+      { kind: "tremolo", tremoloType: note.tremoloType, marks: note.tremoloMarks },
+    ]));
   }
   if (note.glissandoStart) chunks.push('<glissando type="start" number="1">wavy</glissando>');
   if (note.glissandoStop) chunks.push('<glissando type="stop" number="1">wavy</glissando>');
   if (note.slideStart) chunks.push('<slide type="start" number="1"/>');
   if (note.slideStop) chunks.push('<slide type="stop" number="1"/>');
-  if (note.schleifer) chunks.push("<ornaments><schleifer/></ornaments>");
-  if (note.shake) chunks.push("<ornaments><shake/></ornaments>");
+  if (note.schleifer) chunks.push(buildMusicXmlOrnamentsXml([{ kind: "schleifer" }]));
+  if (note.shake) chunks.push(buildMusicXmlOrnamentsXml([{ kind: "shake" }]));
   if (note.arpeggiate) chunks.push("<arpeggiate/>");
   return chunks.join("");
 };
 
 const buildAbcNoteArticulationsXml = (note: AbcParsedNote): string => {
   const articulationParts: string[] = [];
-  if (note.staccato) articulationParts.push("<staccato/>");
-  if (note.staccatissimo) articulationParts.push("<staccatissimo/>");
-  if (note.accent) articulationParts.push("<accent/>");
-  if (note.tenuto) articulationParts.push("<tenuto/>");
+  const articulationKinds = [];
+  if (note.staccato) articulationKinds.push("staccato");
+  if (note.staccatissimo) articulationKinds.push("staccatissimo");
+  if (note.accent) articulationKinds.push("accent");
+  if (note.tenuto) articulationKinds.push("tenuto");
   if (note.stress) articulationParts.push("<stress/>");
   if (note.unstress) articulationParts.push("<unstress/>");
-  if (note.strongAccent) articulationParts.push("<strong-accent/>");
-  if (note.breathMark) articulationParts.push("<breath-mark/>");
-  if (note.caesura) articulationParts.push("<caesura/>");
+  if (note.strongAccent) articulationKinds.push("strong-accent");
+  if (note.breathMark) articulationKinds.push("breath-mark");
+  if (note.caesura) articulationKinds.push("caesura");
   if (note.phraseMark) articulationParts.push(`<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>`);
+  const featureItemsXml = buildMusicXmlArticulationItemsXml(articulationKinds);
+  if (featureItemsXml && articulationParts.length === 0) return `<articulations>${featureItemsXml}</articulations>`;
+  if (featureItemsXml) articulationParts.unshift(featureItemsXml);
   return articulationParts.length > 0 ? `<articulations>${articulationParts.join("")}</articulations>` : "";
 };
 
@@ -1680,10 +1717,14 @@ const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
   }
   const chunks: string[] = [];
   chunks.push("<notations>");
-  if (note.tieStart) chunks.push('<tied type="start"/>');
-  if (note.tieStop) chunks.push('<tied type="stop"/>');
-  if (note.slurStart) chunks.push('<slur type="start"/>');
-  if (note.slurStop) chunks.push('<slur type="stop"/>');
+  chunks.push(buildMusicXmlTiedItemsXml({
+    tiedStart: Boolean(note.tieStart),
+    tiedStop: Boolean(note.tieStop),
+  }));
+  chunks.push(buildMusicXmlSlursXml([
+    ...(note.slurStart ? [{ type: "start" as const }] : []),
+    ...(note.slurStop ? [{ type: "stop" as const }] : []),
+  ]));
   if (note.tupletStart) chunks.push('<tuplet type="start"/>');
   if (note.tupletStop) chunks.push('<tuplet type="stop"/>');
   chunks.push(buildAbcNoteOrnamentsXml(note));
@@ -4602,8 +4643,8 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             for (const rehearsalText of rehearsalTexts) {
               pendingDirectionDecorations.push(`!rehearsal:${rehearsalText}!`);
             }
-            const words = Array.from(child.querySelectorAll(":scope > direction-type > words"))
-              .map((node) => abcQuotedTextEscape(node.textContent || ""))
+            const words = extractMusicXmlDirectionWords(child)
+              .map((feature) => abcQuotedTextEscape(feature.text))
               .filter(Boolean);
             pendingDirectionWords.push(...words);
             if (child.querySelector(":scope > direction-type > segno")) {
@@ -4628,23 +4669,20 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             if (hasToCoda && !hasDaCapo) {
               pendingDirectionDecorations.push("!tocoda!");
             }
-            for (const wedgeNode of Array.from(child.querySelectorAll(":scope > direction-type > wedge"))) {
-              const wedgeType = (wedgeNode.getAttribute("type") || "").trim().toLowerCase();
-              if (wedgeType === "crescendo") {
+            for (const feature of extractMusicXmlDirectionFeatures(child)) {
+              if (feature.kind === "wedge" && feature.wedgeType === "crescendo") {
                 pendingDirectionDecorations.push("!crescendo(!");
                 activeWedgeType = "crescendo";
-              } else if (wedgeType === "diminuendo") {
+              } else if (feature.kind === "wedge" && feature.wedgeType === "diminuendo") {
                 pendingDirectionDecorations.push("!diminuendo(!");
                 activeWedgeType = "diminuendo";
-              } else if (wedgeType === "stop") {
+              } else if (feature.kind === "wedge" && feature.wedgeType === "stop") {
                 pendingDirectionDecorations.push(activeWedgeType === "diminuendo" ? "!diminuendo)!" : "!crescendo)!");
                 activeWedgeType = "";
               }
             }
-            for (const dynamicName of ["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "fz", "rfz", "sf", "sfp", "sfz"]) {
-              if (child.querySelector(`:scope > direction-type > dynamics > ${dynamicName}`)) {
-                pendingDirectionDecorations.push(`!${dynamicName}!`);
-              }
+            for (const feature of extractMusicXmlDirectionFeatures(child)) {
+              if (feature.kind === "dynamic") pendingDirectionDecorations.push(`!${feature.mark}!`);
             }
             continue;
           }
@@ -4666,18 +4704,22 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             ? (Number.isFinite(duration) && duration > 0 ? duration : Math.round(currentDivisions / 2))
             : duration;
 
-          const hasTieStart = Boolean(child.querySelector(':scope > tie[type="start"]'));
-          const hasTrillMark = Boolean(child.querySelector(":scope > notations > ornaments > trill-mark"));
-          const hasTurn = Boolean(child.querySelector(":scope > notations > ornaments > turn"));
-          const hasInvertedTurn = Boolean(child.querySelector(":scope > notations > ornaments > inverted-turn"));
-          const hasTurnSlash = Array.from(child.querySelectorAll(":scope > notations > ornaments > turn, :scope > notations > ornaments > inverted-turn"))
-            .some((node) => (node.getAttribute("slash") || "").trim().toLowerCase() === "yes");
-          const hasDelayedTurn = Boolean(child.querySelector(":scope > notations > ornaments > delayed-turn"));
-          const hasMordent = Boolean(child.querySelector(":scope > notations > ornaments > mordent"));
-          const hasInvertedMordent = Boolean(child.querySelector(":scope > notations > ornaments > inverted-mordent"));
-          const tremoloNode = child.querySelector(":scope > notations > ornaments > tremolo");
-          const hasSchleifer = Boolean(child.querySelector(":scope > notations > ornaments > schleifer"));
-          const hasShake = Boolean(child.querySelector(":scope > notations > ornaments > shake"));
+          const tieState = extractMusicXmlTieState(child);
+          const hasTieStart = tieState.tieStart;
+          const ornamentFeatures = extractMusicXmlOrnamentFeatures(child);
+          const ornamentKinds = new Set(ornamentFeatures.map((feature) => feature.kind));
+          const hasTrillMark = ornamentKinds.has("trill-mark");
+          const hasTurn = ornamentKinds.has("turn");
+          const hasInvertedTurn = ornamentKinds.has("inverted-turn");
+          const hasTurnSlash = ornamentFeatures.some((feature) =>
+            (feature.kind === "turn" || feature.kind === "inverted-turn") && feature.slash
+          );
+          const hasDelayedTurn = ornamentKinds.has("delayed-turn");
+          const hasMordent = ornamentKinds.has("mordent");
+          const hasInvertedMordent = ornamentKinds.has("inverted-mordent");
+          const tremoloFeature = ornamentFeatures.find((feature) => feature.kind === "tremolo");
+          const hasSchleifer = ornamentKinds.has("schleifer");
+          const hasShake = ornamentKinds.has("shake");
           const hasGlissandoStart = Boolean(child.querySelector(':scope > notations > glissando[type="start"]'));
           const hasGlissandoStop = Boolean(child.querySelector(':scope > notations > glissando[type="stop"]'));
           const hasSlideStart = Boolean(child.querySelector(':scope > notations > slide[type="start"]'));
@@ -4698,22 +4740,22 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
           const hasTrill = hasTrillMark || hasWavyLineStart;
           const turnType: "" | "turn" | "inverted-turn" = hasInvertedTurn ? "inverted-turn" : (hasTurn ? "turn" : "");
           const mordentType: "" | "mordent" | "inverted-mordent" = hasInvertedMordent ? "inverted-mordent" : (hasMordent ? "mordent" : "");
-          const tremoloTypeRaw = (tremoloNode?.getAttribute("type") || "").trim().toLowerCase();
           const tremoloType: "" | "single" | "start" | "stop" =
-            tremoloTypeRaw === "single" || tremoloTypeRaw === "start" || tremoloTypeRaw === "stop"
-              ? tremoloTypeRaw
+            tremoloFeature?.kind === "tremolo" && tremoloFeature.tremoloType
+              ? tremoloFeature.tremoloType
               : "";
-          const tremoloMarks = Math.max(1, Math.min(8, Number.parseInt(tremoloNode?.textContent?.trim() || "", 10) || 0));
+          const tremoloMarks = tremoloFeature?.kind === "tremolo" && tremoloFeature.marks ? tremoloFeature.marks : 1;
           const trillAccidentalText = child.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() || "";
-          const hasStaccato = Boolean(child.querySelector(":scope > notations > articulations > staccato"));
-          const hasStaccatissimo = Boolean(child.querySelector(":scope > notations > articulations > staccatissimo"));
-          const hasAccent = Boolean(child.querySelector(":scope > notations > articulations > accent"));
-          const hasTenuto = Boolean(child.querySelector(":scope > notations > articulations > tenuto"));
+          const articulationKinds = new Set(extractMusicXmlArticulationKinds(child));
+          const hasStaccato = articulationKinds.has("staccato");
+          const hasStaccatissimo = articulationKinds.has("staccatissimo");
+          const hasAccent = articulationKinds.has("accent");
+          const hasTenuto = articulationKinds.has("tenuto");
           const hasStress = Boolean(child.querySelector(":scope > notations > articulations > stress"));
           const hasUnstress = Boolean(child.querySelector(":scope > notations > articulations > unstress"));
-          const hasStrongAccent = Boolean(child.querySelector(":scope > notations > articulations > strong-accent"));
-          const hasBreathMark = Boolean(child.querySelector(":scope > notations > articulations > breath-mark"));
-          const hasCaesura = Boolean(child.querySelector(":scope > notations > articulations > caesura"));
+          const hasStrongAccent = articulationKinds.has("strong-accent");
+          const hasBreathMark = articulationKinds.has("breath-mark");
+          const hasCaesura = articulationKinds.has("caesura");
           const phraseMarkText = Array.from(child.querySelectorAll(":scope > notations > articulations > other-articulation"))
             .map((node) => (node.textContent || "").trim().toLowerCase())
             .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") || "";
@@ -4744,8 +4786,9 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
             !fermataNode
               ? ""
               : (fermataTypeRaw === "inverted" || fermataShapeRaw === "inverted" ? "inverted" : "normal");
-          const hasSlurStart = Boolean(child.querySelector(':scope > notations > slur[type="start"]'));
-          const hasSlurStop = Boolean(child.querySelector(':scope > notations > slur[type="stop"]'));
+          const slurFeatures = extractMusicXmlSlurFeatures(child);
+          const hasSlurStart = slurFeatures.some((slur) => slur.type === "start");
+          const hasSlurStop = slurFeatures.some((slur) => slur.type === "stop");
           const hasGraceSlash = (child.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes";
           const hasTupletStart = Boolean(child.querySelector(':scope > notations > tuplet[type="start"]'));
           const tmActual = Number(child.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() || "");

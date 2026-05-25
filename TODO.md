@@ -105,20 +105,20 @@
     - add `mikuscore convert --from musicxml --to vsqx`
     - add matching CLI help and regression tests
 
-- [ ] Add MEI CLI conversion pairs around the existing reusable format I/O.
+- [x] Add MEI CLI conversion pairs around the existing reusable format I/O.
   - Target pairs:
     - `mikuscore convert --from mei --to musicxml`
     - `mikuscore convert --from musicxml --to mei`
-  - Implementation slices:
+  - Result:
     - extend `src/ts/cli-api.ts` with `mei` facade entries
     - wire `scripts/mikuscore-cli.mjs` help and convert handlers
     - add CLI regression tests for stdin/file input, `--out`, and representative failures
 
-- [ ] Add LilyPond CLI conversion pairs around the existing reusable format I/O.
+- [x] Add LilyPond CLI conversion pairs around the existing reusable format I/O.
   - Target pairs:
     - `mikuscore convert --from lilypond --to musicxml`
     - `mikuscore convert --from musicxml --to lilypond`
-  - Implementation slices:
+  - Result:
     - extend `src/ts/cli-api.ts` with `lilypond` facade entries
     - wire `scripts/mikuscore-cli.mjs` help and convert handlers
     - add CLI regression tests for stdin/file input, `--out`, and representative failures
@@ -291,14 +291,22 @@
 
 ## Facade
 
-- [ ] Keep the non-UI CLI facade small and format-oriented.
-  - Current Step 1 functions:
+- [x] Keep the non-UI CLI facade small and format-oriented.
+  - Current facade functions include:
     - `importAbcToMusicXml(...)`
     - `exportMusicXmlToAbc(...)`
-  - Planned next functions:
+    - `importMidiToMusicXml(...)`
+    - `exportMusicXmlToMidi(...)`
     - `importMuseScoreToMusicXml(...)`
     - `exportMusicXmlToMuseScore(...)`
+    - `importMeiToMusicXml(...)`
+    - `exportMusicXmlToMei(...)`
+    - `importLilyPondToMusicXml(...)`
+    - `exportMusicXmlToLilyPond(...)`
     - `renderMusicXmlToSvg(...)`
+  - Result:
+    - keep `src/ts/cli-api.ts` as a small non-UI facade over format-oriented reusable modules
+    - keep command routing, file I/O, and CLI diagnostics in `scripts/mikuscore-cli.mjs`
 
 - [ ] Re-evaluate `core/` boundaries only if reuse pressure becomes real.
   - Do not move conversion facade code into `core/` without a concrete need.
@@ -334,6 +342,84 @@
     - only raise per-test timeout after checking whether the case can be made cheaper or better isolated
 
 ## Refactoring Priorities
+
+- [ ] Introduce small cross-format score feature models where they reduce format-local branching.
+  - Current observation:
+    - `src/ts/abc-io.ts`, `src/ts/mei-io.ts`, `src/ts/lilypond-io.ts`, `src/ts/midi-io.ts`, and `src/ts/musescore-io.ts` each contain local handling for recurring score concepts such as dynamics, wedges, articulations, ornaments, slurs, ties, tempo, repeats, and barlines
+    - tests currently verify many of these behaviors inside format-specific suites, which makes cross-format semantics harder to compare directly
+    - ABC parsing already has `src/ts/abc-parser.ts` and `docs/spec/abc-compat-parser-ebnf.md`, so grammar-oriented cleanup is plausible, but parse output, semantic mapping, and MusicXML emission are still too entangled in `src/ts/abc-io.ts`
+  - Direction:
+    - move from format-local giant conditionals toward format adapters plus small feature-specific models
+    - do not create one large generic score IR; MusicXML remains the canonical score state
+    - introduce only narrow feature models when they simplify duplicated mapping and enable feature-level tests
+  - Design note from the first implementation slice:
+    - this direction worked best when the abstraction stayed small
+    - keep `MusicXML` as the canonical score state and use feature models only as narrow adapters for repeated concepts such as dynamics and wedges
+    - avoid turning feature models into a second canonical representation of the whole score
+    - a feature model is justified when it removes duplicated format-local branching and gives the project a focused test surface
+  - Implemented slices:
+    - dynamics and wedges:
+      - added a narrow feature vocabulary for dynamic marks and wedge directions
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore paths where the mapping was already local and low-risk
+      - added feature-level coverage in `tests/unit/score-dynamics.spec.ts`
+    - articulations:
+      - added a narrow feature vocabulary for common MusicXML articulation elements
+      - rewired ABC, MEI, LilyPond, and MuseScore paths without replacing format-specific parsing or non-articulation notation handling
+      - added feature-level coverage in `tests/unit/score-articulations.spec.ts`
+    - ornaments:
+      - added a narrow feature vocabulary for simple MusicXML ornament elements and tremolo
+      - rewired ABC, MEI, LilyPond, MIDI playback ornament detection, and MuseScore trill-mark paths where the mapping was already local
+      - kept wavy-line spanner state and trill accidental details format-local
+      - added feature-level coverage in `tests/unit/score-ornaments.spec.ts`
+    - slurs:
+      - added a narrow feature vocabulary for MusicXML slur start/stop, number, and placement
+      - rewired ABC, MEI, LilyPond, MIDI slur detection, and MuseScore slur emission/extraction where the mapping was local
+      - kept broader spanner state format-local
+      - added feature-level coverage in `tests/unit/score-slurs.spec.ts`
+    - ties:
+      - added a narrow feature vocabulary for MusicXML `<tie>` sound ties and `<tied>` notation ties
+      - rewired ABC, MEI, LilyPond, MIDI tie detection/emission, and MuseScore tie emission/extraction where the mapping was local
+      - kept tie carry, pitch matching, and format-specific tie inference in the adapters
+      - added feature-level coverage in `tests/unit/score-ties.spec.ts`
+    - tempo and direction text:
+      - added a narrow feature vocabulary for MusicXML direction words and `sound tempo`
+      - rewired ABC, MEI, LilyPond, MIDI tempo emission, and MuseScore words/tempo extraction where the mapping was local
+      - kept metronome beat-unit interpretation, jumps, markers, and format-specific direction semantics in the adapters
+      - added feature-level coverage in `tests/unit/score-direction-text.spec.ts`
+    - repeat and barline semantics:
+      - added a narrow feature vocabulary for simple MusicXML barline location, bar-style, repeat directions, and ending markers
+      - rewired MuseScore mid-measure repeat barline handling and LilyPond simple repeat/ending generation where the mapping was local
+      - kept ABC `winged` / repeat `times` metadata and broader measure-level repeat policy format-local
+      - added feature-level coverage in `tests/unit/score-barlines.spec.ts`
+  - Model examples:
+    - dynamics and wedges:
+      - dynamic marks such as `pp`, `p`, `mp`, `mf`, `f`, `ff`, `sfz`
+      - wedge controls such as crescendo, diminuendo, and stop with measure offset / staff context where available
+    - articulations:
+      - common MusicXML articulation tags such as `staccato`, `accent`, `tenuto`, `strong-accent`, `breath-mark`, and `caesura`
+    - ornaments:
+      - common MusicXML ornament tags such as `trill-mark`, `turn`, `inverted-turn`, `mordent`, `inverted-mordent`, `shake`, `schleifer`, and `tremolo`
+    - slurs:
+      - MusicXML slur controls with `type`, `number`, and start placement
+    - ties:
+      - MusicXML tie controls that preserve the distinction between direct `<tie>` and notation `<tied>`
+    - tempo and direction text:
+      - MusicXML direction words, optional font style, placement, and `sound tempo`
+    - repeat and barline semantics:
+      - simple MusicXML barline controls with location, bar-style, repeat directions, and ending markers
+  - Follow-up candidates:
+    - 1. keep reviewing the feature-model slices during nearby changes:
+      - a first cleanup pass removed additional local words/tempo and simple barline XML generation where it was clearly equivalent
+      - remaining direct XML assembly is mostly format-specific wrapping, wavy-line/trill detail, ABC repeat metadata, MEI measure policy, or notation container composition
+      - avoid expanding the shared models further until a real duplication or test-surface problem appears
+  - Test direction:
+    - add feature-level unit tests next to the new model before rewiring multiple formats
+    - keep existing format-specific regression tests as safety coverage
+    - compare equivalent feature extraction/emission across formats where behavior is intentionally shared
+  - Constraints:
+    - preserve current public entry points such as `convertAbcToMusicXml(...)`, `exportMusicXmlDomToAbc(...)`, `convertMeiToMusicXml(...)`, and related CLI facade calls
+    - extract one feature at a time; do not redesign every format module in one pass
+    - avoid hiding format-specific loss, approximation, or unsupported behavior behind an over-general abstraction
 
 - [ ] Long-range: revisit the large format I/O modules with a review-first pass, not an immediate rewrite.
   - Target modules:

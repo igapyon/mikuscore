@@ -7,6 +7,19 @@ import {
   computeBeamAssignments,
 } from "./beam-common";
 import {
+  buildMusicXmlDirectionFeatureXml,
+  velocityToDynamicMark,
+  type DynamicMark,
+} from "./score-features/dynamics";
+import { buildMusicXmlTempoDirectionXml } from "./score-features/direction-text";
+import { extractMusicXmlOrnamentFeatures } from "./score-features/ornaments";
+import { extractMusicXmlSlurFeatures } from "./score-features/slurs";
+import {
+  buildMusicXmlTieItemsXml,
+  buildMusicXmlTiedItemsXml,
+  extractMusicXmlTieState,
+} from "./score-features/ties";
+import {
   chooseSingleClefByKeys,
   pickStaffForClusterWithHysteresis,
   shouldUseGrandStaffByRange,
@@ -484,28 +497,20 @@ const hasExplicitArticulation = (noteNode: Element): boolean => {
 };
 
 const getTieFlags = (noteNode: Element): { start: boolean; stop: boolean } => {
-  const directTieNodes = Array.from(noteNode.children).filter((child) => child.tagName === "tie");
-  const notationTieNodes = Array.from(noteNode.querySelectorAll("notations > tied"));
-  const allTieNodes = [...directTieNodes, ...notationTieNodes];
-  let start = false;
-  let stop = false;
-  for (const tieNode of allTieNodes) {
-    const tieType = tieNode.getAttribute("type")?.trim().toLowerCase();
-    if (tieType === "start") start = true;
-    if (tieType === "stop") stop = true;
-  }
-  return { start, stop };
+  const tie = extractMusicXmlTieState(noteNode);
+  return {
+    start: tie.tieStart || tie.tiedStart,
+    stop: tie.tieStop || tie.tiedStop,
+  };
 };
 
 const getSlurNumbers = (noteNode: Element): { starts: string[]; stops: string[] } => {
   const starts: string[] = [];
   const stops: string[] = [];
-  const slurNodes = Array.from(noteNode.querySelectorAll("notations > slur"));
-  for (const slurNode of slurNodes) {
-    const slurType = slurNode.getAttribute("type")?.trim().toLowerCase() ?? "";
-    const slurNumber = slurNode.getAttribute("number")?.trim() || "1";
-    if (slurType === "start") starts.push(slurNumber);
-    if (slurType === "stop") stops.push(slurNumber);
+  for (const slur of extractMusicXmlSlurFeatures(noteNode)) {
+    const slurNumber = String(slur.number ?? 1);
+    if (slur.type === "start") starts.push(slurNumber);
+    if (slur.type === "stop") stops.push(slurNumber);
   }
   return { starts, stops };
 };
@@ -689,9 +694,7 @@ const buildOrnamentMidiSequence = (
   }
 ): number[] => {
   if (durTicks < 2) return [baseMidi];
-  const ornamentTags = new Set(
-    Array.from(noteNode.querySelectorAll("notations > ornaments > *")).map((node) => node.tagName.toLowerCase())
-  );
+  const ornamentTags = new Set(extractMusicXmlOrnamentFeatures(noteNode).map((feature) => feature.kind));
   if (ornamentTags.size === 0) return [baseMidi];
 
   const upperNeighbor = resolveNeighborPitch(
@@ -1446,29 +1449,13 @@ type ImportedVoiceNoteSegment = {
   endTick: number;
 };
 
-type DynamicMark = "ppp" | "pp" | "p" | "mp" | "mf" | "f" | "ff" | "fff";
-
-const velocityToDynamicMark = (velocity: number): DynamicMark => {
-  const v = clampVelocity(velocity);
-  if (v <= 15) return "ppp";
-  if (v <= 31) return "pp";
-  if (v <= 47) return "p";
-  if (v <= 63) return "mp";
-  if (v <= 79) return "mf";
-  if (v <= 95) return "f";
-  if (v <= 111) return "ff";
-  return "fff";
-};
-
 const buildDynamicsDirectionXml = (dynamicMark: DynamicMark, offsetDiv: number, staff: number): string => {
-  let xml = "<direction>";
-  xml += `<direction-type><dynamics><${dynamicMark}/></dynamics></direction-type>`;
-  if (offsetDiv > 0) {
-    xml += `<offset>${offsetDiv}</offset>`;
-  }
-  xml += `<staff>${Math.max(1, Math.round(staff))}</staff>`;
-  xml += "</direction>";
-  return xml;
+  return buildMusicXmlDirectionFeatureXml({
+    kind: "dynamic",
+    mark: dynamicMark,
+    offsetDiv,
+    staff: Math.max(1, Math.round(staff)),
+  });
 };
 
 const midiToPitchComponents = (midiNumber: number): { step: string; alter: number; octave: number } => {
@@ -1906,14 +1893,12 @@ const beamLevelFromNotationType = (type: DurationNotation["type"]): number => {
 const buildTieXml = (tieStart: boolean, tieStop: boolean, withStaccato = false): string => {
   if (!tieStart && !tieStop && !withStaccato) return "";
   let xml = "";
-  if (tieStop) xml += '<tie type="stop"/>';
-  if (tieStart) xml += '<tie type="start"/>';
+  xml += buildMusicXmlTieItemsXml({ tieStart, tieStop });
   xml += "<notations>";
   if (withStaccato) {
     xml += "<articulations><staccato/></articulations>";
   }
-  if (tieStop) xml += '<tied type="stop"/>';
-  if (tieStart) xml += '<tied type="start"/>';
+  xml += buildMusicXmlTiedItemsXml({ tiedStart: tieStart, tiedStop: tieStop });
   xml += "</notations>";
   return xml;
 };
@@ -2455,15 +2440,11 @@ const buildPartMusicXml = (params: {
     if (includeTempoEvents) {
       const tempoEvents = tempoEventsByMeasure.get(measureIndex) ?? [];
       for (const event of tempoEvents) {
-        partXml += "<direction>";
-        partXml += "<direction-type><metronome><beat-unit>quarter</beat-unit>";
-        partXml += `<per-minute>${event.bpm}</per-minute>`;
-        partXml += "</metronome></direction-type>";
-        if (event.offsetDiv > 0) {
-          partXml += `<offset>${event.offsetDiv}</offset>`;
-        }
-        partXml += `<sound tempo="${event.bpm}"/>`;
-        partXml += "</direction>";
+        partXml += buildMusicXmlTempoDirectionXml({
+          bpm: event.bpm,
+          offsetDiv: event.offsetDiv,
+          includeQuarterMetronome: true,
+        });
       }
     }
     if (debugImportMetadata) {
