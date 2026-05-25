@@ -11,6 +11,41 @@ import {
   computeBeamAssignments,
 } from "./beam-common";
 import { applyImplicitBeamsToMusicXmlText } from "./musicxml-io";
+import {
+  buildMusicXmlArticulationsXml,
+  extractMusicXmlArticulationKinds,
+  normalizeArticulationKind,
+  type ArticulationKind,
+} from "./score-features/articulations";
+import {
+  buildMusicXmlDirectionFeatureXml,
+  extractMusicXmlDirectionFeatures,
+  normalizeDynamicMark,
+  type DynamicMark,
+} from "./score-features/dynamics";
+import {
+  buildMusicXmlBarlineXml,
+  extractMusicXmlBarlineFeature,
+} from "./score-features/barlines";
+import {
+  buildMusicXmlWordsDirectionXml,
+  buildMusicXmlTempoDirectionXml,
+  extractMusicXmlDirectionWords,
+  extractMusicXmlSoundTempoBpm,
+} from "./score-features/direction-text";
+import {
+  buildMusicXmlOrnamentItemsXml,
+  extractMusicXmlOrnamentFeatures,
+} from "./score-features/ornaments";
+import {
+  buildMusicXmlSlursXml,
+  extractMusicXmlSlurFeatures,
+} from "./score-features/slurs";
+import {
+  buildMusicXmlTieItemsXml,
+  buildMusicXmlTiedItemsXml,
+  extractMusicXmlTieState,
+} from "./score-features/ties";
 
 type MuseScoreImportOptions = {
   sourceMetadata?: boolean;
@@ -80,12 +115,12 @@ type ParsedMuseScoreEvent =
     trillStops?: number[];
     trillMarkOnly?: boolean;
     trillAccidentalMark?: string;
-    articulationTags?: string[];
+    articulationTags?: ArticulationKind[];
     technicalTags?: string[];
     grace?: boolean;
     graceSlash?: boolean;
   }
-  | { kind: "dynamic"; mark: string; voice: number; staffNo?: number; atDiv: number; soundDynamics?: number }
+  | { kind: "dynamic"; mark: DynamicMark; voice: number; staffNo?: number; atDiv: number; soundDynamics?: number }
   | { kind: "directionXml"; xml: string; voice: number; staffNo?: number; atDiv: number }
   | { kind: "barlineXml"; xml: string; voice: number; staffNo?: number; atDiv: number };
 
@@ -349,20 +384,15 @@ const buildMidMeasureRepeatBarlineXml = (
   direction: "forward" | "backward" | "end-start"
 ): string => {
   if (direction === "end-start") {
-    return "<barline location=\"middle\"><bar-style>light-heavy</bar-style><repeat direction=\"backward\"/><repeat direction=\"forward\"/></barline>";
+    return buildMusicXmlBarlineXml({ location: "middle", barStyle: "light-heavy", repeats: ["backward", "forward"] });
   }
   if (direction === "forward") {
-    return "<barline location=\"middle\"><bar-style>heavy-light</bar-style><repeat direction=\"forward\"/></barline>";
+    return buildMusicXmlBarlineXml({ location: "middle", barStyle: "heavy-light", repeats: ["forward"] });
   }
-  return "<barline location=\"middle\"><bar-style>light-heavy</bar-style><repeat direction=\"backward\"/></barline>";
+  return buildMusicXmlBarlineXml({ location: "middle", barStyle: "light-heavy", repeats: ["backward"] });
 };
 
-const parseMuseDynamicMark = (value: string): string | null => {
-  const v = String(value || "").trim().toLowerCase();
-  if (!v) return null;
-  const allow = new Set(["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sf", "sfz", "rfz"]);
-  return allow.has(v) ? v : null;
-};
+const parseMuseDynamicMark = (value: string): DynamicMark | null => normalizeDynamicMark(value);
 
 const parseMuseDynamicSoundValue = (dynamicEl: Element): number | null => {
   const velocity = firstNumber(dynamicEl, ":scope > velocity");
@@ -379,7 +409,7 @@ const isMuseElementVisible = (el: Element): boolean => {
 
 const museArticulationSubtypeToMusicXmlTag = (
   raw: string | null | undefined
-): { group: "articulations" | "technical"; tag: string } | null => {
+): { group: "articulations"; tag: ArticulationKind } | { group: "technical"; tag: string } | null => {
   const v = String(raw ?? "").trim().toLowerCase();
   if (!v) return null;
   // MuseScore left-hand pizzicato (+) variants.
@@ -448,10 +478,11 @@ const readGlobalMuseKeyMode = (score: Element): "major" | "minor" => {
   return inferred || "major";
 };
 
-const buildDynamicDirectionXml = (mark: string, options?: { soundDynamics?: number }): string => {
+const buildDynamicDirectionXml = (mark: DynamicMark, options?: { soundDynamics?: number }): string => {
   const value = options?.soundDynamics;
   const soundXml = Number.isFinite(value) ? `<sound dynamics="${Number(value).toFixed(2)}"/>` : "";
-  return `<direction><direction-type><dynamics><${mark}/></dynamics></direction-type>${soundXml}</direction>`;
+  const featureXml = buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark });
+  return soundXml ? featureXml.replace("</direction>", `${soundXml}</direction>`) : featureXml;
 };
 
 const museAccidentalSubtypeToMusicXml = (raw: string | null | undefined): string | null => {
@@ -489,11 +520,12 @@ const buildWordsDirectionXml = (
   text: string,
   options?: { placement?: "above" | "below"; soundTempo?: number | null; fontStyle?: "italic" | "normal" }
 ): string => {
-  const placementAttr = options?.placement ? ` placement="${options.placement}"` : "";
-  const fontStyleAttr = options?.fontStyle ? ` font-style="${options.fontStyle}"` : "";
-  const soundTempo = options?.soundTempo ?? null;
-  const soundXml = soundTempo !== null ? `<sound tempo="${soundTempo}"/>` : "";
-  return `<direction${placementAttr}><direction-type><words${fontStyleAttr}>${xmlEscape(text)}</words></direction-type>${soundXml}</direction>`;
+  return buildMusicXmlWordsDirectionXml({
+    text,
+    placement: options?.placement,
+    fontStyle: options?.fontStyle,
+    tempoBpm: options?.soundTempo ?? undefined,
+  });
 };
 
 const buildSegnoDirectionXml = (): string => {
@@ -529,7 +561,7 @@ const parseJumpDirectionXml = (jump: Element): { xml: string; mapped: boolean } 
   if (playUntil.toLowerCase().includes("coda") || continueAt.toLowerCase().includes("coda")) attrs.push('tocoda="coda"');
   const soundXml = attrs.length ? `<sound ${attrs.join(" ")}/>` : "";
   return {
-    xml: `<direction><direction-type><words>${xmlEscape(words)}</words></direction-type>${soundXml}</direction>`,
+    xml: buildMusicXmlWordsDirectionXml({ text: words }).replace("</direction>", `${soundXml}</direction>`),
     mapped: attrs.length > 0,
   };
 };
@@ -551,7 +583,7 @@ const parseTempoDirectionXml = (tempoEl: Element): string | null => {
     return buildWordsDirectionXml(text, { placement: "above", soundTempo: bpm });
   }
   if (bpm !== null) {
-    return `<direction><sound tempo="${bpm}"/></direction>`;
+    return buildMusicXmlTempoDirectionXml({ bpm });
   }
   return null;
 };
@@ -775,7 +807,7 @@ type MuseScoreImportChordLocalSpannerResult = {
 };
 
 type MuseScoreChordNotationSummary = {
-  articulationTags: string[];
+  articulationTags: ArticulationKind[];
   technicalTags: string[];
   hasChordLocalTrillMark: boolean;
 };
@@ -1927,7 +1959,7 @@ const applyMuseChordLocalSpanners = (
 const summarizeMuseChordNotations = (chordEl: Element): MuseScoreChordNotationSummary => {
   const articulationMappings = Array.from(chordEl.querySelectorAll(":scope > Articulation > subtype"))
     .map((node) => museArticulationSubtypeToMusicXmlTag(node.textContent))
-    .filter((mapped): mapped is { group: "articulations" | "technical"; tag: string } => mapped !== null);
+    .filter((mapped): mapped is NonNullable<ReturnType<typeof museArticulationSubtypeToMusicXmlTag>> => mapped !== null);
   const ornamentSubtypeTexts = Array.from(
     chordEl.querySelectorAll(":scope > Ornament > subtype, :scope > ornament > subtype")
   ).map((node) => (node.textContent ?? "").trim().toLowerCase());
@@ -1939,7 +1971,8 @@ const summarizeMuseChordNotations = (chordEl: Element): MuseScoreChordNotationSu
   return {
     articulationTags: allMappings
       .filter((mapped) => mapped.group === "articulations")
-      .map((mapped) => mapped.tag),
+      .map((mapped) => normalizeArticulationKind(mapped.tag))
+      .filter((kind): kind is ArticulationKind => kind !== null),
     technicalTags: allMappings
       .filter((mapped) => mapped.group === "technical")
       .map((mapped) => mapped.tag),
@@ -2865,10 +2898,10 @@ const buildMuseImportedMeasureHeaderXml = (
     body += "</attributes>";
   }
   if (primaryMeasure.leftDoubleBarline) {
-    body += `<barline location="left"><bar-style>light-light</bar-style></barline>`;
+    body += buildMusicXmlBarlineXml({ location: "left", barStyle: "light-light" });
   }
   if (primaryMeasure.repeatForward) {
-    body += `<barline location="left"><repeat direction="forward"/></barline>`;
+    body += buildMusicXmlBarlineXml({ location: "left", repeats: ["forward"] });
   }
   if (primaryMeasure.tempoText) {
     body += buildWordsDirectionXml(primaryMeasure.tempoText, {
@@ -2876,7 +2909,7 @@ const buildMuseImportedMeasureHeaderXml = (
       soundTempo: primaryMeasure.tempoBpm,
     });
   } else if (primaryMeasure.tempoBpm !== null) {
-    body += `<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${primaryMeasure.tempoBpm}</per-minute></metronome></direction-type><sound tempo="${primaryMeasure.tempoBpm}"/></direction>`;
+    body += buildMusicXmlTempoDirectionXml({ bpm: primaryMeasure.tempoBpm, includeQuarterMetronome: true });
   }
   return body;
 };
@@ -2961,10 +2994,11 @@ const finalizeMuseImportedMeasureXml = (
   const isLastMeasure = measureIndex === measureCount - 1;
   let out = body;
   if (primaryMeasure.repeatBackward || isLastMeasure) {
-    out += `<barline location="right">`;
-    if (isLastMeasure) out += "<bar-style>light-heavy</bar-style>";
-    if (primaryMeasure.repeatBackward) out += `<repeat direction="backward"/>`;
-    out += "</barline>";
+    out += buildMusicXmlBarlineXml({
+      location: "right",
+      ...(isLastMeasure ? { barStyle: "light-heavy" } : {}),
+      ...(primaryMeasure.repeatBackward ? { repeats: ["backward"] } : {}),
+    });
   }
   const implicitAttr = primaryMeasure.implicit ? ' implicit="yes"' : "";
   const measureNumber = startsWithPickup ? measureIndex : measureIndex + 1;
@@ -3051,29 +3085,28 @@ const emitMuseImportedVoiceXml = (
       continue;
     }
     const tupletXml = buildTupletMusicXml(event);
-    const slurItems: string[] = [];
-    for (const no of event.slurStarts ?? []) {
-      slurItems.push(`<slur type="start" number="${Math.max(1, Math.round(no))}"/>`);
-    }
-    for (const no of event.slurStops ?? []) {
-      slurItems.push(`<slur type="stop" number="${Math.max(1, Math.round(no))}"/>`);
-    }
+    const slurItemsXml = buildMusicXmlSlursXml([
+      ...(event.slurStarts ?? []).map((no) => ({ type: "start" as const, number: Math.max(1, Math.round(no)) })),
+      ...(event.slurStops ?? []).map((no) => ({ type: "stop" as const, number: Math.max(1, Math.round(no)) })),
+    ]);
+    const slurItems = slurItemsXml ? [slurItemsXml] : [];
     const trillItems: string[] = [];
     const trillAccidentalMarkXml = event.trillAccidentalMark
       ? `<accidental-mark>${event.trillAccidentalMark}</accidental-mark>`
       : "";
+    const trillMarkXml = buildMusicXmlOrnamentItemsXml([{ kind: "trill-mark" }]);
     const trillStarts = event.trillStarts ?? [];
     for (let i = 0; i < trillStarts.length; i += 1) {
       const no = trillStarts[i] as number;
       trillItems.push(
-        `<ornaments><trill-mark/>${i === 0 ? trillAccidentalMarkXml : ""}<wavy-line type="start" number="${Math.max(1, Math.round(no))}"/></ornaments>`
+        `<ornaments>${trillMarkXml}${i === 0 ? trillAccidentalMarkXml : ""}<wavy-line type="start" number="${Math.max(1, Math.round(no))}"/></ornaments>`
       );
     }
     for (const no of event.trillStops ?? []) {
       trillItems.push(`<ornaments><wavy-line type="stop" number="${Math.max(1, Math.round(no))}"/></ornaments>`);
     }
     if (trillStarts.length === 0 && event.trillMarkOnly) {
-      trillItems.push(`<ornaments><trill-mark/>${trillAccidentalMarkXml}</ornaments>`);
+      trillItems.push(`<ornaments>${trillMarkXml}${trillAccidentalMarkXml}</ornaments>`);
     }
     for (let ni = 0; ni < event.notes.length; ni += 1) {
       const note = event.notes[ni];
@@ -3090,11 +3123,15 @@ const emitMuseImportedVoiceXml = (
       });
       const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
       const timeModificationXml = ni === 0 && !event.grace ? tupletXml.timeModificationXml : "";
-      const tieXml = `${note.tieStart ? '<tie type="start"/>' : ""}${note.tieStop ? '<tie type="stop"/>' : ""}`;
-      const tiedItems = `${note.tieStart ? '<tied type="start"/>' : ""}${note.tieStop ? '<tied type="stop"/>' : ""}`;
-      const articulationXml = ni === 0 && (event.articulationTags?.length ?? 0) > 0
-        ? `<articulations>${(event.articulationTags ?? []).map((tag) => `<${tag}/>`).join("")}</articulations>`
-        : "";
+      const tieXml = buildMusicXmlTieItemsXml({
+        tieStart: Boolean(note.tieStart),
+        tieStop: Boolean(note.tieStop),
+      });
+      const tiedItems = buildMusicXmlTiedItemsXml({
+        tiedStart: Boolean(note.tieStart),
+        tiedStop: Boolean(note.tieStop),
+      });
+      const articulationXml = ni === 0 ? buildMusicXmlArticulationsXml(event.articulationTags ?? []) : "";
       const noteTechnicalItems: string[] = [];
       if (ni === 0 && (event.technicalTags?.length ?? 0) > 0) {
         noteTechnicalItems.push(...(event.technicalTags ?? []).map((tag) => `<${tag}/>`));
@@ -3440,16 +3477,12 @@ const getPartStaffCountFromMusicXml = (part: Element): number => {
 
 type MuseDirectionSeed =
   | { kind: "tempo"; qps: number; text?: string; followText?: boolean; visible?: boolean }
-  | { kind: "dynamic"; subtype: string; velocity?: number }
+  | { kind: "dynamic"; subtype: DynamicMark; velocity?: number }
   | { kind: "expression"; text: string; italic?: boolean }
   | { kind: "marker"; subtype: "segno" | "coda" | "fine"; label: string }
   | { kind: "jump"; text: string; jumpTo?: string; playUntil?: string; continueAt?: string };
 
-const dynamicTagToMuseSubtype = (tag: string): string | null => {
-  const v = tag.trim().toLowerCase();
-  const allow = new Set(["pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "sf", "sfz", "rfz"]);
-  return allow.has(v) ? v : null;
-};
+const dynamicTagToMuseSubtype = (tag: string): DynamicMark | null => normalizeDynamicMark(tag);
 
 const musicXmlSoundDynamicsToMuseVelocity = (raw: string | null): number | undefined => {
   const n = Number(raw ?? "");
@@ -3492,9 +3525,8 @@ const beatUnitToQuarterFactor = (beatUnit: string, dots: number): number | null 
 };
 
 const readDirectionTempoQps = (direction: Element): number => {
-  const soundTempoText = direction.querySelector(":scope > sound")?.getAttribute("tempo") ?? "";
-  const soundTempo = Number(soundTempoText);
-  if (Number.isFinite(soundTempo) && soundTempo > 0) return soundTempo / 60;
+  const soundTempo = extractMusicXmlSoundTempoBpm(direction);
+  if (soundTempo !== null) return soundTempo / 60;
 
   const metronome = direction.querySelector(":scope > direction-type > metronome");
   if (!metronome) return 0;
@@ -3521,8 +3553,9 @@ const collectDirectionSeedsFromMusicXmlMeasure = (measure: Element, staffNo: num
     const soundToCoda = (direction.querySelector(":scope > sound")?.getAttribute("tocoda") ?? "").trim();
     const velocity = musicXmlSoundDynamicsToMuseVelocity(soundDynamics);
 
-    for (const dynNode of Array.from(direction.querySelectorAll(":scope > direction-type > dynamics > *"))) {
-      const subtype = dynamicTagToMuseSubtype(dynNode.tagName.toLowerCase());
+    for (const feature of extractMusicXmlDirectionFeatures(direction)) {
+      if (feature.kind !== "dynamic") continue;
+      const subtype = dynamicTagToMuseSubtype(feature.mark);
       if (!subtype) continue;
       out.push({ kind: "dynamic", subtype, velocity });
     }
@@ -3532,10 +3565,9 @@ const collectDirectionSeedsFromMusicXmlMeasure = (measure: Element, staffNo: num
     if (direction.querySelector(":scope > direction-type > coda") !== null) {
       out.push({ kind: "marker", subtype: "coda", label: "coda" });
     }
-    for (const words of Array.from(direction.querySelectorAll(":scope > direction-type > words"))) {
-      const text = (words.textContent ?? "").trim();
-      if (!text) continue;
-      const italic = (words.getAttribute("font-style") ?? "").trim().toLowerCase() === "italic";
+    for (const words of extractMusicXmlDirectionWords(direction)) {
+      const text = words.text;
+      const italic = words.fontStyle === "italic";
       if (hasTempo) out.push({ kind: "tempo", qps, text });
       else if (text.toLowerCase() === "fine") out.push({ kind: "marker", subtype: "fine", label: "Fine" });
       else out.push({ kind: "expression", text, italic: italic || undefined });
@@ -3683,13 +3715,11 @@ const parseMusicXmlPitchToMidi = (note: Element): number | null => {
 };
 
 const parseMusicXmlTieFlags = (note: Element): { tieStart: boolean; tieStop: boolean } => {
-  const hasStart =
-    note.querySelector(':scope > tie[type="start"]') !== null
-    || note.querySelector(':scope > notations > tied[type="start"]') !== null;
-  const hasStop =
-    note.querySelector(':scope > tie[type="stop"]') !== null
-    || note.querySelector(':scope > notations > tied[type="stop"]') !== null;
-  return { tieStart: hasStart, tieStop: hasStop };
+  const tie = extractMusicXmlTieState(note);
+  return {
+    tieStart: tie.tieStart || tie.tiedStart,
+    tieStop: tie.tieStop || tie.tiedStop,
+  };
 };
 
 const parseMusicXmlAccidentalSubtype = (note: Element): string | null => {
@@ -3706,13 +3736,10 @@ const parseMusicXmlAccidentalSubtype = (note: Element): string | null => {
 const parseMusicXmlSlurNumbers = (note: Element): { starts: number[]; stops: number[] } => {
   const starts: number[] = [];
   const stops: number[] = [];
-  for (const slur of Array.from(note.querySelectorAll(":scope > notations > slur[type]"))) {
-    const type = (slur.getAttribute("type") ?? "").trim().toLowerCase();
-    const rawNumber = (slur.getAttribute("number") ?? "").trim();
-    const number = Number(rawNumber);
-    const normalized = Number.isFinite(number) && number > 0 ? Math.round(number) : 1;
-    if (type === "start") starts.push(normalized);
-    if (type === "stop") stops.push(normalized);
+  for (const slur of extractMusicXmlSlurFeatures(note)) {
+    const normalized = slur.number ?? 1;
+    if (slur.type === "start") starts.push(normalized);
+    if (slur.type === "stop") stops.push(normalized);
   }
   return { starts, stops };
 };
@@ -3733,7 +3760,7 @@ const parseMusicXmlTrillNumbers = (note: Element): { starts: number[]; stops: nu
 
 const hasMusicXmlTrillMarkOnly = (note: Element, trill: { starts: number[]; stops: number[] }): boolean => {
   if (trill.starts.length > 0 || trill.stops.length > 0) return false;
-  return note.querySelector(":scope > notations > ornaments > trill-mark") !== null;
+  return extractMusicXmlOrnamentFeatures(note).some((feature) => feature.kind === "trill-mark");
 };
 
 const parseMusicXmlTupletTimeModification = (
@@ -3771,11 +3798,10 @@ const mergeUniqueNumbers = (base: number[] | undefined, incoming: number[]): num
 
 const parseMusicXmlArticulationSubtypes = (note: Element): string[] => {
   const out = new Set<string>();
-  for (const node of Array.from(note.querySelectorAll(":scope > notations > articulations > *"))) {
-    const tag = node.tagName.toLowerCase();
-    if (tag === "staccato") out.add("articStaccatoAbove");
-    if (tag === "accent") out.add("articAccentAbove");
-    if (tag === "tenuto") out.add("articTenutoAbove");
+  for (const kind of extractMusicXmlArticulationKinds(note)) {
+    if (kind === "staccato") out.add("articStaccatoAbove");
+    if (kind === "accent") out.add("articAccentAbove");
+    if (kind === "tenuto") out.add("articTenutoAbove");
   }
   for (const node of Array.from(note.querySelectorAll(":scope > notations > technical > *"))) {
     const tag = node.tagName.toLowerCase();
@@ -4062,12 +4088,11 @@ const parseMusicXmlDirectionMarkPayload = (
 const parseMusicXmlMidBarlineRepeatMarks = (
   barline: Element
 ): Partial<MusePendingDirectionMarks> | null => {
-  const location = (barline.getAttribute("location") ?? "").trim().toLowerCase();
-  if (location !== "middle") return null;
+  const feature = extractMusicXmlBarlineFeature(barline);
+  if (feature.location !== "middle") return null;
   let repeatForwardCount = 0;
   let repeatBackwardCount = 0;
-  for (const repeat of Array.from(barline.querySelectorAll(":scope > repeat[direction]"))) {
-    const direction = (repeat.getAttribute("direction") ?? "").trim().toLowerCase();
+  for (const direction of feature.repeats ?? []) {
     if (direction === "forward") repeatForwardCount += 1;
     if (direction === "backward") repeatBackwardCount += 1;
   }

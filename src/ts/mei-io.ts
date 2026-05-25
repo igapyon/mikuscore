@@ -4,6 +4,34 @@
  */
 
 import { applyImplicitBeamsToMusicXmlText, prettyPrintMusicXmlText } from "./musicxml-io";
+import {
+  buildMusicXmlArticulationItemsXml,
+  extractMusicXmlArticulationKinds,
+  type ArticulationKind,
+} from "./score-features/articulations";
+import {
+  buildMusicXmlDirectionFeatureXml,
+  extractMusicXmlDirectionFeatures,
+  normalizeDynamicMark,
+} from "./score-features/dynamics";
+import {
+  buildMusicXmlWordsDirectionXml,
+  extractMusicXmlDirectionWords,
+  extractMusicXmlSoundTempoBpm,
+} from "./score-features/direction-text";
+import {
+  buildMusicXmlOrnamentItemsXml,
+  extractMusicXmlOrnamentFeatures,
+} from "./score-features/ornaments";
+import {
+  buildMusicXmlSlurXml,
+  buildMusicXmlSlursXml,
+  extractMusicXmlSlurFeatures,
+} from "./score-features/slurs";
+import {
+  buildMusicXmlTieItemsXml,
+  buildMusicXmlTiedItemsXml,
+} from "./score-features/ties";
 
 type StaffSlot = {
   partId: string;
@@ -242,15 +270,17 @@ const extractMeiTieFromMusicXmlNote = (note: Element): string => {
 };
 
 const extractMeiArticulationTokensFromMusicXmlNote = (note: Element): string[] => {
-  const arts = note.querySelector(":scope > notations > articulations");
-  if (!arts) return [];
-  const out: string[] = [];
-  if (arts.querySelector(":scope > staccato")) out.push("stacc");
-  if (arts.querySelector(":scope > staccatissimo")) out.push("spicc");
-  if (arts.querySelector(":scope > accent")) out.push("acc");
-  if (arts.querySelector(":scope > tenuto")) out.push("ten");
-  if (arts.querySelector(":scope > strong-accent")) out.push("marc");
-  if (arts.querySelector(":scope > marcato")) out.push("marc");
+  const tokenByKind: Partial<Record<ArticulationKind, string>> = {
+    staccato: "stacc",
+    staccatissimo: "spicc",
+    accent: "acc",
+    tenuto: "ten",
+    "strong-accent": "marc",
+  };
+  const out = extractMusicXmlArticulationKinds(note)
+    .map((kind) => tokenByKind[kind])
+    .filter((token): token is string => !!token);
+  if (note.querySelector(":scope > notations > articulations > marcato")) out.push("marc");
   return Array.from(new Set(out));
 };
 
@@ -685,20 +715,14 @@ const collectMeiDirectionControlsForStaff = (
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
     const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
-    const dynamicsNode = direction.querySelector(":scope > direction-type > dynamics");
-    if (dynamicsNode) {
-      const symbol = Array.from(dynamicsNode.children)
-        .map((child) => localNameOf(child))
-        .find((name) => !!name);
-      if (symbol) {
-        out.push(`<dynam tstamp="${esc(tstamp)}"${placeAttr}>${esc(symbol)}</dynam>`);
-        continue;
-      }
+    const dynamicFeature = extractMusicXmlDirectionFeatures(direction).find((feature) => feature.kind === "dynamic");
+    if (dynamicFeature?.kind === "dynamic") {
+      out.push(`<dynam tstamp="${esc(tstamp)}"${placeAttr}>${esc(dynamicFeature.mark)}</dynam>`);
+      continue;
     }
-    const tempoRaw = (direction.querySelector(":scope > sound")?.getAttribute("tempo") || "").trim();
-    const tempo = Number.parseFloat(tempoRaw);
-    const words = (direction.querySelector(":scope > direction-type > words")?.textContent || "").trim();
-    if (words && Number.isFinite(tempo) && tempo > 0) {
+    const tempo = extractMusicXmlSoundTempoBpm(direction);
+    const words = extractMusicXmlDirectionWords(direction)[0]?.text ?? "";
+    if (words && tempo !== null) {
       out.push(`<tempo tstamp="${esc(tstamp)}" midi.bpm="${esc(String(tempo))}"${placeAttr}>${esc(words)}</tempo>`);
       continue;
     }
@@ -709,9 +733,8 @@ const collectMeiDirectionControlsForStaff = (
   if (localStaff === 1) {
     const measureSounds = Array.from(measure.querySelectorAll(":scope > sound"));
     for (const sound of measureSounds) {
-      const tempoRaw = (sound.getAttribute("tempo") || "").trim();
-      const tempo = Number.parseFloat(tempoRaw);
-      if (!Number.isFinite(tempo) || tempo <= 0) continue;
+      const tempo = extractMusicXmlSoundTempoBpm(sound);
+      if (tempo === null) continue;
       const offsetTicks = Math.max(0, parseIntSafe(sound.getAttribute("offset"), 0));
       const tstamp = offsetTicksToTstamp(offsetTicks, sourceDivisions, beatType);
       const bpm = Number.isInteger(tempo)
@@ -726,24 +749,24 @@ const collectMeiDirectionControlsForStaff = (
   type PendingWedge = { tstamp: string; form: "cres" | "dim"; placeAttr: string };
   const pendingByNumber = new Map<string, PendingWedge>();
   for (const direction of directions) {
-    const wedge = direction.querySelector(":scope > direction-type > wedge");
-    if (!wedge) continue;
-    const type = (wedge.getAttribute("type") || "").trim().toLowerCase();
-    const number = (wedge.getAttribute("number") || "1").trim() || "1";
     const tstamp = directionTstamp(direction, sourceDivisions, beatType, onsetTicksByDirection);
     const placement = (direction.getAttribute("placement") || "").trim().toLowerCase();
     const placeAttr = placement === "above" || placement === "below" ? ` place="${esc(placement)}"` : "";
-    if (type === "crescendo" || type === "diminuendo") {
-      pendingByNumber.set(number, { tstamp, form: type === "diminuendo" ? "dim" : "cres", placeAttr });
-      continue;
-    }
-    if (type === "stop") {
-      const pending = pendingByNumber.get(number);
-      if (!pending) continue;
-      out.push(
-        `<hairpin form="${pending.form}" tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"${pending.placeAttr}/>`
-      );
-      pendingByNumber.delete(number);
+    for (const feature of extractMusicXmlDirectionFeatures(direction)) {
+      if (feature.kind !== "wedge") continue;
+      const number = feature.number || "1";
+      if (feature.wedgeType === "crescendo" || feature.wedgeType === "diminuendo") {
+        pendingByNumber.set(number, { tstamp, form: feature.wedgeType === "diminuendo" ? "dim" : "cres", placeAttr });
+        continue;
+      }
+      if (feature.wedgeType === "stop") {
+        const pending = pendingByNumber.get(number);
+        if (!pending) continue;
+        out.push(
+          `<hairpin form="${pending.form}" tstamp="${esc(pending.tstamp)}" tstamp2="${esc(tstamp)}"${pending.placeAttr}/>`
+        );
+        pendingByNumber.delete(number);
+      }
     }
   }
   for (const pending of pendingByNumber.values()) {
@@ -827,7 +850,7 @@ const collectMeiDirectionControlsForStaff = (
       out.push(`<repeatMark tstamp="${esc(tstamp)}"${placeAttr}>coda</repeatMark>`);
       continue;
     }
-    const words = (direction.querySelector(":scope > direction-type > words")?.textContent || "").trim();
+    const words = extractMusicXmlDirectionWords(direction)[0]?.text ?? "";
     if (!words) continue;
     const lowered = words.toLowerCase();
     if (
@@ -948,15 +971,13 @@ const collectMeiTieSlurControlsForStaff = (
     const note = item.note;
     const tstamp = offsetTicksToTstamp(item.onset, divisions, beatType);
 
-    const slurs = Array.from(note.querySelectorAll(":scope > notations > slur"));
-    for (const slur of slurs) {
-      const type = (slur.getAttribute("type") || "").trim().toLowerCase();
-      const number = String(Math.max(1, parseIntSafe(slur.getAttribute("number"), 1)));
-      if (type === "start") {
+    for (const slur of extractMusicXmlSlurFeatures(note)) {
+      const number = String(slur.number ?? 1);
+      if (slur.type === "start") {
         pendingSlurByNumber.set(number, { tstamp, noteId: item.noteId });
         continue;
       }
-      if (type === "stop") {
+      if (slur.type === "stop") {
         const pending = pendingSlurByNumber.get(number);
         if (pending) {
           if (pending.noteId && item.noteId) {
@@ -1014,19 +1035,20 @@ const collectMeiOrnamentAndBreathControlsForStaff = (
     const notations = note.querySelector(":scope > notations");
     if (!notations) continue;
 
-    if (notations.querySelector(":scope > ornaments > trill-mark")) {
+    const ornamentKinds = new Set(extractMusicXmlOrnamentFeatures(note).map((feature) => feature.kind));
+    if (ornamentKinds.has("trill-mark")) {
       out.push(`<trill tstamp="${esc(tstamp)}"/>`);
     }
-    if (notations.querySelector(":scope > ornaments > turn")) {
+    if (ornamentKinds.has("turn")) {
       out.push(`<turn tstamp="${esc(tstamp)}" type="upper"/>`);
     }
-    if (notations.querySelector(":scope > ornaments > inverted-turn")) {
+    if (ornamentKinds.has("inverted-turn")) {
       out.push(`<turn tstamp="${esc(tstamp)}" type="inverted"/>`);
     }
-    if (notations.querySelector(":scope > ornaments > mordent")) {
+    if (ornamentKinds.has("mordent")) {
       out.push(`<mordent tstamp="${esc(tstamp)}" type="upper"/>`);
     }
-    if (notations.querySelector(":scope > ornaments > inverted-mordent")) {
+    if (ornamentKinds.has("inverted-mordent")) {
       out.push(`<mordent tstamp="${esc(tstamp)}" type="inverted"/>`);
     }
     const fermata = notations.querySelector(":scope > fermata");
@@ -1416,11 +1438,14 @@ const readMeiArticulationTokens = (node: Element): string[] => {
 };
 
 const appendMusicXmlArticulationsFromMeiTokens = (tokens: string[], out: string[]): void => {
-  if (tokens.includes("stacc")) out.push("<staccato/>");
-  if (tokens.includes("spicc") || tokens.includes("stacciss")) out.push("<staccatissimo/>");
-  if (tokens.includes("acc")) out.push("<accent/>");
-  if (tokens.includes("ten") || tokens.includes("tenuto")) out.push("<tenuto/>");
-  if (tokens.includes("marc") || tokens.includes("marcato")) out.push("<strong-accent/>");
+  const kinds: ArticulationKind[] = [];
+  if (tokens.includes("stacc")) kinds.push("staccato");
+  if (tokens.includes("spicc") || tokens.includes("stacciss")) kinds.push("staccatissimo");
+  if (tokens.includes("acc")) kinds.push("accent");
+  if (tokens.includes("ten") || tokens.includes("tenuto")) kinds.push("tenuto");
+  if (tokens.includes("marc") || tokens.includes("marcato")) kinds.push("strong-accent");
+  const xml = buildMusicXmlArticulationItemsXml(kinds);
+  if (xml) out.push(xml);
 };
 
 const accidToPitchAlterXml = (accid: string): string => {
@@ -1601,11 +1626,9 @@ const buildMusicXmlNoteFromMeiNote = (
   const arts: string[] = [];
   appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
   const tieFlags = parseMeiTieFlags(meiNote.getAttribute("tie") || "");
-  const tieXml = `${tieFlags.start ? '<tie type="start"/>' : ""}${tieFlags.stop ? '<tie type="stop"/>' : ""}`;
-  const tiedXml = `${tieFlags.start ? '<tied type="start"/>' : ""}${tieFlags.stop ? '<tied type="stop"/>' : ""}`;
-  const slurXml = parseMeiSlurNotations(meiNote.getAttribute("slur") || "")
-    .map((entry) => `<slur type="${entry.type}" number="${entry.number}"/>`)
-    .join("");
+  const tieXml = buildMusicXmlTieItemsXml({ tieStart: tieFlags.start, tieStop: tieFlags.stop });
+  const tiedXml = buildMusicXmlTiedItemsXml({ tiedStart: tieFlags.start, tiedStop: tieFlags.stop });
+  const slurXml = buildMusicXmlSlursXml(parseMeiSlurNotations(meiNote.getAttribute("slur") || ""));
   const tupletXml = `${hasTupletStart ? '<tuplet type="start"/>' : ""}${hasTupletStop ? '<tuplet type="stop"/>' : ""}`;
   const hasNotations = arts.length > 0 || tupletXml.length > 0 || tiedXml.length > 0 || slurXml.length > 0;
   const notationsXml = hasNotations
@@ -1765,11 +1788,9 @@ const parseLayerEvents = (
     const alterXml = resolvedAlter !== 0 ? `<alter>${resolvedAlter}</alter>` : "";
     const accidentalText = accidToMusicXmlAccidental(visualAccid);
     const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
-    const tiedXml = `${tieFlags.start ? '<tied type="start"/>' : ""}${tieFlags.stop ? '<tied type="stop"/>' : ""}`;
-    const tieXml = `${tieFlags.start ? '<tie type="start"/>' : ""}${tieFlags.stop ? '<tie type="stop"/>' : ""}`;
-    const slurXml = parseMeiSlurNotations(effectiveNode.getAttribute("slur") || "")
-      .map((entry) => `<slur type="${entry.type}" number="${entry.number}"/>`)
-      .join("");
+    const tiedXml = buildMusicXmlTiedItemsXml({ tiedStart: tieFlags.start, tiedStop: tieFlags.stop });
+    const tieXml = buildMusicXmlTieItemsXml({ tieStart: tieFlags.start, tieStop: tieFlags.stop });
+    const slurXml = buildMusicXmlSlursXml(parseMeiSlurNotations(effectiveNode.getAttribute("slur") || ""));
     const hasNotations = tiedXml.length > 0 || slurXml.length > 0;
     const notationsXml = hasNotations ? `<notations>${tiedXml}${slurXml}</notations>` : "";
     events.push({
@@ -1929,11 +1950,9 @@ const parseLayerEvents = (
         const articTokens = Array.from(new Set<string>([...chordArticTokens, ...noteTokens]));
         const arts: string[] = [];
         appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
-        const tieXml = `${tieFlags.start ? '<tie type="start"/>' : ""}${tieFlags.stop ? '<tie type="stop"/>' : ""}`;
-        const tiedXml = `${tieFlags.start ? '<tied type="start"/>' : ""}${tieFlags.stop ? '<tied type="stop"/>' : ""}`;
-        const slurXml = parseMeiSlurNotations(note.getAttribute("slur") || "")
-          .map((entry) => `<slur type="${entry.type}" number="${entry.number}"/>`)
-          .join("");
+        const tieXml = buildMusicXmlTieItemsXml({ tieStart: tieFlags.start, tieStop: tieFlags.stop });
+        const tiedXml = buildMusicXmlTiedItemsXml({ tiedStart: tieFlags.start, tiedStop: tieFlags.stop });
+        const slurXml = buildMusicXmlSlursXml(parseMeiSlurNotations(note.getAttribute("slur") || ""));
         const tupletXml = index === 0
           ? `${chordTupletStart ? '<tuplet type="start"/>' : ""}${chordTupletStop ? '<tuplet type="stop"/>' : ""}`
           : "";
@@ -2088,7 +2107,7 @@ const parseLayerEvents = (
 };
 
 const addSlurNotationToSingleNoteXml = (noteXml: string, type: "start" | "stop", number: number): string => {
-  const slurXml = `<slur type="${type}" number="${number}"/>`;
+  const slurXml = buildMusicXmlSlurXml({ type, number });
   if (noteXml.includes("<notations>")) {
     return noteXml.replace("</notations>", `${slurXml}</notations>`);
   }
@@ -2096,8 +2115,8 @@ const addSlurNotationToSingleNoteXml = (noteXml: string, type: "start" | "stop",
 };
 
 const addTieToSingleNoteXml = (noteXml: string, type: "start" | "stop"): string => {
-  const tieXml = `<tie type="${type}"/>`;
-  const tiedXml = `<tied type="${type}"/>`;
+  const tieXml = buildMusicXmlTieItemsXml({ tieStart: type === "start", tieStop: type === "stop" });
+  const tiedXml = buildMusicXmlTiedItemsXml({ tiedStart: type === "start", tiedStop: type === "stop" });
   const withTie =
     noteXml.includes("<duration>")
       ? noteXml.replace("<duration>", `${tieXml}<duration>`)
@@ -2159,7 +2178,10 @@ const addTrillNotationToEventXml = (eventXml: string): string => {
   const before = eventXml.slice(0, firstNoteStart);
   const noteBlock = eventXml.slice(firstNoteStart, firstNoteEnd + "</note>".length);
   const after = eventXml.slice(firstNoteEnd + "</note>".length);
-  return before + addOrnamentXmlToSingleNoteXml(noteBlock, "<trill-mark/>") + after;
+  return before + addOrnamentXmlToSingleNoteXml(
+    noteBlock,
+    buildMusicXmlOrnamentItemsXml([{ kind: "trill-mark" }])
+  ) + after;
 };
 
 const addFermataNotationToEventXml = (eventXml: string, isBelow: boolean): string => {
@@ -2204,7 +2226,10 @@ const addTurnNotationToEventXml = (eventXml: string, isInverted: boolean): strin
   const before = eventXml.slice(0, firstNoteStart);
   const noteBlock = eventXml.slice(firstNoteStart, firstNoteEnd + "</note>".length);
   const after = eventXml.slice(firstNoteEnd + "</note>".length);
-  return before + addOrnamentXmlToSingleNoteXml(noteBlock, isInverted ? "<inverted-turn/>" : "<turn/>") + after;
+  return before + addOrnamentXmlToSingleNoteXml(
+    noteBlock,
+    buildMusicXmlOrnamentItemsXml([{ kind: isInverted ? "inverted-turn" : "turn" }])
+  ) + after;
 };
 
 const addMordentNotationToEventXml = (eventXml: string, isInverted: boolean): string => {
@@ -2215,7 +2240,10 @@ const addMordentNotationToEventXml = (eventXml: string, isInverted: boolean): st
   const before = eventXml.slice(0, firstNoteStart);
   const noteBlock = eventXml.slice(firstNoteStart, firstNoteEnd + "</note>".length);
   const after = eventXml.slice(firstNoteEnd + "</note>".length);
-  return before + addOrnamentXmlToSingleNoteXml(noteBlock, isInverted ? "<inverted-mordent/>" : "<mordent/>") + after;
+  return before + addOrnamentXmlToSingleNoteXml(
+    noteBlock,
+    buildMusicXmlOrnamentItemsXml([{ kind: isInverted ? "inverted-mordent" : "mordent" }])
+  ) + after;
 };
 
 const addBreathNotationToEventXml = (eventXml: string): string => {
@@ -2226,7 +2254,10 @@ const addBreathNotationToEventXml = (eventXml: string): string => {
   const before = eventXml.slice(0, firstNoteStart);
   const noteBlock = eventXml.slice(firstNoteStart, firstNoteEnd + "</note>".length);
   const after = eventXml.slice(firstNoteEnd + "</note>".length);
-  return before + addArticulationXmlToSingleNoteXml(noteBlock, "<breath-mark/>") + after;
+  return before + addArticulationXmlToSingleNoteXml(
+    noteBlock,
+    buildMusicXmlArticulationItemsXml(["breath-mark"])
+  ) + after;
 };
 
 const addCaesuraNotationToEventXml = (eventXml: string): string => {
@@ -2237,7 +2268,10 @@ const addCaesuraNotationToEventXml = (eventXml: string): string => {
   const before = eventXml.slice(0, firstNoteStart);
   const noteBlock = eventXml.slice(firstNoteStart, firstNoteEnd + "</note>".length);
   const after = eventXml.slice(firstNoteEnd + "</note>".length);
-  return before + addArticulationXmlToSingleNoteXml(noteBlock, "<caesura/>") + after;
+  return before + addArticulationXmlToSingleNoteXml(
+    noteBlock,
+    buildMusicXmlArticulationItemsXml(["caesura"])
+  ) + after;
 };
 
 const addTupletNotationToEventXml = (eventXml: string, type: "start" | "stop", number: number): string => {
@@ -2346,10 +2380,6 @@ const resolveControlEventEndpointIndex = (
   if (ticks === null) return null;
   return resolveEventIndexByTstamp(events, ticks);
 };
-
-const DYNAMICS_TAGS = new Set([
-  "pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff", "ffff", "fp", "sf", "sfz", "sffz", "rfz", "rf", "fz",
-]);
 
 const parseHarmonyAlter = (token: string): number => {
   const v = token.trim();
@@ -2666,19 +2696,30 @@ const buildMusicXmlDirectionFromMeiDynam = (
 ): string | null => {
   const rawText = (dynam.textContent || "").trim();
   if (!rawText) return null;
-  const normalized = rawText.toLowerCase();
+  const dynamicMark = normalizeDynamicMark(rawText);
   const placement = (dynam.getAttribute("place") || dynam.getAttribute("placement") || "").trim().toLowerCase();
-  const placementAttr = placement === "above" || placement === "below" ? ` placement="${placement}"` : "";
   const offsetTicks = parseMeiTstampToTicks(dynam.getAttribute("tstamp"), divisions, beatType);
-  const offsetXml = Number.isFinite(offsetTicks) && (offsetTicks as number) > 0
-    ? `<offset>${Math.round(offsetTicks as number)}</offset>`
-    : "";
-  const directionType = DYNAMICS_TAGS.has(normalized)
-    ? `<dynamics><${normalized}/></dynamics>`
-    : `<words>${xmlEscape(rawText)}</words>`;
-  return `<direction${placementAttr}><direction-type>${directionType}</direction-type>${offsetXml}<voice>${xmlEscape(
-    voice
-  )}</voice><staff>${xmlEscape(staffNo)}</staff></direction>`;
+  const offsetDiv = Number.isFinite(offsetTicks) && (offsetTicks as number) > 0
+    ? Math.round(offsetTicks as number)
+    : undefined;
+  const placementFeature = placement === "above" || placement === "below" ? placement : undefined;
+  if (dynamicMark) {
+    return buildMusicXmlDirectionFeatureXml({
+      kind: "dynamic",
+      mark: dynamicMark,
+      offsetDiv,
+      voice,
+      staff: staffNo,
+      placement: placementFeature,
+    });
+  }
+  return buildMusicXmlWordsDirectionXml({
+    text: rawText,
+    placement: placementFeature,
+    offsetDiv,
+    voice,
+    staff: staffNo,
+  });
 };
 
 const buildMusicXmlDirectionsFromMeiHairpin = (
@@ -2694,7 +2735,6 @@ const buildMusicXmlDirectionsFromMeiHairpin = (
   const formRaw = (hairpin.getAttribute("form") || hairpin.getAttribute("type") || "").trim().toLowerCase();
   const wedgeType = formRaw.includes("dim") || formRaw.includes("decresc") ? "diminuendo" : "crescendo";
   const placement = (hairpin.getAttribute("place") || hairpin.getAttribute("placement") || "").trim().toLowerCase();
-  const placementAttr = placement === "above" || placement === "below" ? ` placement="${placement}"` : "";
   const startIndex = resolveControlEventEndpointIndex(
     (hairpin.getAttribute("startid") || "").trim(),
     hairpin.getAttribute("tstamp"),
@@ -2717,18 +2757,23 @@ const buildMusicXmlDirectionsFromMeiHairpin = (
   );
   const startTick = Number.isInteger(startIndex) ? resolveEventStartTickByIndex(events, startIndex as number) : null;
   const endTick = Number.isInteger(endIndex) ? resolveEventStartTickByIndex(events, endIndex as number) : null;
-  const startOffsetXml = Number.isFinite(startTick) && (startTick as number) > 0
-    ? `<offset>${Math.round(startTick as number)}</offset>`
-    : "";
-  const endOffsetXml = Number.isFinite(endTick) && (endTick as number) > 0
-    ? `<offset>${Math.round(endTick as number)}</offset>`
-    : "";
-  const startDir = `<direction${placementAttr}><direction-type><wedge type="${wedgeType}"/></direction-type>${startOffsetXml}<voice>${xmlEscape(
-    voice
-  )}</voice><staff>${xmlEscape(staffNo)}</staff></direction>`;
-  const stopDir = `<direction${placementAttr}><direction-type><wedge type="stop"/></direction-type>${endOffsetXml}<voice>${xmlEscape(
-    voice
-  )}</voice><staff>${xmlEscape(staffNo)}</staff></direction>`;
+  const placementFeature = placement === "above" || placement === "below" ? placement : undefined;
+  const startDir = buildMusicXmlDirectionFeatureXml({
+    kind: "wedge",
+    wedgeType,
+    offsetDiv: Number.isFinite(startTick) && (startTick as number) > 0 ? Math.round(startTick as number) : undefined,
+    voice,
+    staff: staffNo,
+    placement: placementFeature,
+  });
+  const stopDir = buildMusicXmlDirectionFeatureXml({
+    kind: "wedge",
+    wedgeType: "stop",
+    offsetDiv: Number.isFinite(endTick) && (endTick as number) > 0 ? Math.round(endTick as number) : undefined,
+    voice,
+    staff: staffNo,
+    placement: placementFeature,
+  });
   return `${startDir}${stopDir}`;
 };
 
