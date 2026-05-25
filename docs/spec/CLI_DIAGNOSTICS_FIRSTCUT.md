@@ -159,6 +159,17 @@ That means:
 - CLI diagnostics describe command execution, I/O context, and exit semantics
 - core diagnostics describe music-edit validity and execution outcomes inside the bounded command layer
 
+## Relationship To Conversion Diagnostics
+
+Conversion diagnostics are defined in
+`docs/spec/CONVERSION_DIAGNOSTICS.md`.
+
+The CLI diagnostics contract should wrap conversion diagnostics without
+renaming them. For example, `MIDI_KEY_SIGNATURE_INFERRED` or
+`VSQX_BRIDGE_UNAVAILABLE` may appear as warning/error entries inside CLI JSON
+diagnostics, while the CLI wrapper still describes command, I/O, and exit
+status.
+
 ## Multi-stage Commands
 
 Some future CLI commands may cross multiple internal stages.

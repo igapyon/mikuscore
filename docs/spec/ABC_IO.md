@@ -4,6 +4,11 @@
 
 This document defines the behavior of `src/ts/abc-io.ts`.
 
+Cross-format mapping classification is summarized in
+`docs/spec/FORMAT_MAPPING.md`.
+Conversion diagnostic policy is defined in
+`docs/spec/CONVERSION_DIAGNOSTICS.md`.
+
 The module is responsible for:
 
 - parsing ABC text into an internal structure compatible with MusicXML generation
@@ -73,6 +78,27 @@ The goal is to accept broadly used ABC variants without unnecessary failure, whi
 - `exportMusicXmlDomToAbc(doc)`
 - `clefXmlFromAbcClef(rawClef?)`
 - `convertAbcToMusicXml(abcSource)`
+
+---
+
+## Mapping Policy
+
+ABC is a supported surrounding compact text notation format. It is useful for
+AI/human handoff and practical interchange, but canonical score state remains
+MusicXML.
+
+| Outcome | Current ABC policy |
+|---|---|
+| Normal MusicXML | Headers and inline fields for title, composer, meter, default note length, key, tempo, supported voices, names, clefs, notes, rests, chords, durations, ties, common slurs, tuplets, lyrics, barlines, repeats, endings, selected decorations, articulations, dynamics, technicals, beam-break hints, and supported jump markers |
+| `mks:meta:*` | `%@mks ...` comment hints preserve roundtrip behavior that plain ABC cannot carry reliably, including selected key, measure, transpose, and edge repeat/ending metadata |
+| `mks:src:*` | Not a primary ABC mechanism today; source traceability may be added later if needed |
+| `mks:diag:*` | Non-fatal parse/export issues are surfaced as warnings; persistent structured diagnostic storage may be added when needed for review or agent workflows |
+| Approximated | Overlay `&` currently expands into synthetic overlay voices/parts; beam-break intent is imported from whitespace, but exact ABC spacing is not canonical roundtrip data |
+| Skipped | Unsupported directives, unsupported inline fields, symbol lines, unsupported field continuation, unsupported decorations/text forms, malformed leftovers, and unsupported `V:` property fragments should be skipped with warnings when safely recoverable |
+| Rejected | ABC input with no usable body, no notes/rests, unrecoverable token parsing, or structurally ambiguous content that cannot safely produce canonical MusicXML |
+
+The standard ABC surface, compatibility behavior, and `mikuscore` extension
+metadata MUST remain distinguishable in this document and tests.
 
 ---
 
