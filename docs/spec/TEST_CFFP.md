@@ -7,6 +7,7 @@
 Scope note:
 
 - This file is the authoritative CFFP case catalog and per-format policy source.
+- Cross-format capability classes are summarized in `docs/spec/FORMAT_MAPPING.md`.
 - `docs/spec/TEST_MATRIX.md` tracks required automated gates at matrix level.
 
 One topic at a time:
@@ -37,6 +38,39 @@ All topics should still keep baseline checks across all formats:
 - first pitched note pitch class / octave
 - first pitched note start timing baseline
 - no malformed MusicXML after roundtrip
+
+### Relationship to Format Mapping
+
+`docs/spec/FORMAT_MAPPING.md` classifies broad format capability. CFFP policies
+classify one focused notation topic at a time.
+
+These two levels intentionally do not use a 1:1 mapping:
+
+- `Normal MusicXML` in a format mapping means the format path has a normal
+  MusicXML representation for that broad class of data. It does not mean every
+  CFFP topic in that class is `must-preserve`.
+- `metadata-assisted` behavior may be `must-preserve` for a focused topic when
+  the importer/exporter and tests explicitly cover that metadata path.
+- `allowed-degrade` is not a failure. It means the format may still produce
+  valid canonical MusicXML and preserve baseline pitch/start checks, while the
+  focused feature may be absent, simplified, or represented differently.
+- MIDI and VSQX are performance/vocal timing formats. They should usually be
+  `allowed-degrade` for notation-specific topics unless a focused test proves a
+  narrow invariant.
+- MEI and LilyPond remain experimental product formats even when individual
+  CFFP topics are `must-preserve`.
+
+Current alignment result:
+
+- No CFFP policy currently requires a notation feature from VSQX.
+- MIDI currently has one `must-preserve` focused case,
+  `CFFP-ACCIDENTAL-RESET`; this is a pitch-alter/reset invariant, not a claim
+  that MIDI preserves visual accidental spelling.
+- MuseScore is the strongest notation parity target, but layout-heavy and
+  advanced notation topics may still be `allowed-degrade`.
+- ABC, MEI, and LilyPond use a mix of normal and metadata-assisted paths;
+  `must-preserve` means the specific path is covered by current tests, not that
+  the whole source format is lossless.
 
 ---
 
@@ -554,6 +588,9 @@ All topics should still keep baseline checks across all formats:
 - Avoid mixing multiple semantics in one case.
 - Keep assertions deterministic and narrow.
 - If policy changes, update this file and `docs/spec/TEST_MATRIX.md` together.
+- If a CFFP policy contradicts `docs/spec/FORMAT_MAPPING.md`, update one of
+  them in the same change and explain whether the conflict was a broad mapping
+  issue or a focused test-policy issue.
 
 ---
 

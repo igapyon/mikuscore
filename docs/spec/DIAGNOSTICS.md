@@ -4,6 +4,9 @@
 
 Single source of truth for diagnostics emitted by core.
 
+Conversion import/export diagnostics are defined separately in
+`docs/spec/CONVERSION_DIAGNOSTICS.md`.
+
 ## Error Diagnostics
 
 1. `MEASURE_OVERFULL`

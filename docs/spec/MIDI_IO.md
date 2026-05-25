@@ -4,6 +4,11 @@
 
 This document defines the behavior of `src/ts/midi-io.ts`.
 
+Cross-format mapping classification is summarized in
+`docs/spec/FORMAT_MAPPING.md`.
+Conversion diagnostic policy is defined in
+`docs/spec/CONVERSION_DIAGNOSTICS.md`.
+
 The module is responsible for:
 
 - building playback events from MusicXML
@@ -34,6 +39,27 @@ The module is responsible for:
 - `buildPlaybackEventsFromMusicXmlDoc(doc, ticksPerQuarter, options)`
 - `buildPlaybackEventsFromXml(xml, ticksPerQuarter)`
 - `convertMidiToMusicXml(midiBytes, options)` (planned/import path)
+
+---
+
+## Mapping Policy
+
+MIDI is a supported surrounding performance-event format. MIDI export derives
+performance events from canonical MusicXML. MIDI import reconstructs notation
+from timed events and is inherently approximate.
+
+| Outcome | Current MIDI policy |
+|---|---|
+| Normal MusicXML | Import reconstructs score/part/measure structure, note/rest timing, quantized durations, voices through auto voice split, drum part separation, program metadata, tempo, time signatures, and key signatures when available |
+| `mks:meta:*` | Export may emit mikuscore text meta events such as metadata version, title, movement title, composer, pickup ticks, and part-name/track hints |
+| `mks:src:*` | Not a primary current MIDI mechanism; raw event preservation is not a first-cut guarantee |
+| `mks:diag:*` | Planned/stabilizing diagnostics should cover unsupported divisions, broken note pairing, quantization clamping, dropped events, voice assignment/overflow, drum separation, and unmapped drum notes |
+| Approximated | Import necessarily approximates notation from performance events, including quantization, rests, enharmonic spelling, voice assignment, beams, articulations, and score layout |
+| Skipped | DAW-specific, device-specific, SysEx, controller, meta, or unrecognized events outside current export/import scope may be skipped or ignored unless mapped explicitly |
+| Rejected | Invalid SMF structure, unsupported SMPTE time division, unpairable note streams that cannot be handled safely, and export with no playable note events |
+
+MIDI output is a derived playback artifact. It MUST NOT become an independent
+canonical score state.
 
 ---
 

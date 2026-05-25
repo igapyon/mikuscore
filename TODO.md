@@ -1,5 +1,59 @@
 # TODO
 
+## Specification
+
+- [x] Create the first cross-format mapping table from the MusicXML canonical-state policy.
+  - Current source of truth:
+    - `docs/spec/CANONICAL_MUSICXML.md`
+    - `docs/spec/FORMAT_MAPPING.md`
+    - `docs/FORMAT_COVERAGE.md`
+    - `docs/spec/FORMAT_IO_CHECKLIST.md`
+
+- [x] Add current-boundary specs for MEI, LilyPond, and VSQX.
+  - Added:
+    - `docs/spec/MEI_IO.md`
+    - `docs/spec/LILYPOND_IO.md`
+    - `docs/spec/VSQX_IO.md`
+
+- [x] Add explicit mapping sections to existing ABC, MIDI, and MuseScore specs.
+  - Updated:
+    - `docs/spec/ABC_IO.md`
+    - `docs/spec/MIDI_IO.md`
+    - `docs/spec/MUSESCORE_IO.md`
+
+- [x] Align CFFP policy with the cross-format mapping table.
+  - Source of truth:
+    - `docs/spec/CANONICAL_MUSICXML.md`
+    - `docs/spec/FORMAT_MAPPING.md`
+    - `docs/FORMAT_COVERAGE.md`
+    - `docs/spec/FORMAT_IO_CHECKLIST.md`
+    - `docs/spec/TEST_CFFP.md`
+  - Result:
+    - documented how broad mapping categories relate to focused CFFP policy
+    - recorded current notable exceptions such as MIDI `CFFP-ACCIDENTAL-RESET`
+    - clarified that VSQX has no current notation-feature `must-preserve` CFFP claims
+
+- [x] Document current stable conversion diagnostic codes.
+  - Source of truth:
+    - `docs/spec/DIAGNOSTICS.md`
+    - `docs/spec/CONVERSION_DIAGNOSTICS.md`
+    - `docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md`
+    - `docs/spec/FORMAT_MAPPING.md`
+    - format-specific I/O specs
+  - Result:
+    - separated core edit diagnostics from conversion import/export diagnostics
+    - documented current stable ABC, MIDI, MuseScore, MEI, LilyPond, and VSQX conversion codes
+    - recorded promotion rules for broad warning codes
+
+- [ ] Promote broad conversion warnings into narrower stable codes only where callers need them.
+  - Source of truth:
+    - `docs/spec/CONVERSION_DIAGNOSTICS.md`
+    - format-specific I/O specs
+  - Scope:
+    - split broad codes such as `ABC_IMPORT_WARNING`, `MUSESCORE_IMPORT_WARNING`, and `LILYPOND_IMPORT_WARNING` only for real tool-caller needs
+    - keep message text human-readable but non-normative
+    - add tests when a new stable code becomes part of public behavior
+
 ## CLI
 
 - [ ] Add a CLI surface sync check whenever `src/ts/cli-api.ts` grows new or newly composable entry points.

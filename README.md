@@ -128,9 +128,15 @@ Implementation specs:
 
 - `docs/spec/SPEC.md`
 - `docs/spec/ARCHITECTURE.md`
+- `docs/spec/CANONICAL_MUSICXML.md`
+- `docs/spec/FORMAT_MAPPING.md`
+- `docs/spec/CONVERSION_DIAGNOSTICS.md`
 - `docs/spec/ABC_IO.md`
 - `docs/spec/MIDI_IO.md`
 - `docs/spec/MUSESCORE_IO.md`
+- `docs/spec/MEI_IO.md`
+- `docs/spec/LILYPOND_IO.md`
+- `docs/spec/VSQX_IO.md`
 
 ## 日本語
 

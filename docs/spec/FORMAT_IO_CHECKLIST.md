@@ -12,6 +12,11 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - Import only / Export only / both
   - Supported notation subset (note/rest/chord/tuplet/ornament/etc.)
   - Explicit out-of-scope items for first release
+- [ ] Define the format's relationship to canonical MusicXML:
+  - surrounding notation format
+  - surrounding performance-event format
+  - surrounding singing/vocal timing format
+  - other documented role
 - [ ] Define degradation policy:
   - What must be preserved
   - What may degrade
@@ -23,6 +28,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 
 - [ ] Parser/decoder handles invalid input safely (no crash, diagnostic returned)
 - [ ] Generated MusicXML is valid XML and parseable by existing loader
+- [ ] Generated MusicXML conforms to the canonical state policy in `docs/spec/CANONICAL_MUSICXML.md`
 - [ ] Output MusicXML is pretty-printed (human-readable)
 - [ ] Apply only bounded structural normalization required for loader/renderer interoperability:
   - [ ] Allowed example: synthesize missing `part-list` and `part/@id` / `score-part/@id` linkage when absent
@@ -42,6 +48,13 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Unsupported feature handling is explicit:
   - [ ] either diagnostic + skip
   - [ ] or hard error + fail import
+- [ ] Source features are classified:
+  - [ ] preserved in normal MusicXML
+  - [ ] preserved as `mks:meta:*`
+  - [ ] preserved as `mks:src:*`
+  - [ ] approximated with diagnostics
+  - [ ] skipped with diagnostics
+  - [ ] rejected with diagnostics
 
 ---
 
@@ -61,6 +74,12 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - [ ] `miscellaneous-field` equivalent
   - [ ] comment-level metadata/hints (if any) are versioned and parseable (e.g. `%@mks ...`)
 - [ ] If loss is unavoidable, degradation behavior is documented
+- [ ] Exported MusicXML features are classified:
+  - [ ] represented in the target format
+  - [ ] represented through target-format hints/comments
+  - [ ] approximated with diagnostics
+  - [ ] skipped with diagnostics
+  - [ ] rejected with diagnostics
 
 ---
 

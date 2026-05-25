@@ -107,6 +107,7 @@ Payload keys:
 - `mks:diag:0001` ... `mks:diag:####`
 
 `mks:diag:0001` 以降は `;` 区切りの構造化文字列。
+安定コードの方針は `docs/spec/CONVERSION_DIAGNOSTICS.md` を参照。
 例:
 
 - `level=warn;code=OVERFULL_CLAMPED;fmt=mei;...`

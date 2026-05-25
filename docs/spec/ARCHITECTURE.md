@@ -7,6 +7,7 @@ This document defines high-level architecture boundaries for mikuscore MVP.
 Scope note:
 
 - This file defines boundaries and invariants at architecture level.
+- Canonical score-state policy is defined in `docs/spec/CANONICAL_MUSICXML.md`.
 - Detailed runtime build constraints are in `docs/spec/BUILD_PROCESS.md`.
 - Detailed UI behavior is in `docs/spec/UI_SPEC.md`.
 
@@ -15,6 +16,16 @@ Scope note:
 - Baseline format: **MusicXML 4.0**
 - Stability note: as of 2026-02-14, MusicXML 4.0 is treated as the latest stable baseline for this project
 - Rule: core interfaces, validators, and fixtures MUST be authored against 4.0 semantics
+
+## Canonical Score State
+
+- Canonical state: MusicXML
+- Surrounding formats are imported into, or exported from, the current
+  MusicXML state.
+- Product semantics belong to the main application layer. Web and Agent Skills
+  surfaces expose or orchestrate those semantics; they do not redefine them.
+- Conversion loss, approximation, fallback, skipped data, and unsupported
+  behavior SHOULD be represented through diagnostics.
 
 ## Architectural Separation
 
@@ -93,6 +104,7 @@ UI MUST NOT mutate XML DOM directly.
 ## References
 
 - `docs/spec/SPEC.md`
+- `docs/spec/CANONICAL_MUSICXML.md`
 - `docs/spec/TERMS.md`
 - `docs/spec/COMMANDS.md`
 - `docs/spec/COMMAND_CATALOG.md`

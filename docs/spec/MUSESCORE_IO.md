@@ -4,6 +4,11 @@
 
 This document defines the behavior of `src/ts/musescore-io.ts`.
 
+Cross-format mapping classification is summarized in
+`docs/spec/FORMAT_MAPPING.md`.
+Conversion diagnostic policy is defined in
+`docs/spec/CONVERSION_DIAGNOSTICS.md`.
+
 The module is responsible for:
 
 - importing MuseScore XML (`.mscx` content) into MusicXML
@@ -28,6 +33,26 @@ The module is responsible for:
 ### `exportMusicXmlDomToMuseScore` options
 
 - `normalizeCutTimeToTwoTwo?: boolean` (default: `false`)
+
+---
+
+## Mapping Policy
+
+MuseScore is a supported surrounding notation format. It is the highest-priority
+notation-tool parity target, but canonical score state remains MusicXML.
+
+| Outcome | Current MuseScore policy |
+|---|---|
+| Normal MusicXML | Time, key, tempo, staff/voice events, notes, rests, tuplets, slurs, ties, ottava, trills, dynamics, directions, repeats, barlines, accidental spelling where recoverable, beam information, and selected notation semantics |
+| `mks:meta:*` | May be used if future MuseScore roundtrip behavior needs mikuscore-specific extension metadata |
+| `mks:src:*` | Source chunks may be stored in `mks:src:mscx:*` when `sourceMetadata` is enabled |
+| `mks:diag:*` | Import warnings may be exported to MusicXML `miscellaneous-field` entries when `debugMetadata` is enabled |
+| Approximated | Missing beam modes may be filled through implicit beam inference; unsupported layout or engraving-only details may be approximated or omitted |
+| Skipped | Unknown or unsupported MuseScore elements may generate `MUSESCORE_IMPORT_WARNING` and be skipped when the musical structure remains usable |
+| Rejected | Input that is not parseable XML, lacks a usable MuseScore `Score`, or cannot be mapped safely into canonical MusicXML |
+
+MuseScore parity SHOULD be judged by focused MusicXML semantic comparison and
+reference-guided parity tests, not textual MuseScore XML equality.
 
 ---
 
