@@ -14,15 +14,26 @@ import {
   extractMusicXmlDirectionFeatures,
   normalizeDynamicMark,
 } from "./score-features/dynamics";
+import { buildMusicXmlDotsXml } from "./score-features/durations";
 import {
   buildMusicXmlWordsDirectionXml,
   extractMusicXmlDirectionWords,
   extractMusicXmlSoundTempoBpm,
 } from "./score-features/direction-text";
+import { buildMusicXmlClefXml } from "./score-features/clefs";
+import { buildMusicXmlKeySignatureXml } from "./score-features/key-signatures";
 import {
   buildMusicXmlOrnamentItemsXml,
   extractMusicXmlOrnamentFeatures,
 } from "./score-features/ornaments";
+import { buildMusicXmlPitchXml } from "./score-features/pitches";
+import { buildMusicXmlBackupXml } from "./score-features/measure-flow";
+import {
+  buildMusicXmlAccidentalXml,
+  buildMusicXmlGraceXml,
+  buildMusicXmlLyricXml,
+  buildMusicXmlStemXml,
+} from "./score-features/note-elements";
 import {
   buildMusicXmlSlurXml,
   buildMusicXmlSlursXml,
@@ -32,6 +43,9 @@ import {
   buildMusicXmlTieItemsXml,
   buildMusicXmlTiedItemsXml,
 } from "./score-features/ties";
+import { buildMusicXmlTimeModificationXml } from "./score-features/tuplets";
+import { buildMusicXmlTimeSignatureXml, type TimeSignatureSymbol } from "./score-features/time-signatures";
+import { buildMusicXmlTransposeXml } from "./score-features/transposition";
 
 type StaffSlot = {
   partId: string;
@@ -1608,16 +1622,15 @@ const buildMusicXmlNoteFromMeiNote = (
   const { visualAccid, soundingAccid } = readMeiSoundingAccid(meiNote);
   const explicitAlterXml = accidToPitchAlterXml(soundingAccid);
   const impliedAlter = impliedAlterFromFifths(pname, measureFifths);
-  const alterXml = explicitAlterXml || (impliedAlter !== 0 ? `<alter>${impliedAlter}</alter>` : "");
   const accidentalText = accidToMusicXmlAccidental(visualAccid);
-  const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
-  const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
+  const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
+  const dotXml = buildMusicXmlDotsXml(dots);
   const actual = parseIntSafe(meiNote.getAttribute("num"), NaN);
   const normal = parseIntSafe(meiNote.getAttribute("numbase"), NaN);
-  const hasTimeModification = Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0;
-  const timeModificationXml = hasTimeModification
-    ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
-    : "";
+  const timeModificationXml = buildMusicXmlTimeModificationXml({
+    actualNotes: actual,
+    normalNotes: normal,
+  });
   const hasTupletStart =
     (meiNote.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
   const hasTupletStop =
@@ -1638,15 +1651,12 @@ const buildMusicXmlNoteFromMeiNote = (
   const isGrace = graceAttr === "acc" || graceAttr === "unacc";
   const stemMod = (meiNote.getAttribute("stem.mod") || "").trim().toLowerCase();
   const hasStemSlash = stemMod.includes("slash");
-  const graceXml = isGrace ? `<grace${graceAttr === "acc" || hasStemSlash ? ' slash="yes"' : ""}/>` : "";
+  const graceXml = isGrace ? buildMusicXmlGraceXml({ slash: graceAttr === "acc" || hasStemSlash }) : "";
   const durationXml = isGrace ? "" : `<duration>${durationTicks}</duration>`;
-  const stemDir = (meiNote.getAttribute("stem.dir") || "").trim().toLowerCase();
-  const stemXml = stemDir === "up" || stemDir === "down" ? `<stem>${xmlEscape(stemDir)}</stem>` : "";
+  const stemXml = buildMusicXmlStemXml(meiNote.getAttribute("stem.dir"));
   const lyric = extractMeiLyric(meiNote);
-  const lyricXml = lyric
-    ? `<lyric>${lyric.syllabic ? `<syllabic>${xmlEscape(lyric.syllabic)}</syllabic>` : ""}<text>${xmlEscape(lyric.text)}</text></lyric>`
-    : "";
-  return `<note>${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${tieXml}${durationXml}<voice>${xmlEscape(
+  const lyricXml = buildMusicXmlLyricXml(lyric);
+  return `<note>${graceXml}${buildMusicXmlPitchXml({ step: pname, alter: explicitAlterXml ? accidToAlter(soundingAccid) : impliedAlter, octave })}${tieXml}${durationXml}<voice>${xmlEscape(
     voice
   )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${stemXml}${accidentalXml}${timeModificationXml}${notationsXml}${lyricXml}</note>`;
 };
@@ -1785,9 +1795,8 @@ const parseLayerEvents = (
           : Number.isFinite(measureCarriedAlter as number)
             ? Math.round(Number(measureCarriedAlter))
           : impliedAlter;
-    const alterXml = resolvedAlter !== 0 ? `<alter>${resolvedAlter}</alter>` : "";
     const accidentalText = accidToMusicXmlAccidental(visualAccid);
-    const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
+    const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
     const tiedXml = buildMusicXmlTiedItemsXml({ tiedStart: tieFlags.start, tiedStop: tieFlags.stop });
     const tieXml = buildMusicXmlTieItemsXml({ tieStart: tieFlags.start, tieStop: tieFlags.stop });
     const slurXml = buildMusicXmlSlursXml(parseMeiSlurNotations(effectiveNode.getAttribute("slur") || ""));
@@ -1801,21 +1810,18 @@ const parseLayerEvents = (
         const isGrace = graceAttr === "acc" || graceAttr === "unacc";
         const stemMod = (effectiveNode.getAttribute("stem.mod") || "").trim().toLowerCase();
         const hasStemSlash = stemMod.includes("slash");
-        const graceXml = isGrace ? `<grace${graceAttr === "acc" || hasStemSlash ? ' slash="yes"' : ""}/>` : "";
+        const graceXml = isGrace ? buildMusicXmlGraceXml({ slash: graceAttr === "acc" || hasStemSlash }) : "";
         const durationXml = isGrace ? "" : `<duration>${resolvedTicks}</duration>`;
-        const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
-        const stemDir = (effectiveNode.getAttribute("stem.dir") || "").trim().toLowerCase();
-        const stemXml = stemDir === "up" || stemDir === "down" ? `<stem>${xmlEscape(stemDir)}</stem>` : "";
+        const dotXml = buildMusicXmlDotsXml(dots);
+        const stemXml = buildMusicXmlStemXml(effectiveNode.getAttribute("stem.dir"));
         const lyric = extractMeiLyric(effectiveNode);
-        const lyricXml = lyric
-          ? `<lyric>${lyric.syllabic ? `<syllabic>${xmlEscape(lyric.syllabic)}</syllabic>` : ""}<text>${xmlEscape(lyric.text)}</text></lyric>`
-          : "";
+        const lyricXml = buildMusicXmlLyricXml(lyric);
         const actual = parseIntSafe(effectiveNode.getAttribute("num"), NaN);
         const normal = parseIntSafe(effectiveNode.getAttribute("numbase"), NaN);
-        const hasTimeModification = Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0;
-        const timeModificationXml = hasTimeModification
-          ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
-          : "";
+        const timeModificationXml = buildMusicXmlTimeModificationXml({
+          actualNotes: actual,
+          normalNotes: normal,
+        });
         const articTokens = readMeiArticulationTokens(effectiveNode);
         const arts: string[] = [];
         appendMusicXmlArticulationsFromMeiTokens(articTokens, arts);
@@ -1825,7 +1831,7 @@ const parseLayerEvents = (
         const fullNotationsXml = arts.length > 0 || tupletXml.length > 0 || tiedXml.length > 0 || slurXml.length > 0
           ? `<notations>${arts.length ? `<articulations>${arts.join("")}</articulations>` : ""}${tupletXml}${tiedXml}${slurXml}</notations>`
           : "";
-        return `<note>${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${tieXml}${durationXml}<voice>${xmlEscape(
+        return `<note>${graceXml}${buildMusicXmlPitchXml({ step: pname, alter: resolvedAlter, octave })}${tieXml}${durationXml}<voice>${xmlEscape(
           voice
         )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${stemXml}${accidentalXml}${timeModificationXml}${fullNotationsXml}${lyricXml}</note>`;
       })(),
@@ -1869,7 +1875,7 @@ const parseLayerEvents = (
     const typeText = meiDurToMusicXmlType(durAttr);
     const ticks = Math.max(1, Math.round(meiDurToQuarterLength(durAttr) * dotsMultiplier(dots) * divisions * tupletRatio));
     const resolvedTicks = resolveDurTicksFromMetadata(effectiveNode, ticks, divisions);
-    const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
+    const dotXml = buildMusicXmlDotsXml(dots);
     events.push({
       kind: "rest",
       durationTicks: resolvedTicks,
@@ -1907,15 +1913,15 @@ const parseLayerEvents = (
     const resolvedTicks = isGrace ? 0 : resolveDurTicksFromMetadata(effectiveNode, ticks, divisions);
     const noteChildren = childElementsByName(effectiveNode, "note");
     if (noteChildren.length === 0) return;
-    const dotXml = Array.from({ length: dots }, () => "<dot/>").join("");
+    const dotXml = buildMusicXmlDotsXml(dots);
     const chordTupletStart = (effectiveNode.getAttribute("mks-tuplet-start") ?? "").trim() === "1";
     const chordTupletStop = (effectiveNode.getAttribute("mks-tuplet-stop") ?? "").trim() === "1";
-    const timeModificationXml =
-      Number.isFinite(actual) && Number.isFinite(normal) && actual > 0 && normal > 0
-        ? `<time-modification><actual-notes>${Math.round(actual)}</actual-notes><normal-notes>${Math.round(normal)}</normal-notes></time-modification>`
-        : "";
+    const timeModificationXml = buildMusicXmlTimeModificationXml({
+      actualNotes: actual,
+      normalNotes: normal,
+    });
     const chordArticTokens = readMeiArticulationTokens(effectiveNode);
-    const graceXml = isGrace ? `<grace${graceAttr === "acc" ? ' slash="yes"' : ""}/>` : "";
+    const graceXml = isGrace ? buildMusicXmlGraceXml({ slash: graceAttr === "acc" }) : "";
     const durationXml = isGrace ? "" : `<duration>${resolvedTicks}</duration>`;
     const noteXml = noteChildren
       .map((note, index) => {
@@ -1942,9 +1948,8 @@ const parseLayerEvents = (
               : Number.isFinite(measureCarriedAlter as number)
                 ? Math.round(Number(measureCarriedAlter))
               : impliedAlter;
-        const alterXml = resolvedAlter !== 0 ? `<alter>${resolvedAlter}</alter>` : "";
         const accidentalText = accidToMusicXmlAccidental(visualAccid);
-        const accidentalXml = accidentalText ? `<accidental>${xmlEscape(accidentalText)}</accidental>` : "";
+        const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
         const chordXml = index > 0 ? "<chord/>" : "";
         const noteTokens = readMeiArticulationTokens(note);
         const articTokens = Array.from(new Set<string>([...chordArticTokens, ...noteTokens]));
@@ -1960,9 +1965,7 @@ const parseLayerEvents = (
           ? `<notations>${index === 0 && arts.length ? `<articulations>${arts.join("")}</articulations>` : ""}${index === 0 ? tupletXml : ""}${tiedXml}${slurXml}</notations>`
           : "";
         const lyric = extractMeiLyric(note);
-        const lyricXml = lyric
-          ? `<lyric>${lyric.syllabic ? `<syllabic>${xmlEscape(lyric.syllabic)}</syllabic>` : ""}<text>${xmlEscape(lyric.text)}</text></lyric>`
-          : "";
+          const lyricXml = buildMusicXmlLyricXml(lyric);
         if (tieFlags.start) {
           tieCarryByPitch.set(pitchKey, resolvedAlter);
         } else if (tieFlags.stop) {
@@ -1971,7 +1974,7 @@ const parseLayerEvents = (
         if (explicitAlter !== null) {
           measureAccidentalByPitch.set(pitchKey, resolvedAlter);
         }
-        return `<note>${chordXml}${graceXml}<pitch><step>${xmlEscape(pname)}</step>${alterXml}<octave>${octave}</octave></pitch>${tieXml}${durationXml}<voice>${xmlEscape(
+        return `<note>${chordXml}${graceXml}${buildMusicXmlPitchXml({ step: pname, alter: resolvedAlter, octave })}${tieXml}${durationXml}<voice>${xmlEscape(
           voice
         )}</voice><type>${xmlEscape(typeText)}</type>${dotXml}${accidentalXml}${timeModificationXml}${notationsXml}${lyricXml}</note>`;
       })
@@ -2606,11 +2609,7 @@ const parseTransposeFromScoreDefForStaff = (
 };
 
 const buildTransposeXml = (transpose: { chromatic?: number; diatonic?: number } | null): string => {
-  if (!transpose) return "";
-  const chromatic = Number.isFinite(transpose.chromatic) ? Math.round(Number(transpose.chromatic)) : null;
-  const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
-  if (chromatic === null && diatonic === null) return "";
-  return `<transpose>${diatonic !== null ? `<diatonic>${diatonic}</diatonic>` : ""}${chromatic !== null ? `<chromatic>${chromatic}</chromatic>` : ""}</transpose>`;
+  return buildMusicXmlTransposeXml(transpose);
 };
 
 const buildTimeXml = (
@@ -2618,8 +2617,11 @@ const buildTimeXml = (
   beatType: number,
   symbol: "common" | "cut" | null
 ): string => {
-  const symbolAttr = symbol ? ` symbol="${symbol}"` : "";
-  return `<time${symbolAttr}><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`;
+  return buildMusicXmlTimeSignatureXml({
+    beats,
+    beatType,
+    symbol: symbol as TimeSignatureSymbol | null,
+  });
 };
 
 const parseMeiHarmText = (
@@ -4134,7 +4136,7 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
             body += layers[0].xml;
             const backupTicks = Math.max(measureTicks, layers[0].totalTicks);
             for (let i = 1; i < layers.length; i += 1) {
-              body += `<backup><duration>${backupTicks}</duration></backup>`;
+              body += buildMusicXmlBackupXml({ duration: backupTicks });
               body += layers[i].xml;
             }
           }
@@ -4178,21 +4180,21 @@ export const convertMeiToMusicXml = (meiSource: string, options: MeiImportOption
           let attributesXml = "";
           if (!hasEmittedInitialAttributes) {
             attributesXml =
-              `<attributes><divisions>${divisions}</divisions><key><fifths>${measureFifths}</fifths></key>` +
+              `<attributes><divisions>${divisions}</divisions>${buildMusicXmlKeySignatureXml({ fifths: measureFifths })}` +
               `${buildTimeXml(measureBeats, measureBeatType, measureTimeSymbol)}` +
               `${buildTransposeXml(measureTranspose)}` +
-              `<clef><sign>${xmlEscape(measureClefSign)}</sign><line>${measureClefLine}</line></clef>` +
+              `${buildMusicXmlClefXml({ sign: measureClefSign, line: measureClefLine })}` +
               `${miscellaneousXml}</attributes>`;
           } else if (shouldEmitTime || shouldEmitKey || shouldEmitTranspose || shouldEmitClef || miscellaneousXml) {
             attributesXml =
               `<attributes>${
-                shouldEmitKey ? `<key><fifths>${measureFifths}</fifths></key>` : ""
+                shouldEmitKey ? buildMusicXmlKeySignatureXml({ fifths: measureFifths }) : ""
               }${
                 shouldEmitTime ? `${buildTimeXml(measureBeats, measureBeatType, measureTimeSymbol)}` : ""
               }${
                 shouldEmitTranspose ? `${buildTransposeXml(measureTranspose)}` : ""
               }${
-                shouldEmitClef ? `<clef><sign>${xmlEscape(measureClefSign)}</sign><line>${measureClefLine}</line></clef>` : ""
+                shouldEmitClef ? buildMusicXmlClefXml({ sign: measureClefSign, line: measureClefLine }) : ""
               }${miscellaneousXml}</attributes>`;
           }
           let leftBarlineXml = "";

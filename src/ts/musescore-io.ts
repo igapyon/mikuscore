@@ -8,6 +8,7 @@ import {
   resolveAccidentalTextForPitch,
 } from "../../core/accidentalSpelling";
 import {
+  buildMusicXmlBeamItemsXml,
   computeBeamAssignments,
 } from "./beam-common";
 import { applyImplicitBeamsToMusicXmlText } from "./musicxml-io";
@@ -23,6 +24,7 @@ import {
   normalizeDynamicMark,
   type DynamicMark,
 } from "./score-features/dynamics";
+import { buildMusicXmlDotsXml } from "./score-features/durations";
 import {
   buildMusicXmlBarlineXml,
   extractMusicXmlBarlineFeature,
@@ -33,10 +35,24 @@ import {
   extractMusicXmlDirectionWords,
   extractMusicXmlSoundTempoBpm,
 } from "./score-features/direction-text";
+import { buildMusicXmlClefXml } from "./score-features/clefs";
+import { buildMusicXmlKeySignatureXml } from "./score-features/key-signatures";
 import {
   buildMusicXmlOrnamentItemsXml,
   extractMusicXmlOrnamentFeatures,
 } from "./score-features/ornaments";
+import { buildMusicXmlPitchXml } from "./score-features/pitches";
+import {
+  buildMusicXmlBackupXml,
+  buildMusicXmlForwardXml,
+} from "./score-features/measure-flow";
+import {
+  buildMusicXmlAccidentalXml,
+  buildMusicXmlFingeringXml,
+  buildMusicXmlGraceXml,
+  buildMusicXmlStringNumberXml,
+  buildMusicXmlTechnicalXml,
+} from "./score-features/note-elements";
 import {
   buildMusicXmlSlursXml,
   extractMusicXmlSlurFeatures,
@@ -46,6 +62,9 @@ import {
   buildMusicXmlTiedItemsXml,
   extractMusicXmlTieState,
 } from "./score-features/ties";
+import { buildMusicXmlTimeModificationXml } from "./score-features/tuplets";
+import { buildMusicXmlTimeSignatureXml } from "./score-features/time-signatures";
+import { buildMusicXmlTransposeXml } from "./score-features/transposition";
 
 type MuseScoreImportOptions = {
   sourceMetadata?: boolean;
@@ -969,11 +988,7 @@ const resolveMuseExportKeySigXml = (writtenFifths: number, transpose: { diatonic
 };
 
 const buildTransposeXml = (transpose: { diatonic?: number; chromatic?: number } | null): string => {
-  if (!transpose) return "";
-  const diatonic = Number.isFinite(transpose.diatonic) ? Math.round(Number(transpose.diatonic)) : null;
-  const chromatic = Number.isFinite(transpose.chromatic) ? Math.round(Number(transpose.chromatic)) : null;
-  if (diatonic === null && chromatic === null) return "";
-  return `<transpose>${diatonic !== null ? `<diatonic>${diatonic}</diatonic>` : ""}${chromatic !== null ? `<chromatic>${chromatic}</chromatic>` : ""}</transpose>`;
+  return buildMusicXmlTransposeXml(transpose);
 };
 
 const parseMuseClefText = (raw: string): { sign: "G" | "F" | "C"; line: number } | null => {
@@ -1070,9 +1085,7 @@ const buildTupletMusicXml = (
   const timeModification = event.tupletTimeModification;
   const starts = event.tupletStarts ?? [];
   const stops = event.tupletStops ?? [];
-  const timeModificationXml = timeModification
-    ? `<time-modification><actual-notes>${timeModification.actualNotes}</actual-notes><normal-notes>${timeModification.normalNotes}</normal-notes></time-modification>`
-    : "";
+  const timeModificationXml = buildMusicXmlTimeModificationXml(timeModification);
   const tupletNotations: string[] = [];
   for (const start of starts) {
     const attrs: string[] = [
@@ -1257,10 +1270,7 @@ const buildBeamXmlByVoiceEvents = (
     splitAtBeatBoundaryWhenImplicit: !hasExplicitMuseBeamInfo,
   });
   for (const [idx, assignment] of assignments.entries()) {
-    let xml = "";
-    for (let level = 1; level <= assignment.levels; level += 1) {
-      xml += `<beam number="${level}">${assignment.state}</beam>`;
-    }
+    const xml = buildMusicXmlBeamItemsXml(assignment);
     if (xml) beamXmlByIndex.set(idx, xml);
   }
   return beamXmlByIndex;
@@ -2880,17 +2890,23 @@ const buildMuseImportedMeasureHeaderXml = (
 ): string => {
   let body = "";
   if (needsAttributes) {
-    const timeSymbolAttr = primaryMeasure.timeSymbol ? ` symbol="${primaryMeasure.timeSymbol}"` : "";
-    body += `<attributes><divisions>${divisions}</divisions><key><fifths>${primaryMeasure.fifths}</fifths><mode>${primaryMeasure.mode}</mode></key><time${timeSymbolAttr}><beats>${primaryMeasure.beats}</beats><beat-type>${primaryMeasure.beatType}</beat-type></time>${buildTransposeXml(part.transpose)}`;
+    body += `<attributes><divisions>${divisions}</divisions>${buildMusicXmlKeySignatureXml({
+      fifths: primaryMeasure.fifths,
+      mode: primaryMeasure.mode,
+    })}${buildMusicXmlTimeSignatureXml({
+      beats: primaryMeasure.beats,
+      beatType: primaryMeasure.beatType,
+      symbol: primaryMeasure.timeSymbol,
+    })}${buildTransposeXml(part.transpose)}`;
     if (part.staffs.length > 1) {
       body += `<staves>${part.staffs.length}</staves>`;
       for (let si = 0; si < part.staffs.length; si += 1) {
         const staff = part.staffs[si];
-        body += `<clef number="${si + 1}"><sign>${staff.clefSign}</sign><line>${staff.clefLine}</line></clef>`;
+        body += buildMusicXmlClefXml({ sign: staff.clefSign, line: staff.clefLine, number: si + 1 });
       }
     } else {
       const staff = part.staffs[0];
-      body += `<clef><sign>${staff?.clefSign ?? "G"}</sign><line>${staff?.clefLine ?? 2}</line></clef>`;
+      body += buildMusicXmlClefXml({ sign: staff?.clefSign ?? "G", line: staff?.clefLine ?? 2 });
     }
     if (partIndex === 0 && miscXml) {
       body += `<miscellaneous>${miscXml}</miscellaneous>`;
@@ -3037,7 +3053,7 @@ const emitMuseImportedVoiceXml = (
     if (event.kind === "dynamic") {
       const lead = Math.max(0, eventAtDiv - occupied);
       if (lead > 0) {
-        body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${eventStaffNo}</staff></forward>`;
+        body += buildMusicXmlForwardXml({ duration: lead, voice: partVoiceNo, staff: eventStaffNo });
         occupied += lead;
       }
       body += withDirectionPlacement(
@@ -3050,7 +3066,7 @@ const emitMuseImportedVoiceXml = (
     if (event.kind === "directionXml") {
       const lead = Math.max(0, eventAtDiv - occupied);
       if (lead > 0) {
-        body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${eventStaffNo}</staff></forward>`;
+        body += buildMusicXmlForwardXml({ duration: lead, voice: partVoiceNo, staff: eventStaffNo });
         occupied += lead;
       }
       body += withDirectionPlacement(event.xml, eventStaffNo, partVoiceNo);
@@ -3059,7 +3075,7 @@ const emitMuseImportedVoiceXml = (
     if (event.kind === "barlineXml") {
       const lead = Math.max(0, eventAtDiv - occupied);
       if (lead > 0) {
-        body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${eventStaffNo}</staff></forward>`;
+        body += buildMusicXmlForwardXml({ duration: lead, voice: partVoiceNo, staff: eventStaffNo });
         occupied += lead;
       }
       body += event.xml;
@@ -3067,7 +3083,7 @@ const emitMuseImportedVoiceXml = (
     }
     if (eventAtDiv > occupied) {
       const lead = eventAtDiv - occupied;
-      body += `<forward><duration>${lead}</duration><voice>${partVoiceNo}</voice><staff>${eventStaffNo}</staff></forward>`;
+      body += buildMusicXmlForwardXml({ duration: lead, voice: partVoiceNo, staff: eventStaffNo });
       occupied += lead;
     }
     const timedDuration = Math.max(0, event.durationDiv);
@@ -3081,7 +3097,7 @@ const emitMuseImportedVoiceXml = (
       const notationsXml = tupletXml.notationItems.length
         ? `<notations>${tupletXml.notationItems.join("")}</notations>`
         : "";
-      body += `<note><rest/><duration>${event.durationDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}${tupletXml.timeModificationXml}${beamXml}<staff>${eventStaffNo}</staff>${notationsXml}</note>`;
+      body += `<note><rest/><duration>${event.durationDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${buildMusicXmlDotsXml(info.dots)}${tupletXml.timeModificationXml}${beamXml}<staff>${eventStaffNo}</staff>${notationsXml}</note>`;
       continue;
     }
     const tupletXml = buildTupletMusicXml(event);
@@ -3121,7 +3137,7 @@ const emitMuseImportedVoiceXml = (
         pitchKey,
         preferredAccidentalText: note.accidentalText || note.tpcAccidentalText,
       });
-      const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
+      const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
       const timeModificationXml = ni === 0 && !event.grace ? tupletXml.timeModificationXml : "";
       const tieXml = buildMusicXmlTieItemsXml({
         tieStart: Boolean(note.tieStart),
@@ -3137,12 +3153,12 @@ const emitMuseImportedVoiceXml = (
         noteTechnicalItems.push(...(event.technicalTags ?? []).map((tag) => `<${tag}/>`));
       }
       if (note.fingeringText && note.fingeringText.trim()) {
-        noteTechnicalItems.push(`<fingering>${xmlEscape(note.fingeringText.trim())}</fingering>`);
+        noteTechnicalItems.push(buildMusicXmlFingeringXml(note.fingeringText));
       }
       if (note.stringNumber && note.stringNumber > 0) {
-        noteTechnicalItems.push(`<string>${Math.round(note.stringNumber)}</string>`);
+        noteTechnicalItems.push(buildMusicXmlStringNumberXml(note.stringNumber, { roundNumeric: true }));
       }
-      const technicalXml = noteTechnicalItems.length ? `<technical>${noteTechnicalItems.join("")}</technical>` : "";
+      const technicalXml = buildMusicXmlTechnicalXml(noteTechnicalItems);
       const notationItems = [
         ...(ni === 0 ? tupletXml.notationItems : []),
         ...(ni === 0 ? slurItems : []),
@@ -3154,16 +3170,16 @@ const emitMuseImportedVoiceXml = (
       const notationsXml = notationItems.length ? `<notations>${notationItems.join("")}</notations>` : "";
       const beamXmlForNote = ni === 0 ? beamXml : "";
       const graceXml = ni === 0 && event.grace
-        ? (event.graceSlash ? '<grace slash="yes"/>' : "<grace/>")
+        ? buildMusicXmlGraceXml({ slash: event.graceSlash })
         : "";
       const durationXml = event.grace ? "" : `<duration>${event.durationDiv}</duration>`;
-      body += `<note>${ni > 0 ? "<chord/>" : ""}${graceXml}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>${tieXml}${durationXml}<voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}${timeModificationXml}${accidentalXml}${beamXmlForNote}<staff>${eventStaffNo}</staff>${notationsXml}</note>`;
+      body += `<note>${ni > 0 ? "<chord/>" : ""}${graceXml}${buildMusicXmlPitchXml(pitch)}${tieXml}${durationXml}<voice>${partVoiceNo}</voice><type>${info.type}</type>${buildMusicXmlDotsXml(info.dots)}${timeModificationXml}${accidentalXml}${beamXmlForNote}<staff>${eventStaffNo}</staff>${notationsXml}</note>`;
     }
   }
   if (occupied < capacity && capacity - occupied > tupletTolerance) {
     const restDiv = capacity - occupied;
     const info = divisionToTypeAndDots(divisions, restDiv);
-    body += `<note><rest/><duration>${restDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${"<dot/>".repeat(info.dots)}<staff>${staffNo}</staff></note>`;
+    body += `<note><rest/><duration>${restDiv}</duration><voice>${partVoiceNo}</voice><type>${info.type}</type>${buildMusicXmlDotsXml(info.dots)}<staff>${staffNo}</staff></note>`;
   }
   return body;
 };
@@ -3219,7 +3235,7 @@ const emitMuseScoreImportedPartXml = (
       const staffNo = si + 1;
       const measure = resolveMuseImportedStaffMeasure(part, si, mi, primaryMeasure);
       if (si > 0) {
-        body += `<backup><duration>${capacity}</duration></backup>`;
+        body += buildMusicXmlBackupXml({ duration: capacity });
       }
       const voices = Array.from(new Set(measure.events.map((event) => Math.max(1, Math.round(event.voice))))).sort(
         (a, b) => a - b
@@ -3229,7 +3245,7 @@ const emitMuseScoreImportedPartXml = (
         const voiceNo = voices[vi];
         const partVoiceNo = resolvePartVoiceId(staffNo, voiceNo);
         if (vi > 0) {
-          body += `<backup><duration>${capacity}</duration></backup>`;
+          body += buildMusicXmlBackupXml({ duration: capacity });
         }
         body += emitMuseImportedVoiceXml(
           measure,

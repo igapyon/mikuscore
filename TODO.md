@@ -1,5 +1,16 @@
 # TODO
 
+## Current First Focus
+
+- [ ] Continue the ABC I/O refactoring pass first.
+  - Primary entry point:
+    - `Refactor src/ts/abc-io.ts before continuing larger ABC layout expansion.`
+  - Current stance:
+    - the broad cross-format score feature model pass is complete enough for now
+    - do not expand shared feature models further until a real duplication or test-surface problem appears
+    - resume from ABC characterization coverage and small in-file helper ordering / section-boundary cleanup
+    - keep public conversion entry points stable while moving internals
+
 ## Specification
 
 - [x] Create the first cross-format mapping table from the MusicXML canonical-state policy.
@@ -343,7 +354,7 @@
 
 ## Refactoring Priorities
 
-- [ ] Introduce small cross-format score feature models where they reduce format-local branching.
+- [x] Introduce small cross-format score feature models where they reduce format-local branching.
   - Current observation:
     - `src/ts/abc-io.ts`, `src/ts/mei-io.ts`, `src/ts/lilypond-io.ts`, `src/ts/midi-io.ts`, and `src/ts/musescore-io.ts` each contain local handling for recurring score concepts such as dynamics, wedges, articulations, ornaments, slurs, ties, tempo, repeats, and barlines
     - tests currently verify many of these behaviors inside format-specific suites, which makes cross-format semantics harder to compare directly
@@ -391,6 +402,60 @@
       - rewired MuseScore mid-measure repeat barline handling and LilyPond simple repeat/ending generation where the mapping was local
       - kept ABC `winged` / repeat `times` metadata and broader measure-level repeat policy format-local
       - added feature-level coverage in `tests/unit/score-barlines.spec.ts`
+    - tuplets:
+      - added a narrow feature vocabulary for MusicXML `<time-modification>` actual/normal note ratios
+      - rewired ABC, MEI, LilyPond, and MuseScore time-modification XML generation where the mapping was local
+      - kept tuplet start/stop notation state, numbering, bracket policy, and source-format tuplet interpretation in the adapters
+      - added feature-level coverage in `tests/unit/score-tuplets.spec.ts`
+    - clefs:
+      - added a narrow feature vocabulary for MusicXML clef sign, line, and optional number
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore clef XML generation where the mapping was local
+      - kept source-format clef inference, percussion policy, staff selection, and MuseScore-native clef tags in the adapters
+      - added feature-level coverage in `tests/unit/score-clefs.spec.ts`
+    - time signatures:
+      - added a narrow feature vocabulary for MusicXML beats, beat-type, and optional symbol
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore time signature XML generation where the mapping was local
+      - kept source-format meter parsing, time-change detection, and cut/common-time policy in the adapters
+      - added feature-level coverage in `tests/unit/score-time-signatures.spec.ts`
+    - key signatures:
+      - added a narrow feature vocabulary for MusicXML fifths and optional mode
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore key signature XML generation where the mapping was local
+      - kept source-format key parsing, key-change detection, and transposition policy in the adapters
+      - added feature-level coverage in `tests/unit/score-key-signatures.spec.ts`
+    - transposition:
+      - added a narrow feature vocabulary for MusicXML diatonic/chromatic transpose values
+      - rewired ABC, MEI, LilyPond, and MuseScore MusicXML transpose XML generation where the mapping was local
+      - kept source-format transposition parsing and MuseScore-native transpose tags in the adapters
+      - added feature-level coverage in `tests/unit/score-transposition.spec.ts`
+    - duration dots:
+      - added a small duration helper for MusicXML `<dot/>` item generation and counting
+      - rewired MEI, LilyPond, MIDI, and MuseScore dot XML generation where the mapping was local
+      - kept duration quantization, type selection, tuplet ratios, and source-format duration policy in the adapters
+      - added feature-level coverage in `tests/unit/score-durations.spec.ts`
+    - note elements:
+      - added small helpers for MusicXML accidental, grace, lyric, stem, fingering, string, and technical item generation
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore accidental XML generation where the mapping was local
+      - rewired ABC, MEI, LilyPond, and MuseScore MusicXML grace item generation where the mapping was local
+      - rewired ABC, MEI, and LilyPond lyric XML generation where the mapping was local
+      - rewired MEI stem XML generation where the mapping was local
+      - rewired ABC and MuseScore fingering/string/technical XML generation where the mapping was local
+      - kept MuseScore-native grace tags, MEI grace groups, trill accidental marks, and source-format grace interpretation in the adapters
+      - added feature-level coverage in `tests/unit/score-note-elements.spec.ts`
+    - measure flow controls:
+      - added small helpers for MusicXML `<backup>` and `<forward>` controls
+      - rewired MEI, LilyPond, MIDI, and MuseScore backup/forward XML generation where the mapping was local
+      - kept layer/voice/staff timing calculations in the adapters
+      - added feature-level coverage in `tests/unit/score-measure-flow.spec.ts`
+    - pitches:
+      - added a narrow feature vocabulary for MusicXML pitch step, alter, and octave
+      - rewired ABC, MEI, LilyPond, MIDI, and MuseScore pitch XML generation where the mapping was local
+      - kept source-format pitch parsing, accidental spelling policy, carried alter state, and rest/chord decisions in the adapters
+      - added feature-level coverage in `tests/unit/score-pitches.spec.ts`
+    - beam items:
+      - added MusicXML beam item generation to the existing `src/ts/beam-common.ts` helper module
+      - rewired ABC, MIDI, and MuseScore beam XML generation where the mapping was local
+      - kept beam assignment, explicit beam mode handling, and beat-boundary policy in the existing beam computation path
+      - added focused coverage in `tests/unit/beam-common.spec.ts`
   - Model examples:
     - dynamics and wedges:
       - dynamic marks such as `pp`, `p`, `mp`, `mf`, `f`, `ff`, `sfz`
@@ -407,11 +472,31 @@
       - MusicXML direction words, optional font style, placement, and `sound tempo`
     - repeat and barline semantics:
       - simple MusicXML barline controls with location, bar-style, repeat directions, and ending markers
-  - Follow-up candidates:
-    - 1. keep reviewing the feature-model slices during nearby changes:
-      - a first cleanup pass removed additional local words/tempo and simple barline XML generation where it was clearly equivalent
-      - remaining direct XML assembly is mostly format-specific wrapping, wavy-line/trill detail, ABC repeat metadata, MEI measure policy, or notation container composition
-      - avoid expanding the shared models further until a real duplication or test-surface problem appears
+    - tuplets:
+      - MusicXML time-modification controls with positive rounded `actual-notes` and `normal-notes`
+    - clefs:
+      - MusicXML clef controls with `sign`, `line`, and optional staff `number`
+    - time signatures:
+      - MusicXML time signature controls with positive rounded `beats`, `beat-type`, and optional `symbol`
+    - key signatures:
+      - MusicXML key signature controls with rounded `fifths` and optional `mode`
+    - transposition:
+      - MusicXML transpose controls with rounded optional `diatonic` and `chromatic` values
+    - duration dots:
+      - MusicXML dot items from normalized dot counts
+    - note elements:
+      - MusicXML accidental, grace, lyric, stem, fingering, string, and technical items
+    - measure flow controls:
+      - MusicXML backup/forward controls with normalized durations and optional voice/staff context
+    - pitches:
+      - MusicXML pitch controls with normalized `step`, optional nonzero `alter`, and bounded `octave`
+    - beam items:
+      - MusicXML beam item controls from existing beam assignments
+  - Follow-up stance:
+    - keep reviewing the feature-model slices during nearby changes
+    - a first cleanup pass removed additional local words/tempo and simple barline XML generation where it was clearly equivalent
+    - remaining direct XML assembly is mostly format-specific wrapping, wavy-line/trill detail, ABC repeat metadata, MEI measure policy, or notation container composition
+    - avoid expanding the shared models further until a real duplication or test-surface problem appears
   - Test direction:
     - add feature-level unit tests next to the new model before rewiring multiple formats
     - keep existing format-specific regression tests as safety coverage
@@ -457,6 +542,176 @@
     - `parseForMusicXml(...)` is now much closer to orchestration, with line parsing, layout derivation, body entry dispatch, and post-processing split into helpers
     - pending note-state application and playable-event/body-token dispatch have also been thinned substantially
     - export-side grouped-staff measure rendering, header generation, repeat/ending barline assembly, note serialization, note-level precomputation, measure-note rendering, top-level part rendering, document-shell assembly, and export-context calculation are now also partially helperized
+    - MusicXML-to-ABC export-side clef resolution, key-signature accidental lookup, accidental-text mapping, and optional-number parsing have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side part-name lookup and lane definition / lane-name construction have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side transpose and diagnostic meta-line construction have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure meta-line construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side direction pending-word / decoration handling has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side staff/voice lane note filtering has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side pitch / accidental token construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side grace-token pending updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side time-modification reading and note length-token construction have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side active tuplet prefix / remaining-count updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side queued harmony / words / direction / grace event-prefix handling has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side trill accidental meta-line construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side technical decoration prefix construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side fermata decoration prefix construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side articulation decoration prefix construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side ornament / glissando / slide / arpeggiate prefix construction has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side lyric token / extension updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side pending note/chord event token serialization has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side pending note/chord event creation and chord-pitch updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side note event derived-value reading has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side note event-prefix assembly has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side trailing grace, empty-measure rest, and measure text finalization have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure repeat / ending boundary reading has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure divisions / key / time state updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure meta / diagnostic meta-line appending has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side note event number / pending-event updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side harmony / direction child dispatch has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side grace-note child dispatch has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side note event tuplet / lyric state updates have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side note child processing has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure child-loop processing has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side measure rendering has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side lane rendering has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side part rendering has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side document context creation and final document assembly have also been pulled out of the main export function
+    - MusicXML-to-ABC export-side part iteration has also been pulled out of the main export function
+    - MusicXML-to-ABC export-side lane header and lane body appending have also been split inside lane rendering
+    - MusicXML-to-ABC export-side lane initial key and measure-state creation have also been pulled out of lane body appending
+    - MusicXML-to-ABC export-side lane body rendering has also been split from appending rendered lane lines
+    - MusicXML-to-ABC export-side rendered lane line appending has also been pulled out of lane body appending
+    - MusicXML-to-ABC export-side part render-info creation has also been pulled out of part rendering
+    - MusicXML-to-ABC export-side part lane appending has also been pulled out of part rendering
+    - MusicXML-to-ABC export-side document header-info creation and header-line assembly have also been split from document context creation
+    - MusicXML-to-ABC export-side tempo header construction has also been pulled out of document header-info creation
+    - MusicXML-to-ABC export-side document credit and meter/key reading have also been pulled out of document header-info creation
+    - MusicXML-to-ABC export-side initial document-context assembly has also been pulled out of document context creation
+    - MusicXML-to-ABC export-side final document text assembly now consumes the export document context directly
+    - MusicXML-to-ABC export-side part render-context creation has also been pulled out of part iteration
+    - MusicXML-to-ABC export-side part element reading has also been pulled out of part iteration
+    - MusicXML-to-ABC export-side rendered document-context creation has also been pulled out of the public export function
+    - MusicXML-to-ABC export-side part appending now consumes pre-read part elements
+    - MusicXML-to-ABC export-side final meta-block assembly has also been pulled out of document text assembly
+    - MusicXML-to-ABC export-side first-measure reading has also been pulled out of document header-info creation
+    - MusicXML-to-ABC export-side title and composer reading have also been pulled out of document credit reading
+    - MusicXML-to-ABC export-side document meter and key reading have also been split inside document meter/key reading
+    - MusicXML-to-ABC export-side document key-name conversion has also been pulled out of document key reading
+    - MusicXML-to-ABC export-side raw header-line assembly has also been split from final header-line filtering
+    - MusicXML-to-ABC export-side tempo-header formatting has also been split from initial tempo reading
+    - MusicXML-to-ABC export-side unit tempo and fallback tempo header formatting have also been split
+    - MusicXML-to-ABC export-side unit tempo-header eligibility has also been pulled out of unit tempo formatting
+    - MusicXML-to-ABC export-side document header-info assembly has also been split from document DOM reading
+    - MusicXML-to-ABC export-side document meter beats and beat-type reading have also been pulled out of document meter reading
+    - MusicXML-to-ABC export-side document key fifths and mode reading have also been pulled out of document key reading
+    - MusicXML-to-ABC export-side document meter/key info assembly has also been split from document meter/key reading
+    - MusicXML-to-ABC export-side document header unit length and export unit length now share the same default unit constant
+    - MusicXML-to-ABC export-side harmony pitch-token construction has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony kind suffix conversion has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony pitch-token node reading has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony kind text override handling has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony pitch XML construction has also been pulled out of ABC chord-symbol-to-harmony conversion
+    - MusicXML-to-ABC export-side ABC chord-symbol parsing has also been pulled out of chord-symbol-to-harmony conversion
+    - MusicXML-to-ABC export-side harmony kind XML construction has also been pulled out of chord-symbol-to-harmony conversion
+    - MusicXML-to-ABC export-side ABC chord-symbol matching now uses a shared pattern for likelihood checks and parsing
+    - MusicXML-to-ABC export-side harmony bass-token construction has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony kind-value reading has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side final harmony chord-symbol assembly has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side harmony pitch DOM reading has also been split from harmony pitch-token construction
+    - MusicXML-to-ABC export-side harmony suffix reading from kind nodes has also been pulled out of harmony-to-ABC chord-symbol conversion
+    - MusicXML-to-ABC export-side final harmony XML assembly has also been pulled out of ABC chord-symbol-to-harmony conversion
+    - MusicXML-to-ABC export-side harmony pitch typing is now shared between chord-symbol parsing and MusicXML harmony reading
+    - MusicXML-to-ABC export-side ABC harmony suffix normalization has also been split from suffix-to-kind conversion
+    - MusicXML-to-ABC export-side MusicXML harmony kind-value normalization has also been split from kind-node reading
+    - MusicXML-to-ABC export-side lyric text normalization has also been pulled out of MusicXML lyric-token conversion
+    - MusicXML-to-ABC export-side lyric syllabic-mode normalization has also been pulled out of MusicXML lyric-token conversion
+    - MusicXML-to-ABC export-side lyric continuation-hyphen decision has also been pulled out of MusicXML lyric-token conversion
+    - MusicXML-to-ABC export-side final lyric text-token assembly has also been pulled out of MusicXML lyric-token conversion
+    - MusicXML-to-ABC export-side MusicXML type-name normalization has also been pulled out of type fallback handling
+    - MusicXML-to-ABC export-side MusicXML type-name support checks have also been pulled out of type fallback handling
+    - MusicXML-to-ABC export-side MusicXML voice text normalization has also been pulled out of voice fallback handling
+    - MusicXML-to-ABC export-side MusicXML voice positive-integer checks have also been pulled out of voice fallback handling
+    - MusicXML-to-ABC export-side MusicXML voice number-text extraction has also been pulled out of voice fallback handling
+    - MusicXML-to-ABC export-side MusicXML voice number-text normalization has also been pulled out of voice fallback handling
+    - ABC import-side clef inference step normalization has also been pulled out of note-to-MIDI conversion
+    - ABC import-side clef inference octave normalization has also been pulled out of note-to-MIDI conversion
+    - ABC import-side clef inference alter normalization has also been pulled out of note-to-MIDI conversion
+    - ABC import-side clef inference MIDI pitch assembly has also been pulled out of note-to-MIDI conversion
+    - ABC import-side explicit clef-name normalization has also been pulled out of clef inference
+    - ABC import-side clef inference MIDI-key collection has also been pulled out of clef resolution
+    - ABC import-side inferred clef-name selection has also been pulled out of clef resolution
+    - ABC import-side clef XML conversion now reuses the shared clef-name normalization
+    - ABC import-side clef-name-to-feature mapping has also been pulled out of clef XML conversion
+    - ABC import-side debug metadata step normalization has also been pulled out of debug misc XML assembly
+    - ABC import-side debug metadata octave normalization has also been pulled out of debug misc XML assembly
+    - ABC import-side debug metadata alter normalization has also been pulled out of debug misc XML assembly
+    - ABC import-side debug metadata payload assembly has also been pulled out of debug misc XML assembly
+    - ABC import-side debug metadata core-field assembly has also been pulled out of debug metadata payload assembly
+    - ABC import-side debug metadata count-field assembly has also been pulled out of debug misc XML assembly
+    - ABC import-side ABC source misc XML chunk-field assembly has also been pulled out of source misc XML assembly
+    - ABC import-side ABC source misc XML header-field assembly has also been pulled out of source misc XML assembly
+    - ABC import-side ABC source misc XML encoding has also been pulled out of source misc XML assembly
+    - ABC import-side ABC source misc XML chunking has also been pulled out of source misc XML assembly
+    - ABC import-side ABC source misc XML metrics assembly has also been pulled out of source misc XML header assembly
+    - ABC import-side ABC source misc XML length-field assembly has also been pulled out of source misc XML metrics assembly
+    - ABC import-side ABC source misc XML raw-length field assembly has also been pulled out of source misc XML length-field assembly
+    - ABC import-side ABC source misc XML raw-encoded-length field assembly has also been pulled out of source misc XML length-field assembly
+    - ABC import-side ABC source misc XML state-field assembly has also been pulled out of source misc XML metrics assembly
+    - ABC import-side ABC source misc XML chunk-count field assembly has also been pulled out of source misc XML state-field assembly
+    - ABC import-side ABC source misc XML truncated field assembly has also been pulled out of source misc XML state-field assembly
+    - ABC import-side ABC source misc XML body assembly has also been pulled out of source misc XML assembly
+    - ABC import-side ABC source misc XML body field list assembly has also been pulled out of source misc XML body assembly
+    - ABC import-side ABC source misc XML body header field items assembly has also been pulled out of source misc XML body field list assembly
+    - ABC import-side ABC source misc XML body chunk field parts assembly has also been pulled out of source misc XML body field list assembly
+    - ABC import-side ABC source misc XML chunk-entry assembly has also been pulled out of source misc XML body assembly
+    - ABC import-side ABC source misc XML chunk entry parts assembly has also been pulled out of source misc XML chunk-entry assembly
+    - ABC import-side ABC source misc XML chunk entry assembly has also been pulled out of source misc XML chunk entry parts assembly
+    - ABC import-side ABC source misc XML chunk fields XML assembly has also been pulled out of source misc XML chunk-field assembly
+    - ABC import-side ABC diagnostic misc XML payload assembly has also been pulled out of diagnostic misc XML assembly
+    - ABC import-side ABC diagnostic misc XML core field parts assembly has also been pulled out of diagnostic misc XML payload assembly
+    - ABC import-side ABC diagnostic misc XML optional-field assembly has also been pulled out of diagnostic misc XML payload assembly
+    - ABC import-side ABC diagnostic misc XML optional-field parts assembly has also been pulled out of diagnostic misc XML optional-field assembly
+    - ABC import-side ABC diagnostic misc XML numeric optional-field assembly has also been pulled out of diagnostic misc XML optional-field assembly
+    - ABC import-side ABC diagnostic misc XML numeric optional-field parts assembly has also been pulled out of diagnostic misc XML numeric optional-field assembly
+    - ABC import-side ABC diagnostic misc XML measure optional-field assembly has also been pulled out of diagnostic misc XML numeric optional-field assembly
+    - ABC import-side ABC diagnostic misc XML measure optional-field parts assembly has also been pulled out of diagnostic misc XML measure optional-field assembly
+    - ABC import-side ABC diagnostic misc XML moved-events optional-field assembly has also been pulled out of diagnostic misc XML numeric optional-field assembly
+    - ABC import-side ABC diagnostic misc XML moved-events optional-field parts assembly has also been pulled out of diagnostic misc XML moved-events optional-field assembly
+    - ABC import-side ABC diagnostic misc XML text optional-field assembly has also been pulled out of diagnostic misc XML optional-field assembly
+    - ABC import-side ABC diagnostic misc XML text optional-field parts assembly has also been pulled out of diagnostic misc XML text optional-field assembly
+    - ABC import-side ABC diagnostic misc XML count field assembly has also been pulled out of diagnostic misc XML assembly
+    - ABC import-side ABC diagnostic misc XML entry list assembly has also been pulled out of diagnostic misc XML assembly
+    - ABC import-side ABC diagnostic misc XML entry list item assembly has also been pulled out of diagnostic misc XML entry list assembly
+    - ABC import-side ABC diagnostic misc XML entry list parts assembly has also been pulled out of diagnostic misc XML entry list assembly
+    - ABC import-side ABC diagnostic misc XML entry name assembly has also been pulled out of diagnostic misc XML entry assembly
+    - ABC import-side ABC diagnostic misc XML entry payload assembly has also been pulled out of diagnostic misc XML entry assembly
+    - ABC import-side ABC diagnostic misc XML core-field assembly has also been pulled out of diagnostic misc XML payload assembly
+    - ABC import-side ABC measure debug misc XML entry parts assembly has also been pulled out of measure debug misc XML assembly
+    - ABC import-side ABC diagnostic misc XML entry assembly has also been pulled out of diagnostic misc XML assembly
+    - ABC import-side note notations guard evaluation has also been pulled out of note notations assembly
+    - ABC import-side note notations feature chunk assembly has also been pulled out of note notations assembly
+    - ABC import-side note articulations feature-kind assembly has also been pulled out of note articulations assembly
+    - ABC import-side note articulations feature items assembly has also been pulled out of note articulations assembly
+    - ABC import-side note technical collection assembly has also been pulled out of note technical assembly
+    - ABC import-side note technical collection item assembly has also been pulled out of note technical collection assembly
+    - ABC import-side note technical flag assembly has also been pulled out of note technical assembly
+    - ABC import-side note technical plain-parts assembly has also been pulled out of note technical assembly
+    - ABC import-side note core open-parts assembly has also been pulled out of note core assembly
+    - ABC import-side note core tail modifier assembly has also been pulled out of note core assembly
+    - ABC import-side note ornaments feature assembly has also been pulled out of note ornaments assembly
+    - ABC import-side note ornaments motion item assembly has also been pulled out of note ornaments assembly
+    - ABC import-side rendered measure misc selector assembly has also been pulled out of rendered measure misc assembly
+    - ABC import-side rendered measure diag misc selection has also been pulled out of rendered measure misc assembly
+    - ABC import-side measure header initial/update assembly has also been pulled out of measure header assembly
+    - ABC import-side measure header update key/time field assembly has also been pulled out of measure header update assembly
+    - ABC import-side measure header update key/time XML assembly has also been pulled out of measure header update field assembly
+    - ABC import-side part wrapper and body parts assembly has also been pulled out of part XML assembly
+    - ABC import-side part body part entry assembly has also been pulled out of part body assembly
+    - ABC import-side part body part items assembly has also been pulled out of part body part entry assembly
+    - ABC import-side part measure entry assembly has also been pulled out of part XML measures assembly
+    - ABC import-side part measure entry parts assembly has also been pulled out of part XML measure entries assembly
+    - ABC import-side part list entry assembly has also been pulled out of part list XML assembly
     - focused characterization coverage now also includes grouped `%%score` multi-measure backup emission and grouped repeat/ending restoration
     - the file is much more segmented than before, but it is still not yet at a split-ready boundary
   - Use the same staged refactoring pattern proven in `src/ts/musicxml-io.ts`:
@@ -468,8 +723,8 @@
     - reduce the amount of layout-specific branching embedded directly in MusicXML emission
     - avoid continuing to grow the current `optional field on existing structure` pattern without a cleaner model
   - Immediate start:
-    - first add or confirm focused characterization coverage for grouped-staff lyrics and grouped key/meter/tempo changes
-    - then continue the existing in-file cleanup around export helper ordering / section boundaries
+    - focused characterization coverage for grouped-staff lyrics and grouped key/meter/tempo changes is now present in `tests/unit/abc-io.spec.ts`
+    - continue the existing in-file cleanup around export helper ordering / section boundaries
     - after the next cleanup slice, re-evaluate whether the first small helper module can be extracted safely
   - Focused verification:
     - `npm run typecheck`
@@ -486,7 +741,7 @@
   - Current status:
     - inline `[V:...]` switching and bounded `%%score` grouped import are already covered
     - grouped-staff characterization now also covers multi-measure `<backup>` emission and grouped repeat/ending restoration
-    - further high-value additions would be grouped-staff lyrics and grouped key/meter/tempo changes
+    - grouped-staff lyrics and grouped key/meter/tempo changes are also covered in `tests/unit/abc-io.spec.ts`
 
 - [ ] Refactoring series 2: isolate score-layout parsing from the rest of ABC import.
   - Split out the logic that currently derives:
