@@ -135,7 +135,9 @@ C3/ D | [CE]3/ G | {/g3/}a2 z2 |`;
     const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
     expect(notes[0]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("720");
     expect(notes[2]?.querySelector(":scope > duration")?.textContent?.trim()).toBe("720");
-    expect(outDoc.querySelector("part > measure:nth-of-type(3) > note > grace")).not.toBeNull();
+    const graceNote = outDoc.querySelector("part > measure:nth-of-type(3) > note > grace");
+    expect(graceNote).not.toBeNull();
+    expect(graceNote?.parentElement?.querySelector(":scope > duration")).toBeNull();
   });
 
   it("roundtrip of grand staff score should not trigger MEASURE_OVERFULL", () => {
@@ -870,6 +872,244 @@ K:C
 
     const abc = exportMusicXmlDomToAbc(doc);
     expect(abc).toContain('"rit."C');
+  });
+
+  it("MusicXML->ABC keeps harmony and direction words on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <harmony><root><root-step>A</root-step></root><kind text="Am">minor</kind></harmony>
+      <direction><direction-type><words>rit.</words></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"Am"');
+    expect(abc).toContain('"rit."');
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > harmony")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > direction > direction-type > words")?.textContent?.trim()).toBe("rit.");
+  });
+
+  it("MusicXML->ABC keeps harmony, direction words, and grace tokens on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <harmony><root><root-step>A</root-step></root><kind text="Am">minor</kind></harmony>
+      <direction><direction-type><words>rit.</words></direction-type></direction>
+      <note><grace/><pitch><step>C</step><octave>4</octave></pitch><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"Am"');
+    expect(abc).toContain('"rit."');
+    expect(abc).toContain("{");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > harmony")).not.toBeNull();
+    expect(outDoc.querySelector("part > measure > direction > direction-type > words")?.textContent?.trim()).toBe("rit.");
+    expect(outDoc.querySelector("part > measure > note > grace")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps multiple chord symbols and annotations on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <harmony><root><root-step>A</root-step></root><kind text="Am">minor</kind></harmony>
+      <harmony><root><root-step>G</root-step></root><kind text="G7">dominant</kind></harmony>
+      <direction><direction-type><words>rit.</words></direction-type></direction>
+      <direction><direction-type><words>dolce</words></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"Am"');
+    expect(abc).toContain('"G7"');
+    expect(abc).toContain('"rit."');
+    expect(abc).toContain('"dolce"');
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelectorAll("part > measure > harmony").length).toBeGreaterThanOrEqual(2);
+    const words = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type > words")).map((node) =>
+      node.textContent?.trim()
+    );
+    expect(words).toEqual(expect.arrayContaining(["rit.", "dolce"]));
+  });
+
+  it("MusicXML->ABC keeps direction words and segno on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><direction-type><words>rit.</words></direction-type></direction>
+      <direction><direction-type><segno/></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"rit."');
+    expect(abc).toContain("!segno!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction > direction-type > words")?.textContent?.trim()).toBe("rit.");
+    expect(outDoc.querySelector("part > measure > direction > direction-type > segno")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps rehearsal and segno on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><direction-type><rehearsal>A1</rehearsal></direction-type></direction>
+      <direction><direction-type><segno/></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("!rehearsal:A1!");
+    expect(abc).toContain("!segno!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction > direction-type > rehearsal")?.textContent?.trim()).toBe("A1");
+    expect(outDoc.querySelector("part > measure > direction > direction-type > segno")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps direction words, rehearsal, and sound markers on the same leading note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction>
+        <direction-type>
+          <words>rit.</words>
+          <rehearsal>A1</rehearsal>
+          <segno/>
+        </direction-type>
+        <sound dacapo="yes" tocoda="coda"/>
+      </direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain('"rit."');
+    expect(abc).toContain("!rehearsal:A1!");
+    expect(abc).toContain("!segno!");
+    expect(abc).toContain("!dacoda!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction")).not.toBeNull();
   });
 
   it("MusicXML->ABC->MusicXML keeps unsupported chord-like quoted text as annotation", () => {
@@ -5051,6 +5291,47 @@ K:C
     expect(notes[3]?.querySelector(':scope > notations > slide[type="stop"]')).not.toBeNull();
   });
 
+  it("MusicXML->ABC keeps glissando and slide on the same note when both are present", () => {
+    const xmlWithCombinedSpanners = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>960</duration><voice>1</voice><type>quarter</type>
+        <notations><glissando type="start" number="1">wavy</glissando><slide type="start" number="1"/></notations>
+      </note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithCombinedSpanners);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!gliss-start!");
+    expect(abc).toContain("!slide!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(':scope > notations > glissando[type="start"]')).not.toBeNull();
+    expect(firstNote?.querySelector(':scope > notations > slide[type="start"]')).not.toBeNull();
+  });
+
   it("MusicXML->ABC exports glissando start and roundtrips it", () => {
     const xmlWithGlissStart = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -5443,6 +5724,48 @@ K:C
     expect(notes[0]?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
     expect(notes[1]?.querySelector(":scope > notations > articulations > tenuto")).not.toBeNull();
     expect(notes[2]?.querySelector(":scope > notations > fermata")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps feature and decorative articulations together on one note", () => {
+    const xmlWithCombinedArticulations = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>960</duration>
+        <voice>1</voice><type>quarter</type>
+        <notations><articulations><accent/><stress/></articulations></notations>
+      </note>
+      <note><rest/><duration>2880</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithCombinedArticulations);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!accent!");
+    expect(abc).toContain("!stress!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > articulations > stress")).not.toBeNull();
   });
 
   it("MusicXML->ABC exports accent decoration and roundtrips it", () => {
@@ -6207,6 +6530,43 @@ K:C
     const wedgeTypes = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type > wedge"))
       .map((node) => node.getAttribute("type"));
     expect(wedgeTypes).toEqual(["crescendo", "stop", "diminuendo", "stop"]);
+  });
+
+  it("MusicXML->ABC keeps wedge and sfz on the same note when both are present", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><direction-type><wedge type="crescendo"/></direction-type></direction>
+      <direction><direction-type><dynamics><sfz/></dynamics></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("!crescendo(!");
+    expect(abc).toContain("!sfz!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector("part > measure > direction > direction-type > wedge")?.getAttribute("type")).toBe("crescendo");
+    expect(outDoc.querySelector("part > measure > direction > direction-type > dynamics > sfz")).not.toBeNull();
   });
 
   it("MusicXML->ABC exports pppp and ffff dynamics and roundtrips them", () => {
@@ -7003,6 +7363,49 @@ K:C
     expect(notes[2]?.querySelector(":scope > notations > technical > string")?.textContent?.trim()).toBe("4");
   });
 
+  it("MusicXML->ABC keeps fingering, string, and pluck on the same note when all are present", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <notations><technical><fingering>6</fingering><string>2</string><pluck>p</pluck></technical></notations>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!fingering:6!");
+    expect(abc).toContain("!string:2!");
+    expect(abc).toContain("!pluck:p!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(":scope > notations > technical > fingering")?.textContent?.trim()).toBe("6");
+    expect(firstNote?.querySelector(":scope > notations > technical > string")?.textContent?.trim()).toBe("2");
+    expect(firstNote?.querySelector(":scope > notations > technical > pluck")?.textContent?.trim()).toBe("p");
+  });
+
   it("MusicXML->ABC exports fingering decorations and roundtrips them", () => {
     const xmlWithFingerings = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -7321,6 +7724,96 @@ K:C
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
     expect(outDoc.querySelector("note > notations > technical > open-string")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps open-string and harmonic on the same note when both are present", () => {
+    const xmlWithCombinedTechnicalFlags = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <notations><technical><open-string/><harmonic/></technical></notations>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithCombinedTechnicalFlags);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!open!");
+    expect(abc).toContain("!harmonic!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(":scope > notations > technical > open-string")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > technical > harmonic")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps state technical decorations together on the same note", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <notations><technical><open-string/><snap-pizzicato/><harmonic/><stopped/><thumb-position/></technical></notations>
+      </note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!open!");
+    expect(abc).toContain("!snap!");
+    expect(abc).toContain("!harmonic!");
+    expect(abc).toContain("!stopped!");
+    expect(abc).toContain("!thumb!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(":scope > notations > technical > open-string")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > technical > snap-pizzicato")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > technical > harmonic")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > technical > stopped")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > technical > thumb-position")).not.toBeNull();
   });
 
   it("ABC open-string alias !openstring! roundtrips back to canonical !open!", () => {
@@ -8006,6 +8499,46 @@ K:C
     expect(notes[1]?.querySelector(":scope > notations > ornaments > shake")).not.toBeNull();
   });
 
+  it("MusicXML->ABC keeps shake and arpeggio on the same note when both are present", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>960</duration>
+        <voice>1</voice><type>quarter</type>
+        <notations><ornaments><shake/></ornaments><arpeggiate/></notations>
+      </note>
+      <note><rest/><duration>960</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xml);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("!shake!");
+    expect(abc).toContain("!arpeggio!");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const firstNote = outDoc.querySelector("part > measure > note");
+    expect(firstNote?.querySelector(":scope > notations > ornaments > shake")).not.toBeNull();
+    expect(firstNote?.querySelector(":scope > notations > arpeggiate")).not.toBeNull();
+  });
+
   it("MusicXML->ABC exports schleifer and roundtrips it", () => {
     const xmlWithSchleifer = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
@@ -8120,6 +8653,43 @@ K:C
     const directions = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type"));
     expect(directions[0]?.querySelector(":scope > segno")).not.toBeNull();
     expect(directions[1]?.querySelector(":scope > coda")).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps segno directions on the leading note of a chord group", () => {
+    const xmlWithChordSegno = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><direction-type><segno/></direction-type></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+      <note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>960</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>1920</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithChordSegno);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect((abc.match(/!segno!/g) ?? []).length).toBe(1);
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    const directions = Array.from(outDoc.querySelectorAll("part > measure > direction > direction-type"));
+    expect(directions).toHaveLength(1);
+    expect(directions[0]?.querySelector(":scope > segno")).not.toBeNull();
   });
 
   it("MusicXML->ABC exports segno direction and roundtrips it", () => {
@@ -9188,6 +9758,53 @@ K:C
     const outDoc = parseMusicXmlDocument(roundtripXml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
+    expect(outDoc.querySelector('note > notations > slur[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > notations > slur[type="stop"]')).not.toBeNull();
+  });
+
+  it("MusicXML->ABC keeps tie and slur notation together on the same note", () => {
+    const xmlWithTieAndSlur = `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>960</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <tie type="start"/><notations><tied type="start"/><slur type="start"/></notations>
+      </note>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1920</duration>
+        <voice>1</voice><type>half</type>
+        <tie type="stop"/><notations><tied type="stop"/><slur type="stop"/></notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+    const srcDoc = parseMusicXmlDocument(xmlWithTieAndSlur);
+    expect(srcDoc).not.toBeNull();
+    if (!srcDoc) return;
+
+    const abc = exportMusicXmlDomToAbc(srcDoc);
+    expect(abc).toContain("(");
+    expect(abc).toContain("-");
+
+    const roundtripXml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(roundtripXml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+    expect(outDoc.querySelector('note > tie[type="start"]')).not.toBeNull();
+    expect(outDoc.querySelector('note > tie[type="stop"]')).not.toBeNull();
     expect(outDoc.querySelector('note > notations > slur[type="start"]')).not.toBeNull();
     expect(outDoc.querySelector('note > notations > slur[type="stop"]')).not.toBeNull();
   });

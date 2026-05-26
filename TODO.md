@@ -10,6 +10,26 @@
     - do not expand shared feature models further until a real duplication or test-surface problem appears
     - resume from ABC characterization coverage and small in-file helper ordering / section-boundary cleanup
     - keep public conversion entry points stable while moving internals
+  - Current problem statement:
+    - `src/ts/abc-io.ts` is no longer only ABC text I/O
+    - it now carries ABC parsing, ABC metadata handling, ABC-to-MusicXML import, MusicXML-to-ABC export, MusicXML XML fragment generation, diagnostics, source/debug metadata, and feature-specific conversion rules
+    - this is understandable historical growth from a working converter, but the file now hides too many decisions behind local `if` blocks and copied conversion patterns
+  - Refactoring direction:
+    - first keep reducing large conditional blocks into named, behavior-preserving helpers
+    - treat those helpers as staging boundaries for structural cleanup, not as an end in themselves
+    - keep `abc-io.ts` as the public facade while internals are reorganized gradually
+    - avoid expanding `src/ts/score-features/` until repeated XML generation or test pressure proves the need
+  - Likely later split candidates:
+    - `abc-parse.ts` for ABC text parsing into the current internal representation
+    - `abc-render.ts` for rendering internal ABC-oriented data back to ABC text
+    - `abc-to-musicxml.ts` for building MusicXML from parsed ABC data
+    - `musicxml-to-abc.ts` for deriving ABC output from MusicXML
+    - `abc-io.ts` as the stable public entry point that delegates to those modules
+  - Immediate next steps:
+    - review the current helper clusters in `src/ts/abc-io.ts` for section ordering and naming consistency
+    - add focused characterization coverage before any next behavior-bearing move
+    - identify the first low-risk cleanup target, likely a dense MusicXML-to-ABC export helper cluster or ABC-to-MusicXML note XML cluster
+    - only consider file splits after the related helper cluster has a clear name and focused tests
 
 ## Specification
 
