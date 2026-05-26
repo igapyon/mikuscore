@@ -4,6 +4,7 @@
  */
 
 import {
+  buildMusicXmlBeamItemsXml,
   computeBeamAssignments,
 } from "./beam-common";
 import {
@@ -11,7 +12,14 @@ import {
   velocityToDynamicMark,
   type DynamicMark,
 } from "./score-features/dynamics";
+import { buildMusicXmlClefXml } from "./score-features/clefs";
+import { buildMusicXmlDotsXml } from "./score-features/durations";
 import { buildMusicXmlTempoDirectionXml } from "./score-features/direction-text";
+import { buildMusicXmlKeySignatureXml } from "./score-features/key-signatures";
+import { buildMusicXmlAccidentalXml } from "./score-features/note-elements";
+import { buildMusicXmlBackupXml } from "./score-features/measure-flow";
+import { buildMusicXmlPitchXml } from "./score-features/pitches";
+import { buildMusicXmlTimeSignatureXml } from "./score-features/time-signatures";
 import { extractMusicXmlOrnamentFeatures } from "./score-features/ornaments";
 import { extractMusicXmlSlurFeatures } from "./score-features/slurs";
 import {
@@ -1868,11 +1876,7 @@ const splitDurationNotations = (durDiv: number, divisions: number): DurationNota
 };
 
 const buildTypeXmlFromNotation = (notation: DurationNotation): string => {
-  let xml = `<type>${notation.type}</type>`;
-  for (let i = 0; i < notation.dots; i += 1) {
-    xml += "<dot/>";
-  }
-  return xml;
+  return `<type>${notation.type}</type>${buildMusicXmlDotsXml(notation.dots)}`;
 };
 
 const beamLevelFromNotationType = (type: DurationNotation["type"]): number => {
@@ -2227,11 +2231,7 @@ const buildMeasureVoiceXml = (
   const beamXmlByChunkIndex = new Map<number, string>();
   for (const [chunkIndex, timelineIndex] of noteTimelineByChunkIndex.entries()) {
     const assignment = beamAssignments.get(timelineIndex);
-    if (!assignment || assignment.levels <= 0) continue;
-    let xml = "";
-    for (let level = 1; level <= assignment.levels; level += 1) {
-      xml += `<beam number="${level}">${assignment.state}</beam>`;
-    }
+    const xml = buildMusicXmlBeamItemsXml(assignment);
     if (xml) beamXmlByChunkIndex.set(chunkIndex, xml);
   }
 
@@ -2264,9 +2264,9 @@ const buildMeasureVoiceXml = (
         const accidentalText = requiresAccidental ? accidentalTextFromAlter(pitch.alter) : null;
         xml += "<note>";
         if (i > 0) xml += "<chord/>";
-        xml += `<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch>`;
+        xml += buildMusicXmlPitchXml(pitch);
         if (accidentalText) {
-          xml += `<accidental>${accidentalText}</accidental>`;
+          xml += buildMusicXmlAccidentalXml({ text: accidentalText });
         }
         xml += `<duration>${prepared.durDiv}</duration>${prepared.typeXml}<voice>${voice}</voice>${i === 0 ? beamXml : ""}<staff>${outputStaff}</staff>`;
         xml += buildTieXml(prepared.tieStart, prepared.tieStop, prepared.inferredStaccato && i === 0);
@@ -2415,24 +2415,24 @@ const buildPartMusicXml = (params: {
     if (measureIndex === 0) {
       partXml += "<attributes>";
       partXml += `<divisions>${divisions}</divisions>`;
-      partXml += `<key><fifths>${keyFifths}</fifths><mode>${keyMode}</mode></key>`;
-      partXml += `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`;
+      partXml += buildMusicXmlKeySignatureXml({ fifths: keyFifths, mode: keyMode });
+      partXml += buildMusicXmlTimeSignatureXml({ beats, beatType });
       if (isDrum) {
-        partXml += "<clef><sign>percussion</sign><line>2</line></clef>";
+        partXml += buildMusicXmlClefXml({ sign: "percussion", line: 2 });
       } else {
         if (useGrandStaff) {
           partXml += `<staves>${laneCount}</staves>`;
           for (const lane of laneDefs) {
             if (lane.sourceStaff === 1) {
-              partXml += `<clef number="${lane.outputStaff}"><sign>G</sign><line>2</line></clef>`;
+              partXml += buildMusicXmlClefXml({ sign: "G", line: 2, number: lane.outputStaff });
             } else {
-              partXml += `<clef number="${lane.outputStaff}"><sign>F</sign><line>4</line></clef>`;
+              partXml += buildMusicXmlClefXml({ sign: "F", line: 4, number: lane.outputStaff });
             }
           }
         } else {
           const clefSign = prefersAltoClef ? "C" : singleClefSign;
           const line = clefSign === "F" ? 4 : clefSign === "C" ? 3 : 2;
-          partXml += `<clef><sign>${clefSign}</sign><line>${line}</line></clef>`;
+          partXml += buildMusicXmlClefXml({ sign: clefSign, line });
         }
       }
       partXml += "</attributes>";
@@ -2483,7 +2483,7 @@ const buildPartMusicXml = (params: {
     for (let laneIndex = 0; laneIndex < lanesForMeasure.length; laneIndex += 1) {
       const lane = lanesForMeasure[laneIndex];
       if (laneIndex > 0) {
-        partXml += `<backup><duration>${currentMeasureDiv}</duration></backup>`;
+        partXml += buildMusicXmlBackupXml({ duration: currentMeasureDiv });
       }
       partXml += buildMeasureVoiceXml(
         measureSegments,

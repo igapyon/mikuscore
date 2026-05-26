@@ -11,6 +11,15 @@ export type BeamAssignment = {
   levels: number;
 };
 
+export const buildMusicXmlBeamItemsXml = (assignment: BeamAssignment | null | undefined): string => {
+  if (!assignment || assignment.levels <= 0) return "";
+  let xml = "";
+  for (let level = 1; level <= Math.round(assignment.levels); level += 1) {
+    xml += `<beam number="${level}">${assignment.state}</beam>`;
+  }
+  return xml;
+};
+
 type ComputeBeamAssignmentOptions = {
   splitAtBeatBoundaryWhenImplicit?: boolean;
 };

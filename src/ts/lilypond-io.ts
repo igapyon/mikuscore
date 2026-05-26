@@ -17,12 +17,22 @@ import {
   buildMusicXmlDirectionFeatureXml,
   normalizeDynamicMark,
 } from "./score-features/dynamics";
+import { buildMusicXmlDotsXml } from "./score-features/durations";
 import { buildMusicXmlBarlineXml } from "./score-features/barlines";
+import { buildMusicXmlClefXml } from "./score-features/clefs";
+import { buildMusicXmlKeySignatureXml } from "./score-features/key-signatures";
 import { buildMusicXmlWordsDirectionXml } from "./score-features/direction-text";
 import {
   buildMusicXmlOrnamentItemsXml,
   extractMusicXmlOrnamentFeatures,
 } from "./score-features/ornaments";
+import { buildMusicXmlPitchXml } from "./score-features/pitches";
+import { buildMusicXmlBackupXml } from "./score-features/measure-flow";
+import {
+  buildMusicXmlAccidentalXml,
+  buildMusicXmlGraceXml,
+  buildMusicXmlLyricXml,
+} from "./score-features/note-elements";
 import {
   buildMusicXmlSlursXml,
   extractMusicXmlSlurFeatures,
@@ -31,6 +41,9 @@ import {
   buildMusicXmlTieItemsXml,
   buildMusicXmlTiedItemsXml,
 } from "./score-features/ties";
+import { buildMusicXmlTimeModificationXml } from "./score-features/tuplets";
+import { buildMusicXmlTimeSignatureXml } from "./score-features/time-signatures";
+import { buildMusicXmlTransposeXml } from "./score-features/transposition";
 import {
   chooseSingleClefByKeys,
   pickStaffForClusterWithHysteresis,
@@ -2114,15 +2127,12 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
     return null;
   };
   const buildNoteExtrasXml = (event: Extract<LilyDirectEvent, { kind: "note" | "chord" }>): string => {
-    const graceXml = event.graceSlash === undefined ? "" : `<grace${event.graceSlash ? ' slash="yes"' : ""}/>`;
+    const graceXml = event.graceSlash === undefined ? "" : buildMusicXmlGraceXml({ slash: event.graceSlash });
     const durationXml = event.graceSlash === undefined ? `<duration>${event.durationDiv}</duration>` : "";
-    const timeModXml =
-      Number.isFinite(event.tupletActual)
-      && (event.tupletActual as number) > 0
-      && Number.isFinite(event.tupletNormal)
-      && (event.tupletNormal as number) > 0
-        ? `<time-modification><actual-notes>${Math.round(event.tupletActual as number)}</actual-notes><normal-notes>${Math.round(event.tupletNormal as number)}</normal-notes></time-modification>`
-        : "";
+    const timeModXml = buildMusicXmlTimeModificationXml({
+      actualNotes: event.tupletActual,
+      normalNotes: event.tupletNormal,
+    });
     const tokens = Array.from(new Set(event.articulationSubtypes ?? []));
     const nodesXml = buildMusicXmlArticulationItemsXml(
       tokens.filter((token) => token === "staccato" || token === "accent")
@@ -2167,9 +2177,7 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
     const ornamentsXml = ornamentItemsXml || wavyNodes.length
       ? `<ornaments>${ornamentItemsXml}${wavyNodes.join("")}</ornaments>`
       : "";
-    const lyricXml = event.lyricText
-      ? `<lyric><syllabic>single</syllabic><text>${xmlEscape(event.lyricText)}</text></lyric>`
-      : "";
+    const lyricXml = buildMusicXmlLyricXml({ text: event.lyricText, syllabic: "single" });
     const notationXml = nodes.length || technicalNodes.length || tupletNodes.length || slurNodes.length || glissNodes.length || ornamentsXml || tiedXml
       ? `<notations>${nodes.length ? `<articulations>${nodes.join("")}</articulations>` : ""}${technicalNodes.length ? `<technical>${technicalNodes.join("")}</technical>` : ""}${tupletNodes.join("")}${slurNodes.join("")}${glissNodes.join("")}${tiedXml}${ornamentsXml}</notations>`
       : "";
@@ -2206,19 +2214,17 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
         if (m === 0) {
           const clefXml =
             staff.clef === "bass"
-              ? "<clef><sign>F</sign><line>4</line></clef>"
+              ? buildMusicXmlClefXml({ sign: "F", line: 4 })
               : staff.clef === "alto"
-                ? "<clef><sign>C</sign><line>3</line></clef>"
+                ? buildMusicXmlClefXml({ sign: "C", line: 3 })
                 : staff.clef === "tenor"
-                  ? "<clef><sign>C</sign><line>4</line></clef>"
-                  : "<clef><sign>G</sign><line>2</line></clef>";
+                  ? buildMusicXmlClefXml({ sign: "C", line: 4 })
+                  : buildMusicXmlClefXml({ sign: "G", line: 2 });
           const transpose = staff.transpose || null;
-          const transposeXml = transpose && (Number.isFinite(transpose.chromatic) || Number.isFinite(transpose.diatonic))
-            ? `<transpose>${Number.isFinite(transpose.diatonic) ? `<diatonic>${Math.round(Number(transpose.diatonic))}</diatonic>` : ""}${Number.isFinite(transpose.chromatic) ? `<chromatic>${Math.round(Number(transpose.chromatic))}</chromatic>` : ""}</transpose>`
-            : "";
-          body += `<attributes><divisions>480</divisions><key><fifths>${params.fifths}</fifths><mode>${params.mode}</mode></key><time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time>${transposeXml}${clefXml}</attributes>`;
+          const transposeXml = buildMusicXmlTransposeXml(transpose);
+          body += `<attributes><divisions>480</divisions>${buildMusicXmlKeySignatureXml({ fifths: params.fifths, mode: params.mode })}${buildMusicXmlTimeSignatureXml({ beats: measureBeats, beatType: measureBeatType })}${transposeXml}${clefXml}</attributes>`;
         } else if (shouldEmitTime) {
-          body += `<attributes><time><beats>${measureBeats}</beats><beat-type>${measureBeatType}</beat-type></time></attributes>`;
+          body += `<attributes>${buildMusicXmlTimeSignatureXml({ beats: measureBeats, beatType: measureBeatType })}</attributes>`;
         }
         if (hint?.doubleBar === "left" || hint?.doubleBar === "both") {
           body += buildMusicXmlBarlineXml({ location: "left", barStyle: "light-light" });
@@ -2256,17 +2262,17 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
             continue;
           }
           if (event.kind === "backup") {
-            body += `<backup><duration>${event.durationDiv}</duration></backup>`;
+            body += buildMusicXmlBackupXml({ duration: event.durationDiv });
             continue;
           }
           if (event.kind === "rest") {
-            body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}</note>`;
+            body += `<note><rest/><duration>${event.durationDiv}</duration><voice>1</voice><type>${event.type}</type>${buildMusicXmlDotsXml(event.dots)}</note>`;
             continue;
           }
           if (event.kind === "note") {
             const accidentalText = event.accidentalText || accidentalTextFromAlter(event.pitch.alter);
-            const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
-            body += `<note>${buildNoteExtrasXml(event)}<pitch><step>${event.pitch.step}</step>${event.pitch.alter !== 0 ? `<alter>${event.pitch.alter}</alter>` : ""}<octave>${event.pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${accidentalXml}</note>`;
+            const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
+            body += `<note>${buildNoteExtrasXml(event)}${buildMusicXmlPitchXml(event.pitch)}<voice>1</voice><type>${event.type}</type>${buildMusicXmlDotsXml(event.dots)}${accidentalXml}</note>`;
             continue;
           }
           for (let pi = 0; pi < event.pitches.length; pi += 1) {
@@ -2275,8 +2281,8 @@ const buildDirectMusicXmlFromStaffBlocks = (params: {
             const accidentalText =
               (pi === 0 && event.accidentalText ? event.accidentalText : null)
               || accidentalTextFromAlter(pitch.alter);
-            const accidentalXml = accidentalText ? `<accidental>${accidentalText}</accidental>` : "";
-            body += `<note>${pi > 0 ? "<chord/>" : ""}${pi === 0 ? buildNoteExtrasXml(event) : chordDurationXml}<pitch><step>${pitch.step}</step>${pitch.alter !== 0 ? `<alter>${pitch.alter}</alter>` : ""}<octave>${pitch.octave}</octave></pitch><voice>1</voice><type>${event.type}</type>${"<dot/>".repeat(event.dots)}${accidentalXml}</note>`;
+            const accidentalXml = buildMusicXmlAccidentalXml({ text: accidentalText });
+            body += `<note>${pi > 0 ? "<chord/>" : ""}${pi === 0 ? buildNoteExtrasXml(event) : chordDurationXml}${buildMusicXmlPitchXml(pitch)}<voice>1</voice><type>${event.type}</type>${buildMusicXmlDotsXml(event.dots)}${accidentalXml}</note>`;
           }
         }
         if (hint?.repeat === "forward") {
