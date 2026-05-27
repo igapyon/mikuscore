@@ -874,6 +874,201 @@ K:C
     expect(abc).toContain('"rit."C');
   });
 
+  it("MusicXML->ABC uses movement title, composer, and key defaults from the first measure", () => {
+    const xml = `<score-partwise version="3.1">
+  <movement-title>Fallback Title</movement-title>
+  <identification><creator type="composer">Composer Name</creator></identification>
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>3</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("T:Fallback Title");
+    expect(abc).toContain("C:Composer Name");
+    expect(abc).toContain("K:A");
+  });
+
+  it("MusicXML->ABC prefers work title over movement title", () => {
+    const xml = `<score-partwise version="3.1">
+  <work><work-title>Primary Title</work-title></work>
+  <movement-title>Secondary Title</movement-title>
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("T:Primary Title");
+    expect(abc).not.toContain("Secondary Title");
+  });
+
+  it("MusicXML->ABC omits the composer line when the composer is missing", () => {
+    const xml = `<score-partwise version="3.1">
+  <work><work-title>Primary Title</work-title></work>
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("T:Primary Title");
+    expect(abc).not.toContain("\nC:");
+  });
+
+  it("MusicXML->ABC trims work title and composer text", () => {
+    const xml = `<score-partwise version="3.1">
+  <work><work-title>  Trimmed Title  </work-title></work>
+  <identification><creator type="composer">  Trimmed Composer  </creator></identification>
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("T:Trimmed Title");
+    expect(abc).toContain("C:Trimmed Composer");
+    expect(abc).not.toContain("  Trimmed Title  ");
+    expect(abc).not.toContain("  Trimmed Composer  ");
+  });
+
+  it("MusicXML->ABC defaults missing key mode to major", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>1</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("K:G");
+  });
+
+  it("MusicXML->ABC defaults missing key fifths to C", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><mode>major</mode></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("K:C");
+  });
+
+  it("MusicXML->ABC defaults missing meter to 4/4", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths><mode>major</mode></key>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>480</duration><voice>1</voice><type>eighth</type></note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const doc = parseMusicXmlDocument(xml);
+    expect(doc).not.toBeNull();
+    if (!doc) return;
+
+    const abc = exportMusicXmlDomToAbc(doc);
+    expect(abc).toContain("M:4/4");
+  });
+
   it("MusicXML->ABC keeps harmony and direction words on the same leading note", () => {
     const xml = `<score-partwise version="3.1">
   <part-list>
@@ -3115,6 +3310,171 @@ K:C
     expect(notes[2]?.querySelector(":scope > notations > technical > string")?.textContent?.trim()).toBe("4");
   });
 
+  it("ABC->MusicXML preserves technical collection order across fingering, string, and pluck decorations", () => {
+    const abc = `X:1
+T:Technical collection order
+M:4/4
+L:1/2
+K:C
+!fingering:1!!fingering:4!!string:2!!string:3!!pluck:p!!pluck:i!C |`;
+
+    const xml = convertAbcToMusicXml(abc);
+    const outDoc = parseMusicXmlDocument(xml);
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const technicalChildren = Array.from(
+      outDoc.querySelectorAll("part > measure > note > notations > technical > *")
+    ).map((node) => node.tagName.toLowerCase());
+    expect(technicalChildren).toEqual(["fingering", "fingering", "string", "string", "pluck", "pluck"]);
+    const technicalTexts = Array.from(
+      outDoc.querySelectorAll("part > measure > note > notations > technical > *")
+    ).map((node) => node.textContent?.trim() ?? "");
+    expect(technicalTexts).toEqual(["1", "4", "2", "3", "p", "i"]);
+  });
+
+  it("ABC->MusicXML keeps technical groups ordered as plain, collection, then flags", () => {
+    const abc = `X:1
+T:Technical group order
+M:4/4
+L:1/4
+K:C
+!upbow!!fingering:1!!openstring!C |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const technicalChildren = Array.from(
+      outDoc.querySelectorAll("part > measure > note > notations > technical > *")
+    ).map((node) => node.tagName.toLowerCase());
+    expect(technicalChildren).toEqual(["up-bow", "fingering", "open-string"]);
+  });
+
+  it("MusicXML->ABC->MusicXML preserves notation wrapper order on a combined note", () => {
+    const xml = `<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Part 1</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>480</duration><voice>1</voice><type>quarter</type>
+        <notations>
+          <ornaments><trill-mark/><wavy-line type="start"/></ornaments>
+          <articulations><accent/><stress/></articulations>
+          <technical><fingering>1</fingering></technical>
+          <fermata>normal</fermata>
+        </notations>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+    const abc = exportMusicXmlDomToAbc(parseMusicXmlDocument(xml) as Document);
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notations = outDoc.querySelector("part > measure > note > notations");
+    expect(notations).not.toBeNull();
+    const childNames = Array.from(notations?.children ?? []).map((node) => node.tagName.toLowerCase());
+    expect(childNames).toEqual(["ornaments", "articulations", "technical", "fermata"]);
+  });
+
+  it("ABC->MusicXML keeps leading harmony and directions before the first note", () => {
+    const abc = `X:1
+T:Leading element order
+M:4/4
+L:1/8
+K:C
+"Am"!segno!!sfz!C D |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const measure = outDoc.querySelector("part > measure");
+    expect(measure).not.toBeNull();
+    const childNames = Array.from(measure?.children ?? []).map((node) => node.tagName.toLowerCase());
+    expect(childNames.filter((name) => name !== "attributes").slice(0, 4)).toEqual([
+      "harmony",
+      "direction",
+      "direction",
+      "note",
+    ]);
+  });
+
+  it("ABC->MusicXML keeps rest and pitch as the first note child in each branch", () => {
+    const abc = `X:1
+T:Rest and pitch order
+M:4/4
+L:1/4
+K:C
+z C |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const notes = Array.from(outDoc.querySelectorAll("part > measure > note"));
+    expect(Array.from(notes[0]?.children ?? []).map((node) => node.tagName.toLowerCase()).slice(0, 3)).toEqual([
+      "rest",
+      "duration",
+      "voice",
+    ]);
+    expect(notes[1]?.firstElementChild?.tagName.toLowerCase()).toBe("pitch");
+  });
+
+  it("ABC->MusicXML keeps pitch note children ordered before staff and type", () => {
+    const abc = `X:1
+T:Pitch note order
+M:4/4
+L:1/4
+K:C
+V:1
+C |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const note = outDoc.querySelector("part > measure > note");
+    expect(note).not.toBeNull();
+    const childNames = Array.from(note?.children ?? []).map((node) => node.tagName.toLowerCase());
+    expect(childNames.slice(0, 4)).toEqual(["pitch", "duration", "voice", "type"]);
+    expect(childNames).not.toContain("staff");
+  });
+
+  it("ABC->MusicXML keeps grouped pitch note children ordered before staff and type", () => {
+    const abc = `X:1
+T:Grouped pitch note order
+M:4/4
+L:1/4
+K:C
+%%score (1 2)
+V:1 name="Upper" clef=treble
+V:2 name="Lower" clef=bass
+[V:1] C |
+[V:2] C, |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const note = outDoc.querySelector("part > measure > note");
+    expect(note).not.toBeNull();
+    const childNames = Array.from(note?.children ?? []).map((node) => node.tagName.toLowerCase());
+    expect(childNames.slice(0, 5)).toEqual(["pitch", "duration", "voice", "staff", "type"]);
+  });
+
   it("ABC->MusicXML parses standard fingering decorations !0! to !5!", () => {
     const abc = `X:1
 T:Standard fingering decorations
@@ -3824,6 +4184,24 @@ K:C
 
     const firstDirection = outDoc.querySelector("part > measure > direction > direction-type > dynamics > sfz");
     expect(firstDirection).not.toBeNull();
+  });
+
+  it("ABC->MusicXML keeps dynamic and sfz directions in source order", () => {
+    const abc = `X:1
+T:Dynamic and sfz order
+M:4/4
+L:1/4
+K:C
+!p!!sfz!C D |`;
+
+    const outDoc = parseMusicXmlDocument(convertAbcToMusicXml(abc));
+    expect(outDoc).not.toBeNull();
+    if (!outDoc) return;
+
+    const directionKinds = Array.from(
+      outDoc.querySelectorAll("part > measure > direction > direction-type > dynamics > *")
+    ).map((node) => node.tagName.toLowerCase());
+    expect(directionKinds.slice(0, 2)).toEqual(["p", "sfz"]);
   });
 
   it("ABC->MusicXML parses sf decoration as dynamics direction", () => {
@@ -5764,8 +6142,10 @@ K:C
     if (!outDoc) return;
 
     const firstNote = outDoc.querySelector("part > measure > note");
-    expect(firstNote?.querySelector(":scope > notations > articulations > accent")).not.toBeNull();
-    expect(firstNote?.querySelector(":scope > notations > articulations > stress")).not.toBeNull();
+    const articulationChildren = Array.from(firstNote?.querySelectorAll(":scope > notations > articulations > *") ?? []).map(
+      (node) => node.tagName.toLowerCase()
+    );
+    expect(articulationChildren).toEqual(["accent", "stress"]);
   });
 
   it("MusicXML->ABC exports accent decoration and roundtrips it", () => {
@@ -7764,8 +8144,10 @@ K:C
     if (!outDoc) return;
 
     const firstNote = outDoc.querySelector("part > measure > note");
-    expect(firstNote?.querySelector(":scope > notations > technical > open-string")).not.toBeNull();
-    expect(firstNote?.querySelector(":scope > notations > technical > harmonic")).not.toBeNull();
+    const technicalChildren = Array.from(firstNote?.querySelectorAll(":scope > notations > technical > *") ?? []).map(
+      (node) => node.tagName.toLowerCase()
+    );
+    expect(technicalChildren).toEqual(["open-string", "harmonic"]);
   });
 
   it("MusicXML->ABC keeps state technical decorations together on the same note", () => {
@@ -10013,6 +10395,9 @@ K:C
     const srcDoc = parseMusicXmlDocument(xmlWithTrillWidth);
     expect(srcDoc).not.toBeNull();
     if (!srcDoc) return;
+    expect(
+      Array.from(srcDoc.querySelector("note > notations > ornaments")?.children ?? []).map((node) => node.tagName.toLowerCase())
+    ).toEqual(["trill-mark", "accidental-mark"]);
 
     const abc = exportMusicXmlDomToAbc(srcDoc);
     expect(abc).toContain("!trill!");
@@ -10023,6 +10408,9 @@ K:C
     const outDoc = parseMusicXmlDocument(roundtripXml);
     expect(outDoc).not.toBeNull();
     if (!outDoc) return;
+    expect(
+      Array.from(outDoc.querySelector("note > notations > ornaments")?.children ?? []).map((node) => node.tagName.toLowerCase())
+    ).toEqual(["trill-mark", "accidental-mark"]);
     expect(outDoc.querySelector("note > notations > ornaments > accidental-mark")?.textContent?.trim()).toBe("sharp");
   });
 

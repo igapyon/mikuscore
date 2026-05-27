@@ -110,7 +110,7 @@ const divideFractions = (a: Fraction, b: Fraction, fallback: Fraction = DEFAULT_
 };
 
 const parseFractionText = (text: string, fallback: Fraction = DEFAULT_UNIT): Fraction => {
-  const m = String(text || "").match(/^\s*(\d+)\/(\d+)\s*$/);
+  const m = String(text ?? "").match(/^\s*(\d+)\/(\d+)\s*$/);
   if (!m) {
     return { num: fallback.num, den: fallback.den };
   }
@@ -123,15 +123,15 @@ const parseFractionText = (text: string, fallback: Fraction = DEFAULT_UNIT): Fra
 };
 
 const isAbcjsWrapperLine = (text: string): boolean =>
-  /^\[\s*\/?\s*abcjs(?:-[A-Za-z0-9_-]+)?(?:\s+[^\]]*)?\]$/i.test(String(text || "").trim());
+  /^\[\s*\/?\s*abcjs(?:-[A-Za-z0-9_-]+)?(?:\s+[^\]]*)?\]$/i.test(String(text ?? "").trim());
 
 const estimateAbcMeasureContentDiv = (notes: any[]): number => {
   const byVoice = new Map<string, number>();
   const lastStartByVoice = new Map<string, number>();
   for (const note of Array.isArray(notes) ? notes : []) {
     if (!note || note.grace) continue;
-    const voice = String(note.voice || "1");
-    const durationDiv = Math.max(0, Math.round(Number(note.duration) || 0));
+    const voice = String(note.voice ?? "1");
+    const durationDiv = Math.max(0, Math.round(Number(note.duration ?? 0)));
     if (durationDiv <= 0) continue;
     const current = byVoice.get(voice) ?? 0;
     if (note.chord) {
@@ -185,7 +185,7 @@ const abcLengthTokenFromFraction = (ratio: Fraction): string => {
 };
 
 const abcPitchFromStepOctave = (step: string, octave: number): string => {
-  const upperStep = String(step || "").toUpperCase();
+  const upperStep = String(step ?? "").toUpperCase();
   if (!/^[A-G]$/.test(upperStep)) {
     return "C";
   }
@@ -208,7 +208,7 @@ const keyFromFifthsMode = (fifths: number, mode: string): string => {
   if (idx < 0 || idx >= major.length) {
     return "C";
   }
-  const lowerMode = String(mode || "").toLowerCase();
+  const lowerMode = String(mode ?? "").toLowerCase();
   if (lowerMode === "minor") {
     return minor[idx];
   }
@@ -555,9 +555,9 @@ const appendAbcBodyTextEntries = (
   splitBodyTextByInlineVoice: (text: string, initialVoiceId?: string) => { segments: Array<{ voiceId: string; text: string }>; finalVoiceId: string },
   splitBodyTextByOverlay: (text: string, baseVoiceId?: string) => Array<{ voiceId: string; text: string; overlayIndex: number }>
 ): { appended: boolean; finalVoiceId: string } => {
-  const normalizedBodyText = String(rawBodyText || "").replace(/\\\s*$/, "");
+  const normalizedBodyText = String(rawBodyText ?? "").replace(/\\\s*$/, "");
   if (!normalizedBodyText.trim()) {
-    return { appended: false, finalVoiceId: String(voiceId || "1").trim() || "1" };
+    return { appended: false, finalVoiceId: String(voiceId ?? "1").trim() || "1" };
   }
   const { segments: inlineVoiceSegments, finalVoiceId } = splitBodyTextByInlineVoice(normalizedBodyText, voiceId);
   for (const segment of inlineVoiceSegments) {
@@ -579,7 +579,7 @@ const appendAbcBodyTextEntries = (
       bodyEntries.push({ text: overlaySegment.text, lineNo, voiceId: overlaySegment.voiceId });
     }
   }
-  return { appended: true, finalVoiceId: String(finalVoiceId || voiceId || "1").trim() || "1" };
+  return { appended: true, finalVoiceId: String(finalVoiceId ?? voiceId ?? "1").trim() || "1" };
 };
 
 const applyAbcVoiceDirective = (
@@ -604,7 +604,7 @@ const applyAbcVoiceDirective = (
   if (!m) return;
   lineState.currentVoiceId = m[1];
   ensureAbcDeclaredVoice(voiceRegistry, lineState.currentVoiceId);
-  const rest = m[2].trim();
+  const rest = m[2]?.trim() ?? "";
   const parsedVoice = parseVoiceDirectiveTail(rest);
   if (parsedVoice.name) {
     voiceRegistry.voiceNameById[lineState.currentVoiceId] = parsedVoice.name;
@@ -623,7 +623,7 @@ const applyAbcVoiceDirective = (
         parsedVoice.skippedText
     );
   }
-  for (const unsupportedKey of parsedVoice.unsupportedKeys || []) {
+  for (const unsupportedKey of parsedVoice.unsupportedKeys ?? []) {
     warnings.push(
       "line " +
         lineNo +
@@ -724,10 +724,10 @@ const applyAbcTrillMeta = (
   params: AbcMetaParams,
   trillWidthHintByKey: Map<string, string>
 ): boolean => {
-  const voiceId = String(params.voice || "").trim();
-  const measureNo = Number.parseInt(String(params.measure || ""), 10);
-  const eventNo = Number.parseInt(String(params.event || ""), 10);
-  const upper = String(params.upper || "").trim();
+  const voiceId = String(params.voice ?? "").trim();
+  const measureNo = Number.parseInt(String(params.measure ?? ""), 10);
+  const eventNo = Number.parseInt(String(params.event ?? ""), 10);
+  const upper = String(params.upper ?? "").trim();
   if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(eventNo) && eventNo > 0 && upper) {
     trillWidthHintByKey.set(`${voiceId}#${measureNo}#${eventNo}`, upper);
     return true;
@@ -739,9 +739,9 @@ const applyAbcKeyMeta = (
   params: AbcMetaParams,
   keyHintFifthsByKey: Map<string, number>
 ): boolean => {
-  const voiceId = String(params.voice || "").trim();
-  const measureNo = Number.parseInt(String(params.measure || ""), 10);
-  const fifths = Number.parseInt(String(params.fifths || ""), 10);
+  const voiceId = String(params.voice ?? "").trim();
+  const measureNo = Number.parseInt(String(params.measure ?? ""), 10);
+  const fifths = Number.parseInt(String(params.fifths ?? ""), 10);
   if (voiceId && Number.isFinite(measureNo) && measureNo > 0 && Number.isFinite(fifths)) {
     const key = `${voiceId}#${measureNo}`;
     if (!keyHintFifthsByKey.has(key)) {
@@ -765,18 +765,18 @@ const applyAbcMeasureMeta = (
     endingStopType: "" | "stop" | "discontinue";
   }>
 ): boolean => {
-  const voiceId = String(params.voice || "").trim();
-  const measureNo = Number.parseInt(String(params.measure || ""), 10);
+  const voiceId = String(params.voice ?? "").trim();
+  const measureNo = Number.parseInt(String(params.measure ?? ""), 10);
   if (!(voiceId && Number.isFinite(measureNo) && measureNo > 0)) return false;
-  const measureNumberText = String(params.number || "").trim();
-  const implicitRaw = String(params.implicit || "").trim().toLowerCase();
-  const repeatRaw = String(params.repeat || "").trim().toLowerCase();
-  const leftRepeatRaw = String(params["left-repeat"] || "").trim().toLowerCase();
-  const rightRepeatRaw = String(params["right-repeat"] || "").trim().toLowerCase();
-  const repeatTimesRaw = Number.parseInt(String(params.times || ""), 10);
-  const endingStart = String(params["ending-start"] || "").trim();
-  const endingStop = String(params["ending-stop"] || "").trim();
-  const endingStopTypeRaw = String(params["ending-type"] || "").trim().toLowerCase();
+  const measureNumberText = String(params.number ?? "").trim();
+  const implicitRaw = String(params.implicit ?? "").trim().toLowerCase();
+  const repeatRaw = String(params.repeat ?? "").trim().toLowerCase();
+  const leftRepeatRaw = String(params["left-repeat"] ?? "").trim().toLowerCase();
+  const rightRepeatRaw = String(params["right-repeat"] ?? "").trim().toLowerCase();
+  const repeatTimesRaw = Number.parseInt(String(params.times ?? ""), 10);
+  const endingStart = String(params["ending-start"] ?? "").trim();
+  const endingStop = String(params["ending-stop"] ?? "").trim();
+  const endingStopTypeRaw = String(params["ending-type"] ?? "").trim().toLowerCase();
   measureMetaByKey.set(`${voiceId}#${measureNo}`, {
     number: measureNumberText || String(measureNo),
     implicit: implicitRaw === "1" || implicitRaw === "true" || implicitRaw === "yes",
@@ -799,9 +799,9 @@ const applyAbcTransposeMeta = (
   params: AbcMetaParams,
   transposeHintByVoiceId: Map<string, { chromatic?: number; diatonic?: number }>
 ): boolean => {
-  const voiceId = String(params.voice || "").trim();
-  const chromatic = Number.parseInt(String(params.chromatic || ""), 10);
-  const diatonic = Number.parseInt(String(params.diatonic || ""), 10);
+  const voiceId = String(params.voice ?? "").trim();
+  const chromatic = Number.parseInt(String(params.chromatic ?? ""), 10);
+  const diatonic = Number.parseInt(String(params.diatonic ?? ""), 10);
   if (!(voiceId && (Number.isFinite(chromatic) || Number.isFinite(diatonic)))) return false;
   const metaTranspose: { chromatic?: number; diatonic?: number } = {};
   if (Number.isFinite(chromatic)) metaTranspose.chromatic = chromatic;
@@ -831,8 +831,8 @@ const handleAbcMetaDirectiveLine = (
 ): boolean => {
   const metaMatch = rawTrimmed.match(/^%@mks\s+(trill|key|measure|transpose)\s+(.+)$/i);
   if (!metaMatch) return false;
-  const kind = String(metaMatch[1] || "").toLowerCase();
-  const params = parseAbcMetaParams(String(metaMatch[2] || ""));
+  const kind = String(metaMatch[1] ?? "").toLowerCase();
+  const params = parseAbcMetaParams(String(metaMatch[2] ?? ""));
   if (kind === "trill") return applyAbcTrillMeta(params, trillWidthHintByKey);
   if (kind === "key") return applyAbcKeyMeta(params, keyHintFifthsByKey);
   if (kind === "measure") return applyAbcMeasureMeta(params, measureMetaByKey);
@@ -977,20 +977,20 @@ const buildAbcVoiceMeasureMetaByIndex = (
     if (Number.isFinite(hinted)) {
       keyByMeasure[m] = Number(hinted);
     }
-    const notationMeta = notationMeasureMetaByVoice[voiceId]?.[m] || null;
-    const hintedMeta = measureMetaByKey.get(`${voiceId}#${m}`) || null;
-    const meterHint = meterByMeasureByVoice[voiceId]?.[m] || null;
-    const tempoHint = tempoByMeasureByVoice[voiceId]?.[m] || null;
+    const notationMeta = notationMeasureMetaByVoice[voiceId]?.[m] ?? null;
+    const hintedMeta = measureMetaByKey.get(`${voiceId}#${m}`) ?? null;
+    const meterHint = meterByMeasureByVoice[voiceId]?.[m] ?? null;
+    const tempoHint = tempoByMeasureByVoice[voiceId]?.[m] ?? null;
     if (notationMeta || hintedMeta) {
       measureMetaByIndex[m] = {
         number: hintedMeta?.number || notationMeta?.number || String(m),
         implicit: hintedMeta?.implicit ?? notationMeta?.implicit ?? false,
-        repeatStart: Boolean(notationMeta?.repeatStart || hintedMeta?.repeatStart),
-        repeatEnd: Boolean(notationMeta?.repeatEnd || hintedMeta?.repeatEnd),
+        repeatStart: !!(notationMeta?.repeatStart || hintedMeta?.repeatStart),
+        repeatEnd: !!(notationMeta?.repeatEnd || hintedMeta?.repeatEnd),
         repeatTimes: hintedMeta?.repeatTimes ?? notationMeta?.repeatTimes ?? null,
-        endingStart: String(notationMeta?.endingStart || hintedMeta?.endingStart || ""),
-        endingStop: String(notationMeta?.endingStop || hintedMeta?.endingStop || ""),
-        endingStopType: hintedMeta?.endingStopType || notationMeta?.endingStopType || "",
+        endingStart: String(notationMeta?.endingStart ?? hintedMeta?.endingStart ?? ""),
+        endingStop: String(notationMeta?.endingStop ?? hintedMeta?.endingStop ?? ""),
+        endingStopType: hintedMeta?.endingStopType ?? notationMeta?.endingStopType ?? "",
       };
     }
     if (meterHint) {
@@ -1065,7 +1065,7 @@ const buildAbcNormalizedVoiceDataById = (
     );
     normalizedVoiceDataById.set(voiceId, {
       partName,
-      clef: voiceRegistry.voiceClefById[voiceId] || "",
+      clef: voiceRegistry.voiceClefById[voiceId] ?? "",
       transpose,
       voiceId,
       keyByMeasure: measureData.keyByMeasure,
@@ -1078,55 +1078,13 @@ const buildAbcNormalizedVoiceDataById = (
   return normalizedVoiceDataById;
 };
 
-const buildAbcGroupedStaffClefXml = (staffVoices: AbcParsedStaffVoice[]): string => {
-  return staffVoices
+const buildAbcGroupedStaffClefXml = (staffVoices: AbcParsedStaffVoice[]): string =>
+  staffVoices
     .map((staffVoice) => {
-      const clefXml = clefXmlFromAbcClef(staffVoice.clef || "");
+      const clefXml = clefXmlFromAbcClef(staffVoice.clef ?? "");
       return clefXml.replace("<clef>", `<clef number="${staffVoice.staff}">`);
     })
     .join("");
-};
-
-const buildAbcPartTransposeXml = (
-  transpose?: { chromatic?: number; diatonic?: number } | null
-): string => {
-  return buildMusicXmlTransposeXml(transpose);
-};
-
-const buildAbcTempoDirectionXml = (
-  tempo: number | null,
-  include: boolean
-): string => {
-  if (!(include && tempo !== null)) {
-    return "";
-  }
-  return buildMusicXmlTempoDirectionXml({ bpm: tempo, includeQuarterMetronome: true });
-};
-
-const buildAbcMeasureHeaderXml = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureIndex: number,
-  currentPartFifths: number,
-  currentPartMeter: { beats: number; beatType: number },
-  currentPartTempo: number | null,
-  hintedFifths: number | null,
-  hintedMeter: { beats: number; beatType: number } | null
-): { headerXml: string; tempoDirectionXml: string } => {
-  if (measureIndex === 0) {
-    const headerXml = buildAbcMeasureHeaderInitialParts(part, currentPartFifths, currentPartMeter).join("");
-    const tempoDirectionXml = buildAbcTempoDirectionXml(currentPartTempo, partIndex === 0);
-    return { headerXml, tempoDirectionXml };
-  }
-  const headerXml =
-    hintedFifths !== null || hintedMeter
-      ? buildAbcMeasureHeaderUpdateParts(currentPartFifths, currentPartMeter, hintedFifths, hintedMeter).join("")
-      : "";
-  return {
-    headerXml,
-    tempoDirectionXml: "",
-  };
-};
 
 const buildAbcMeasureHeaderInitialParts = (
   part: AbcParsedPart,
@@ -1141,7 +1099,7 @@ const buildAbcMeasureHeaderInitialParts = (
     beatType: currentPartMeter.beatType,
   }),
   hasAbcGroupedStaffVoices(part) ? `<staves>${part.staffVoices.length}</staves>` : "",
-  buildAbcPartTransposeXml(part.transpose),
+  buildMusicXmlTransposeXml(part.transpose),
   hasAbcGroupedStaffVoices(part) ? buildAbcGroupedStaffClefXml(part.staffVoices) : clefXmlFromAbcClef(part.clef),
   "</attributes>",
 ];
@@ -1153,99 +1111,10 @@ const buildAbcMeasureHeaderUpdateParts = (
   hintedMeter: { beats: number; beatType: number } | null
 ): string[] => [
   "<attributes>",
-  buildAbcMeasureHeaderUpdateKeyPart(currentPartFifths, hintedFifths),
-  buildAbcMeasureHeaderUpdateTimePart(currentPartMeter, hintedMeter),
+  hintedFifths !== null ? buildMusicXmlKeySignatureXml({ fifths: currentPartFifths }) : "",
+  hintedMeter ? buildMusicXmlTimeSignatureXml({ beats: currentPartMeter.beats, beatType: currentPartMeter.beatType }) : "",
   "</attributes>",
 ];
-
-const buildAbcMeasureHeaderUpdateKeyPart = (currentPartFifths: number, hintedFifths: number | null): string =>
-  buildAbcMeasureHeaderUpdateKeyPartXml(currentPartFifths, hintedFifths);
-
-const buildAbcMeasureHeaderUpdateKeyPartXml = (currentPartFifths: number, hintedFifths: number | null): string =>
-  hintedFifths !== null ? buildAbcMeasureHeaderUpdateKeySignatureXml(currentPartFifths) : "";
-
-const buildAbcMeasureHeaderUpdateKeySignatureXml = (currentPartFifths: number): string =>
-  buildMusicXmlKeySignatureXml({ fifths: currentPartFifths });
-
-const buildAbcMeasureHeaderUpdateTimePart = (
-  currentPartMeter: { beats: number; beatType: number },
-  hintedMeter: { beats: number; beatType: number } | null
-): string =>
-  buildAbcMeasureHeaderUpdateTimePartXml(currentPartMeter, hintedMeter);
-
-const buildAbcMeasureHeaderUpdateTimePartXml = (
-  currentPartMeter: { beats: number; beatType: number },
-  hintedMeter: { beats: number; beatType: number } | null
-): string =>
-  hintedMeter ? buildAbcMeasureHeaderUpdateTimeSignatureXml(currentPartMeter) : "";
-
-const buildAbcMeasureHeaderUpdateTimeSignatureXml = (currentPartMeter: { beats: number; beatType: number }): string =>
-  buildMusicXmlTimeSignatureXml({
-    beats: currentPartMeter.beats,
-    beatType: currentPartMeter.beatType,
-  });
-
-const buildAbcMeasureTempoDirectionXml = (
-  hintedTempo: number | null,
-  partIndex: number,
-  measureIndex: number
-): string => {
-  return buildAbcTempoDirectionXml(hintedTempo, measureIndex > 0 && partIndex === 0);
-};
-
-const buildAbcMeasureRepeatStartXml = (
-  measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any
-): string => {
-  const leftBarlineChunks = buildAbcMeasureRepeatStartChunks(measureMeta);
-  return leftBarlineChunks.length > 0 ? `<barline location="left">${leftBarlineChunks.join("")}</barline>` : "";
-};
-
-const buildAbcMeasureRepeatStartChunks = (measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any): string[] =>
-  [
-    measureMeta?.endingStart
-      ? `<ending number="${xmlEscape(String(measureMeta.endingStart))}" type="start"/>`
-      : "",
-    measureMeta?.repeatStart ? '<repeat direction="forward" winged="none"/>' : "",
-  ].filter(Boolean);
-
-const buildAbcMeasureRepeatEndXml = (
-  measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any
-): string => {
-  const rightBarlineChunks = buildAbcMeasureRepeatEndChunks(measureMeta);
-  return rightBarlineChunks.length > 0 ? `<barline location="right">${rightBarlineChunks.join("")}</barline>` : "";
-};
-
-const buildAbcMeasureRepeatEndChunks = (measureMeta: AbcParsedPart["measureMetaByIndex"] extends Record<number, infer T> ? T : any): string[] =>
-  [
-    measureMeta?.endingStop
-      ? `<ending number="${xmlEscape(String(measureMeta.endingStop))}" type="${measureMeta.endingStopType || "stop"}"/>`
-      : "",
-    measureMeta?.repeatEnd
-      ? `<repeat direction="backward" winged="none"${
-          Number.isFinite(measureMeta.repeatTimes) && Number(measureMeta.repeatTimes) > 1
-            ? ` times="${Math.round(Number(measureMeta.repeatTimes))}"`
-            : ""
-        }/>`
-      : "",
-  ].filter(Boolean);
-
-const buildAbcMeasureXml = (
-  measureNo: number,
-  measureNumberText: string,
-  implicit: boolean,
-  repeatStartXml: string,
-  headerXml: string,
-  tempoDirectionXml: string,
-  debugMiscXml: string,
-  diagMiscXml: string,
-  sourceMiscXml: string,
-  notesXml: string,
-  repeatEndXml: string
-): string => {
-  const xmlMeasureNumber = xmlEscape(String(measureNumberText || measureNo));
-  const implicitAttr = implicit ? ' implicit="yes"' : "";
-  return `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${headerXml}${tempoDirectionXml}${debugMiscXml}${diagMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`;
-};
 
 const buildAbcPartMeasureRenderContext = (
   part: AbcParsedPart,
@@ -1320,18 +1189,21 @@ const buildAbcRenderedPartMeasureXml = (
     abcSource,
     buildMeasureNotesXml,
   } = context;
-  const { headerXml, tempoDirectionXml: headerTempoDirectionXml } = buildAbcMeasureHeaderXml(
-    part,
-    partIndex,
-    measureIndex,
-    currentPartFifths,
-    currentPartMeter,
-    currentPartTempo,
-    hintedFifths,
-    hintedMeter
-  );
+  const headerXml =
+    measureIndex === 0
+      ? buildAbcMeasureHeaderInitialParts(part, currentPartFifths, currentPartMeter).join("")
+      : hintedFifths !== null || hintedMeter !== null
+        ? buildAbcMeasureHeaderUpdateParts(currentPartFifths, currentPartMeter, hintedFifths, hintedMeter).join("")
+        : "";
+  const headerTempoDirectionXml =
+    measureIndex === 0 && partIndex === 0 && currentPartTempo !== null
+      ? buildMusicXmlTempoDirectionXml({ bpm: currentPartTempo, includeQuarterMetronome: true })
+      : "";
   const tempoDirectionXml =
-    headerTempoDirectionXml || buildAbcMeasureTempoDirectionXml(hintedTempo, partIndex, measureIndex);
+    headerTempoDirectionXml ||
+    (measureIndex > 0 && partIndex === 0 && hintedTempo !== null
+      ? buildMusicXmlTempoDirectionXml({ bpm: hintedTempo, includeQuarterMetronome: true })
+      : "");
   const notesXml =
     hasAbcGroupedStaffVoices(part)
       ? buildAbcGroupedStaffMeasureNotesXml(
@@ -1341,89 +1213,51 @@ const buildAbcRenderedPartMeasureXml = (
           buildMeasureNotesXml
         )
       : buildMeasureNotesXml(notes);
-  const repeatStartXml = buildAbcMeasureRepeatStartXml(measureMeta);
-  const repeatEndXml = buildAbcMeasureRepeatEndXml(measureMeta);
-  const { debugMiscXml, diagMiscXml, sourceMiscXml } = buildAbcRenderedMeasureMiscXml({
-    part,
-    partIndex,
-    measureNo,
-    notes,
-    debugMetadata,
-    sourceMetadata,
-    diagnostics,
-    abcSource,
-  });
-  return buildAbcMeasureXml(
-    measureNo,
-    String(measureMeta?.number || measureNo),
-    Boolean(measureMeta?.implicit || inferredImplicitPickup),
-    repeatStartXml,
-    headerXml,
-    tempoDirectionXml,
-    debugMiscXml,
-    diagMiscXml,
-    sourceMiscXml,
-    notesXml,
-    repeatEndXml
+  const repeatStartXml = measureMeta
+    ? (() => {
+        const chunks = [
+          ...(measureMeta.endingStart
+            ? [`<ending number="${xmlEscape(String(measureMeta.endingStart))}" type="start"/>`]
+            : []),
+          ...(measureMeta.repeatStart ? ['<repeat direction="forward" winged="none"/>'] : []),
+        ];
+        return chunks.length > 0 ? `<barline location="left">${chunks.join("")}</barline>` : "";
+      })()
+    : "";
+  const repeatEndXml = measureMeta
+    ? (() => {
+        const chunks = [
+          ...(measureMeta.endingStop
+            ? [
+                `<ending number="${xmlEscape(String(measureMeta.endingStop))}" type="${
+                  measureMeta.endingStopType || "stop"
+                }"/>`,
+              ]
+            : []),
+          ...(measureMeta.repeatEnd
+            ? [
+                `<repeat direction="backward" winged="none"${
+                  Number.isFinite(measureMeta.repeatTimes) && Number(measureMeta.repeatTimes) > 1
+                    ? ` times="${Math.round(Number(measureMeta.repeatTimes))}"`
+                    : ""
+                }/>`,
+              ]
+            : []),
+        ];
+        return chunks.length > 0 ? `<barline location="right">${chunks.join("")}</barline>` : "";
+      })()
+    : "";
+  const debugMiscXml = debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
+  const diagMiscXml = buildAbcDiagMiscXml(
+    partIndex === 0 && measureNo === 1
+      ? (diagnostics ?? []).filter((diag) => !diag.voiceId || diag.voiceId === (part.voiceId ?? ""))
+      : []
   );
+  const sourceMiscXml = sourceMetadata && partIndex === 0 && measureNo === 1 ? buildAbcSourceMiscXml(abcSource) : "";
+  const xmlMeasureNumber = xmlEscape(String(measureMeta?.number || measureNo));
+  const implicitAttr = measureMeta?.implicit || inferredImplicitPickup ? ' implicit="yes"' : "";
+  return `<measure number="${xmlMeasureNumber}"${implicitAttr}>${repeatStartXml}${headerXml}${tempoDirectionXml}${debugMiscXml}${diagMiscXml}${sourceMiscXml}${notesXml}${repeatEndXml}</measure>`;
 };
-
-const buildAbcRenderedMeasureMiscXml = (
-  context: Pick<
-    AbcRenderedPartMeasureContext,
-    "part" | "partIndex" | "measureNo" | "notes" | "debugMetadata" | "sourceMetadata" | "diagnostics" | "abcSource"
-  >
-): {
-  debugMiscXml: string;
-  diagMiscXml: string;
-  sourceMiscXml: string;
-} => {
-  const {
-    part,
-    partIndex,
-    measureNo,
-    notes,
-    debugMetadata,
-    sourceMetadata,
-    diagnostics,
-    abcSource,
-  } = context;
-  return {
-    debugMiscXml: buildAbcRenderedMeasureDebugMiscXml(debugMetadata, notes, measureNo),
-    diagMiscXml: buildAbcRenderedMeasureDiagMiscXml(part, partIndex, measureNo, diagnostics),
-    sourceMiscXml: buildAbcRenderedMeasureSourceMiscXml(sourceMetadata, partIndex, measureNo, abcSource),
-  };
-};
-
-const buildAbcRenderedMeasureDebugMiscXml = (debugMetadata: boolean, notes: AbcParsedNote[], measureNo: number): string =>
-  debugMetadata ? buildAbcMeasureDebugMiscXml(notes, measureNo) : "";
-
-const buildAbcRenderedMeasureDiagMiscXml = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureNo: number,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined
-): string => {
-  const filteredDiagnostics = buildAbcRenderedMeasureDiagMiscDiagnostics(part, partIndex, measureNo, diagnostics);
-  return filteredDiagnostics.length > 0 ? buildAbcDiagMiscXml(filteredDiagnostics) : "";
-};
-
-const buildAbcRenderedMeasureDiagMiscDiagnostics = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureNo: number,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined
-): AbcParsedResult["diagnostics"] =>
-  partIndex === 0 && measureNo === 1
-    ? (diagnostics ?? []).filter((diag) => !diag.voiceId || diag.voiceId === (part.voiceId || ""))
-    : [];
-
-const buildAbcRenderedMeasureSourceMiscXml = (
-  sourceMetadata: boolean,
-  partIndex: number,
-  measureNo: number,
-  abcSource: string
-): string => (sourceMetadata && partIndex === 0 && measureNo === 1 ? buildAbcSourceMiscXml(abcSource) : "");
 
 const createInitialAbcPartRenderState = (
   defaultFifths: number,
@@ -1450,95 +1284,6 @@ const buildAbcPartXml = (
   abcSource: string,
   buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
 ): string => {
-  return buildAbcPartXmlWrapper(part.partId, buildAbcPartXmlMeasures(
-    part,
-    partIndex,
-    measureCount,
-    defaultFifths,
-    beats,
-    beatType,
-    tempoBpm,
-    debugMetadata,
-    sourceMetadata,
-    diagnostics,
-    abcSource,
-    buildMeasureNotesXml
-  ));
-};
-
-const buildAbcPartXmlWrapper = (partId: string, measuresXml: string): string =>
-  `<part id="${xmlEscape(partId)}">${measuresXml}</part>`;
-
-const buildAbcPartXmlMeasures = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string => buildAbcPartXmlMeasureEntries(
-  part,
-  partIndex,
-  measureCount,
-  defaultFifths,
-  beats,
-  beatType,
-  tempoBpm,
-  debugMetadata,
-  sourceMetadata,
-  diagnostics,
-  abcSource,
-  buildMeasureNotesXml
-);
-
-const buildAbcPartXmlMeasureEntries = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string => buildAbcPartXmlMeasureEntryParts(
-  part,
-  partIndex,
-  measureCount,
-  defaultFifths,
-  beats,
-  beatType,
-  tempoBpm,
-  debugMetadata,
-  sourceMetadata,
-  diagnostics,
-  abcSource,
-  buildMeasureNotesXml
-).join("");
-
-const buildAbcPartXmlMeasureEntryParts = (
-  part: AbcParsedPart,
-  partIndex: number,
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string[] => {
   const measureParts: string[] = [];
   let state = createInitialAbcPartRenderState(defaultFifths, beats, beatType, tempoBpm);
   for (let i = 0; i < measureCount; i += 1) {
@@ -1579,169 +1324,19 @@ const buildAbcPartXmlMeasureEntryParts = (
       })
     );
   }
-  return measureParts;
+  return `<part id="${xmlEscape(part.partId)}">${measureParts.join("")}</part>`;
 };
 
-const buildAbcPartListXml = (resolvedParts: AbcParsedPart[]): string => {
-  return resolvedParts.map((part, index) => buildAbcPartListEntryXml(part, index)).join("");
-};
+const buildAbcNoteHarmonyAndWordsDirectionXml = (note: AbcParsedNote): string =>
+  note.chord
+    ? ""
+    : buildAbcNoteOptionalXmlParts([
+        note.chordSymbols?.map((chordSymbol) => buildHarmonyXmlFromChordSymbol(chordSymbol) || buildMusicXmlWordsDirectionXml({ text: String(chordSymbol) })).join("") ?? "",
+        note.annotations?.filter((annotation) => annotation.trim().length > 0).map((annotation) => buildMusicXmlWordsDirectionXml({ text: String(annotation) })).join("") ?? "",
+      ]).join("");
 
-const buildAbcPartListEntryXml = (part: AbcParsedPart, index: number): string => {
-  const midiChannel = ((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1);
-  return [
-    `<score-part id="${xmlEscape(part.partId)}">`,
-    `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
-    `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
-    `<midi-channel>${midiChannel}</midi-channel>`,
-    `<midi-program>6</midi-program>`,
-    "</midi-instrument>",
-    "</score-part>",
-  ].join("");
-};
-
-const buildAbcPartBodyXml = (
-  resolvedParts: AbcParsedPart[],
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string => {
-  return buildAbcPartBodyParts(
-    resolvedParts,
-    measureCount,
-    defaultFifths,
-    beats,
-    beatType,
-    tempoBpm,
-    debugMetadata,
-    sourceMetadata,
-    diagnostics,
-    abcSource,
-    buildMeasureNotesXml
-  );
-};
-
-const buildAbcPartBodyParts = (
-  resolvedParts: AbcParsedPart[],
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string => buildAbcPartBodyPartEntries(
-  resolvedParts,
-  measureCount,
-  defaultFifths,
-  beats,
-  beatType,
-  tempoBpm,
-  debugMetadata,
-  sourceMetadata,
-  diagnostics,
-  abcSource,
-  buildMeasureNotesXml
-);
-
-const buildAbcPartBodyPartEntries = (
-  resolvedParts: AbcParsedPart[],
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string => buildAbcPartBodyPartItems(
-  resolvedParts,
-  measureCount,
-  defaultFifths,
-  beats,
-  beatType,
-  tempoBpm,
-  debugMetadata,
-  sourceMetadata,
-  diagnostics,
-  abcSource,
-  buildMeasureNotesXml
-).join("");
-
-const buildAbcPartBodyPartItems = (
-  resolvedParts: AbcParsedPart[],
-  measureCount: number,
-  defaultFifths: number,
-  beats: number,
-  beatType: number,
-  tempoBpm: number | null,
-  debugMetadata: boolean,
-  sourceMetadata: boolean,
-  diagnostics: AbcParsedResult["diagnostics"] | undefined,
-  abcSource: string,
-  buildMeasureNotesXml: (notes: AbcParsedNote[], staffOverride?: number | null) => string
-): string[] =>
-  resolvedParts.map((part, partIndex) =>
-    buildAbcPartXml(
-      part,
-      partIndex,
-      measureCount,
-      defaultFifths,
-      beats,
-      beatType,
-      tempoBpm,
-      debugMetadata,
-      sourceMetadata,
-      diagnostics,
-      abcSource,
-      buildMeasureNotesXml
-    )
-  );
-
-const buildAbcNoteHarmonyAndWordsDirectionXml = (note: AbcParsedNote): string => {
-  return buildAbcNoteHarmonyAndWordsDirectionXmlParts(note).join("");
-};
-
-const buildAbcNoteHarmonyAndWordsDirectionXmlParts = (note: AbcParsedNote): string[] => {
-  if (note.chord) return [];
-  return [
-    buildAbcNoteChordSymbolDirectionXml(note),
-    buildAbcNoteAnnotationDirectionXml(note),
-  ].filter(Boolean);
-};
-
-const buildAbcNoteChordSymbolDirectionXml = (note: AbcParsedNote): string => {
-  return Array.isArray(note.chordSymbols)
-    ? note.chordSymbols.map((chordSymbol) => buildAbcNoteChordSymbolDirectionPart(chordSymbol)).join("")
-    : "";
-};
-
-const buildAbcNoteChordSymbolDirectionPart = (chordSymbol: unknown): string =>
-  buildHarmonyXmlFromChordSymbol(chordSymbol) || buildMusicXmlWordsDirectionXml({ text: String(chordSymbol) });
-
-const buildAbcNoteAnnotationDirectionXml = (note: AbcParsedNote): string => {
-  return Array.isArray(note.annotations)
-    ? note.annotations.filter(Boolean).map((annotation) => buildAbcNoteAnnotationDirectionPart(annotation)).join("")
-    : "";
-};
-
-const buildAbcNoteAnnotationDirectionPart = (annotation: unknown): string =>
-  buildMusicXmlWordsDirectionXml({ text: String(annotation) });
-
-const buildAbcNoteControlDirectionXml = (note: AbcParsedNote): string => {
-  return buildAbcNoteControlDirectionXmlParts(note).join("");
-};
+const buildAbcNoteControlDirectionXml = (note: AbcParsedNote): string =>
+  buildAbcNoteControlDirectionXmlParts(note).join("");
 
 const buildAbcNoteControlDirectionXmlParts = (note: AbcParsedNote): string[] => [
   ...buildAbcNoteMarkerDirectionXmlParts(note),
@@ -1749,13 +1344,11 @@ const buildAbcNoteControlDirectionXmlParts = (note: AbcParsedNote): string[] => 
   ...buildAbcNoteExpressionDirectionXmlParts(note),
 ];
 
-const buildAbcNoteMarkerDirectionXmlParts = (note: AbcParsedNote): string[] => {
-  return [
-    ...buildAbcNoteMarkerSegnoXmlParts(note),
-    ...buildAbcNoteMarkerCodaXmlParts(note),
-    ...buildAbcNoteMarkerRehearsalXmlParts(note),
-  ];
-};
+const buildAbcNoteMarkerDirectionXmlParts = (note: AbcParsedNote): string[] => [
+  ...buildAbcNoteMarkerSegnoXmlParts(note),
+  ...buildAbcNoteMarkerCodaXmlParts(note),
+  ...buildAbcNoteMarkerRehearsalXmlParts(note),
+];
 
 const buildAbcNoteMarkerSegnoXmlParts = (note: AbcParsedNote): string[] =>
   note.segno ? ["<direction><direction-type><segno/></direction-type></direction>"] : [];
@@ -1768,13 +1361,12 @@ const buildAbcNoteMarkerRehearsalXmlParts = (note: AbcParsedNote): string[] =>
     ? [`<direction><direction-type><rehearsal>${xmlEscape(String(note.rehearsalMark))}</rehearsal></direction-type></direction>`]
     : [];
 
-const buildAbcNoteJumpDirectionXmlParts = (note: AbcParsedNote): string[] =>
-  [
-    ...buildAbcNoteFineJumpXmlParts(note),
-    ...buildAbcNoteDaCapoJumpXmlParts(note),
-    ...buildAbcNoteDalSegnoJumpXmlParts(note),
-    ...buildAbcNoteToCodaJumpXmlParts(note),
-  ];
+const buildAbcNoteJumpDirectionXmlParts = (note: AbcParsedNote): string[] => [
+  ...buildAbcNoteFineJumpXmlParts(note),
+  ...buildAbcNoteDaCapoJumpXmlParts(note),
+  ...buildAbcNoteDalSegnoJumpXmlParts(note),
+  ...buildAbcNoteToCodaJumpXmlParts(note),
+];
 
 const buildAbcNoteFineJumpXmlParts = (note: AbcParsedNote): string[] =>
   note.fine ? ['<direction><sound fine="yes"/></direction>'] : [];
@@ -1788,37 +1380,41 @@ const buildAbcNoteDalSegnoJumpXmlParts = (note: AbcParsedNote): string[] =>
 const buildAbcNoteToCodaJumpXmlParts = (note: AbcParsedNote): string[] =>
   note.toCoda ? ['<direction><sound tocoda="coda"/></direction>'] : [];
 
-const buildAbcNoteExpressionDirectionXmlParts = (note: AbcParsedNote): string[] => [
-  buildAbcNoteWedgeDirectionXmlPart(note),
-  buildAbcNoteDynamicDirectionXmlPart(note),
-  buildAbcNoteSfzDirectionXmlPart(note),
-].filter(Boolean);
+const buildAbcNoteExpressionDirectionXmlParts = (note: AbcParsedNote): string[] =>
+  buildAbcNoteOptionalXmlParts([
+    buildAbcNoteWedgeDirectionXmlPart(note),
+    buildAbcNoteDynamicDirectionXmlPart(note),
+    buildAbcNoteSfzDirectionXmlPart(note),
+  ]);
 
-const buildAbcNoteWedgeDirectionXmlPart = (note: AbcParsedNote): string => {
-  if (note.crescendoStart) return buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "crescendo" });
-  if (note.diminuendoStart) return buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "diminuendo" });
-  if (note.crescendoStop || note.diminuendoStop) return buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "stop" });
-  return "";
-};
+const buildAbcNoteWedgeDirectionXmlPart = (note: AbcParsedNote): string =>
+  note.crescendoStart
+    ? buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "crescendo" })
+    : note.diminuendoStart
+      ? buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "diminuendo" })
+      : note.crescendoStop || note.diminuendoStop
+        ? buildMusicXmlDirectionFeatureXml({ kind: "wedge", wedgeType: "stop" })
+        : "";
 
-const buildAbcNoteDynamicDirectionXmlPart = (note: AbcParsedNote): string => {
-  if (!note.dynamicMark) return "";
-  const dynamicMark = normalizeDynamicMark(String(note.dynamicMark));
-  return dynamicMark ? buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: dynamicMark }) : "";
-};
+const buildAbcNoteDynamicDirectionXmlPart = (note: AbcParsedNote): string =>
+  note.dynamicMark
+    ? (() => {
+        const dynamicMark = normalizeDynamicMark(String(note.dynamicMark));
+        return dynamicMark ? buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: dynamicMark }) : "";
+      })()
+    : "";
 
 const buildAbcNoteSfzDirectionXmlPart = (note: AbcParsedNote): string =>
   note.sfz ? buildMusicXmlDirectionFeatureXml({ kind: "dynamic", mark: "sfz" }) : "";
 
-const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string => {
-  if (note.chord) return "";
-  return buildAbcNoteLeadingDirectionXmlParts(note).join("");
-};
-
-const buildAbcNoteLeadingDirectionXmlParts = (note: AbcParsedNote): string[] => [
-  buildAbcNoteHarmonyAndWordsDirectionXml(note),
-  buildAbcNoteControlDirectionXml(note),
-];
+const buildAbcNoteLeadingDirectionXml = (note: AbcParsedNote): string =>
+  note.chord
+    ? ""
+    : buildAbcNoteOptionalXmlParts([
+        note.chordSymbols?.map((chordSymbol) => buildHarmonyXmlFromChordSymbol(chordSymbol) || buildMusicXmlWordsDirectionXml({ text: String(chordSymbol) })).join("") ?? "",
+        note.annotations?.filter((annotation) => annotation.trim().length > 0).map((annotation) => buildMusicXmlWordsDirectionXml({ text: String(annotation) })).join("") ?? "",
+        ...buildAbcNoteControlDirectionXmlParts(note),
+      ]).join("");
 
 const buildAbcNotePitchOrRestXml = (note: AbcParsedNote): string =>
   buildAbcNotePitchOrRestXmlParts(note).join("");
@@ -1835,56 +1431,31 @@ const buildAbcNotePitchXmlPart = (note: AbcParsedNote): string =>
     octave: note.octave,
   });
 
-const buildAbcNoteLyricXml = (note: AbcParsedNote): string => {
-  return buildMusicXmlLyricXml({
+const buildAbcNoteLyricXml = (note: AbcParsedNote): string =>
+  buildMusicXmlLyricXml({
     text: note.lyricText,
     syllabic: note.lyricSyllabic || "single",
     extend: note.lyricExtend,
   });
-};
 
-const buildAbcNoteTimeModificationXml = (note: AbcParsedNote): string => {
-  return buildMusicXmlTimeModificationXml({
+const buildAbcNoteTimeModificationXml = (note: AbcParsedNote): string =>
+  buildMusicXmlTimeModificationXml({
     actualNotes: note.timeModification?.actual,
     normalNotes: note.timeModification?.normal,
   });
-};
 
-const buildAbcNoteAccidentalXml = (note: AbcParsedNote): string => {
-  return buildMusicXmlAccidentalXml({
+const buildAbcNoteAccidentalXml = (note: AbcParsedNote): string =>
+  buildMusicXmlAccidentalXml({
     text: note.accidentalText,
     editorial: note.accidentalEditorial,
     cautionary: note.accidentalCautionary,
   });
-};
 
-const buildAbcNoteCoreXml = (
-  note: AbcParsedNote,
-  noteIndex: number,
-  staffOverride: number | null,
-  beamXmlByNoteIndex: Map<number, string>
-): string => {
-  return buildAbcNoteCoreParts(note, noteIndex, staffOverride, beamXmlByNoteIndex).join("");
-};
-
-const buildAbcNoteCoreParts = (
-  note: AbcParsedNote,
-  noteIndex: number,
-  staffOverride: number | null,
-  beamXmlByNoteIndex: Map<number, string>
-): string[] => [
-  ...buildAbcNoteCoreOpenXmlParts(note, staffOverride),
-  buildAbcNoteCoreBeamPart(note, noteIndex, beamXmlByNoteIndex),
-  ...buildAbcNoteCoreTailXmlParts(note),
+const buildAbcNoteCoreOpenXmlParts = (note: AbcParsedNote, staffOverride: number | null): string[] => [
+  ...buildAbcNoteCoreHeaderXmlParts(note),
+  ...buildAbcNoteCorePitchAndDurationXmlParts(note),
+  ...buildAbcNoteCoreIdentityXmlParts(note, staffOverride),
 ];
-
-const buildAbcNoteCoreOpenXmlParts = (note: AbcParsedNote, staffOverride: number | null): string[] => {
-  return [
-    ...buildAbcNoteCoreHeaderXmlParts(note),
-    ...buildAbcNoteCorePitchAndDurationXmlParts(note),
-    ...buildAbcNoteCoreIdentityXmlParts(note, staffOverride),
-  ];
-};
 
 const buildAbcNoteCoreHeaderXmlParts = (note: AbcParsedNote): string[] => [
   buildAbcNoteCoreNoteStartXmlPart(),
@@ -1915,40 +1486,35 @@ const buildAbcNoteCoreDurationValuePart = (note: AbcParsedNote): number => Math.
 
 const buildAbcNoteCoreDurationXmlFromValuePart = (durationValue: number): string => `<duration>${durationValue}</duration>`;
 
-const buildAbcNoteCoreIdentityXmlParts = (note: AbcParsedNote, staffOverride: number | null): string[] =>
-  [
-    ...buildAbcNoteCorePlacementIdentityXmlParts(note, staffOverride),
-    ...buildAbcNoteCoreTextIdentityXmlParts(note),
-  ];
+const buildAbcNoteCoreIdentityXmlParts = (note: AbcParsedNote, staffOverride: number | null): string[] => [
+  ...buildAbcNoteCorePlacementIdentityXmlParts(note, staffOverride),
+  ...buildAbcNoteCoreTextIdentityXmlParts(note),
+];
 
 const buildAbcNoteCorePlacementIdentityXmlParts = (
   note: AbcParsedNote,
   staffOverride: number | null
-): string[] => [
-  buildAbcNoteCoreVoiceXmlPart(note),
-  ...buildAbcNoteCoreStaffXmlParts(note, staffOverride),
-];
+): string[] => {
+  const staffXmlPart = buildAbcNoteCoreStaffXmlPart(note, staffOverride);
+  return [buildAbcNoteCoreVoiceXmlPart(note), ...(staffXmlPart ? [staffXmlPart] : [])];
+};
 
-const buildAbcNoteCoreTextIdentityXmlParts = (note: AbcParsedNote): string[] =>
-  [buildAbcNoteLyricXml(note), buildAbcNoteCoreTypeXmlPart(note)];
+const buildAbcNoteCoreTextIdentityXmlParts = (note: AbcParsedNote): string[] => [
+  buildAbcNoteLyricXml(note),
+  buildAbcNoteCoreTypeXmlPart(note),
+];
 
 const buildAbcNoteCoreVoiceXmlPart = (note: AbcParsedNote): string =>
   `<voice>${xmlEscape(normalizeVoiceForMusicXml(note.voice))}</voice>`;
 
-const buildAbcNoteCoreStaffXmlParts = (note: AbcParsedNote, staffOverride: number | null): string[] => {
-  const staffXml = buildAbcNoteCoreStaffXmlPart(note, staffOverride);
-  return staffXml === "" ? [] : [staffXml];
-};
-
 const buildAbcNoteCoreStaffXmlPart = (note: AbcParsedNote, staffOverride: number | null): string => {
   const staffValue = buildAbcNoteCoreStaffValuePart(note, staffOverride);
-  return staffValue === null ? "" : buildAbcNoteCoreStaffXmlFromValuePart(staffValue);
+  return staffValue ? buildAbcNoteCoreStaffXmlFromValuePart(staffValue) : "";
 };
 
 const buildAbcNoteCoreStaffValuePart = (note: AbcParsedNote, staffOverride: number | null): number | null => {
-  if (staffOverride !== null) return staffOverride;
-  if (!Number.isFinite(note.staff as number)) return null;
-  return Math.max(1, Math.round(Number(note.staff) || 1));
+  const staff = Number(note.staff);
+  return staffOverride ?? (Number.isFinite(staff) ? Math.max(1, Math.round(staff || 1)) : null);
 };
 
 const buildAbcNoteCoreStaffXmlFromValuePart = (staffValue: number): string => `<staff>${staffValue}</staff>`;
@@ -1959,21 +1525,13 @@ const buildAbcNoteCoreBeamPart = (
   note: AbcParsedNote,
   noteIndex: number,
   beamXmlByNoteIndex: Map<number, string>
-): string => {
-  if (!buildAbcNoteCoreBeamEligibilityPart(note)) return "";
-  return buildAbcNoteCoreBeamMapLookupPart(noteIndex, beamXmlByNoteIndex);
-};
+): string =>
+  !note.chord && beamXmlByNoteIndex.has(noteIndex) ? String(beamXmlByNoteIndex.get(noteIndex)) : "";
 
-const buildAbcNoteCoreBeamEligibilityPart = (note: AbcParsedNote): boolean => !note.chord;
-
-const buildAbcNoteCoreBeamMapLookupPart = (noteIndex: number, beamXmlByNoteIndex: Map<number, string>): string =>
-  beamXmlByNoteIndex.has(noteIndex) ? String(beamXmlByNoteIndex.get(noteIndex)) : "";
-
-const buildAbcNoteCoreTailXmlParts = (note: AbcParsedNote): string[] =>
-  [
-    ...buildAbcNoteCoreNotationTailXmlParts(note),
-    ...buildAbcNoteCoreTieItemsXmlParts(note),
-  ];
+const buildAbcNoteCoreTailXmlParts = (note: AbcParsedNote): string[] => [
+  ...buildAbcNoteCoreNotationTailXmlParts(note),
+  ...buildAbcNoteCoreTieItemsXmlParts(note),
+];
 
 const buildAbcNoteCoreNotationTailXmlParts = (note: AbcParsedNote): string[] => [
   buildAbcNoteTimeModificationXml(note),
@@ -1982,39 +1540,36 @@ const buildAbcNoteCoreNotationTailXmlParts = (note: AbcParsedNote): string[] => 
 
 const buildAbcNoteCoreTieItemsXmlParts = (note: AbcParsedNote): string[] => [
   buildMusicXmlTieItemsXml({
-    tieStart: Boolean(note.tieStart),
-    tieStop: Boolean(note.tieStop),
+    tieStart: !!note.tieStart,
+    tieStop: !!note.tieStop,
   }),
 ];
 
-const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string => {
-  return [
+const buildAbcNoteOrnamentsXml = (note: AbcParsedNote): string =>
+  [
     ...buildAbcNoteOrnamentsFeatureXmlParts(note),
     ...buildAbcNoteOrnamentsMotionXmlParts(note),
   ].join("");
-};
 
-const buildAbcNoteOrnamentsFeatureXmlParts = (note: AbcParsedNote): string[] => [
-  buildAbcNoteOrnamentsWavyLinePart(note),
-  buildAbcNoteOrnamentsTurnPart(note),
-  buildAbcNoteOrnamentsMordentPart(note),
-  buildAbcNoteOrnamentsTremoloPart(note),
-  buildAbcNoteOrnamentsSchleiferPart(note),
-  buildAbcNoteOrnamentsShakePart(note),
-];
+const buildAbcNoteOrnamentsFeatureXmlParts = (note: AbcParsedNote): string[] =>
+  buildAbcNoteOptionalXmlParts([
+    buildAbcNoteOrnamentsWavyLinePart(note),
+    buildAbcNoteOrnamentsTurnPart(note),
+    buildAbcNoteOrnamentsMordentPart(note),
+    buildAbcNoteOrnamentsTremoloPart(note),
+    buildAbcNoteOrnamentsSchleiferPart(note),
+    buildAbcNoteOrnamentsShakePart(note),
+  ]);
 
-const buildAbcNoteOrnamentsMotionXmlParts = (note: AbcParsedNote): string[] => [
-  buildAbcNoteOrnamentsGlissandoXmlPart(note),
-  buildAbcNoteOrnamentsSlideXmlPart(note),
-  buildAbcNoteOrnamentsArpeggiatePart(note),
-];
+const buildAbcNoteOrnamentsMotionXmlParts = (note: AbcParsedNote): string[] =>
+  buildAbcNoteOptionalXmlParts([
+    buildAbcNoteOrnamentsGlissandoXmlPart(note),
+    buildAbcNoteOrnamentsSlideXmlPart(note),
+    buildAbcNoteOrnamentsArpeggiatePart(note),
+  ]);
 
-const buildAbcNoteOrnamentsGlissandoXmlPart = (note: AbcParsedNote): string => {
-  return [
-    buildAbcNoteOrnamentsGlissandoStartPart(note),
-    buildAbcNoteOrnamentsGlissandoStopPart(note),
-  ].join("");
-};
+const buildAbcNoteOrnamentsGlissandoXmlPart = (note: AbcParsedNote): string =>
+  buildAbcNotePairedXmlParts(buildAbcNoteOrnamentsGlissandoStartPart(note), buildAbcNoteOrnamentsGlissandoStopPart(note));
 
 const buildAbcNoteOrnamentsGlissandoStartPart = (note: AbcParsedNote): string =>
   note.glissandoStart ? '<glissando type="start" number="1">wavy</glissando>' : "";
@@ -2022,12 +1577,8 @@ const buildAbcNoteOrnamentsGlissandoStartPart = (note: AbcParsedNote): string =>
 const buildAbcNoteOrnamentsGlissandoStopPart = (note: AbcParsedNote): string =>
   note.glissandoStop ? '<glissando type="stop" number="1">wavy</glissando>' : "";
 
-const buildAbcNoteOrnamentsSlideXmlPart = (note: AbcParsedNote): string => {
-  return [
-    buildAbcNoteOrnamentsSlideStartPart(note),
-    buildAbcNoteOrnamentsSlideStopPart(note),
-  ].join("");
-};
+const buildAbcNoteOrnamentsSlideXmlPart = (note: AbcParsedNote): string =>
+  buildAbcNotePairedXmlParts(buildAbcNoteOrnamentsSlideStartPart(note), buildAbcNoteOrnamentsSlideStopPart(note));
 
 const buildAbcNoteOrnamentsSlideStartPart = (note: AbcParsedNote): string =>
   note.slideStart ? '<slide type="start" number="1"/>' : "";
@@ -2038,35 +1589,36 @@ const buildAbcNoteOrnamentsSlideStopPart = (note: AbcParsedNote): string =>
 const buildAbcNoteOrnamentsArpeggiatePart = (note: AbcParsedNote): string =>
   note.arpeggiate ? "<arpeggiate/>" : "";
 
-const buildAbcNoteOrnamentsWavyLinePart = (note: AbcParsedNote): string => {
-  const trillParts = [
-    buildAbcNoteOrnamentsTrillMarkPart(note),
-    buildAbcNoteOrnamentsWavyLineMotionPart(note),
-    buildAbcNoteOrnamentsTrillAccidentalMarkPart(note),
-  ].filter(Boolean);
-  return trillParts.length > 0 ? `<ornaments>${trillParts.join("")}</ornaments>` : "";
-};
+const buildAbcNotePairedXmlParts = (startPart: string, stopPart: string): string =>
+  [startPart, stopPart].join("");
+
+const buildAbcNoteOptionalXmlParts = (parts: string[]): string[] => parts.filter((part) => part.length > 0);
+
+const buildAbcNoteOrnamentsWavyLinePart = (note: AbcParsedNote): string =>
+  buildAbcNoteWrappedXml(
+    "ornaments",
+    buildAbcNoteOptionalXmlParts([
+      buildAbcNoteOrnamentsTrillMarkPart(note),
+      buildAbcNoteOrnamentsWavyLineMotionPart(note),
+      buildAbcNoteOrnamentsTrillAccidentalMarkPart(note),
+    ])
+  );
 
 const buildAbcNoteOrnamentsTrillMarkPart = (note: AbcParsedNote): string =>
   note.trill ? buildMusicXmlOrnamentItemsXml([{ kind: "trill-mark" }]) : "";
 
-const buildAbcNoteOrnamentsWavyLineMotionPart = (note: AbcParsedNote): string => {
-  if (note.trillLineStop) return '<wavy-line type="stop"/>';
-  if (note.trillLineStart) return '<wavy-line type="start"/>';
-  return "";
-};
+const buildAbcNoteOrnamentsWavyLineMotionPart = (note: AbcParsedNote): string =>
+  note.trillLineStop ? '<wavy-line type="stop"/>' : note.trillLineStart ? '<wavy-line type="start"/>' : "";
 
 const buildAbcNoteOrnamentsTrillAccidentalMarkPart = (note: AbcParsedNote): string =>
   note.trillAccidentalText ? `<accidental-mark>${xmlEscape(String(note.trillAccidentalText))}</accidental-mark>` : "";
 
-const buildAbcNoteOrnamentsTurnPart = (note: AbcParsedNote): string => {
-  if (!note.turnType) return "";
-  return buildMusicXmlOrnamentsXml(buildAbcNoteOrnamentsTurnItems(note));
-};
+const buildAbcNoteOrnamentsTurnPart = (note: AbcParsedNote): string =>
+  note.turnType ? buildMusicXmlOrnamentsXml(buildAbcNoteOrnamentsTurnItems(note)) : "";
 
 const buildAbcNoteOrnamentsTurnItems = (note: AbcParsedNote): AbcExportOrnamentFeature[] => [
   buildAbcNoteOrnamentsTurnMainItem(note),
-  ...buildAbcNoteOrnamentsTurnOptionalItems(note),
+  ...(note.delayedTurn ? [buildAbcNoteOrnamentsDelayedTurnItem()] : []),
 ];
 
 const buildAbcNoteOrnamentsTurnMainItem = (note: AbcParsedNote): AbcExportOrnamentFeature => ({
@@ -2074,24 +1626,17 @@ const buildAbcNoteOrnamentsTurnMainItem = (note: AbcParsedNote): AbcExportOrname
   ...(note.turnSlash ? { slash: true } : {}),
 });
 
-const buildAbcNoteOrnamentsTurnOptionalItems = (note: AbcParsedNote): AbcExportOrnamentFeature[] =>
-  note.delayedTurn ? [buildAbcNoteOrnamentsDelayedTurnItem()] : [];
-
 const buildAbcNoteOrnamentsDelayedTurnItem = (): AbcExportOrnamentFeature => ({ kind: "delayed-turn" });
 
-const buildAbcNoteOrnamentsMordentPart = (note: AbcParsedNote): string => {
-  if (!note.mordentType) return "";
-  return buildMusicXmlOrnamentsXml([buildAbcNoteOrnamentsMordentItem(note)]);
-};
+const buildAbcNoteOrnamentsMordentPart = (note: AbcParsedNote): string =>
+  note.mordentType ? buildMusicXmlOrnamentsXml([buildAbcNoteOrnamentsMordentItem(note)]) : "";
 
 const buildAbcNoteOrnamentsMordentItem = (note: AbcParsedNote): AbcExportOrnamentFeature => ({
   kind: note.mordentType === "inverted-mordent" ? "inverted-mordent" : "mordent",
 });
 
-const buildAbcNoteOrnamentsTremoloPart = (note: AbcParsedNote): string => {
-  if (!note.tremoloType) return "";
-  return buildMusicXmlOrnamentsXml([buildAbcNoteOrnamentsTremoloItem(note)]);
-};
+const buildAbcNoteOrnamentsTremoloPart = (note: AbcParsedNote): string =>
+  note.tremoloType ? buildMusicXmlOrnamentsXml([buildAbcNoteOrnamentsTremoloItem(note)]) : "";
 
 const buildAbcNoteOrnamentsTremoloItem = (note: AbcParsedNote): AbcExportOrnamentFeature => ({
   kind: "tremolo",
@@ -2109,28 +1654,21 @@ const buildAbcNoteOrnamentsSchleiferItem = (): AbcExportOrnamentFeature => ({ ki
 
 const buildAbcNoteOrnamentsShakeItem = (): AbcExportOrnamentFeature => ({ kind: "shake" });
 
-const buildAbcNoteArticulationsXml = (note: AbcParsedNote): string => {
-  const articulationParts = buildAbcNoteArticulationsXmlParts(note);
-  return articulationParts.length > 0 ? `<articulations>${articulationParts.join("")}</articulations>` : "";
-};
+const buildAbcNoteArticulationsXml = (note: AbcParsedNote): string =>
+  buildAbcNoteWrappedXml(
+    "articulations",
+    buildAbcNoteOptionalXmlParts([
+      buildAbcNoteArticulationFeatureItemsXml(note),
+      ...buildAbcNoteArticulationDecorativeXmlParts(note),
+    ])
+  );
 
-const buildAbcNoteArticulationsXmlParts = (note: AbcParsedNote): string[] => {
-  return [
-    ...buildAbcNoteArticulationFeatureXmlParts(note),
-    ...buildAbcNoteArticulationDecorativeXmlParts(note),
-  ];
-};
-
-const buildAbcNoteArticulationFeatureXmlParts = (note: AbcParsedNote): string[] => {
-  const featureItemsXml = buildAbcNoteArticulationFeatureItemsXml(note);
-  return featureItemsXml ? [featureItemsXml] : [];
-};
-
-const buildAbcNoteArticulationDecorativeXmlParts = (note: AbcParsedNote): string[] => [
-  note.stress ? "<stress/>" : "",
-  note.unstress ? "<unstress/>" : "",
-  note.phraseMark ? `<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>` : "",
-].filter(Boolean);
+const buildAbcNoteArticulationDecorativeXmlParts = (note: AbcParsedNote): string[] =>
+  buildAbcNoteOptionalXmlParts([
+    note.stress ? "<stress/>" : "",
+    note.unstress ? "<unstress/>" : "",
+    note.phraseMark ? `<other-articulation>${xmlEscape(String(note.phraseMark))}</other-articulation>` : "",
+  ]);
 
 const buildAbcNoteArticulationFeatureItemsXml = (note: AbcParsedNote): string =>
   buildMusicXmlArticulationItemsXml(buildAbcNoteArticulationFeatureKinds(note));
@@ -2141,29 +1679,19 @@ const buildAbcNoteArticulationFeatureKinds = (note: AbcParsedNote): string[] => 
 ];
 
 const buildAbcNoteArticulationPrimaryKinds = (note: AbcParsedNote): string[] =>
-  [
+  buildAbcNoteOptionalXmlParts([
     note.staccato ? "staccato" : "",
     note.staccatissimo ? "staccatissimo" : "",
     note.accent ? "accent" : "",
     note.tenuto ? "tenuto" : "",
-  ].filter(Boolean);
+  ]);
 
 const buildAbcNoteArticulationSecondaryKinds = (note: AbcParsedNote): string[] =>
-  [
+  buildAbcNoteOptionalXmlParts([
     note.strongAccent ? "strong-accent" : "",
     note.breathMark ? "breath-mark" : "",
     note.caesura ? "caesura" : "",
-  ].filter(Boolean);
-
-const buildAbcNoteTechnicalXml = (note: AbcParsedNote): string => {
-  return buildMusicXmlTechnicalXml(buildAbcNoteTechnicalParts(note));
-};
-
-const buildAbcNoteTechnicalParts = (note: AbcParsedNote): string[] => [
-  ...buildAbcNoteTechnicalPlainParts(note),
-  ...buildAbcNoteTechnicalCollectionParts(note),
-  ...buildAbcNoteTechnicalFlagParts(note),
-];
+  ]);
 
 const buildAbcNoteTechnicalPlainParts = (note: AbcParsedNote): string[] => [
   ...buildAbcNoteTechnicalBowParts(note),
@@ -2171,66 +1699,34 @@ const buildAbcNoteTechnicalPlainParts = (note: AbcParsedNote): string[] => [
 ];
 
 const buildAbcNoteTechnicalBowParts = (note: AbcParsedNote): string[] =>
-  [
+  buildAbcNoteOptionalXmlParts([
     note.upBow ? "<up-bow/>" : "",
     note.downBow ? "<down-bow/>" : "",
     note.doubleTongue ? "<double-tongue/>" : "",
     note.tripleTongue ? "<triple-tongue/>" : "",
-  ].filter(Boolean);
+  ]);
 
 const buildAbcNoteTechnicalFootParts = (note: AbcParsedNote): string[] =>
-  [
+  buildAbcNoteOptionalXmlParts([
     note.heel ? "<heel/>" : "",
     note.toe ? "<toe/>" : "",
-  ].filter(Boolean);
+  ]);
 
-const buildAbcNoteTechnicalCollectionParts = (note: AbcParsedNote): string[] => {
-  return [
-    ...buildAbcNoteTechnicalFingeringParts(note),
-    ...buildAbcNoteTechnicalStringParts(note),
-    ...buildAbcNoteTechnicalPluckParts(note),
-  ];
-};
-
-const buildAbcNoteTechnicalFingeringParts = (note: AbcParsedNote): string[] => {
-  const collectionParts: string[] = [];
-  if (Array.isArray(note.fingerings) && note.fingerings.length > 0) {
-    for (const fingering of note.fingerings) collectionParts.push(buildAbcNoteTechnicalFingeringPart(fingering));
-  }
-  return collectionParts;
-};
-
-const buildAbcNoteTechnicalFingeringPart = (fingering: unknown): string => buildMusicXmlFingeringXml(fingering);
-
-const buildAbcNoteTechnicalStringParts = (note: AbcParsedNote): string[] => {
-  const collectionParts: string[] = [];
-  if (Array.isArray(note.strings) && note.strings.length > 0) {
-    for (const stringText of note.strings) collectionParts.push(buildAbcNoteTechnicalStringPart(stringText));
-  }
-  return collectionParts;
-};
-
-const buildAbcNoteTechnicalStringPart = (stringText: unknown): string => buildMusicXmlStringNumberXml(stringText);
-
-const buildAbcNoteTechnicalPluckParts = (note: AbcParsedNote): string[] => {
-  const collectionParts: string[] = [];
-  if (Array.isArray(note.plucks) && note.plucks.length > 0) {
-    for (const pluckText of note.plucks) collectionParts.push(buildAbcNoteTechnicalPluckPart(pluckText));
-  }
-  return collectionParts;
-};
-
-const buildAbcNoteTechnicalPluckPart = (pluckText: unknown): string =>
-  pluckText ? `<pluck>${xmlEscape(String(pluckText))}</pluck>` : "";
+const buildAbcNoteTechnicalCollectionParts = (note: AbcParsedNote): string[] =>
+  buildAbcNoteMergedXmlParts(
+    note.fingerings ? note.fingerings.map((fingering) => buildMusicXmlFingeringXml(fingering)) : [],
+    note.strings ? note.strings.map((stringText) => buildMusicXmlStringNumberXml(stringText)) : [],
+    note.plucks ? note.plucks.map((pluckText) => (pluckText ? `<pluck>${xmlEscape(pluckText)}</pluck>` : "")) : []
+  );
 
 const buildAbcNoteTechnicalFlagParts = (note: AbcParsedNote): string[] =>
-  [
+  buildAbcNoteOptionalXmlParts([
     buildAbcNoteTechnicalOpenStringFlagPart(note),
     buildAbcNoteTechnicalSnapPizzicatoFlagPart(note),
     buildAbcNoteTechnicalHarmonicFlagPart(note),
     buildAbcNoteTechnicalStoppedFlagPart(note),
     buildAbcNoteTechnicalThumbPositionFlagPart(note),
-  ].filter(Boolean);
+  ]);
 
 const buildAbcNoteTechnicalOpenStringFlagPart = (note: AbcParsedNote): string =>
   note.openString ? "<open-string/>" : "";
@@ -2248,76 +1744,75 @@ const buildAbcNoteTechnicalThumbPositionFlagPart = (note: AbcParsedNote): string
   note.thumbPosition ? "<thumb-position/>" : "";
 
 const hasAbcNoteNotations = (note: AbcParsedNote): boolean =>
-  Boolean(
-    hasAbcNoteTieOrSlurNotations(note) ||
-      hasAbcNoteOrnaments(note) ||
-      hasAbcNoteArticulations(note) ||
-      hasAbcNoteTechnicalNotations(note) ||
-      hasAbcNoteFermataNotation(note) ||
-      hasAbcNoteTupletNotations(note)
-  );
+  hasAbcNoteTieOrSlurNotations(note) ||
+  hasAbcNoteOrnaments(note) ||
+  hasAbcNoteArticulations(note) ||
+  hasAbcNoteTechnicalNotations(note) ||
+  hasAbcNoteFermataNotation(note) ||
+  hasAbcNoteTupletNotations(note);
 
 const hasAbcNoteTieOrSlurNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.tieStart || note.tieStop || note.slurStart || note.slurStop);
+  note.tieStart || note.tieStop || note.slurStart || note.slurStop;
 
 const hasAbcNoteOrnaments = (note: AbcParsedNote): boolean =>
-  Boolean(hasAbcNoteOrnamentFeatureNotations(note) || hasAbcNoteOrnamentMotionNotations(note));
+  hasAbcNoteOrnamentFeatureNotations(note) || hasAbcNoteOrnamentMotionNotations(note);
 
 const hasAbcNoteOrnamentFeatureNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.trill || note.trillLineStop || note.turnType || note.delayedTurn || note.mordentType || note.tremoloType ||
-    note.schleifer || note.shake);
+  note.trill || note.trillLineStop || note.turnType || note.delayedTurn || note.mordentType || note.tremoloType ||
+  note.schleifer || note.shake;
 
 const hasAbcNoteOrnamentMotionNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.glissandoStart || note.glissandoStop || note.slideStart || note.slideStop || note.arpeggiate);
+  note.glissandoStart || note.glissandoStop || note.slideStart || note.slideStop || note.arpeggiate;
 
 const hasAbcNoteArticulations = (note: AbcParsedNote): boolean =>
-  Boolean(hasAbcNoteArticulationFeatureNotations(note) || hasAbcNoteArticulationDecorativeNotations(note));
+  hasAbcNoteArticulationFeatureNotations(note) || hasAbcNoteArticulationDecorativeNotations(note);
 
 const hasAbcNoteArticulationFeatureNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.staccato || note.staccatissimo || note.accent || note.tenuto || note.strongAccent || note.breathMark || note.caesura);
+  note.staccato || note.staccatissimo || note.accent || note.tenuto || note.strongAccent || note.breathMark || note.caesura;
 
 const hasAbcNoteArticulationDecorativeNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.stress || note.unstress || note.phraseMark);
+  note.stress || note.unstress || note.phraseMark;
 
 const hasAbcNoteTechnicalNotations = (note: AbcParsedNote): boolean =>
-  Boolean(hasAbcNoteTechnicalPlainNotations(note) || hasAbcNoteTechnicalCollectionNotations(note) || hasAbcNoteTechnicalFlagNotations(note));
+  hasAbcNoteTechnicalPlainNotations(note) || hasAbcNoteTechnicalCollectionNotations(note) || hasAbcNoteTechnicalFlagNotations(note);
 
 const hasAbcNoteTechnicalPlainNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.upBow || note.downBow || note.doubleTongue || note.tripleTongue || note.heel || note.toe);
+  !!(note.upBow || note.downBow || note.doubleTongue || note.tripleTongue || note.heel || note.toe);
 
 const hasAbcNoteTechnicalCollectionNotations = (note: AbcParsedNote): boolean =>
-  Boolean(
-    (Array.isArray(note.fingerings) && note.fingerings.length > 0) ||
-      (Array.isArray(note.strings) && note.strings.length > 0) ||
-      (Array.isArray(note.plucks) && note.plucks.length > 0)
-  );
+  !!(note.fingerings?.length || note.strings?.length || note.plucks?.length);
 
 const hasAbcNoteTechnicalFlagNotations = (note: AbcParsedNote): boolean =>
-  Boolean(note.openString || note.snapPizzicato || note.harmonic || note.stopped || note.thumbPosition);
+  note.openString || note.snapPizzicato || note.harmonic || note.stopped || note.thumbPosition;
 
-const hasAbcNoteFermataNotation = (note: AbcParsedNote): boolean => Boolean(note.fermataType);
+const hasAbcNoteFermataNotation = (note: AbcParsedNote): boolean => !!note.fermataType;
 
-const hasAbcNoteTupletNotations = (note: AbcParsedNote): boolean => Boolean(note.tupletStart || note.tupletStop);
+const hasAbcNoteTupletNotations = (note: AbcParsedNote): boolean => !!(note.tupletStart || note.tupletStop);
 
-const buildAbcNoteNotationsXml = (note: AbcParsedNote): string => {
-  if (!hasAbcNoteNotations(note)) return "";
-  return `<notations>${buildAbcNoteNotationsParts(note).join("")}</notations>`;
-};
-
-const buildAbcNoteNotationsParts = (note: AbcParsedNote): string[] => [
-  buildAbcNoteTieNotationParts(note),
-  buildAbcNoteSlurNotationParts(note),
-  buildAbcNoteTupletNotationParts(note),
-  buildAbcNoteOrnamentsXml(note),
-  buildAbcNoteArticulationsXml(note),
-  buildAbcNoteTechnicalXml(note),
-  buildAbcNoteFermataNotationPart(note),
-];
+const buildAbcNoteNotationsXml = (note: AbcParsedNote): string =>
+  hasAbcNoteNotations(note)
+    ? buildAbcNoteWrappedXml(
+        "notations",
+        buildAbcNoteOptionalXmlParts([
+          buildAbcNoteTieNotationParts(note),
+          buildAbcNoteSlurNotationParts(note),
+          buildAbcNoteTupletNotationParts(note),
+          buildAbcNoteOrnamentsXml(note),
+          buildAbcNoteArticulationsXml(note),
+          buildMusicXmlTechnicalXml([
+            ...buildAbcNoteTechnicalPlainParts(note),
+            ...buildAbcNoteTechnicalCollectionParts(note),
+            ...buildAbcNoteTechnicalFlagParts(note),
+          ]),
+          buildAbcNoteFermataNotationPart(note),
+        ])
+      )
+    : "";
 
 const buildAbcNoteTieNotationParts = (note: AbcParsedNote): string =>
   buildMusicXmlTiedItemsXml({
-    tiedStart: Boolean(note.tieStart),
-    tiedStop: Boolean(note.tieStop),
+    tiedStart: !!note.tieStart,
+    tiedStop: !!note.tieStop,
   });
 
 const buildAbcNoteSlurNotationParts = (note: AbcParsedNote): string =>
@@ -2327,10 +1822,10 @@ const buildAbcNoteSlurNotationParts = (note: AbcParsedNote): string =>
   ]);
 
 const buildAbcNoteTupletNotationParts = (note: AbcParsedNote): string =>
-  [
+  buildAbcNotePairedXmlParts(
     buildAbcNoteTupletStartNotationPart(note),
-    buildAbcNoteTupletStopNotationPart(note),
-  ].filter(Boolean).join("");
+    buildAbcNoteTupletStopNotationPart(note)
+  );
 
 const buildAbcNoteTupletStartNotationPart = (note: AbcParsedNote): string =>
   note.tupletStart ? '<tuplet type="start"/>' : "";
@@ -2341,15 +1836,11 @@ const buildAbcNoteTupletStopNotationPart = (note: AbcParsedNote): string =>
 const buildAbcNoteFermataNotationPart = (note: AbcParsedNote): string =>
   note.fermataType ? `<fermata>${note.fermataType === "inverted" ? "inverted" : "normal"}</fermata>` : "";
 
-const buildAbcEmptyMeasureNotesXml = (
-  measureDurationDiv: number,
-  emptyMeasureRestType: string,
-  staffOverride: number | null
-): string => {
-  return `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type>${
-    staffOverride !== null ? `<staff>${staffOverride}</staff>` : ""
-  }</note>`;
-};
+const buildAbcNoteWrappedXml = (tagName: string, parts: string[]): string =>
+  parts.length > 0 ? `<${tagName}>${parts.join("")}</${tagName}>` : "";
+
+const buildAbcNoteMergedXmlParts = (...partsGroups: string[][]): string[] =>
+  partsGroups.reduce<string[]>((allParts, parts) => allParts.concat(parts), []);
 
 const buildAbcBeamXmlByNoteIndex = (
   notes: AbcParsedNote[],
@@ -2357,7 +1848,7 @@ const buildAbcBeamXmlByNoteIndex = (
 ): Map<number, string> => {
   const out = new Map<number, string>();
   const levelFromType = (typeText: string): number => {
-    switch (String(typeText || "").trim().toLowerCase()) {
+    switch (String(typeText ?? "").trim().toLowerCase()) {
       case "eighth":
         return 1;
       case "16th":
@@ -2388,8 +1879,8 @@ const buildAbcBeamXmlByNoteIndex = (
         const type = normalizeTypeForMusicXml(ev.note?.type);
         return {
           timed: true,
-          chord: !Boolean(ev.note?.isRest),
-          grace: Boolean(ev.note?.grace),
+          chord: !ev.note?.isRest,
+          grace: !!ev.note?.grace,
           durationDiv: ev.note?.grace ? 0 : Math.max(1, Math.round(Number(ev.note?.duration) || 1)),
           levels: levelFromType(type),
           explicitMode: ev.note?.beamMode,
@@ -2416,7 +1907,11 @@ const buildAbcNoteXml = (
 ): string => {
   const chunks: string[] = [];
   chunks.push(buildAbcNoteLeadingDirectionXml(note));
-  chunks.push(buildAbcNoteCoreXml(note, noteIndex, staffOverride, beamXmlByNoteIndex));
+  chunks.push([
+    ...buildAbcNoteCoreOpenXmlParts(note, staffOverride),
+    buildAbcNoteCoreBeamPart(note, noteIndex, beamXmlByNoteIndex),
+    ...buildAbcNoteCoreTailXmlParts(note),
+  ].join(""));
   chunks.push(buildAbcNoteNotationsXml(note));
   chunks.push("</note>");
   return chunks.join("");
@@ -2430,7 +1925,9 @@ const buildAbcMeasureNotesXml = (
   staffOverride: number | null = null
 ): string => {
   if (!notes.length) {
-    return buildAbcEmptyMeasureNotesXml(measureDurationDiv, emptyMeasureRestType, staffOverride);
+    return `<note><rest/><duration>${measureDurationDiv}</duration><voice>1</voice><type>${emptyMeasureRestType}</type>${
+      staffOverride !== null ? `<staff>${staffOverride}</staff>` : ""
+    }</note>`;
   }
   const beamXmlByNoteIndex = buildAbcBeamXmlByNoteIndex(notes, beatDiv);
   return notes
@@ -2508,7 +2005,7 @@ const finalizeAbcActiveEndings = (stores: AbcVoiceStores): void => {
     while (measures.length > 1 && measures[measures.length - 1].length === 0) {
       measures.pop();
     }
-    const activeEndingMarker = String(stores.activeEndingByVoice[voiceId] || "");
+    const activeEndingMarker = String(stores.activeEndingByVoice[voiceId] ?? "");
     if (activeEndingMarker) {
       const lastMeasureNo = measures.length;
       if (lastMeasureNo >= 1) {
@@ -2606,7 +2103,7 @@ const applyAbcBodyField = (
     return { handled: true, activeKeyFifths, activeKeySignatureAccidentals, activeUnitLength, activeMeter, activeTempoBpm, measureAccidentals };
   }
   if (fieldName === "Q") {
-    activeTempoBpm = parseTempoFromQ(fieldValue || "", context.warnings);
+    activeTempoBpm = parseTempoFromQ(fieldValue ?? "", context.warnings);
     if (Number.isFinite(activeTempoBpm)) {
       ensureAbcTempoByMeasure(context.voiceStores, context.entryVoiceId)[context.currentMeasureNo] =
         Math.max(20, Math.min(300, Math.round(Number(activeTempoBpm))));
@@ -2705,36 +2202,6 @@ const processAbcPlayableEvent = (
   }
   context.commitPlayableEvent(eventNotes, context.resolution.commitOptions);
   return true;
-};
-
-const buildAbcPlayableEventNotes = (
-  context: AbcPlayableEventBuildContext
-): any[] => {
-  const notes: any[] = [];
-  for (let pitchIndex = 0; pitchIndex < context.pitchSources.length; pitchIndex += 1) {
-    const note = context.buildPlayableNoteForBody(
-      context.pitchSources[pitchIndex],
-      context.timing.absoluteLength,
-      context.timing.dur,
-      context.octaveWarningMessage
-    );
-    if (!note) {
-      notes.length = 0;
-      break;
-    }
-    if (pitchIndex === 0) {
-      context.finalizePlayableEventStart(
-        note,
-        context.timing.dur,
-        context.timing.activeTuplet,
-        context.firstNoteOptions
-      );
-    } else {
-      note.chord = true;
-    }
-    notes.push(note);
-  }
-  return notes;
 };
 
 const processAbcSimpleBodyToken = (
@@ -2911,7 +2378,7 @@ const fifthsFromAbcKey = (raw: string): number | null => {
     Ebm: -6,
     Abm: -7,
   };
-  const normalized = String(raw || "").trim().replace(/\s+/g, "");
+  const normalized = String(raw ?? "").trim().replace(/\s+/g, "");
   if (Object.prototype.hasOwnProperty.call(table, normalized)) {
     return table[normalized];
   }
@@ -2988,13 +2455,13 @@ const STOPPED_DECORATIONS = new Set(["stopped", "+", "plus", "stopped horn", "st
 const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-position", "thumbpos", "thumb pos", "thumb position"]);
 
   function tokenizeAbcLyricLine(text) {
-    const raw = String(text || "").trim();
+    const raw = String(text ?? "").trim();
     if (!raw) return [];
     const chunks = raw
       .replace(/\|/g, " ")
       .split(/\s+/)
       .map((token) => token.trim())
-      .filter(Boolean);
+      .filter((token) => token.length > 0);
     const tokens = [];
     let pendingHyphenWord = false;
     for (const chunk of chunks) {
@@ -3040,9 +2507,9 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
 
   function splitBodyTextByInlineVoice(text, initialVoiceId) {
     const segments = [];
-    let activeVoiceId = String(initialVoiceId || "1").trim() || "1";
+    let activeVoiceId = String(initialVoiceId ?? "1").trim() || "1";
     let buffer = "";
-    const raw = String(text || "");
+    const raw = String(text ?? "");
     let idx = 0;
     while (idx < raw.length) {
       if (raw[idx] === "[") {
@@ -3053,7 +2520,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
             segments.push({ voiceId: activeVoiceId, text: buffer });
           }
           buffer = "";
-          const voiceMatch = String(inlineField.fieldValue || "").match(/^(\S+)/);
+          const voiceMatch = String(inlineField.fieldValue ?? "").match(/^(\S+)/);
           if (voiceMatch) {
             activeVoiceId = voiceMatch[1];
           } else {
@@ -3076,8 +2543,8 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
   }
 
   function splitBodyTextByOverlay(text, baseVoiceId) {
-    const raw = String(text || "");
-    const normalizedBaseVoiceId = String(baseVoiceId || "1").trim() || "1";
+    const raw = String(text ?? "");
+    const normalizedBaseVoiceId = String(baseVoiceId ?? "1").trim() || "1";
     const overlayBuffers = [""];
     let completedMeasureSkeleton = "";
     let activeOverlayIndex = 0;
@@ -3156,11 +2623,11 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
   }
 
   function parseUserDefinedDecoration(rawValue) {
-    const text = String(rawValue || "").trim();
+    const text = String(rawValue ?? "").trim();
     const match = text.match(/^(\S)(?:\s*=\s*|\s+)(.+)$/);
     if (!match) return null;
-    const symbol = String(match[1] || "");
-    const rhs = String(match[2] || "").trim();
+    const symbol = String(match[1] ?? "");
+    const rhs = String(match[2] ?? "").trim();
     if (!symbol || !rhs) return null;
     const wrapped = rhs.match(/^[!+](.+)[!+]$/);
     const decoration = String(wrapped ? wrapped[1] : rhs).trim();
@@ -3169,8 +2636,8 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
   }
 
   function expandUserDefinedDecorationSymbols(text, userDefinedDecorationBySymbol) {
-    const raw = String(text || "");
-    const symbolMap = userDefinedDecorationBySymbol || {};
+    const raw = String(text ?? "");
+    const symbolMap = userDefinedDecorationBySymbol ?? {};
     if (!raw || Object.keys(symbolMap).length === 0) {
       return raw;
     }
@@ -3201,7 +2668,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
   }
 
   function parseTempoFromQ(rawQ, warnings) {
-    const raw = String(rawQ || "").trim();
+    const raw = String(rawQ ?? "").trim();
     if (!raw) {
       return null;
     }
@@ -3239,7 +2706,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
 
   function parseForMusicXml(source, settings) {
     const warnings = [];
-    const lines = String(source || "").split("\n");
+    const lines = String(source ?? "").split("\n");
     const trillWidthHintByKey = new Map();
     const keyHintFifthsByKey = new Map();
     const measureMetaByKey = new Map();
@@ -3306,7 +2773,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
     const meter = parseMeter(headers.M || "4/4", warnings);
     const unitLength = parseFraction(headers.L || "1/8", "L", warnings);
     const keyInfo = parseKey(headers.K || "C", warnings);
-    const tempoBpm = parseTempoFromQ(headers.Q || "", warnings);
+    const tempoBpm = parseTempoFromQ(headers.Q ?? "", warnings);
     const keySignatureAccidentals = keySignatureAlterByStep(keyInfo.fifths);
     const voiceStores = createAbcVoiceStores();
     let noteCount = 0;
@@ -3317,7 +2784,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
       let measureAccidentals = {};
       let activeUnitLength = unitLength;
       let activeMeter = meter;
-      let activeTempoBpm = Number.isFinite(tempoBpm) ? Number(tempoBpm) : null;
+      let activeTempoBpm = tempoBpm ?? null;
       let activeKeyFifths = Number.isFinite(voiceStores.currentKeyFifthsByVoice[entry.voiceId])
         ? Number(voiceStores.currentKeyFifthsByVoice[entry.voiceId])
         : keyInfo.fifths;
@@ -3392,9 +2859,9 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
       let beamRunActive = false;
       let sawInterEventWhitespace = false;
       let beamCursorDiv = 0;
-      let activeEndingMarker = String(voiceStores.activeEndingByVoice[entry.voiceId] || "");
+      let activeEndingMarker = String(voiceStores.activeEndingByVoice[entry.voiceId] ?? "");
       let idx = 0;
-      const text = entry.text;
+      const text = entry.text ?? "";
 
       const warnBody = (message) => {
         warnings.push("line " + entry.lineNo + ": " + message);
@@ -3931,7 +3398,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
         const applyTieStop = options.applyTieStop !== false;
         applyBeamModeForEvent(note, dur);
         currentEventNo += 1;
-        const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) || "";
+        const trillHint = trillWidthHintByKey.get(`${entry.voiceId}#${currentMeasureNo}#${currentEventNo}`) ?? "";
         applyPendingToPlayableNote(note, { applySlurStart: true, applyTieStop, trillHint });
         applyTupletToEventStart(note, activeTuplet);
         note.voice = entry.voiceId;
@@ -3951,7 +3418,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
             measureAccidentals
           );
         } catch (error) {
-          if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+          if (error instanceof Error && /Octave out of range/i.test(error.message ?? "")) {
             warnBody(octaveWarningMessage);
             return null;
           }
@@ -3986,23 +3453,35 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
           clearLastEventState();
           return false;
         }
-        lastNote = notes[0] || null;
+        lastNote = notes[0] ?? null;
         lastEventNotes = notes;
         noteCount += notes.length;
         return true;
       };
 
       const buildPlayableEventFromPitches = (pitchSources, timing, options = {}) => {
-        const octaveWarningMessage = options.octaveWarningMessage || "Skipped note with unsupported octave range.";
-        const firstNoteOptions = options.firstNoteOptions || {};
-        return buildAbcPlayableEventNotes({
-          pitchSources,
-          timing,
-          octaveWarningMessage,
-          firstNoteOptions,
-          buildPlayableNoteForBody,
-          finalizePlayableEventStart,
-        });
+        const octaveWarningMessage = options.octaveWarningMessage ?? "Skipped note with unsupported octave range.";
+        const firstNoteOptions = options.firstNoteOptions ?? {};
+        const notes = [];
+        for (let pitchIndex = 0; pitchIndex < pitchSources.length; pitchIndex += 1) {
+          const note = buildPlayableNoteForBody(
+            pitchSources[pitchIndex],
+            timing.absoluteLength,
+            timing.dur,
+            octaveWarningMessage
+          );
+          if (!note) {
+            notes.length = 0;
+            break;
+          }
+          if (pitchIndex === 0) {
+            finalizePlayableEventStart(note, timing.dur, timing.activeTuplet, firstNoteOptions);
+          } else {
+            note.chord = true;
+          }
+          notes.push(note);
+        }
+        return notes;
       };
 
       const playableEventOptionsForSource = (source) => ({
@@ -4397,11 +3876,11 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
       };
 
       const isBeamableAbcNote = (note) =>
-        Boolean(
+        !!(
           note &&
           !note.isRest &&
           !note.grace &&
-          ["eighth", "16th", "32nd", "64th"].includes(String(note.type || "").trim().toLowerCase())
+          ["eighth", "16th", "32nd", "64th"].includes(String(note.type ?? "").trim().toLowerCase())
         );
       const applyBeamModeForEvent = (note, durationDiv) => {
         const resolvedDurationDiv = Math.max(0, Math.round(Number(durationDiv) || 0));
@@ -4527,25 +4006,25 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
     if (!raw) {
       return { name: "", clef: "", transpose: null, bodyText: "", skippedText: "", unsupportedKeys: [] };
     }
-    let bodyText = String(raw);
+    let bodyText = String(raw ?? "");
     let name = "";
     let clef = "";
     let transpose = null;
     const unsupportedKeys = [];
     const bareClefMatch = bodyText.match(/^\s*(bass|treble|alto|tenor|c3|c4)(?=\s|$)/i);
     if (bareClefMatch) {
-      clef = String(bareClefMatch[1] || "").trim().toLowerCase();
+      clef = String(bareClefMatch[1] ?? "").trim().toLowerCase();
       bodyText = bodyText.slice(bareClefMatch[0].length);
     }
     const attrRegex = /([A-Za-z][A-Za-z0-9_-]*)\s*=\s*("([^"]*)"|(\S+))/g;
     bodyText = bodyText.replace(attrRegex, (_full, key, _quotedValue, quotedInner, bareValue) => {
       const lowerKey = String(key).toLowerCase();
       if (lowerKey === "name") {
-        name = quotedInner || bareValue || "";
+        name = quotedInner ?? bareValue ?? "";
       } else if (lowerKey === "clef") {
-        clef = String(quotedInner || bareValue || "").trim().toLowerCase();
+        clef = String(quotedInner ?? bareValue ?? "").trim().toLowerCase();
       } else if (lowerKey === "transpose") {
-        const parsed = Number.parseInt(String(quotedInner || bareValue || "").trim(), 10);
+        const parsed = Number.parseInt(String(quotedInner ?? bareValue ?? "").trim(), 10);
         if (Number.isFinite(parsed) && parsed >= -24 && parsed <= 24) {
           transpose = { chromatic: parsed };
         }
@@ -4557,7 +4036,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
     bodyText = bodyText.trim();
     let skippedText = "";
     const firstTokenMatch = bodyText.match(/^(\S+)/);
-    const firstToken = firstTokenMatch ? firstTokenMatch[1] : "";
+    const firstToken = firstTokenMatch ? firstTokenMatch[1] ?? "" : "";
     if (firstToken && /^[A-Za-z][A-Za-z0-9_-]*$/.test(firstToken) && /[^A-Ga-gzZxX]/.test(firstToken)) {
       skippedText = firstToken;
       bodyText = bodyText.slice(firstToken.length).trim();
@@ -4582,7 +4061,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
       return null;
     }
 
-    const tonic = String(m[1]).toUpperCase() + (m[2] || "");
+    const tonic = String(m[1]).toUpperCase() + (m[2] ?? "");
     const semitoneByTonic = {
       C: 0,
       "C#": 1,
@@ -4616,7 +4095,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
   }
 
   function parseMeter(raw, warnings) {
-    const normalized = String(raw || "").trim();
+    const normalized = String(raw ?? "").trim();
     if (normalized === "C") {
       return { beats: 4, beatType: 4 };
     }
@@ -4633,11 +4112,11 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
 
   function parseFraction(raw, fieldName, warnings) {
     const parsed = abcCommon.parseFractionText(raw, { num: 1, den: 8 });
-    if (parsed.num === 1 && parsed.den === 8 && !/^\s*\d+\/\d+\s*$/.test(String(raw || ""))) {
+    if (parsed.num === 1 && parsed.den === 8 && !/^\s*\d+\/\d+\s*$/.test(String(raw ?? ""))) {
       warnings.push(fieldName + " has invalid format; defaulted to 1/8: " + raw);
       return parsed;
     }
-    const m = String(raw || "").match(/^\s*(\d+)\/(\d+)\s*$/);
+    const m = String(raw ?? "").match(/^\s*(\d+)\/(\d+)\s*$/);
     if (!m || !Number(m[1]) || !Number(m[2])) {
       warnings.push(fieldName + " has invalid value; defaulted to 1/8: " + raw);
       return { num: 1, den: 8 };
@@ -4687,7 +4166,7 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
           graceAccidentals
         );
       } catch (error) {
-        if (error instanceof Error && /Octave out of range/i.test(error.message || "")) {
+        if (error instanceof Error && /Octave out of range/i.test(error.message ?? "")) {
           warnings.push("line " + lineNo + ": Skipped grace note with unsupported octave range.");
           continue;
         }
@@ -5001,17 +4480,6 @@ type AbcExportLaneDefinition = {
   voiceId: string;
 };
 
-const buildAbcExportPartNameById = (doc: Document): Map<string, string> => {
-  const partNameById = new Map<string, string>();
-  for (const scorePart of Array.from(doc.querySelectorAll("part-list > score-part"))) {
-    const id = scorePart.getAttribute("id") ?? "";
-    if (!id) continue;
-    const name = scorePart.querySelector("part-name")?.textContent?.trim() || id;
-    partNameById.set(id, name);
-  }
-  return partNameById;
-};
-
 const compareAbcExportLanes = (
   a: { staff: string | null; voice: string | null },
   b: { staff: string | null; voice: string | null }
@@ -5055,31 +4523,21 @@ const buildAbcExportLaneDefinitions = (part: Element, partId: string): AbcExport
     });
 };
 
-const buildAbcExportLaneName = (
-  partName: string,
-  laneCount: number,
-  lane: AbcExportLaneDefinition
-): string => {
-  if (laneCount <= 1) return partName;
-  if (lane.staff && lane.voice) return `${partName} (Staff ${lane.staff} Voice ${lane.voice})`;
-  if (lane.staff) return `${partName} (Staff ${lane.staff})`;
-  if (lane.voice) return `${partName} (Voice ${lane.voice})`;
-  return `${partName} (Lane)`;
-};
-
 const buildAbcExportTransposeMetaLine = (
   normalizedVoiceId: string,
   measure: Element
 ): string | null => {
   const transposeNode = measure.querySelector(":scope > attributes > transpose");
   if (!transposeNode) return null;
-  const chromatic = Number(transposeNode.querySelector(":scope > chromatic")?.textContent?.trim() || "");
-  const diatonic = Number(transposeNode.querySelector(":scope > diatonic")?.textContent?.trim() || "");
-  if (!Number.isFinite(chromatic) && !Number.isFinite(diatonic)) return null;
-  const parts: string[] = [`%@mks transpose voice=${normalizedVoiceId}`];
-  if (Number.isFinite(chromatic)) parts.push(`chromatic=${Math.round(chromatic)}`);
-  if (Number.isFinite(diatonic)) parts.push(`diatonic=${Math.round(diatonic)}`);
-  return parts.join(" ");
+  const chromatic = Number(transposeNode.querySelector(":scope > chromatic")?.textContent?.trim() ?? "");
+  const diatonic = Number(transposeNode.querySelector(":scope > diatonic")?.textContent?.trim() ?? "");
+  return Number.isFinite(chromatic) || Number.isFinite(diatonic)
+    ? [
+        `%@mks transpose voice=${normalizedVoiceId}`,
+        ...(Number.isFinite(chromatic) ? [`chromatic=${Math.round(chromatic)}`] : []),
+        ...(Number.isFinite(diatonic) ? [`diatonic=${Math.round(diatonic)}`] : []),
+      ].join(" ")
+    : null;
 };
 
 const buildAbcExportDiagMetaLines = (
@@ -5095,9 +4553,9 @@ const buildAbcExportDiagMetaLines = (
   if (!fields.length) return [];
   const byName = new Map<string, string>();
   for (const field of fields) {
-    const name = (field.getAttribute("name") || "").trim();
+    const name = (field.getAttribute("name") ?? "").trim();
     if (!name) continue;
-    const value = (field.textContent || "").trim();
+    const value = (field.textContent ?? "").trim();
     byName.set(name, value);
   }
   const orderedNames = Array.from(byName.keys()).sort((a, b) => {
@@ -5107,10 +4565,12 @@ const buildAbcExportDiagMetaLines = (
     if (!isCountA && isCountB) return 1;
     return a.localeCompare(b);
   });
-  return orderedNames.map((name) => {
-    const value = byName.get(name) || "";
-    return `%@mks diag voice=${normalizedVoiceId} measure=${safeMeasureNumber} name=${name} enc=uri-v1 value=${encodeURIComponent(value)}`;
-  });
+  return orderedNames.map(
+    (name) =>
+      `%@mks diag voice=${normalizedVoiceId} measure=${safeMeasureNumber} name=${name} enc=uri-v1 value=${encodeURIComponent(
+        byName.get(name) ?? ""
+      )}`
+  );
 };
 
 const buildAbcExportMeasureMetaLine = (
@@ -5121,11 +4581,11 @@ const buildAbcExportMeasureMetaLine = (
   rightEndingNumber: string,
   rightEndingType: string
 ): string | null => {
-  const rawMeasureNumber = (measure.getAttribute("number") || "").trim() || String(safeMeasureNumber);
-  const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+  const rawMeasureNumber = (measure.getAttribute("number") ?? "").trim() || String(safeMeasureNumber);
+  const implicitAttr = (measure.getAttribute("implicit") ?? "").trim().toLowerCase();
   const isImplicit = implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
   const rightRepeatNode = measure.querySelector(':scope > barline[location="right"] > repeat');
-  const repeatTimes = Number.parseInt(String(rightRepeatNode?.getAttribute("times") || ""), 10);
+  const repeatTimes = Number.parseInt(String(rightRepeatNode?.getAttribute("times") ?? ""), 10);
   if (
     !isImplicit &&
     rawMeasureNumber === String(safeMeasureNumber) &&
@@ -5158,23 +4618,21 @@ const applyAbcExportDirectionToPending = (
   appendAbcExportDirectionWords(direction, pendingDirectionWords);
   appendAbcExportDirectionTextDecorations(direction, pendingDirectionDecorations);
   appendAbcExportDirectionSoundDecorations(direction, pendingDirectionDecorations);
-  let nextWedgeType = activeWedgeType;
-  nextWedgeType = appendAbcExportDirectionFeatureDecorations(direction, pendingDirectionDecorations, nextWedgeType);
-  return nextWedgeType;
+  return appendAbcExportDirectionFeatureDecorations(direction, pendingDirectionDecorations, activeWedgeType);
 };
 
 const appendAbcExportDirectionWords = (direction: Element, pendingDirectionWords: string[]): void => {
-  const words = extractMusicXmlDirectionWords(direction)
-    .map((feature) => abcQuotedTextEscape(feature.text))
-    .filter(Boolean);
-  pendingDirectionWords.push(...words);
+  pendingDirectionWords.push(
+    ...extractMusicXmlDirectionWords(direction)
+      .map((feature) => abcQuotedTextEscape(feature.text))
+      .filter((word) => word.length > 0)
+  );
 };
 
 const appendAbcExportDirectionTextDecorations = (direction: Element, pendingDirectionDecorations: string[]): void => {
-  const rehearsalTexts = Array.from(direction.querySelectorAll(":scope > direction-type > rehearsal"))
-    .map((node) => abcQuotedTextEscape(node.textContent || ""))
-    .filter(Boolean);
-  for (const rehearsalText of rehearsalTexts) {
+  for (const rehearsalText of Array.from(direction.querySelectorAll(":scope > direction-type > rehearsal"))
+    .map((node) => abcQuotedTextEscape(node.textContent ?? ""))
+    .filter((text) => text.length > 0)) {
     appendAbcExportDirectionPresenceDecoration(
       pendingDirectionDecorations,
       true,
@@ -5190,9 +4648,9 @@ const appendAbcExportDirectionSoundDecorations = (direction: Element, pendingDir
 
 const appendAbcExportDirectionMarkerDecorations = (direction: Element, pendingDirectionDecorations: string[]): void => {
   appendAbcExportDirectionPresenceDecorations(pendingDirectionDecorations, [
-    [Boolean(direction.querySelector(":scope > direction-type > segno")), "!segno!"],
-    [Boolean(direction.querySelector(":scope > direction-type > coda")), "!coda!"],
-    [Boolean(direction.querySelector(':scope > sound[fine="yes"]')), "!fine!"],
+    [direction.querySelector(":scope > direction-type > segno") !== null, "!segno!"],
+    [direction.querySelector(":scope > direction-type > coda") !== null, "!coda!"],
+    [direction.querySelector(':scope > sound[fine="yes"]') !== null, "!fine!"],
   ]);
 };
 
@@ -5203,8 +4661,8 @@ const appendAbcExportDirectionJumpDecorations = (direction: Element, pendingDire
 };
 
 const appendAbcExportDirectionDaCapoDecorations = (direction: Element, pendingDirectionDecorations: string[]): void => {
-  const hasDaCapo = Boolean(direction.querySelector(':scope > sound[dacapo="yes"]'));
-  const hasToCoda = Boolean(direction.querySelector(":scope > sound[tocoda]"));
+  const hasDaCapo = direction.querySelector(':scope > sound[dacapo="yes"]') !== null;
+  const hasToCoda = direction.querySelector(":scope > sound[tocoda]") !== null;
   appendAbcExportDirectionPresenceDecoration(
     pendingDirectionDecorations,
     hasDaCapo && hasToCoda,
@@ -5216,17 +4674,15 @@ const appendAbcExportDirectionDaCapoDecorations = (direction: Element, pendingDi
 const appendAbcExportDirectionDalSegnoDecorations = (direction: Element, pendingDirectionDecorations: string[]): void => {
   appendAbcExportDirectionPresenceDecoration(
     pendingDirectionDecorations,
-    Boolean(direction.querySelector(":scope > sound[dalsegno]")),
+    direction.querySelector(":scope > sound[dalsegno]") !== null,
     "!dalsegno!"
   );
 };
 
 const appendAbcExportDirectionToCodaDecorations = (direction: Element, pendingDirectionDecorations: string[]): void => {
-  const hasDaCapo = Boolean(direction.querySelector(':scope > sound[dacapo="yes"]'));
-  const hasToCoda = Boolean(direction.querySelector(":scope > sound[tocoda]"));
   appendAbcExportDirectionPresenceDecoration(
     pendingDirectionDecorations,
-    hasToCoda && !hasDaCapo,
+    direction.querySelector(":scope > sound[tocoda]") !== null && direction.querySelector(':scope > sound[dacapo="yes"]') === null,
     "!tocoda!"
   );
 };
@@ -5237,47 +4693,42 @@ const appendAbcExportDirectionFeatureDecorations = (
   activeWedgeType: "" | "crescendo" | "diminuendo"
 ): "" | "crescendo" | "diminuendo" => {
   const directionFeatures = extractMusicXmlDirectionFeatures(direction);
-  let nextWedgeType = appendAbcExportDirectionWedgeDecorations(directionFeatures, pendingDirectionDecorations, activeWedgeType);
   appendAbcExportDirectionDynamicDecorations(directionFeatures, pendingDirectionDecorations);
-  return nextWedgeType;
+  return appendAbcExportDirectionWedgeDecorations(directionFeatures, pendingDirectionDecorations, activeWedgeType);
 };
 
 const appendAbcExportDirectionWedgeDecorations = (
   directionFeatures: AbcExportDirectionFeatures,
   pendingDirectionDecorations: string[],
   activeWedgeType: "" | "crescendo" | "diminuendo"
-): "" | "crescendo" | "diminuendo" => {
-  const nextWedgeType = appendAbcExportDirectionWedgeStartDecorations(
+): "" | "crescendo" | "diminuendo" =>
+  appendAbcExportDirectionWedgeStopDecorations(
     directionFeatures,
     pendingDirectionDecorations,
-    activeWedgeType
+    appendAbcExportDirectionWedgeStartDecorations(directionFeatures, pendingDirectionDecorations, activeWedgeType)
   );
-  return appendAbcExportDirectionWedgeStopDecorations(directionFeatures, pendingDirectionDecorations, nextWedgeType);
-};
 
 const appendAbcExportDirectionWedgeStartDecorations = (
   directionFeatures: AbcExportDirectionFeatures,
   pendingDirectionDecorations: string[],
   activeWedgeType: "" | "crescendo" | "diminuendo"
 ): "" | "crescendo" | "diminuendo" => {
-  let nextWedgeType = activeWedgeType;
-  nextWedgeType = appendAbcExportDirectionWedgeMatch(
+  const crescendoWedgeType = appendAbcExportDirectionWedgeMatch(
     directionFeatures,
     pendingDirectionDecorations,
-    nextWedgeType,
+    activeWedgeType,
     (feature) => feature.kind === "wedge" && feature.wedgeType === "crescendo",
     "!crescendo(!",
     "crescendo"
   );
-  nextWedgeType = appendAbcExportDirectionWedgeMatch(
+  return appendAbcExportDirectionWedgeMatch(
     directionFeatures,
     pendingDirectionDecorations,
-    nextWedgeType,
+    crescendoWedgeType,
     (feature) => feature.kind === "wedge" && feature.wedgeType === "diminuendo",
     "!diminuendo(!",
     "diminuendo"
   );
-  return nextWedgeType;
 };
 
 const appendAbcExportDirectionWedgeStopDecorations = (
@@ -5411,8 +4862,8 @@ const buildAbcExportPitchToken = (
   const accidentalNode = note.querySelector(":scope > accidental");
   const accidentalText = accidentalNode?.textContent?.trim() ?? "";
   const accidentalAlter = musicXmlAccidentalTextToAlter(accidentalText);
-  const accidentalEditorial = ((accidentalNode?.getAttribute("editorial") || "").trim().toLowerCase() === "yes");
-  const accidentalCautionary = ((accidentalNode?.getAttribute("cautionary") || "").trim().toLowerCase() === "yes");
+  const accidentalEditorial = ((accidentalNode?.getAttribute("editorial") ?? "").trim().toLowerCase() === "yes");
+  const accidentalCautionary = ((accidentalNode?.getAttribute("cautionary") ?? "").trim().toLowerCase() === "yes");
 
   const keyAlter = keyAlterMap[upperStep] ?? 0;
   const currentAlter = measureAccidentalByStepOctave.has(stepOctaveKey)
@@ -5729,8 +5180,8 @@ type AbcExportDocumentContext = {
 };
 
 const readAbcExportTimeModification = (note: Element): AbcExportTimeModification | null => {
-  const actual = Number(note.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() || "");
-  const normal = Number(note.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim() || "");
+  const actual = Number(note.querySelector(":scope > time-modification > actual-notes")?.textContent?.trim() ?? "");
+  const normal = Number(note.querySelector(":scope > time-modification > normal-notes")?.textContent?.trim() ?? "");
   if (!Number.isFinite(actual) || actual <= 0 || !Number.isFinite(normal) || normal <= 0) return null;
   return { actual: Math.round(actual), normal: Math.round(normal) };
 };
@@ -5769,10 +5220,10 @@ const updateAbcExportActiveTupletBeforeEvent = (
   return activeTuplet;
 };
 
-const buildAbcExportTupletPrefix = (activeTuplet: AbcExportActiveTuplet | null, isChord: boolean): string => {
-  if (isChord || !activeTuplet || activeTuplet.remaining !== activeTuplet.actual) return "";
-  return `(${activeTuplet.actual}:${activeTuplet.normal}:${activeTuplet.actual}`;
-};
+const buildAbcExportTupletPrefix = (activeTuplet: AbcExportActiveTuplet | null, isChord: boolean): string =>
+  isChord || !activeTuplet || activeTuplet.remaining !== activeTuplet.actual
+    ? ""
+    : `(${activeTuplet.actual}:${activeTuplet.normal}:${activeTuplet.actual}`;
 
 const advanceAbcExportActiveTupletAfterEvent = (
   activeTuplet: AbcExportActiveTuplet | null,
@@ -5798,44 +5249,36 @@ const takeAbcExportQueuedEventPrefix = (
   ].join("");
 };
 
-const buildAbcExportPendingHarmonyPrefix = (isChord: boolean, pendingHarmonySymbols: string[]): string => {
-  return buildAbcExportPendingQuotedPrefix(isChord, pendingHarmonySymbols, (symbol) => abcQuotedTextEscape(symbol));
-};
+const buildAbcExportPendingHarmonyPrefix = (isChord: boolean, pendingHarmonySymbols: string[]): string =>
+  takeAbcExportPendingTextPrefix({
+    isChord,
+    pending: pendingHarmonySymbols,
+    buildPrefix: (items) => items.map((item) => `"${abcQuotedTextEscape(item)}"`).join(""),
+  });
 
-const buildAbcExportPendingWordsPrefix = (isChord: boolean, pendingDirectionWords: string[]): string => {
-  return buildAbcExportPendingQuotedPrefix(isChord, pendingDirectionWords, (word) => word);
-};
+const buildAbcExportPendingWordsPrefix = (isChord: boolean, pendingDirectionWords: string[]): string =>
+  takeAbcExportPendingTextPrefix({
+    isChord,
+    pending: pendingDirectionWords,
+    buildPrefix: (items) => items.map((item) => `"${item}"`).join(""),
+  });
 
 const buildAbcExportPendingDirectionDecorationPrefix = (
   isChord: boolean,
   pendingDirectionDecorations: string[]
-): string => {
-  return takeAbcExportPendingTextPrefix({
+): string =>
+  takeAbcExportPendingTextPrefix({
     isChord,
     pending: pendingDirectionDecorations,
     buildPrefix: (items) => items.join(""),
   });
-};
 
-const buildAbcExportPendingGracePrefix = (pendingGraceTokens: string[]): string => {
-  return takeAbcExportPendingTextPrefix({
+const buildAbcExportPendingGracePrefix = (pendingGraceTokens: string[]): string =>
+  takeAbcExportPendingTextPrefix({
     isChord: false,
     pending: pendingGraceTokens,
     buildPrefix: (items) => `{${items.join("")}}`,
   });
-};
-
-const buildAbcExportPendingQuotedPrefix = (
-  isChord: boolean,
-  pending: string[],
-  encode: (value: string) => string
-): string => {
-  return takeAbcExportPendingTextPrefix({
-    isChord,
-    pending,
-    buildPrefix: (items) => items.map((item) => `"${encode(item)}"`).join(""),
-  });
-};
 
 const takeAbcExportPendingTextPrefix = (options: {
   isChord: boolean;
@@ -5868,12 +5311,14 @@ const buildAbcExportOrnamentPrefixInfo = (note: Element): AbcExportOrnamentPrefi
   const ornamentFeatures = extractMusicXmlOrnamentFeatures(note);
   const ornamentKinds = new Set(ornamentFeatures.map((feature) => feature.kind));
   const trillInfo = buildAbcExportOrnamentTrillPrefix(note, ornamentKinds);
-  const turnPrefix = buildAbcExportOrnamentTurnPrefix(ornamentFeatures, ornamentKinds);
-  const mordentPrefix = buildAbcExportOrnamentMordentPrefix(ornamentKinds);
-  const tremoloPrefix = buildAbcExportOrnamentTremoloPrefix(ornamentFeatures);
-  const motionPrefix = buildAbcExportOrnamentMotionPrefix(note, ornamentKinds);
   return {
-    prefix: buildAbcExportOrnamentPrefixText(trillInfo.prefix, turnPrefix, mordentPrefix, tremoloPrefix, motionPrefix),
+    prefix: buildAbcExportOrnamentPrefixText(
+      trillInfo.prefix,
+      buildAbcExportOrnamentTurnPrefix(ornamentFeatures, ornamentKinds),
+      buildAbcExportOrnamentMordentPrefix(ornamentKinds),
+      buildAbcExportOrnamentTremoloPrefix(ornamentFeatures),
+      buildAbcExportOrnamentMotionPrefix(note, ornamentKinds)
+    ),
     hasTrill: trillInfo.hasTrill,
     trillAccidentalText: buildAbcExportOrnamentTrillAccidentalText(note),
   };
@@ -5885,13 +5330,10 @@ const buildAbcExportOrnamentPrefixText = (
   mordentPrefix: string,
   tremoloPrefix: string,
   motionPrefix: string
-): string => {
-  return [trillPrefix, turnPrefix, mordentPrefix, tremoloPrefix, motionPrefix].join("");
-};
+): string => [trillPrefix, turnPrefix, mordentPrefix, tremoloPrefix, motionPrefix].join("");
 
-const buildAbcExportOrnamentTrillAccidentalText = (note: Element): string => {
-  return note.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() || "";
-};
+const buildAbcExportOrnamentTrillAccidentalText = (note: Element): string =>
+  note.querySelector(":scope > notations > ornaments > accidental-mark")?.textContent?.trim() ?? "";
 
 const buildAbcExportOrnamentTrillPrefix = (
   note: Element,
@@ -5900,105 +5342,87 @@ const buildAbcExportOrnamentTrillPrefix = (
   const hasTrillMark = buildAbcExportOrnamentTrillMarkPresence(ornamentKinds);
   const hasWavyLineStart = buildAbcExportOrnamentWavyLineStartPresence(note);
   const hasWavyLineStop = buildAbcExportOrnamentWavyLineStopPresence(note);
-  const hasTrill = hasTrillMark || hasWavyLineStart;
   return {
-    prefix: buildAbcExportOrnamentTrillPrefixFromPresence(hasTrillMark, hasWavyLineStart, hasWavyLineStop, hasTrill),
-    hasTrill,
+    prefix: buildAbcExportOrnamentTrillPrefixFromPresence(hasTrillMark, hasWavyLineStart, hasWavyLineStop),
+    hasTrill: hasTrillMark || hasWavyLineStart,
   };
 };
 
 const buildAbcExportOrnamentTrillPrefixFromPresence = (
   hasTrillMark: boolean,
   hasWavyLineStart: boolean,
-  hasWavyLineStop: boolean,
-  hasTrill: boolean
-): string => {
-  const candidates = [
-    hasWavyLineStop ? "!trill)!" : "",
-    hasWavyLineStart && !hasTrillMark ? "!trill!" : "",
-    hasWavyLineStart ? "!trill(!" : "",
-    hasTrill ? "!trill!" : "",
-  ];
-  return candidates.find(Boolean) || "";
-};
+  hasWavyLineStop: boolean
+): string =>
+  hasWavyLineStop
+    ? "!trill)!"
+    : hasWavyLineStart && !hasTrillMark
+      ? "!trill!"
+      : hasWavyLineStart
+        ? "!trill(!"
+        : hasTrillMark
+          ? "!trill!"
+          : "";
 
-const buildAbcExportOrnamentTrillMarkPresence = (ornamentKinds: Set<string>): boolean => {
-  return ornamentKinds.has("trill-mark");
-};
+const buildAbcExportOrnamentTrillMarkPresence = (ornamentKinds: Set<string>): boolean =>
+  ornamentKinds.has("trill-mark");
 
-const buildAbcExportOrnamentWavyLineStartPresence = (note: Element): boolean => {
-  return Array.from(note.querySelectorAll(":scope > notations > ornaments > wavy-line")).some((node) => {
-    const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
-    return type === "" || type === "start";
-  });
-};
+const buildAbcExportOrnamentWavyLineStartPresence = (note: Element): boolean =>
+  buildAbcExportOrnamentWavyLinePresence(note, (type) => type === "" || type === "start");
 
-const buildAbcExportOrnamentWavyLineStopPresence = (note: Element): boolean => {
-  return Array.from(note.querySelectorAll(":scope > notations > ornaments > wavy-line")).some((node) => {
-    const type = (node.getAttribute("type") ?? "").trim().toLowerCase();
-    return type === "stop";
-  });
-};
+const buildAbcExportOrnamentWavyLineStopPresence = (note: Element): boolean =>
+  buildAbcExportOrnamentWavyLinePresence(note, (type) => type === "stop");
+
+const buildAbcExportOrnamentWavyLinePresence = (
+  note: Element,
+  acceptsType: (type: string) => boolean
+): boolean =>
+  Array.from(note.querySelectorAll(":scope > notations > ornaments > wavy-line")).some((node) =>
+    acceptsType((node.getAttribute("type") ?? "").trim().toLowerCase())
+  );
 
 const buildAbcExportOrnamentTurnPrefix = (
   ornamentFeatures: AbcExportOrnamentFeatures,
   ornamentKinds: Set<string>
-): string => {
-  return [
+): string =>
+  [
     buildAbcExportOrnamentInvertedTurnPrefix(ornamentFeatures, ornamentKinds),
     buildAbcExportOrnamentNormalTurnPrefix(ornamentFeatures, ornamentKinds),
   ].join("");
-};
 
 const buildAbcExportOrnamentInvertedTurnPrefix = (
   ornamentFeatures: AbcExportOrnamentFeatures,
   ornamentKinds: Set<string>
-): string => {
-  const hasInvertedTurn = ornamentKinds.has("inverted-turn");
-  const hasTurnSlash = buildAbcExportOrnamentInvertedTurnSlashPresence(ornamentFeatures);
-  const hasDelayedTurn = buildAbcExportOrnamentDelayedTurnPresence(ornamentKinds);
-  return buildAbcExportOrnamentPresencePrefix(
-    hasInvertedTurn,
-    hasDelayedTurn,
-    hasTurnSlash,
+): string =>
+  buildAbcExportOrnamentPresencePrefix(
+    ornamentKinds.has("inverted-turn"),
+    buildAbcExportOrnamentDelayedTurnPresence(ornamentKinds),
+    buildAbcExportOrnamentInvertedTurnSlashPresence(ornamentFeatures),
     "!delayedinvertedturn!",
     "!invertedturnx!",
     "!invertedturn!"
   );
-};
 
 const buildAbcExportOrnamentNormalTurnPrefix = (
   ornamentFeatures: AbcExportOrnamentFeatures,
   ornamentKinds: Set<string>
-): string => {
-  const hasTurn = ornamentKinds.has("turn");
-  const hasTurnSlash = buildAbcExportOrnamentNormalTurnSlashPresence(ornamentFeatures);
-  const hasDelayedTurn = buildAbcExportOrnamentDelayedTurnPresence(ornamentKinds);
-  return buildAbcExportOrnamentPresencePrefix(
-    hasTurn,
-    hasDelayedTurn,
-    hasTurnSlash,
+): string =>
+  buildAbcExportOrnamentPresencePrefix(
+    ornamentKinds.has("turn"),
+    buildAbcExportOrnamentDelayedTurnPresence(ornamentKinds),
+    buildAbcExportOrnamentNormalTurnSlashPresence(ornamentFeatures),
     "!delayedturn!",
     "!turnx!",
     "!turn!"
   );
-};
 
-const buildAbcExportOrnamentInvertedTurnSlashPresence = (
-  ornamentFeatures: AbcExportOrnamentFeatures
-): boolean => {
-  return ornamentFeatures.some((feature) => feature.kind === "inverted-turn" && feature.slash);
-};
+const buildAbcExportOrnamentInvertedTurnSlashPresence = (ornamentFeatures: AbcExportOrnamentFeatures): boolean =>
+  ornamentFeatures.some((feature) => feature.kind === "inverted-turn" && feature.slash);
 
-const buildAbcExportOrnamentNormalTurnSlashPresence = (
-  ornamentFeatures: AbcExportOrnamentFeatures
-): boolean => {
-  return ornamentFeatures.some((feature) => feature.kind === "turn" && feature.slash);
-};
+const buildAbcExportOrnamentNormalTurnSlashPresence = (ornamentFeatures: AbcExportOrnamentFeatures): boolean =>
+  ornamentFeatures.some((feature) => feature.kind === "turn" && feature.slash);
 
-const buildAbcExportOrnamentDelayedTurnPresence = (ornamentKinds: Set<string>): boolean => {
-  return ornamentKinds.has("delayed-turn");
-};
+const buildAbcExportOrnamentDelayedTurnPresence = (ornamentKinds: Set<string>): boolean =>
+  ornamentKinds.has("delayed-turn");
 
 const buildAbcExportOrnamentPresencePrefix = (
   hasKind: boolean,
@@ -6007,85 +5431,63 @@ const buildAbcExportOrnamentPresencePrefix = (
   delayedPrefix: string,
   slashPrefix: string,
   normalPrefix: string
-): string => {
-  if (!hasKind) return "";
-  return hasDelayed ? delayedPrefix : (hasSlash ? slashPrefix : normalPrefix);
-};
+): string => (hasKind ? (hasDelayed ? delayedPrefix : hasSlash ? slashPrefix : normalPrefix) : "");
 
-const buildAbcExportOrnamentSimplePresencePrefix = (hasKind: boolean, prefix: string): string => {
-  return hasKind ? prefix : "";
-};
+const buildAbcExportOrnamentSimplePresencePrefix = (hasKind: boolean, prefix: string): string =>
+  hasKind ? prefix : "";
 
-const buildAbcExportOrnamentMordentPrefix = (ornamentKinds: Set<string>): string => {
-  return [
-    buildAbcExportOrnamentInvertedMordentPrefix(ornamentKinds),
-    buildAbcExportOrnamentNormalMordentPrefix(ornamentKinds),
-  ].join("");
-};
+const buildAbcExportOrnamentMordentPrefix = (ornamentKinds: Set<string>): string =>
+  [buildAbcExportOrnamentInvertedMordentPrefix(ornamentKinds), buildAbcExportOrnamentNormalMordentPrefix(ornamentKinds)].join("");
 
-const buildAbcExportOrnamentInvertedMordentPrefix = (ornamentKinds: Set<string>): string => {
-  return buildAbcExportOrnamentSimplePresencePrefix(ornamentKinds.has("inverted-mordent"), "!pralltriller!");
-};
+const buildAbcExportOrnamentInvertedMordentPrefix = (ornamentKinds: Set<string>): string =>
+  buildAbcExportOrnamentSimplePresencePrefix(ornamentKinds.has("inverted-mordent"), "!pralltriller!");
 
-const buildAbcExportOrnamentNormalMordentPrefix = (ornamentKinds: Set<string>): string => {
-  return buildAbcExportOrnamentSimplePresencePrefix(ornamentKinds.has("mordent"), "!mordent!");
-};
+const buildAbcExportOrnamentNormalMordentPrefix = (ornamentKinds: Set<string>): string =>
+  buildAbcExportOrnamentSimplePresencePrefix(ornamentKinds.has("mordent"), "!mordent!");
 
-const buildAbcExportOrnamentTremoloPrefix = (ornamentFeatures: AbcExportOrnamentFeatures): string => {
-  return (["single", "start", "stop"] as const)
-    .map((tremoloType) => buildAbcExportOrnamentTremoloPrefixForType(ornamentFeatures, tremoloType))
+const buildAbcExportOrnamentTremoloPrefix = (ornamentFeatures: AbcExportOrnamentFeatures): string =>
+  (["single", "start", "stop"] as const)
+    .map((tremoloType) =>
+      buildAbcExportOrnamentTremoloPrefixFromFeature(
+        buildAbcExportOrnamentTremoloFeatureByType(ornamentFeatures, tremoloType),
+        tremoloType
+      )
+    )
     .join("");
-};
-
-const buildAbcExportOrnamentTremoloPrefixForType = (
-  ornamentFeatures: AbcExportOrnamentFeatures,
-  tremoloType: "single" | "start" | "stop"
-): string => {
-  const tremoloFeature = buildAbcExportOrnamentTremoloFeatureByType(ornamentFeatures, tremoloType);
-  return buildAbcExportOrnamentTremoloPrefixFromFeature(tremoloFeature, tremoloType);
-};
 
 const buildAbcExportOrnamentTremoloFeatureByType = (
   ornamentFeatures: AbcExportOrnamentFeatures,
   tremoloType: "single" | "start" | "stop"
-): AbcExportTremoloOrnamentFeature | undefined => {
-  return ornamentFeatures.find((feature) => feature.kind === "tremolo" && feature.tremoloType === tremoloType);
-};
+): AbcExportTremoloOrnamentFeature | undefined =>
+  ornamentFeatures.find((feature) => feature.kind === "tremolo" && feature.tremoloType === tremoloType);
 
 const buildAbcExportOrnamentTremoloPrefixFromFeature = (
   tremoloFeature: AbcExportTremoloOrnamentFeature | undefined,
   tremoloType: "single" | "start" | "stop"
-): string => {
-  if (!tremoloFeature) return "";
-  const tremoloMarks = tremoloFeature.marks ? tremoloFeature.marks : 1;
-  return `!tremolo-${tremoloType}-${tremoloMarks}!`;
-};
+): string =>
+  tremoloFeature ? `!tremolo-${tremoloType}-${tremoloFeature.marks ? tremoloFeature.marks : 1}!` : "";
 
-const buildAbcExportOrnamentMotionPrefix = (note: Element, ornamentKinds: Set<string>): string => {
-  return buildAbcExportOrnamentMotionPrefixParts(note, ornamentKinds).join("");
-};
+const buildAbcExportOrnamentMotionPrefix = (note: Element, ornamentKinds: Set<string>): string =>
+  buildAbcExportOrnamentMotionPrefixParts(note, ornamentKinds).join("");
 
-const buildAbcExportOrnamentGlissandoSlidePrefix = (note: Element): string => {
-  return buildAbcExportOrnamentGlissandoSlidePrefixParts(note).join("");
-};
+const buildAbcExportOrnamentGlissandoSlidePrefix = (note: Element): string =>
+  buildAbcExportOrnamentGlissandoSlidePrefixParts(note).join("");
 
-const buildAbcExportOrnamentGlissandoPrefix = (note: Element): string => {
-  return buildAbcExportOrnamentStartStopPrefixParts(
-    Boolean(note.querySelector(':scope > notations > glissando[type="start"]')),
-    Boolean(note.querySelector(':scope > notations > glissando[type="stop"]')),
+const buildAbcExportOrnamentGlissandoPrefix = (note: Element): string =>
+  buildAbcExportOrnamentStartStopPrefixParts(
+    note.querySelector(':scope > notations > glissando[type="start"]'),
+    note.querySelector(':scope > notations > glissando[type="stop"]'),
     "!gliss-start!",
     "!gliss-stop!"
   ).join("");
-};
 
-const buildAbcExportOrnamentSlidePrefix = (note: Element): string => {
-  return buildAbcExportOrnamentStartStopPrefixParts(
-    Boolean(note.querySelector(':scope > notations > slide[type="start"]')),
-    Boolean(note.querySelector(':scope > notations > slide[type="stop"]')),
+const buildAbcExportOrnamentSlidePrefix = (note: Element): string =>
+  buildAbcExportOrnamentStartStopPrefixParts(
+    note.querySelector(':scope > notations > slide[type="start"]'),
+    note.querySelector(':scope > notations > slide[type="stop"]'),
     "!slide!",
     "!slide-stop!"
   ).join("");
-};
 
 const buildAbcExportOrnamentGlissandoSlidePrefixParts = (note: Element): string[] => [
   buildAbcExportOrnamentGlissandoPrefix(note),
@@ -6093,31 +5495,29 @@ const buildAbcExportOrnamentGlissandoSlidePrefixParts = (note: Element): string[
 ];
 
 const buildAbcExportOrnamentStartStopPrefixParts = (
-  hasStart: boolean,
-  hasStop: boolean,
+  hasStart: boolean | Element | null,
+  hasStop: boolean | Element | null,
   startPrefix: string,
   stopPrefix: string
-): string[] => [hasStart ? startPrefix : "", hasStop ? stopPrefix : ""].filter(Boolean);
+): string[] => [
+  ...(hasStart ? [startPrefix] : []),
+  ...(hasStop ? [stopPrefix] : []),
+];
 
-const buildAbcExportOrnamentMotionEffectPrefix = (note: Element, ornamentKinds: Set<string>): string => {
-  return buildAbcExportOrnamentMotionEffectPrefixParts(note, ornamentKinds).join("");
-};
+const buildAbcExportOrnamentMotionEffectPrefix = (note: Element, ornamentKinds: Set<string>): string =>
+  buildAbcExportOrnamentMotionEffectPrefixParts(note, ornamentKinds).join("");
 
-const buildAbcExportOrnamentSchleiferShakePrefix = (ornamentKinds: Set<string>): string => {
-  return [buildAbcExportOrnamentSchleiferPrefix(ornamentKinds), buildAbcExportOrnamentShakePrefix(ornamentKinds)].join("");
-};
+const buildAbcExportOrnamentSchleiferShakePrefix = (ornamentKinds: Set<string>): string =>
+  [buildAbcExportOrnamentSchleiferPrefix(ornamentKinds), buildAbcExportOrnamentShakePrefix(ornamentKinds)].join("");
 
-const buildAbcExportOrnamentSchleiferPrefix = (ornamentKinds: Set<string>): string => {
-  return ornamentKinds.has("schleifer") ? "!schleifer!" : "";
-};
+const buildAbcExportOrnamentSchleiferPrefix = (ornamentKinds: Set<string>): string =>
+  ornamentKinds.has("schleifer") ? "!schleifer!" : "";
 
-const buildAbcExportOrnamentShakePrefix = (ornamentKinds: Set<string>): string => {
-  return ornamentKinds.has("shake") ? "!shake!" : "";
-};
+const buildAbcExportOrnamentShakePrefix = (ornamentKinds: Set<string>): string =>
+  ornamentKinds.has("shake") ? "!shake!" : "";
 
-const buildAbcExportOrnamentArpeggiatePrefix = (note: Element): string => {
-  return Boolean(note.querySelector(":scope > notations > arpeggiate")) ? "!arpeggio!" : "";
-};
+const buildAbcExportOrnamentArpeggiatePrefix = (note: Element): string =>
+  note.querySelector(":scope > notations > arpeggiate") ? "!arpeggio!" : "";
 
 const buildAbcExportOrnamentMotionPrefixParts = (note: Element, ornamentKinds: Set<string>): string[] => [
   buildAbcExportOrnamentGlissandoSlidePrefix(note),
@@ -6129,9 +5529,8 @@ const buildAbcExportOrnamentMotionEffectPrefixParts = (note: Element, ornamentKi
   buildAbcExportOrnamentArpeggiatePrefix(note),
 ];
 
-const buildAbcExportTechnicalPrefix = (note: Element): string => {
-  return buildAbcExportTechnicalPrefixXmlParts(note).join("");
-};
+const buildAbcExportTechnicalPrefix = (note: Element): string =>
+  buildAbcExportTechnicalPrefixXmlParts(note).join("");
 
 const buildAbcExportTechnicalPrefixXmlParts = (note: Element): string[] => [
   ...buildAbcExportTechnicalStrokeXmlParts(note),
@@ -6139,99 +5538,80 @@ const buildAbcExportTechnicalPrefixXmlParts = (note: Element): string[] => [
   ...buildAbcExportTechnicalStateXmlParts(note),
 ];
 
-const buildAbcExportTechnicalStrokeXmlParts = (note: Element): string[] => {
-  return [
-    ...buildAbcExportTechnicalBowingXmlParts(note),
-    ...buildAbcExportTechnicalTongueAndFootXmlParts(note),
+const buildAbcExportTechnicalStrokeXmlParts = (note: Element): string[] => [
+  ...buildAbcExportTechnicalBowingXmlParts(note),
+  ...buildAbcExportTechnicalTongueAndFootXmlParts(note),
+];
+
+const buildAbcExportTechnicalBowingXmlParts = (note: Element): string[] => [
+  note.querySelector(":scope > notations > technical > up-bow") ? "!upbow!" : "",
+  note.querySelector(":scope > notations > technical > down-bow") ? "!downbow!" : "",
+];
+
+const buildAbcExportTechnicalTongueAndFootXmlParts = (note: Element): string[] =>
+  [
+    note.querySelector(":scope > notations > technical > double-tongue") ? "!doubletongue!" : "",
+    note.querySelector(":scope > notations > technical > triple-tongue") ? "!tripletongue!" : "",
+    note.querySelector(":scope > notations > technical > heel") ? "!heel!" : "",
+    note.querySelector(":scope > notations > technical > toe") ? "!toe!" : "",
   ];
-};
 
-const buildAbcExportTechnicalBowingXmlParts = (note: Element): string[] => {
-  return buildAbcExportTechnicalPresenceXmlParts(note, [
-    ["up-bow", "!upbow!"],
-    ["down-bow", "!downbow!"],
-  ]);
-};
+const buildAbcExportTechnicalCollectionXmlParts = (note: Element): string[] =>
+  [
+    Array.from(note.querySelectorAll(":scope > notations > technical > fingering"))
+      .map((node) => (node.textContent ?? "").trim())
+      .filter((text) => text.length > 0)
+      .map((value) => (/^[0-5]$/.test(value) ? `!${value}!` : `!fingering:${value}!`))
+      .join(""),
+    Array.from(note.querySelectorAll(":scope > notations > technical > string"))
+      .map((node) => (node.textContent ?? "").trim())
+      .filter((text) => text.length > 0)
+      .map((value) => `!string:${value}!`)
+      .join(""),
+    Array.from(note.querySelectorAll(":scope > notations > technical > pluck"))
+      .map((node) => (node.textContent ?? "").trim())
+      .filter((text) => text.length > 0)
+      .map((value) => `!pluck:${value}!`)
+      .join(""),
+  ];
 
-const buildAbcExportTechnicalTongueAndFootXmlParts = (note: Element): string[] => {
-  return buildAbcExportTechnicalPresenceXmlParts(note, [
-    ["double-tongue", "!doubletongue!"],
-    ["triple-tongue", "!tripletongue!"],
-    ["heel", "!heel!"],
-    ["toe", "!toe!"],
-  ]);
-};
-
-const buildAbcExportTechnicalCollectionXmlParts = (note: Element): string[] => {
-  return buildAbcExportTechnicalTextCollectionXmlParts(note, [
-    [":scope > notations > technical > fingering", (value) => (/^[0-5]$/.test(value) ? `!${value}!` : `!fingering:${value}!`)],
-    [":scope > notations > technical > string", (value) => `!string:${value}!`],
-    [":scope > notations > technical > pluck", (value) => `!pluck:${value}!`],
-  ]);
-};
-
-const buildAbcExportTechnicalTextCollectionXmlParts = (
-  note: Element,
-  entries: Array<[string, (value: string) => string]>
-): string[] => {
-  return entries.map(([selector, formatValue]) => buildAbcExportTechnicalTextCollectionXmlPart(note, selector, formatValue));
-};
-
-const buildAbcExportTechnicalTextCollectionXmlPart = (
-  note: Element,
-  selector: string,
-  formatValue: (value: string) => string
-): string => {
-  return Array.from(note.querySelectorAll(selector))
-    .map((node) => (node.textContent || "").trim())
-    .filter(Boolean)
-    .map(formatValue)
-    .join("");
-};
-
-const buildAbcExportTechnicalStateXmlParts = (note: Element): string[] => {
-  return buildAbcExportTechnicalPresenceXmlParts(note, [
-    ["open-string", "!open!"],
-    ["snap-pizzicato", "!snap!"],
-    ["harmonic", "!harmonic!"],
-    ["stopped", "!stopped!"],
-    ["thumb-position", "!thumb!"],
-  ]);
-};
-
-const buildAbcExportTechnicalPresenceXmlParts = (
-  note: Element,
-  entries: Array<[string, string]>
-): string[] => {
-  return entries.map(([elementName, decoration]) => buildAbcExportTechnicalPresenceXmlPart(note, elementName, decoration));
-};
-
-const buildAbcExportTechnicalPresenceXmlPart = (
-  note: Element,
-  elementName: string,
-  decoration: string
-): string => {
-  return Boolean(note.querySelector(`:scope > notations > technical > ${elementName}`)) ? decoration : "";
-};
+const buildAbcExportTechnicalStateXmlParts = (note: Element): string[] =>
+  [
+    note.querySelector(":scope > notations > technical > open-string") ? "!open!" : "",
+    note.querySelector(":scope > notations > technical > snap-pizzicato") ? "!snap!" : "",
+    note.querySelector(":scope > notations > technical > harmonic") ? "!harmonic!" : "",
+    note.querySelector(":scope > notations > technical > stopped") ? "!stopped!" : "",
+    note.querySelector(":scope > notations > technical > thumb-position") ? "!thumb!" : "",
+  ];
 
 const buildAbcExportFermataPrefix = (note: Element): string => {
   const fermata = note.querySelector(":scope > notations > fermata");
-  if (!fermata) return "";
-  const type = fermata.getAttribute("type")?.trim().toLowerCase() || "";
-  const shape = fermata.textContent?.trim().toLowerCase() || "";
-  return type === "inverted" || shape === "inverted" ? "!invertedfermata!" : "!fermata!";
+  const type = fermata?.getAttribute("type")?.trim().toLowerCase() ?? "";
+  const shape = fermata?.textContent?.trim().toLowerCase() ?? "";
+  return fermata ? (type === "inverted" || shape === "inverted" ? "!invertedfermata!" : "!fermata!") : "";
 };
 
-const buildAbcExportArticulationPrefix = (note: Element): string => {
-  return buildAbcExportArticulationPrefixXmlParts(note).join("");
-};
+const buildAbcExportArticulationPrefix = (note: Element): string =>
+  buildAbcExportArticulationPrefixXmlParts(note).join("");
 
 const buildAbcExportArticulationPrefixXmlParts = (note: Element): string[] => {
   const articulationKinds = new Set(extractMusicXmlArticulationKinds(note));
   return [
     ...buildAbcExportArticulationCorePrefixXmlParts(articulationKinds),
     ...buildAbcExportArticulationDecorativePrefixXmlParts(note, articulationKinds),
-    ...buildAbcExportArticulationPhraseMarkXmlParts(note),
+    ...[
+      (
+        Array.from(note.querySelectorAll(":scope > notations > articulations > other-articulation"))
+          .map((node) => (node.textContent ?? "").trim().toLowerCase())
+          .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") ?? ""
+      )
+        ? `!${
+            Array.from(note.querySelectorAll(":scope > notations > articulations > other-articulation"))
+              .map((node) => (node.textContent ?? "").trim().toLowerCase())
+              .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") ?? ""
+          }!`
+        : "",
+    ].filter((part) => part.length > 0),
   ];
 };
 
@@ -6281,32 +5661,15 @@ const buildAbcExportArticulationBreathXmlPart = (articulationKinds: Set<string>)
 const buildAbcExportArticulationCaesuraXmlPart = (articulationKinds: Set<string>): string =>
   buildAbcExportArticulationSimplePresenceXmlPart(articulationKinds.has("caesura"), "!caesura!");
 
-const buildAbcExportArticulationPhraseMarkXmlParts = (note: Element): string[] => {
-  const phraseMarkXmlPart = buildAbcExportArticulationPhraseMarkXmlPart(note);
-  return phraseMarkXmlPart ? [phraseMarkXmlPart] : [];
-};
-
-const buildAbcExportArticulationPhraseMarkXmlPart = (note: Element): string => {
-  const phraseMarkText = Array.from(note.querySelectorAll(":scope > notations > articulations > other-articulation"))
-    .map((node) => (node.textContent || "").trim().toLowerCase())
-    .find((text) => text === "shortphrase" || text === "mediumphrase" || text === "longphrase") || "";
-  return phraseMarkText ? `!${phraseMarkText}!` : "";
-};
-
-const buildAbcExportArticulationSimplePresenceXmlPart = (hasKind: boolean, prefix: string): string => {
-  return hasKind ? prefix : "";
-};
+const buildAbcExportArticulationSimplePresenceXmlPart = (hasKind: boolean, prefix: string): string =>
+  hasKind ? prefix : "";
 
 const buildAbcExportArticulationPresenceXmlPart = (
   note: Element,
   elementName: string,
   prefix: string
-): string => {
-  return buildAbcExportArticulationSimplePresenceXmlPart(
-    Boolean(note.querySelector(`:scope > notations > articulations > ${elementName}`)),
-    prefix
-  );
-};
+): string =>
+  buildAbcExportArticulationSimplePresenceXmlPart(note.querySelector(`:scope > notations > articulations > ${elementName}`) !== null, prefix);
 
 const appendAbcExportLyricToken = (
   note: Element,
@@ -6315,9 +5678,9 @@ const appendAbcExportLyricToken = (
 ): boolean => {
   if (note.querySelector(":scope > rest")) return pendingLyricExtension;
   const lyric = note.querySelector(":scope > lyric");
-  const lyricText = lyric?.querySelector(":scope > text")?.textContent?.trim() || "";
-  const lyricSyllabic = lyric?.querySelector(":scope > syllabic")?.textContent?.trim() || "single";
-  const lyricExtend = Boolean(lyric?.querySelector(":scope > extend"));
+  const lyricText = lyric?.querySelector(":scope > text")?.textContent?.trim() ?? "";
+  const lyricSyllabic = lyric?.querySelector(":scope > syllabic")?.textContent?.trim() ?? "single";
+  const lyricExtend = lyric?.querySelector(":scope > extend") !== null;
   if (lyricText) {
     lyricTokens.push(abcLyricTokenFromMusicXml(lyricText, lyricSyllabic));
     return lyricExtend;
@@ -6374,23 +5737,6 @@ const appendAbcExportChordPitchToPendingEvent = (
   pending.slurStop = pending.slurStop || hasSlurStop;
 };
 
-const buildAbcExportTrillMetaLineIfNeeded = (
-  normalizedVoiceId: string,
-  measure: Element,
-  fallbackMeasureNumber: number,
-  eventNo: number,
-  ornamentPrefixInfo: AbcExportOrnamentPrefixInfo
-): string => {
-  if (!ornamentPrefixInfo.hasTrill || !ornamentPrefixInfo.trillAccidentalText) return "";
-  return buildAbcExportTrillMetaLine(
-    normalizedVoiceId,
-    measure,
-    fallbackMeasureNumber,
-    eventNo,
-    ornamentPrefixInfo.trillAccidentalText
-  );
-};
-
 const startAbcExportPendingEventForNote = (
   flushPending: boolean,
   pending: AbcExportPendingEvent | null,
@@ -6408,13 +5754,16 @@ const startAbcExportPendingEventForNote = (
   eventNo: number
 ): AbcExportPendingEventUpdateResult => {
   const nextEventNo = eventNo + 1;
-  const trillMetaLine = buildAbcExportTrillMetaLineIfNeeded(
-    normalizedVoiceId,
-    measure,
-    fallbackMeasureNumber,
-    nextEventNo,
-    ornamentPrefixInfo
-  );
+  const trillMetaLine =
+    ornamentPrefixInfo.hasTrill && ornamentPrefixInfo.trillAccidentalText
+      ? buildAbcExportTrillMetaLine(
+          normalizedVoiceId,
+          measure,
+          fallbackMeasureNumber,
+          nextEventNo,
+          ornamentPrefixInfo.trillAccidentalText
+        )
+      : "";
   if (trillMetaLine) metaLines.push(trillMetaLine);
   if (flushPending) flushAbcExportPendingEvent(pending, tokens);
   return {
@@ -6428,9 +5777,9 @@ const readAbcExportNoteEventInfo = (
   currentDivisions: number,
   unitLength: Fraction
 ): AbcExportNoteEventInfo | null => {
-  const isChord = Boolean(note.querySelector(":scope > chord"));
-  const isGrace = Boolean(note.querySelector(":scope > grace"));
-  const duration = Number(note.querySelector(":scope > duration")?.textContent?.trim() || "0");
+  const isChord = note.querySelector(":scope > chord") !== null;
+  const isGrace = note.querySelector(":scope > grace") !== null;
+  const duration = Number(note.querySelector(":scope > duration")?.textContent?.trim() ?? "0");
   if (!isGrace && (!Number.isFinite(duration) || duration <= 0)) return null;
   const noteDuration = isGrace
     ? (Number.isFinite(duration) && duration > 0 ? duration : Math.round(currentDivisions / 2))
@@ -6446,7 +5795,7 @@ const readAbcExportNoteEventInfo = (
     hasSlurStart: slurFeatures.some((slur) => slur.type === "start"),
     hasSlurStop: slurFeatures.some((slur) => slur.type === "stop"),
     hasGraceSlash: (note.querySelector(":scope > grace")?.getAttribute("slash") ?? "").trim().toLowerCase() === "yes",
-    hasTupletStart: Boolean(note.querySelector(':scope > notations > tuplet[type="start"]')),
+    hasTupletStart: note.querySelector(':scope > notations > tuplet[type="start"]') !== null,
     timeModification,
     len: buildAbcExportLengthToken(noteDuration, currentDivisions, unitLength, timeModification),
   };
@@ -6536,27 +5885,6 @@ const appendAbcExportEmptyMeasureRestTokenIfNeeded = (
   tokens.push(`z${AbcCommon.abcLengthTokenFromFraction(lenRatio)}`);
 };
 
-const buildAbcExportMeasureText = (
-  tokens: string[],
-  needsInlineKeyChange: boolean,
-  currentFifths: number,
-  boundaryInfo: AbcExportMeasureBoundaryInfo
-): string => {
-  return buildAbcExportMeasureTextParts(tokens, needsInlineKeyChange, currentFifths, boundaryInfo).join(" ").trim();
-};
-
-const buildAbcExportMeasureTextParts = (
-  tokens: string[],
-  needsInlineKeyChange: boolean,
-  currentFifths: number,
-  boundaryInfo: AbcExportMeasureBoundaryInfo
-): string[] => [
-  buildAbcExportMeasureBoundaryPrefix(boundaryInfo),
-  buildAbcExportMeasureKeyPrefix(needsInlineKeyChange, currentFifths),
-  tokens.join(" "),
-  buildAbcExportMeasureBoundarySuffix(boundaryInfo),
-].filter(Boolean);
-
 const buildAbcExportMeasureBoundaryPrefix = (boundaryInfo: AbcExportMeasureBoundaryInfo): string =>
   `${boundaryInfo.hasLeftRepeat ? "|:" : ""}${boundaryInfo.leftEndingNumber ? `[${boundaryInfo.leftEndingNumber}` : ""}`;
 
@@ -6565,32 +5893,24 @@ const buildAbcExportMeasureKeyPrefix = (needsInlineKeyChange: boolean, currentFi
     ? `[K:${AbcCommon.keyFromFifthsMode(Math.max(-7, Math.min(7, Math.round(currentFifths))), "major")}]`
     : "";
 
-const buildAbcExportMeasureBoundarySuffix = (boundaryInfo: AbcExportMeasureBoundaryInfo): string => {
-  if (boundaryInfo.hasRightRepeat && boundaryInfo.rightEndingNumber) {
-    return ":|]";
-  }
-  if (boundaryInfo.hasRightRepeat) {
-    return ":|";
-  }
-  if (boundaryInfo.rightEndingNumber) {
-    return "]|";
-  }
-  return "|";
-};
+const buildAbcExportMeasureBoundarySuffix = (boundaryInfo: AbcExportMeasureBoundaryInfo): string =>
+  boundaryInfo.hasRightRepeat
+    ? (boundaryInfo.rightEndingNumber ? ":|]" : ":|")
+    : (boundaryInfo.rightEndingNumber ? "]|" : "|");
 
 const readAbcExportMeasureBoundaryInfo = (measure: Element): AbcExportMeasureBoundaryInfo => {
   const leftRepeatNode = measure.querySelector(':scope > barline[location="left"] > repeat');
   const rightRepeatNode = measure.querySelector(':scope > barline[location="right"] > repeat');
   const leftEndingNode = measure.querySelector(':scope > barline[location="left"] > ending');
   const rightEndingNode = measure.querySelector(':scope > barline[location="right"] > ending');
-  const leftRepeatDir = (leftRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
-  const rightRepeatDir = (rightRepeatNode?.getAttribute("direction") || "").trim().toLowerCase();
+  const leftRepeatDir = (leftRepeatNode?.getAttribute("direction") ?? "").trim().toLowerCase();
+  const rightRepeatDir = (rightRepeatNode?.getAttribute("direction") ?? "").trim().toLowerCase();
   return {
     hasLeftRepeat: leftRepeatDir === "forward",
     hasRightRepeat: rightRepeatDir === "backward",
-    leftEndingNumber: (leftEndingNode?.getAttribute("number") || "").trim(),
-    rightEndingNumber: (rightEndingNode?.getAttribute("number") || "").trim(),
-    rightEndingType: (rightEndingNode?.getAttribute("type") || "").trim().toLowerCase(),
+    leftEndingNumber: (leftEndingNode?.getAttribute("number") ?? "").trim(),
+    rightEndingNumber: (rightEndingNode?.getAttribute("number") ?? "").trim(),
+    rightEndingType: (rightEndingNode?.getAttribute("type") ?? "").trim().toLowerCase(),
   };
 };
 
@@ -6751,12 +6071,9 @@ const updateAbcExportStateAfterNoteEvent = (
   lyricTokens: string[],
   pendingLyricExtension: boolean
 ): AbcExportPostNoteEventState => {
-  const nextActiveTuplet = advanceAbcExportActiveTupletAfterEvent(activeTuplet, noteEventInfo.isChord);
   return {
-    activeTuplet: nextActiveTuplet,
-    pendingLyricExtension: noteEventInfo.isChord
-      ? pendingLyricExtension
-      : appendAbcExportLyricToken(note, lyricTokens, pendingLyricExtension),
+    activeTuplet: advanceAbcExportActiveTupletAfterEvent(activeTuplet, noteEventInfo.isChord),
+    pendingLyricExtension: noteEventInfo.isChord ? pendingLyricExtension : appendAbcExportLyricToken(note, lyricTokens, pendingLyricExtension),
   };
 };
 
@@ -7105,40 +6422,22 @@ const renderAbcExportMeasureText = (
     currentBeatType,
     unitLength
   );
+  const boundaryPrefix = buildAbcExportMeasureBoundaryPrefix(boundaryInfo);
+  const keyPrefix = buildAbcExportMeasureKeyPrefix(needsInlineKeyChange, currentFifths);
+  const boundarySuffix = buildAbcExportMeasureBoundarySuffix(boundaryInfo);
   return {
-    measureText: buildAbcExportMeasureText(
-      tokens,
-      needsInlineKeyChange,
-      currentFifths,
-      boundaryInfo
-    ),
+    measureText: [
+      ...(boundaryPrefix ? [boundaryPrefix] : []),
+      ...(keyPrefix ? [keyPrefix] : []),
+      tokens.join(" "),
+      ...(boundarySuffix ? [boundarySuffix] : []),
+    ]
+      .join(" ")
+      .trim(),
     measureState,
     lastEmittedKeyFifths: currentFifths,
     pendingLyricExtension,
   };
-};
-
-const buildAbcExportLaneHeaderFromContext = (context: AbcExportLaneRenderContext): string => {
-  const {
-    part,
-    partName,
-    measures,
-    laneDefs,
-    lane,
-    headerLines,
-    metaLines,
-  } = context;
-  const normalizedVoiceId = lane.voiceId.replace(/[^A-Za-z0-9_.-]/g, "_");
-  const laneName = buildAbcExportLaneName(partName, laneDefs.length, lane);
-  const abcClef = resolveAbcExportLaneClef(part, measures, lane.staff);
-  const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
-  headerLines.push(`V:${normalizedVoiceId} name="${laneName}"${clefSuffix}`);
-  const firstMeasure = measures[0];
-  if (firstMeasure) {
-    const transposeMetaLine = buildAbcExportTransposeMetaLine(normalizedVoiceId, firstMeasure);
-    if (transposeMetaLine) metaLines.push(transposeMetaLine);
-  }
-  return normalizedVoiceId;
 };
 
 const readAbcExportPartInitialFifths = (part: Element, fallbackFifths: number): number => {
@@ -7161,35 +6460,6 @@ const createAbcExportInitialMeasureStateFromPart = (
   currentBeats: Number(meterBeats) || 4,
   currentBeatType: Number(meterBeatType) || 4,
 });
-
-const buildAbcExportLaneBodyFromContext = (
-  context: AbcExportLaneRenderContext,
-  normalizedVoiceId: string
-): AbcExportLaneBodyRenderResult => {
-  const {
-    part,
-    measures,
-    lane,
-    fifths,
-    meterBeats,
-    meterBeatType,
-    unitLength,
-    metaLines,
-  } = context;
-
-  const state = createAbcExportLaneBodyStateFromPart(part, fifths, meterBeats, meterBeatType);
-  for (const measure of measures) {
-    appendAbcExportLaneBodyMeasure(
-      state,
-      measure,
-      lane,
-      unitLength,
-      metaLines,
-      normalizedVoiceId,
-    );
-  }
-  return { measureTexts: state.measureTexts, lyricTokens: state.lyricTokens };
-};
 
 const createAbcExportLaneBodyStateFromPart = (
   part: Element,
@@ -7230,318 +6500,168 @@ const appendAbcExportLaneBodyMeasure = (
   state.measureTexts.push(renderedMeasure.measureText);
 };
 
-const appendAbcExportLaneBodyLines = (
-  bodyLines: string[],
-  normalizedVoiceId: string,
-  renderedLaneBody: AbcExportLaneBodyRenderResult
-): void => {
-  const { measureTexts, lyricTokens } = renderedLaneBody;
-  bodyLines.push(...buildAbcExportLaneBodyLines(normalizedVoiceId, measureTexts, lyricTokens));
-};
-
-const buildAbcExportLaneBodyLines = (
-  normalizedVoiceId: string,
-  measureTexts: string[],
-  lyricTokens: string[]
-): string[] => {
-  const bodyLines = [`V:${normalizedVoiceId}`, measureTexts.join(" ")];
-  const lyricLine = buildAbcExportLaneBodyLyricLine(lyricTokens);
-  if (lyricLine) bodyLines.push(lyricLine);
-  return bodyLines;
-};
-
-const buildAbcExportLaneBodyLyricLine = (lyricTokens: string[]): string =>
-  lyricTokens.some((token) => token !== "*") ? `w: ${lyricTokens.join(" ")}` : "";
-
-const appendAbcExportLaneBodyLinesFromContext = (
-  context: AbcExportLaneRenderContext,
-  normalizedVoiceId: string
-): void => {
-  const { bodyLines } = context;
-  appendAbcExportLaneBodyLines(
-    bodyLines,
-    normalizedVoiceId,
-    buildAbcExportLaneBodyFromContext(context, normalizedVoiceId)
-  );
-};
-
-const createAbcExportLaneRenderContextFromPartContext = (
-  context: AbcExportPartRenderContext,
-  partName: string,
-  measures: Element[],
-  laneDefs: AbcExportLaneDefinition[],
-  lane: AbcExportLaneDefinition
-): AbcExportLaneRenderContext => ({
-  part: context.part,
-  partName,
-  measures,
-  laneDefs,
-  lane,
-  fifths: context.fifths,
-  meterBeats: context.meterBeats,
-  meterBeatType: context.meterBeatType,
-  unitLength: context.unitLength,
-  headerLines: context.headerLines,
-  bodyLines: context.bodyLines,
-  metaLines: context.metaLines,
-});
-
-const appendAbcExportLaneFromRenderContext = (context: AbcExportLaneRenderContext): void => {
-  const normalizedVoiceId = buildAbcExportLaneHeaderFromContext(context);
-  appendAbcExportLaneBodyLinesFromContext(context, normalizedVoiceId);
-};
-
-const createAbcExportPartRenderInfoFromPart = (
-  part: Element,
-  partIndex: number,
-  partNameById: Map<string, string>
-): AbcExportPartRenderInfo => {
-  const partId = part.getAttribute("id") || `P${partIndex + 1}`;
-  return {
-    partName: partNameById.get(partId) || partId,
-    measures: Array.from(part.querySelectorAll(":scope > measure")),
-    laneDefs: buildAbcExportLaneDefinitions(part, partId),
-  };
-};
-
-const appendAbcExportPartLanesFromPartRenderInfo = (
-  context: AbcExportPartRenderContext,
-  partRenderInfo: AbcExportPartRenderInfo
-): void => {
-  const { partName, measures, laneDefs } = partRenderInfo;
+const appendAbcExportPartFromRenderContext = (context: AbcExportPartRenderContext): void => {
+  const partId = context.part.getAttribute("id") || `P${context.partIndex + 1}`;
+  const partName = context.partNameById.get(partId) || partId;
+  const measures = Array.from(context.part.querySelectorAll(":scope > measure"));
+  const laneDefs = buildAbcExportLaneDefinitions(context.part, partId);
 
   for (const lane of laneDefs) {
-    appendAbcExportPartLaneFromPartRenderInfo(context, partName, measures, laneDefs, lane);
+    const laneContext: AbcExportLaneRenderContext = {
+      part: context.part,
+      partName,
+      measures,
+      laneDefs,
+      lane,
+      fifths: context.fifths,
+      meterBeats: context.meterBeats,
+      meterBeatType: context.meterBeatType,
+      unitLength: context.unitLength,
+      headerLines: context.headerLines,
+      bodyLines: context.bodyLines,
+      metaLines: context.metaLines,
+    };
+    const normalizedVoiceId = laneContext.lane.voiceId.replace(/[^A-Za-z0-9_.-]/g, "_");
+    const laneName =
+      laneContext.laneDefs.length <= 1
+        ? laneContext.partName
+        : laneContext.lane.staff && laneContext.lane.voice
+          ? `${laneContext.partName} (Staff ${laneContext.lane.staff} Voice ${laneContext.lane.voice})`
+          : laneContext.lane.staff
+            ? `${laneContext.partName} (Staff ${laneContext.lane.staff})`
+            : laneContext.lane.voice
+              ? `${laneContext.partName} (Voice ${laneContext.lane.voice})`
+              : `${laneContext.partName} (Lane)`;
+    const abcClef = resolveAbcExportLaneClef(laneContext.part, laneContext.measures, laneContext.lane.staff);
+    const clefSuffix = abcClef ? ` clef=${abcClef}` : "";
+    laneContext.headerLines.push(`V:${normalizedVoiceId} name="${laneName}"${clefSuffix}`);
+    const transposeMetaLine = buildAbcExportTransposeMetaLine(normalizedVoiceId, laneContext.measures[0]);
+    if (transposeMetaLine) laneContext.metaLines.push(transposeMetaLine);
+    const state = createAbcExportLaneBodyStateFromPart(
+      laneContext.part,
+      laneContext.fifths,
+      laneContext.meterBeats,
+      laneContext.meterBeatType
+    );
+    for (const measure of laneContext.measures) {
+      appendAbcExportLaneBodyMeasure(
+        state,
+        measure,
+        laneContext.lane,
+        laneContext.unitLength,
+        laneContext.metaLines,
+        normalizedVoiceId
+      );
+    }
+    laneContext.bodyLines.push(`V:${normalizedVoiceId}`, state.measureTexts.join(" "));
+    if (state.lyricTokens.some((token) => token !== "*")) {
+      laneContext.bodyLines.push(`w: ${state.lyricTokens.join(" ")}`);
+    }
   }
-};
-
-const appendAbcExportPartLaneFromPartRenderInfo = (
-  context: AbcExportPartRenderContext,
-  partName: string,
-  measures: Element[],
-  laneDefs: AbcExportLaneDefinition[],
-  lane: AbcExportLaneDefinition
-): void => {
-  appendAbcExportLaneFromRenderContext(createAbcExportLaneRenderContextFromPartContext(context, partName, measures, laneDefs, lane));
-};
-
-const appendAbcExportPartFromRenderContext = (context: AbcExportPartRenderContext): void => {
-  const {
-    part,
-    partIndex,
-    partNameById,
-  } = context;
-  appendAbcExportPartLanesFromPartRenderInfo(
-    context,
-    createAbcExportPartRenderInfoFromPart(part, partIndex, partNameById)
-  );
 };
 
 const hasAbcExportUnitTempoHeader = (
   initialTempo: AbcExportInitialTempo
 ): initialTempo is AbcExportInitialTempo & { unit: Fraction } =>
-  Boolean(initialTempo.unit && Number.isFinite(initialTempo.bpm) && initialTempo.bpm > 0);
-
-const buildAbcExportUnitTempoHeader = (initialTempo: AbcExportInitialTempo): string => {
-  if (hasAbcExportUnitTempoHeader(initialTempo)) {
-    return `Q:${fractionToAbcTempoUnit(initialTempo.unit)}=${Math.round(initialTempo.bpm)}`;
-  }
-  return "";
-};
+  !!initialTempo.unit && Number.isFinite(initialTempo.bpm) && initialTempo.bpm > 0;
 
 const buildAbcExportFallbackTempoHeader = (tempoBpm: number): string =>
   Number.isFinite(tempoBpm) ? `Q:1/4=${Math.round(tempoBpm)}` : "";
 
-const buildAbcExportTempoHeaderFromInitialTempo = (
-  initialTempo: AbcExportInitialTempo | null
-): string => {
-  const tempoBpm = initialTempo?.bpm ?? NaN;
-  if (initialTempo) {
-    const unitTempoHeader = buildAbcExportUnitTempoHeader(initialTempo);
-    if (unitTempoHeader) return unitTempoHeader;
-  }
-  return buildAbcExportFallbackTempoHeader(tempoBpm);
-};
-
 const buildAbcExportTempoHeader = (doc: Document): string =>
-  buildAbcExportTempoHeaderFromInitialTempo(readInitialTempoFromMusicXml(doc));
+  (() => {
+    const initialTempo = readInitialTempoFromMusicXml(doc);
+    return initialTempo
+      ? (hasAbcExportUnitTempoHeader(initialTempo)
+          ? `Q:${fractionToAbcTempoUnit(initialTempo.unit)}=${Math.round(initialTempo.bpm)}`
+          : buildAbcExportFallbackTempoHeader(initialTempo.bpm))
+      : buildAbcExportFallbackTempoHeader(NaN);
+  })();
 
 const readAbcExportTitle = (doc: Document): string =>
-  doc.querySelector("work > work-title")?.textContent?.trim() ||
-  doc.querySelector("movement-title")?.textContent?.trim() ||
+  doc.querySelector("work > work-title")?.textContent?.trim() ??
+  doc.querySelector("movement-title")?.textContent?.trim() ??
   "mikuscore";
 
 const readAbcExportComposer = (doc: Document): string =>
-  doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim() || "";
+  doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim() ?? "";
 
 const readAbcExportDocumentCredits = (doc: Document): AbcExportDocumentCredits => ({
   title: readAbcExportTitle(doc),
   composer: readAbcExportComposer(doc),
 });
 
-const readAbcExportMeterBeats = (firstMeasure: Element | null): string =>
-  firstMeasure?.querySelector("attributes > time > beats")?.textContent?.trim() || "4";
-
-const readAbcExportMeterBeatType = (firstMeasure: Element | null): string =>
-  firstMeasure?.querySelector("attributes > time > beat-type")?.textContent?.trim() || "4";
-
-const readAbcExportDocumentMeterInfo = (firstMeasure: Element | null): AbcExportDocumentMeterInfo => ({
-  meterBeats: readAbcExportMeterBeats(firstMeasure),
-  meterBeatType: readAbcExportMeterBeatType(firstMeasure),
-});
-
-const buildAbcExportKeyFromFifthsMode = (fifths: number, mode: string): string =>
-  AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode);
-
-const readAbcExportKeyFifths = (firstMeasure: Element | null): number =>
-  Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() || "0");
-
-const readAbcExportKeyMode = (firstMeasure: Element | null): string =>
-  firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() || "major";
-
-const readAbcExportDocumentKeyInfo = (firstMeasure: Element | null): AbcExportDocumentKeyInfo => {
-  const fifths = readAbcExportKeyFifths(firstMeasure);
-  const mode = readAbcExportKeyMode(firstMeasure);
+const createAbcExportDocumentHeaderInfo = (doc: Document): AbcExportDocumentHeaderInfo => {
+  const credits = readAbcExportDocumentCredits(doc);
+  const firstMeasure = doc.querySelector("score-partwise > part > measure");
+  const meterBeats = firstMeasure?.querySelector("attributes > time > beats")?.textContent?.trim() ?? "4";
+  const meterBeatType = firstMeasure?.querySelector("attributes > time > beat-type")?.textContent?.trim() ?? "4";
+  const fifths = Number(firstMeasure?.querySelector("attributes > key > fifths")?.textContent?.trim() ?? "0");
+  const mode = firstMeasure?.querySelector("attributes > key > mode")?.textContent?.trim() ?? "major";
+  const abcTempoHeader = buildAbcExportTempoHeader(doc);
   return {
+    title: credits.title,
+    composer: credits.composer,
+    meterBeats,
+    meterBeatType,
     fifths,
-    key: buildAbcExportKeyFromFifthsMode(fifths, mode),
+    key: AbcCommon.keyFromFifthsMode(Number.isFinite(fifths) ? fifths : 0, mode),
+    abcTempoHeader,
   };
 };
 
-const createAbcExportDocumentMeterKeyInfoFromParts = (
-  meterInfo: AbcExportDocumentMeterInfo,
-  keyInfo: AbcExportDocumentKeyInfo
-): AbcExportDocumentMeterKeyInfo => ({
-  meterBeats: meterInfo.meterBeats,
-  meterBeatType: meterInfo.meterBeatType,
-  fifths: keyInfo.fifths,
-  key: keyInfo.key,
-});
-
-const readAbcExportDocumentMeterKeyInfo = (
-  firstMeasure: Element | null
-): AbcExportDocumentMeterKeyInfo => {
-  const meterInfo = readAbcExportDocumentMeterInfo(firstMeasure);
-  const keyInfo = readAbcExportDocumentKeyInfo(firstMeasure);
-  return createAbcExportDocumentMeterKeyInfoFromParts(meterInfo, keyInfo);
-};
-
-const readAbcExportFirstMeasure = (doc: Document): Element | null =>
-  doc.querySelector("score-partwise > part > measure");
-
-const createAbcExportDocumentHeaderInfoFromParts = (
-  credits: AbcExportDocumentCredits,
-  meterKeyInfo: AbcExportDocumentMeterKeyInfo,
-  abcTempoHeader: string
-): AbcExportDocumentHeaderInfo => ({
-  title: credits.title,
-  composer: credits.composer,
-  meterBeats: meterKeyInfo.meterBeats,
-  meterBeatType: meterKeyInfo.meterBeatType,
-  fifths: meterKeyInfo.fifths,
-  key: meterKeyInfo.key,
-  abcTempoHeader,
-});
-
-const createAbcExportDocumentHeaderInfo = (doc: Document): AbcExportDocumentHeaderInfo =>
-  createAbcExportDocumentHeaderInfoFromParts(
-    readAbcExportDocumentCredits(doc),
-    readAbcExportDocumentMeterKeyInfo(readAbcExportFirstMeasure(doc)),
-    buildAbcExportTempoHeader(doc)
-  );
-
-const buildAbcExportRawHeaderLines = (headerInfo: AbcExportDocumentHeaderInfo): string[] => {
-  const { title, composer, meterBeats, meterBeatType, key, abcTempoHeader } = headerInfo;
-  return [
-    "X:1",
-    `T:${title}`,
-    composer ? `C:${composer}` : "",
-    `M:${meterBeats}/${meterBeatType}`,
-    `L:${fractionToAbcTempoUnit(DEFAULT_UNIT)}`,
-    abcTempoHeader,
-    `K:${key}`,
-  ];
-};
-
-const buildAbcExportHeaderLines = (headerInfo: AbcExportDocumentHeaderInfo): string[] =>
-  buildAbcExportRawHeaderLines(headerInfo).filter(Boolean);
-
-const createAbcExportDocumentContextFromHeaderInfo = (
-  headerInfo: AbcExportDocumentHeaderInfo,
-  partNameById: Map<string, string>
-): AbcExportDocumentContext => ({
-  headerLines: buildAbcExportHeaderLines(headerInfo),
-  bodyLines: [],
-  metaLines: [],
-  partNameById,
-  fifths: headerInfo.fifths,
-  meterBeats: headerInfo.meterBeats,
-  meterBeatType: headerInfo.meterBeatType,
-  unitLength: DEFAULT_UNIT,
-});
-
-const createAbcExportDocumentContextFromDoc = (doc: Document): AbcExportDocumentContext =>
-  createAbcExportDocumentContextFromHeaderInfo(
-    createAbcExportDocumentHeaderInfo(doc),
-    buildAbcExportPartNameById(doc)
-  );
-
-const buildAbcExportMetaBlock = (metaLines: string[]): string =>
-  metaLines.length > 0 ? `\n${metaLines.join("\n")}\n` : "\n";
-
-const buildAbcExportDocumentTextFromLines = (
-  headerLines: string[],
-  bodyLines: string[],
-  metaLines: string[]
-): string => {
-  const metaBlock = buildAbcExportMetaBlock(metaLines);
-  return `${headerLines.join("\n")}\n\n${bodyLines.join("\n")}${metaBlock}`;
-};
-
-const buildAbcExportDocumentText = (exportContext: AbcExportDocumentContext): string =>
-  buildAbcExportDocumentTextFromLines(
-    exportContext.headerLines,
-    exportContext.bodyLines,
-    exportContext.metaLines
-  );
-
-const createAbcExportPartRenderContextFromPartContext = (
-  part: Element,
-  partIndex: number,
-  exportContext: AbcExportDocumentContext
-): AbcExportPartRenderContext => ({
-  part,
-  partIndex,
-  partNameById: exportContext.partNameById,
-  fifths: exportContext.fifths,
-  meterBeats: exportContext.meterBeats,
-  meterBeatType: exportContext.meterBeatType,
-  unitLength: exportContext.unitLength,
-  headerLines: exportContext.headerLines,
-  bodyLines: exportContext.bodyLines,
-  metaLines: exportContext.metaLines,
-});
-
-const readAbcExportParts = (doc: Document): Element[] =>
-  Array.from(doc.querySelectorAll("score-partwise > part"));
+const buildAbcExportRawHeaderLines = (headerInfo: AbcExportDocumentHeaderInfo): string[] => [
+  "X:1",
+  `T:${headerInfo.title}`,
+  headerInfo.composer ? `C:${headerInfo.composer}` : "",
+  `M:${headerInfo.meterBeats}/${headerInfo.meterBeatType}`,
+  `L:${fractionToAbcTempoUnit(DEFAULT_UNIT)}`,
+  headerInfo.abcTempoHeader,
+  `K:${headerInfo.key}`,
+];
 
 const appendAbcExportParts = (
   parts: Element[],
   exportContext: AbcExportDocumentContext
 ): void => {
   for (const [partIndex, part] of parts.entries()) {
-    appendAbcExportPartFromRenderContext(createAbcExportPartRenderContextFromPartContext(part, partIndex, exportContext));
+    appendAbcExportPartFromRenderContext({
+      part,
+      partIndex,
+      partNameById: exportContext.partNameById,
+      fifths: exportContext.fifths,
+      meterBeats: exportContext.meterBeats,
+      meterBeatType: exportContext.meterBeatType,
+      unitLength: exportContext.unitLength,
+      headerLines: exportContext.headerLines,
+      bodyLines: exportContext.bodyLines,
+      metaLines: exportContext.metaLines,
+    });
   }
 };
 
-const renderAbcExportDocumentContext = (doc: Document): AbcExportDocumentContext => {
-  const exportContext = createAbcExportDocumentContextFromDoc(doc);
-  appendAbcExportParts(readAbcExportParts(doc), exportContext);
-  return exportContext;
+export const exportMusicXmlDomToAbc = (doc: Document): string => {
+  const headerInfo = createAbcExportDocumentHeaderInfo(doc);
+  const exportContext: AbcExportDocumentContext = {
+    headerLines: buildAbcExportRawHeaderLines(headerInfo).filter((line) => line.length > 0),
+    bodyLines: [],
+    metaLines: [],
+    partNameById: new Map(
+      Array.from(doc.querySelectorAll("part-list > score-part"))
+        .map((scorePart) => {
+          const id = scorePart.getAttribute("id") ?? "";
+          return id ? [id, scorePart.querySelector("part-name")?.textContent?.trim() || id] : null;
+        })
+        .filter((entry): entry is [string, string] => entry !== null)
+    ),
+    fifths: headerInfo.fifths,
+    meterBeats: headerInfo.meterBeats,
+    meterBeatType: headerInfo.meterBeatType,
+    unitLength: DEFAULT_UNIT,
+  };
+  appendAbcExportParts(Array.from(doc.querySelectorAll("score-partwise > part")), exportContext);
+  return `${exportContext.headerLines.join("\n")}\n\n${exportContext.bodyLines.join("\n")}${exportContext.metaLines.length > 0 ? `\n${exportContext.metaLines.join("\n")}\n` : "\n"}`;
 };
-
-export const exportMusicXmlDomToAbc = (doc: Document): string =>
-  buildAbcExportDocumentText(renderAbcExportDocumentContext(doc));
 
 const xmlEscape = (text: string): string =>
   text
@@ -7552,13 +6672,13 @@ const xmlEscape = (text: string): string =>
     .replace(/'/g, "&apos;");
 
 const abcQuotedTextEscape = (text: string): string =>
-  String(text || "")
+  String(text ?? "")
     .replace(/"/g, "'")
     .replace(/\s+/g, " ")
     .trim();
 
 const normalizeChordToken = (raw: string): string =>
-  String(raw || "")
+  String(raw ?? "")
     .trim()
     .replace(/♯/g, "#")
     .replace(/♭/g, "b")
@@ -7566,47 +6686,56 @@ const normalizeChordToken = (raw: string): string =>
 
 const ABC_CHORD_SYMBOL_PATTERN = /^([A-G](?:#|b)?)([^/\s"]*)?(?:\/([A-G](?:#|b)?))?$/;
 
-const isLikelyAbcChordSymbol = (raw: string): boolean => {
-  const text = normalizeChordToken(raw);
-  return ABC_CHORD_SYMBOL_PATTERN.test(text);
-};
+const isLikelyAbcChordSymbol = (raw: string): boolean =>
+  ABC_CHORD_SYMBOL_PATTERN.test(normalizeChordToken(raw));
 
 const normalizeHarmonyChordSuffix = (suffixRaw: string): string =>
-  String(suffixRaw || "").trim().toLowerCase();
+  String(suffixRaw ?? "").trim().toLowerCase();
+
+const abcHarmonyKindBySuffix: Readonly<Record<string, string>> = {
+  "": "major",
+  m: "minor",
+  min: "minor",
+  "6": "major-sixth",
+  m6: "minor-sixth",
+  min6: "minor-sixth",
+  "7": "dominant",
+  "7sus4": "suspended-fourth",
+  "9": "dominant-ninth",
+  "11": "dominant-11th",
+  "13": "dominant-13th",
+  maj7: "major-seventh",
+  maj9: "major-ninth",
+  m9: "minor-ninth",
+  min9: "minor-ninth",
+  m7: "minor-seventh",
+  min7: "minor-seventh",
+  dim: "diminished",
+  dim7: "diminished-seventh",
+  aug: "augmented",
+  "+": "augmented",
+  sus4: "suspended-fourth",
+  sus2: "suspended-second",
+  "m7b5": "half-diminished",
+  min7b5: "half-diminished",
+  "ø": "half-diminished",
+};
 
 const xmlHarmonyKindFromChordSuffix = (suffixRaw: string): string | null => {
   const suffix = normalizeHarmonyChordSuffix(suffixRaw);
-  if (!suffix) return "major";
-  if (suffix === "m" || suffix === "min") return "minor";
-  if (suffix === "6") return "major-sixth";
-  if (suffix === "m6" || suffix === "min6") return "minor-sixth";
-  if (suffix === "7") return "dominant";
-  if (suffix === "7sus4") return "suspended-fourth";
-  if (suffix === "9") return "dominant-ninth";
-  if (suffix === "11") return "dominant-11th";
-  if (suffix === "13") return "dominant-13th";
-  if (suffix === "maj7") return "major-seventh";
-  if (suffix === "maj9") return "major-ninth";
-  if (suffix === "m9" || suffix === "min9") return "minor-ninth";
-  if (suffix === "m7" || suffix === "min7") return "minor-seventh";
-  if (suffix === "dim") return "diminished";
-  if (suffix === "dim7") return "diminished-seventh";
-  if (suffix === "aug" || suffix === "+") return "augmented";
-  if (suffix === "sus4") return "suspended-fourth";
-  if (suffix === "sus2") return "suspended-second";
-  if (suffix === "m7b5" || suffix === "min7b5" || suffix === "ø") return "half-diminished";
-  return null;
+  return abcHarmonyKindBySuffix[suffix] ?? null;
 };
 
 type AbcHarmonyPitch = { step: string; alter: number };
 
 const xmlHarmonyRootFromChordToken = (token: string): AbcHarmonyPitch | null => {
-  const m = String(token || "").match(/^([A-G])(#|b)?$/);
-  if (!m) return null;
-  return {
-    step: m[1],
-    alter: m[2] === "#" ? 1 : (m[2] === "b" ? -1 : 0),
-  };
+  const m = String(token ?? "").match(/^([A-G])(#|b)?$/);
+  return m
+    ? {
+        step: m[1],
+        alter: m[2] === "#" ? 1 : (m[2] === "b" ? -1 : 0),
+      }
+    : null;
 };
 
 type AbcChordSymbolParts = {
@@ -7620,13 +6749,13 @@ const parseAbcChordSymbolParts = (raw: string): AbcChordSymbolParts | null => {
   const normalized = normalizeChordToken(raw);
   const match = normalized.match(ABC_CHORD_SYMBOL_PATTERN);
   if (!match) return null;
-  const root = xmlHarmonyRootFromChordToken(match[1] || "");
+  const root = xmlHarmonyRootFromChordToken(match[1] ?? "");
   if (!root) return null;
   const bass = match[3] ? xmlHarmonyRootFromChordToken(match[3]) : null;
   return {
     normalized,
     root,
-    suffix: String(match[2] || ""),
+    suffix: String(match[2] ?? ""),
     bass,
   };
 };
@@ -7634,122 +6763,86 @@ const parseAbcChordSymbolParts = (raw: string): AbcChordSymbolParts | null => {
 const buildHarmonyPitchXml = (
   tagName: "root" | "bass",
   pitch: AbcHarmonyPitch
-): string => {
-  const childPrefix = tagName === "root" ? "root" : "bass";
-  return [
-    `<${tagName}>`,
-    `<${childPrefix}-step>${xmlEscape(pitch.step)}</${childPrefix}-step>`,
-    pitch.alter !== 0 ? `<${childPrefix}-alter>${pitch.alter}</${childPrefix}-alter>` : "",
-    `</${tagName}>`,
-  ].join("");
-};
-
-const buildHarmonyKindXml = (normalized: string, kind: string): string =>
-  `<kind text="${xmlEscape(normalized)}">${kind}</kind>`;
-
-const buildHarmonyXmlFromParts = (parts: AbcChordSymbolParts, kind: string): string =>
-  [
-    "<harmony>",
-    buildHarmonyPitchXml("root", parts.root),
-    parts.bass ? buildHarmonyPitchXml("bass", parts.bass) : "",
-    buildHarmonyKindXml(parts.normalized, kind),
-    "</harmony>",
-  ].join("");
+): string => [
+  `<${tagName}>`,
+  `<${tagName}-step>${xmlEscape(pitch.step)}</${tagName}-step>`,
+  pitch.alter !== 0 ? `<${tagName}-alter>${pitch.alter}</${tagName}-alter>` : "",
+  `</${tagName}>`,
+].join("");
 
 const buildHarmonyXmlFromChordSymbol = (raw: string): string => {
   const parts = parseAbcChordSymbolParts(raw);
   if (!parts) return "";
   const kind = xmlHarmonyKindFromChordSuffix(parts.suffix);
-  if (!kind) return "";
-  return buildHarmonyXmlFromParts(parts, kind);
+  return kind
+    ? [
+        "<harmony>",
+        buildHarmonyPitchXml("root", parts.root),
+        parts.bass ? buildHarmonyPitchXml("bass", parts.bass) : "",
+        `<kind text="${xmlEscape(parts.normalized)}">${kind}</kind>`,
+        "</harmony>",
+      ].join("")
+    : "";
 };
 
-const abcHarmonyPitchTokenFromStepAlter = (step: string, alter: number): string => {
-  const normalizedStep = String(step || "").trim().toUpperCase();
-  if (!/^[A-G]$/.test(normalizedStep)) return "";
-  return `${normalizedStep}${alter === 1 ? "#" : (alter === -1 ? "b" : "")}`;
+const abcHarmonySuffixByKindValue: Readonly<Record<string, string>> = {
+  major: "",
+  minor: "m",
+  "major-sixth": "6",
+  "minor-sixth": "m6",
+  dominant: "7",
+  "dominant-11th": "11",
+  "dominant-13th": "13",
+  "dominant-ninth": "9",
+  "major-seventh": "maj7",
+  "major-ninth": "maj9",
+  "minor-ninth": "m9",
+  "minor-seventh": "m7",
+  diminished: "dim",
+  "diminished-seventh": "dim7",
+  augmented: "aug",
+  "suspended-fourth": "sus4",
+  "suspended-second": "sus2",
+  "half-diminished": "m7b5",
 };
-
-const abcHarmonyPitchFromNode = (node: Element | null, prefix: "root" | "bass"): AbcHarmonyPitch | null => {
-  if (!node) return null;
-  const step = (node.querySelector(`:scope > ${prefix}-step`)?.textContent || "").trim();
-  const alter = Number(node.querySelector(`:scope > ${prefix}-alter`)?.textContent || "0");
-  return { step, alter };
-};
-
-const abcHarmonyPitchTokenFromNode = (node: Element | null, prefix: "root" | "bass"): string => {
-  const pitch = abcHarmonyPitchFromNode(node, prefix);
-  return pitch ? abcHarmonyPitchTokenFromStepAlter(pitch.step, pitch.alter) : "";
-};
-
-const abcHarmonySuffixFromKindValue = (kindValue: string): string =>
-  kindValue === "major" ? "" :
-  kindValue === "minor" ? "m" :
-  kindValue === "major-sixth" ? "6" :
-  kindValue === "minor-sixth" ? "m6" :
-  kindValue === "dominant" ? "7" :
-  kindValue === "dominant-11th" ? "11" :
-  kindValue === "dominant-13th" ? "13" :
-  kindValue === "dominant-ninth" ? "9" :
-  kindValue === "major-seventh" ? "maj7" :
-  kindValue === "major-ninth" ? "maj9" :
-  kindValue === "minor-ninth" ? "m9" :
-  kindValue === "minor-seventh" ? "m7" :
-  kindValue === "diminished" ? "dim" :
-  kindValue === "diminished-seventh" ? "dim7" :
-  kindValue === "augmented" ? "aug" :
-  kindValue === "suspended-fourth" ? "sus4" :
-  kindValue === "suspended-second" ? "sus2" :
-  kindValue === "half-diminished" ? "m7b5" :
-  "";
-
-const abcHarmonyKindTextOverride = (kindNode: Element | null): string => {
-  const kindTextAttr = (kindNode?.getAttribute("text") || "").trim();
-  return kindTextAttr ? abcQuotedTextEscape(kindTextAttr) : "";
-};
-
-const normalizeHarmonyKindValue = (kindValue: string): string =>
-  String(kindValue || "").trim().toLowerCase();
-
-const abcHarmonyKindValueFromNode = (kindNode: Element | null): string =>
-  normalizeHarmonyKindValue(kindNode?.textContent || "");
-
-const abcHarmonySuffixFromKindNode = (kindNode: Element | null): string =>
-  abcHarmonySuffixFromKindValue(abcHarmonyKindValueFromNode(kindNode));
-
-const abcHarmonyBassTokenFromNode = (node: Element | null): string => {
-  const bassPitchToken = abcHarmonyPitchTokenFromNode(node, "bass");
-  return bassPitchToken ? `/${bassPitchToken}` : "";
-};
-
-const buildAbcHarmonyChordSymbol = (rootToken: string, suffix: string, bassToken: string): string =>
-  `${rootToken}${suffix}${bassToken}`;
 
 const abcChordSymbolFromHarmony = (harmony: Element | null): string => {
   if (!harmony) return "";
-  const rootToken = abcHarmonyPitchTokenFromNode(harmony.querySelector(":scope > root"), "root");
+  const rootNode = harmony.querySelector(":scope > root");
+  const rootStep = rootNode ? (rootNode.querySelector(":scope > root-step")?.textContent ?? "").trim() : "";
+  const rootAlter = rootNode ? Number(rootNode.querySelector(":scope > root-alter")?.textContent ?? "0") : 0;
+  const rootNormalizedStep = String(rootStep ?? "").trim().toUpperCase();
+  const rootToken =
+    /^[A-G]$/.test(rootNormalizedStep)
+      ? `${rootNormalizedStep}${rootAlter === 1 ? "#" : (rootAlter === -1 ? "b" : "")}`
+      : "";
   if (!rootToken) return "";
   const kindNode = harmony.querySelector(":scope > kind");
-  const kindTextOverride = abcHarmonyKindTextOverride(kindNode);
-  if (kindTextOverride) return kindTextOverride;
-  const suffix = abcHarmonySuffixFromKindNode(kindNode);
-  const bassToken = abcHarmonyBassTokenFromNode(harmony.querySelector(":scope > bass"));
-  return buildAbcHarmonyChordSymbol(rootToken, suffix, bassToken);
+  const kindTextAttr = kindNode?.getAttribute("text")?.trim() ?? "";
+  if (kindTextAttr) return abcQuotedTextEscape(kindTextAttr);
+  const bassNode = harmony.querySelector(":scope > bass");
+  const bassStep = bassNode ? (bassNode.querySelector(":scope > bass-step")?.textContent ?? "").trim() : "";
+  const bassAlter = bassNode ? Number(bassNode.querySelector(":scope > bass-alter")?.textContent ?? "0") : 0;
+  const bassNormalizedStep = String(bassStep ?? "").trim().toUpperCase();
+  const bassPitchToken =
+    /^[A-G]$/.test(bassNormalizedStep)
+      ? `${bassNormalizedStep}${bassAlter === 1 ? "#" : (bassAlter === -1 ? "b" : "")}`
+      : "";
+  const kindValue = String(kindNode?.textContent ?? "").trim().toLowerCase();
+  const suffix = abcHarmonySuffixByKindValue[kindValue] ?? "";
+  return `${rootToken}${suffix}${bassPitchToken ? `/${bassPitchToken}` : ""}`;
 };
 
 const normalizeAbcLyricText = (text: string): string =>
-  String(text || "").trim().replace(/\s+/g, "~");
+  String(text ?? "").trim().replace(/\s+/g, "~");
 
 const normalizeAbcLyricSyllabicMode = (
   syllabic?: "single" | "begin" | "middle" | "end" | string
 ): string =>
-  String(syllabic || "single").trim().toLowerCase();
+  String(syllabic ?? "single").trim().toLowerCase();
 
 const shouldAppendAbcLyricHyphen = (syllabicMode: string): boolean =>
   syllabicMode === "begin" || syllabicMode === "middle";
-
-const buildAbcLyricTextToken = (normalizedText: string, syllabicMode: string): string =>
-  shouldAppendAbcLyricHyphen(syllabicMode) ? `${normalizedText}-` : normalizedText;
 
 const abcLyricTokenFromMusicXml = (
   text: string,
@@ -7758,11 +6851,11 @@ const abcLyricTokenFromMusicXml = (
   const normalized = normalizeAbcLyricText(text);
   const mode = normalizeAbcLyricSyllabicMode(syllabic);
   if (!normalized) return "*";
-  return buildAbcLyricTextToken(normalized, mode);
+  return shouldAppendAbcLyricHyphen(mode) ? `${normalized}-` : normalized;
 };
 
 const normalizeMusicXmlTypeName = (t?: string): string =>
-  String(t || "").trim();
+  String(t ?? "").trim();
 
 const isSupportedMusicXmlTypeName = (typeName: string): boolean =>
   typeName === "16th" ||
@@ -7776,24 +6869,21 @@ const isSupportedMusicXmlTypeName = (typeName: string): boolean =>
 
 const normalizeTypeForMusicXml = (t?: string): string => {
   const raw = normalizeMusicXmlTypeName(t);
-  if (!raw) return "quarter";
-  if (isSupportedMusicXmlTypeName(raw)) return raw;
-  return "quarter";
+  return raw && isSupportedMusicXmlTypeName(raw) ? raw : "quarter";
 };
 
 const normalizeMusicXmlVoiceText = (voice?: string): string =>
-  String(voice || "").trim();
+  String(voice ?? "").trim();
 
 const isPositiveIntegerVoiceText = (voiceText: string): boolean =>
   /^[1-9]\d*$/.test(voiceText);
 
 const extractFirstVoiceNumberText = (voiceText: string): string =>
-  voiceText.match(/\d+/)?.[0] || "";
+  voiceText.match(/\d+/)?.[0] ?? "";
 
 const normalizeMusicXmlVoiceNumberText = (voiceNumberText: string): string => {
   const n = Number(voiceNumberText);
-  if (!Number.isFinite(n) || n <= 0) return "1";
-  return String(Math.round(n));
+  return Number.isFinite(n) && n > 0 ? String(Math.round(n)) : "1";
 };
 
 const normalizeVoiceForMusicXml = (voice?: string): string => {
@@ -7801,8 +6891,7 @@ const normalizeVoiceForMusicXml = (voice?: string): string => {
   if (!raw) return "1";
   if (isPositiveIntegerVoiceText(raw)) return raw;
   const numberText = extractFirstVoiceNumberText(raw);
-  if (!numberText) return "1";
-  return normalizeMusicXmlVoiceNumberText(numberText);
+  return numberText ? normalizeMusicXmlVoiceNumberText(numberText) : "1";
 };
 
 const midiByStepForAbcImport: Record<string, number> = {
@@ -7816,39 +6905,25 @@ const midiByStepForAbcImport: Record<string, number> = {
 };
 
 const normalizeAbcImportStep = (step?: string): string =>
-  String(step || "").trim().toUpperCase();
-
-const normalizeAbcImportOctave = (octave?: number): number =>
-  Number.isFinite(octave) ? Math.round(Number(octave)) : 4;
-
-const normalizeAbcImportAlter = (alter?: number): number =>
-  Number.isFinite(alter) ? Math.round(Number(alter)) : 0;
-
-const abcImportPitchToMidi = (step: string, octave: number, alter: number): number =>
-  (octave + 1) * 12 + midiByStepForAbcImport[step] + alter;
-
-const noteToMidiForAbcClefInference = (note?: AbcParsedNote): number | null => {
-  if (!note || note.isRest) return null;
-  const step = normalizeAbcImportStep(note.step);
-  if (!Object.prototype.hasOwnProperty.call(midiByStepForAbcImport, step)) {
-    return null;
-  }
-  const octave = normalizeAbcImportOctave(note.octave);
-  const alter = normalizeAbcImportAlter(note.alter);
-  return abcImportPitchToMidi(step, octave, alter);
-};
+  String(step ?? "").trim().toUpperCase();
 
 const normalizeAbcImportClefName = (clef?: string): string =>
-  String(clef || "").trim().toLowerCase();
+  String(clef ?? "").trim().toLowerCase();
 
 const collectAbcImportClefMidiKeys = (part: AbcParsedPart): number[] => {
   const keys: number[] = [];
-  for (const measure of part?.measures || []) {
-    for (const note of measure || []) {
-      const midi = noteToMidiForAbcClefInference(note);
-      if (Number.isFinite(midi)) {
-        keys.push(midi as number);
+  for (const measure of part?.measures ?? []) {
+    for (const note of measure ?? []) {
+      if (!note || note.isRest) {
+        continue;
       }
+      const step = normalizeAbcImportStep(note.step);
+      if (!Object.prototype.hasOwnProperty.call(midiByStepForAbcImport, step)) {
+        continue;
+      }
+      const octave = Number.isFinite(Number(note.octave)) ? Math.round(Number(note.octave)) : 4;
+      const alter = Number.isFinite(Number(note.alter)) ? Math.round(Number(note.alter)) : 0;
+      keys.push((octave + 1) * 12 + midiByStepForAbcImport[step] + alter);
     }
   }
   return keys;
@@ -7859,29 +6934,28 @@ const abcImportClefNameFromMidiKeys = (keys: number[]): string =>
 
 const resolveAbcImportClef = (part: AbcParsedPart): string => {
   const explicit = normalizeAbcImportClefName(part?.clef);
-  if (explicit) return explicit;
   const keys = collectAbcImportClefMidiKeys(part);
-  if (!keys.length) return "";
+  if (explicit) return explicit;
+  if (!keys.length) return explicit;
   return abcImportClefNameFromMidiKeys(keys);
 };
 
-const clefFeatureFromAbcClefName = (clef: string): ClefFeature => {
-  if (clef === "bass" || clef === "f") {
-    return { sign: "F", line: 4 };
-  }
-  if (clef === "alto" || clef === "c3") {
-    return { sign: "C", line: 3 };
-  }
-  if (clef === "tenor" || clef === "c4") {
-    return { sign: "C", line: 4 };
-  }
-  return { sign: "G", line: 2 };
+const clefFeatureByAbcClefName: Readonly<Record<string, ClefFeature>> = {
+  bass: { sign: "F", line: 4 },
+  f: { sign: "F", line: 4 },
+  alto: { sign: "C", line: 3 },
+  c3: { sign: "C", line: 3 },
+  tenor: { sign: "C", line: 4 },
+  c4: { sign: "C", line: 4 },
+  treble: { sign: "G", line: 2 },
+  g: { sign: "G", line: 2 },
 };
 
-export const clefXmlFromAbcClef = (rawClef?: string): string => {
-  const clef = normalizeAbcImportClefName(rawClef);
-  return buildMusicXmlClefXml(clefFeatureFromAbcClefName(clef));
-};
+const clefFeatureFromAbcClefName = (clef: string): ClefFeature =>
+  clefFeatureByAbcClefName[clef] ?? { sign: "G", line: 2 };
+
+export const clefXmlFromAbcClef = (rawClef?: string): string =>
+  buildMusicXmlClefXml(clefFeatureFromAbcClefName(normalizeAbcImportClefName(rawClef)));
 
 type AbcParsedMeta = {
   title: string;
@@ -8043,60 +7117,44 @@ export type AbcImportOptions = {
 };
 
 const toHex = (value: number, width = 2): string => {
-  const safe = Math.max(0, Math.round(Number(value) || 0));
+  const safe = Math.max(0, Math.round(Number(value ?? 0)));
   return `0x${safe.toString(16).toUpperCase().padStart(width, "0")}`;
 };
 
 const normalizeAbcDebugStep = (note: AbcParsedNote): string =>
-  note.isRest ? "R" : (/^[A-G]$/.test(String(note.step || "").toUpperCase()) ? String(note.step).toUpperCase() : "C");
+  note.isRest ? "R" : (/^[A-G]$/.test(String(note.step ?? "").toUpperCase()) ? String(note.step).toUpperCase() : "C");
 
 const normalizeAbcDebugOctave = (octave?: number): number =>
-  Number.isFinite(octave) ? Math.max(0, Math.min(9, Math.round(Number(octave)))) : 4;
+  Number.isFinite(Number(octave)) ? Math.max(0, Math.min(9, Math.round(Number(octave)))) : 4;
 
 const normalizeAbcDebugAlter = (alter?: number): number =>
-  Number.isFinite(alter) ? Math.round(Number(alter)) : 0;
+  Number.isFinite(Number(alter)) ? Math.round(Number(alter)) : 0;
 
-const buildAbcMeasureDebugMiscXmlCoreFields = (index: number, measureNo: number, voice: string, note: AbcParsedNote): string =>
-  [`idx=${toHex(index, 4)}`, `m=${toHex(measureNo, 4)}`, `v=${xmlEscape(voice)}`].join(";");
-
-const buildAbcMeasureDebugMiscXmlNoteFields = (note: AbcParsedNote, step: string, octave: number, alter: number, dur: number): string =>
-  [
-    `r=${note.isRest ? "1" : "0"}`,
-    `g=${note.grace ? "1" : "0"}`,
-    `ch=${note.chord ? "1" : "0"}`,
-    `st=${step}`,
-    `al=${String(alter)}`,
-    `oc=${toHex(octave, 2)}`,
-    `dd=${toHex(dur, 4)}`,
-    `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
-  ].join(";");
-
-const buildAbcMeasureDebugMiscXmlCountField = (noteCount: number): string =>
-  `<miscellaneous-field name="mks:dbg:abc:meta:count">${toHex(noteCount, 4)}</miscellaneous-field>`;
-
-const buildAbcMeasureDebugMiscXmlEntry = (note: AbcParsedNote, index: number, measureNo: number): string =>
-  `<miscellaneous-field name="mks:dbg:abc:meta:${String(index + 1).padStart(4, "0")}">${buildAbcMeasureDebugMiscXmlPayload(note, index, measureNo)}</miscellaneous-field>`;
-
-const buildAbcMeasureDebugMiscXmlPayload = (note: AbcParsedNote, index: number, measureNo: number): string => {
-  const voice = normalizeVoiceForMusicXml(note.voice);
-  const step = normalizeAbcDebugStep(note);
-  const octave = normalizeAbcDebugOctave(note.octave);
-  const alter = normalizeAbcDebugAlter(note.alter);
-  const dur = note.grace ? 0 : Math.max(1, Math.round(Number(note.duration) || 1));
-  return [buildAbcMeasureDebugMiscXmlCoreFields(index, measureNo, voice, note), buildAbcMeasureDebugMiscXmlNoteFields(note, step, octave, alter, dur)].join(";");
-};
-
-const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string => {
-  if (!notes.length) return "";
-  let xml = "<attributes><miscellaneous>";
-  xml += buildAbcMeasureDebugMiscXmlCountField(notes.length);
-  xml += buildAbcMeasureDebugMiscXmlEntryParts(notes, measureNo).join("");
-  xml += "</miscellaneous></attributes>";
-  return xml;
-};
-
-const buildAbcMeasureDebugMiscXmlEntryParts = (notes: AbcParsedNote[], measureNo: number): string[] =>
-  notes.map((note, index) => buildAbcMeasureDebugMiscXmlEntry(note, index, measureNo));
+const buildAbcMeasureDebugMiscXml = (notes: AbcParsedNote[], measureNo: number): string =>
+  notes.length
+    ? `<attributes><miscellaneous><miscellaneous-field name="mks:dbg:abc:meta:count">${toHex(notes.length, 4)}</miscellaneous-field>${notes
+        .map(
+          (note, index) =>
+            `<miscellaneous-field name="mks:dbg:abc:meta:${String(index + 1).padStart(4, "0")}">${[
+              [
+                `idx=${toHex(index, 4)}`,
+                `m=${toHex(measureNo, 4)}`,
+                `v=${xmlEscape(normalizeVoiceForMusicXml(note.voice))}`,
+              ].join(";"),
+              [
+                `r=${note.isRest ? "1" : "0"}`,
+                `g=${note.grace ? "1" : "0"}`,
+                `ch=${note.chord ? "1" : "0"}`,
+                `st=${normalizeAbcDebugStep(note)}`,
+                `al=${String(normalizeAbcDebugAlter(note.alter))}`,
+                `oc=${toHex(normalizeAbcDebugOctave(note.octave), 2)}`,
+                `dd=${toHex(note.grace ? 0 : buildAbcNoteCoreDurationValuePart(note), 4)}`,
+                `tp=${xmlEscape(normalizeTypeForMusicXml(note.type))}`,
+              ].join(";"),
+            ].join(";")}</miscellaneous-field>`,
+        )
+        .join("")}</miscellaneous></attributes>`
+    : "";
 
 const encodeAbcSourceForMiscXml = (abcSource: string): string =>
   String(abcSource ?? "")
@@ -8104,239 +7162,28 @@ const encodeAbcSourceForMiscXml = (abcSource: string): string =>
     .replace(/\r/g, "\\r")
     .replace(/\n/g, "\\n");
 
-const buildAbcSourceMiscXmlEncodingField = (): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-encoding">escape-v1</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlLengthFields = (source: string, encoded: string): string =>
-  buildAbcSourceMiscXmlLengthFieldParts(source, encoded).join("");
-
-const buildAbcSourceMiscXmlLengthFieldParts = (source: string, encoded: string): string[] =>
-  [
-    buildAbcSourceMiscXmlRawLengthField(source),
-    buildAbcSourceMiscXmlRawEncodedLengthField(encoded),
-  ];
-
-const buildAbcSourceMiscXmlRawLengthField = (source: string): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlRawEncodedLengthField = (encoded: string): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlStateFields = (chunks: string[], truncated: boolean): string =>
-  buildAbcSourceMiscXmlStateFieldParts(chunks, truncated).join("");
-
-const buildAbcSourceMiscXmlStateFieldParts = (chunks: string[], truncated: boolean): string[] =>
-  [
-    buildAbcSourceMiscXmlChunkCountField(chunks),
-    buildAbcSourceMiscXmlTruncatedField(truncated),
-  ];
-
-const buildAbcSourceMiscXmlChunkCountField = (chunks: string[]): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlTruncatedField = (truncated: boolean): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlChunkFields = (chunks: string[]): string => {
-  return buildAbcSourceMiscXmlChunkFieldsXml(chunks);
-};
-
-const buildAbcSourceMiscXmlChunkFieldsXml = (chunks: string[]): string =>
-  buildAbcSourceMiscXmlChunkEntryParts(chunks).join("");
-
-const buildAbcSourceMiscXmlChunkEntryParts = (chunks: string[]): string[] => {
-  const chunkParts: string[] = [];
-  for (let i = 0; i < chunks.length; i += 1) {
-    chunkParts.push(buildAbcSourceMiscXmlChunkEntry(chunks[i], i));
-  }
-  return chunkParts;
-};
-
-const buildAbcSourceMiscXmlChunkEntry = (chunk: string, index: number): string =>
-  `<miscellaneous-field name="mks:src:abc:raw-${String(index + 1).padStart(4, "0")}">${xmlEscape(chunk)}</miscellaneous-field>`;
-
-const buildAbcSourceMiscXmlChunks = (encoded: string): string[] => {
+const buildAbcSourceMiscXml = (abcSource: string): string => {
+  const source = String(abcSource ?? "");
+  if (!source.length) return "";
+  const encoded = encodeAbcSourceForMiscXml(source);
   const CHUNK_SIZE = 240;
   const MAX_CHUNKS = 512;
   const chunks: string[] = [];
   for (let i = 0; i < encoded.length && chunks.length < MAX_CHUNKS; i += CHUNK_SIZE) {
     chunks.push(encoded.slice(i, i + CHUNK_SIZE));
   }
-  return chunks;
-};
-
-const buildAbcSourceMiscXmlBody = (source: string, encoded: string, chunks: string[], truncated: boolean): string =>
-  buildAbcSourceMiscXmlBodyFields(source, encoded, chunks, truncated).join("");
-
-const buildAbcSourceMiscXmlBodyFields = (source: string, encoded: string, chunks: string[], truncated: boolean): string[] =>
-  [...buildAbcSourceMiscXmlBodyHeaderFieldItems(source, encoded, chunks, truncated), ...buildAbcSourceMiscXmlBodyChunkFieldParts(chunks)];
-
-const buildAbcSourceMiscXmlBodyHeaderFieldItems = (source: string, encoded: string, chunks: string[], truncated: boolean): string[] => [
-  buildAbcSourceMiscXmlEncodingField(),
-  buildAbcSourceMiscXmlLengthFields(source, encoded),
-  buildAbcSourceMiscXmlStateFields(chunks, truncated),
-];
-
-const buildAbcSourceMiscXmlBodyChunkFieldParts = (chunks: string[]): string[] => [buildAbcSourceMiscXmlChunkFields(chunks)];
-
-const buildAbcSourceMiscXml = (abcSource: string): string => {
-  const source = String(abcSource ?? "");
-  if (!source.length) return "";
-  const encoded = encodeAbcSourceForMiscXml(source);
-  const chunks = buildAbcSourceMiscXmlChunks(encoded);
   const truncated = chunks.join("").length < encoded.length;
-  return `<attributes><miscellaneous>${buildAbcSourceMiscXmlBody(source, encoded, chunks, truncated)}</miscellaneous></attributes>`;
-};
-
-const buildAbcDiagMiscXmlPayload = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-  message?: string;
-  voiceId?: string;
-  measure?: number;
-  action?: string;
-  movedEvents?: number;
-}): string => {
-  return [...buildAbcDiagMiscXmlCoreFieldParts(item), ...buildAbcDiagMiscXmlOptionalFields(item)].join(";");
-};
-
-const buildAbcDiagMiscXmlCoreFieldParts = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-}): string[] => [`level=${item.level}`, `code=${item.code}`, `fmt=${item.fmt}`];
-
-const buildAbcDiagMiscXmlNumericOptionalFields = (item: {
-  measure?: number;
-  movedEvents?: number;
-}): string[] => buildAbcDiagMiscXmlNumericOptionalFieldParts(item);
-
-const buildAbcDiagMiscXmlNumericOptionalFieldParts = (item: {
-  measure?: number;
-  movedEvents?: number;
-}): string[] => [...buildAbcDiagMiscXmlMeasureOptionalParts(item.measure), ...buildAbcDiagMiscXmlMovedEventsOptionalParts(item.movedEvents)];
-
-const buildAbcDiagMiscXmlMeasureOptionalParts = (measure?: number): string[] =>
-  [Number.isFinite(measure) ? `measure=${Math.max(1, Math.round(Number(measure)))}` : ""].filter(Boolean);
-
-const buildAbcDiagMiscXmlMovedEventsOptionalParts = (movedEvents?: number): string[] =>
-  [Number.isFinite(movedEvents) ? `movedEvents=${Math.max(0, Math.round(Number(movedEvents)))}` : ""].filter(Boolean);
-
-const buildAbcDiagMiscXmlTextOptionalFields = (item: {
-  voiceId?: string;
-  action?: string;
-  message?: string;
-}): string[] => buildAbcDiagMiscXmlTextOptionalFieldParts(item);
-
-const buildAbcDiagMiscXmlTextOptionalFieldParts = (item: {
-  voiceId?: string;
-  action?: string;
-  message?: string;
-}): string[] =>
-  [
-    item.voiceId ? `voice=${xmlEscape(item.voiceId)}` : "",
-    item.action ? `action=${xmlEscape(item.action)}` : "",
-    item.message ? `message=${xmlEscape(item.message)}` : "",
-  ].filter(Boolean);
-
-const buildAbcDiagMiscXmlOptionalFields = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-  message?: string;
-  voiceId?: string;
-  measure?: number;
-  action?: string;
-  movedEvents?: number;
-}): string[] => buildAbcDiagMiscXmlOptionalFieldParts(item);
-
-const buildAbcDiagMiscXmlOptionalFieldParts = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-  message?: string;
-  voiceId?: string;
-  measure?: number;
-  action?: string;
-  movedEvents?: number;
-}): string[] => [...buildAbcDiagMiscXmlNumericOptionalFields(item), ...buildAbcDiagMiscXmlTextOptionalFields(item)];
-
-const buildAbcDiagMiscXmlEntry = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-  message?: string;
-  voiceId?: string;
-  measure?: number;
-  action?: string;
-  movedEvents?: number;
-}, index: number): string =>
-  `<miscellaneous-field name="${buildAbcDiagMiscXmlEntryName(index)}">${buildAbcDiagMiscXmlEntryPayload(item)}</miscellaneous-field>`;
-
-const buildAbcDiagMiscXmlEntryName = (index: number): string =>
-  `mks:diag:${String(index + 1).padStart(4, "0")}`;
-
-const buildAbcDiagMiscXmlEntryPayload = (item: {
-  level: "warn";
-  code: string;
-  fmt: "abc";
-  message?: string;
-  voiceId?: string;
-  measure?: number;
-  action?: string;
-  movedEvents?: number;
-}): string => buildAbcDiagMiscXmlPayload(item);
-
-const buildAbcDiagMiscXmlCountField = (maxEntries: number): string =>
-  `<miscellaneous-field name="mks:diag:count">${maxEntries}</miscellaneous-field>`;
-
-const buildAbcDiagMiscXmlEntries = (
-  diagnostics: Array<{
-    level: "warn";
-    code: string;
-    fmt: "abc";
-    message?: string;
-    voiceId?: string;
-    measure?: number;
-    action?: string;
-    movedEvents?: number;
-  }>,
-  maxEntries: number
-): string => buildAbcDiagMiscXmlEntryList(diagnostics, maxEntries);
-
-const buildAbcDiagMiscXmlEntryList = (
-  diagnostics: Array<{
-    level: "warn";
-    code: string;
-    fmt: "abc";
-    message?: string;
-    voiceId?: string;
-    measure?: number;
-    action?: string;
-    movedEvents?: number;
-  }>,
-  maxEntries: number
-): string => buildAbcDiagMiscXmlEntryParts(diagnostics, maxEntries).join("");
-
-const buildAbcDiagMiscXmlEntryParts = (
-  diagnostics: Array<{
-    level: "warn";
-    code: string;
-    fmt: "abc";
-    message?: string;
-    voiceId?: string;
-    measure?: number;
-    action?: string;
-    movedEvents?: number;
-  }>,
-  maxEntries: number
-): string[] => {
-  const entryParts: string[] = [];
-  for (let i = 0; i < maxEntries; i += 1) {
-    entryParts.push(buildAbcDiagMiscXmlEntry(diagnostics[i], i));
-  }
-  return entryParts;
+  return `<attributes><miscellaneous>${[
+    `<miscellaneous-field name="mks:src:abc:raw-encoding">escape-v1</miscellaneous-field>`,
+    `<miscellaneous-field name="mks:src:abc:raw-length">${xmlEscape(String(source.length))}</miscellaneous-field>`,
+    `<miscellaneous-field name="mks:src:abc:raw-encoded-length">${xmlEscape(String(encoded.length))}</miscellaneous-field>`,
+    `<miscellaneous-field name="mks:src:abc:raw-chunks">${xmlEscape(String(chunks.length))}</miscellaneous-field>`,
+    `<miscellaneous-field name="mks:src:abc:raw-truncated">${truncated ? "1" : "0"}</miscellaneous-field>`,
+    ...chunks.map(
+      (chunk, index) =>
+        `<miscellaneous-field name="mks:src:abc:raw-${String(index + 1).padStart(4, "0")}">${xmlEscape(chunk)}</miscellaneous-field>`,
+    ),
+  ].join("")}</miscellaneous></attributes>`;
 };
 
 const buildAbcDiagMiscXml = (
@@ -8349,16 +7196,28 @@ const buildAbcDiagMiscXml = (
     measure?: number;
     action?: string;
     movedEvents?: number;
-  }>
-): string => {
-  if (!diagnostics.length) return "";
-  const maxEntries = Math.min(256, diagnostics.length);
-  let xml = "<attributes><miscellaneous>";
-  xml += buildAbcDiagMiscXmlCountField(maxEntries);
-  xml += buildAbcDiagMiscXmlEntries(diagnostics, maxEntries);
-  xml += "</miscellaneous></attributes>";
-  return xml;
-};
+  }>  
+): string =>
+  diagnostics.length
+    ? `<attributes><miscellaneous><miscellaneous-field name="mks:diag:count">${Math.min(256, diagnostics.length)}</miscellaneous-field>${Array.from(
+        { length: Math.min(256, diagnostics.length) },
+        (_, i) =>
+          `<miscellaneous-field name="mks:diag:${String(i + 1).padStart(4, "0")}">${[
+            `level=${diagnostics[i].level}`,
+            `code=${diagnostics[i].code}`,
+            `fmt=${diagnostics[i].fmt}`,
+            ...(diagnostics[i].measure !== undefined && Number.isFinite(diagnostics[i].measure)
+              ? [`measure=${Math.max(1, Math.round(Number(diagnostics[i].measure)))}`]
+              : []),
+            ...(diagnostics[i].movedEvents !== undefined && Number.isFinite(diagnostics[i].movedEvents)
+              ? [`movedEvents=${Math.max(0, Math.round(Number(diagnostics[i].movedEvents)))}`]
+              : []),
+            ...(diagnostics[i].voiceId ? [`voice=${xmlEscape(diagnostics[i].voiceId)}`] : []),
+            ...(diagnostics[i].action ? [`action=${xmlEscape(diagnostics[i].action)}`] : []),
+            ...(diagnostics[i].message ? [`message=${xmlEscape(diagnostics[i].message)}`] : []),
+          ].join(";")}</miscellaneous-field>`
+      ).join("")}</miscellaneous></attributes>`
+    : "";
 
 const prettyPrintXml = (xml: string): string => {
   const compact = xml.replace(/>\s+</g, "><").trim();
@@ -8377,16 +7236,11 @@ const prettyPrintXml = (xml: string): string => {
   return lines.join("\n");
 };
 
-const resolveAbcParsedPartsForExport = (parts: AbcParsedPart[] | undefined): AbcParsedPart[] => {
-  const safeParts =
-    parts && parts.length > 0
-      ? parts
-      : [{ partId: "P1", partName: "Voice 1", measures: [[]] }];
-  return safeParts.map((part) => ({
+const resolveAbcParsedPartsForExport = (parts: AbcParsedPart[] | undefined): AbcParsedPart[] =>
+  (parts && parts.length > 0 ? parts : [{ partId: "P1", partName: "Voice 1", measures: [[]] }]).map((part) => ({
     ...part,
     clef: resolveAbcImportClef(part),
   }));
-};
 
 type AbcMusicXmlExportContext = {
   resolvedParts: AbcParsedPart[];
@@ -8440,23 +7294,23 @@ const buildAbcScorePartwiseXmlDocument = (
   composer: string,
   partListXml: string,
   partBodyXml: string
-): string => {
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<score-partwise version="4.0">',
-    `<work><work-title>${xmlEscape(title)}</work-title></work>`,
-    `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`,
-    `<part-list>${partListXml}</part-list>`,
-    partBodyXml,
-    "</score-partwise>",
-  ].join("");
-};
+): string => [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<score-partwise version="4.0">',
+  `<work><work-title>${xmlEscape(title)}</work-title></work>`,
+  `<identification><creator type="composer">${xmlEscape(composer)}</creator></identification>`,
+  `<part-list>${partListXml}</part-list>`,
+  partBodyXml,
+  "</score-partwise>",
+].join("");
 
-const buildMusicXmlFromAbcParsed = (
-  parsed: AbcParsedResult,
-  abcSource: string,
-  options: AbcImportOptions = {}
-): string => {
+export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOptions = {}): string => {
+  const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
+    defaultTitle: "mikuscore",
+    defaultComposer: "Unknown",
+    inferTransposeFromPartName: true,
+    overfullCompatibilityMode: options.overfullCompatibilityMode !== false,
+  }) as AbcParsedResult;
   const debugMetadata = options.debugMetadata ?? true;
   const sourceMetadata = options.sourceMetadata ?? true;
   const debugPrettyPrint = options.debugPrettyPrint ?? debugMetadata;
@@ -8469,37 +7323,41 @@ const buildMusicXmlFromAbcParsed = (
       exportContext.beatDiv,
       staffOverride
     );
-
-  const partListXml = buildAbcPartListXml(exportContext.resolvedParts);
-  const partBodyXml = buildAbcPartBodyXml(
-    exportContext.resolvedParts,
-    exportContext.measureCount,
-    exportContext.defaultFifths,
-    exportContext.beats,
-    exportContext.beatType,
-    exportContext.tempoBpm,
-    debugMetadata,
-    sourceMetadata,
-    parsed.diagnostics,
-    abcSource,
-    buildMeasureNotesXml
-  );
-
+  const partBodyXml = exportContext.resolvedParts
+    .map((part, partIndex) =>
+      buildAbcPartXml(
+        part,
+        partIndex,
+        exportContext.measureCount,
+        exportContext.defaultFifths,
+        exportContext.beats,
+        exportContext.beatType,
+        exportContext.tempoBpm,
+        debugMetadata,
+        sourceMetadata,
+        parsed.diagnostics,
+        abcSource,
+        buildMeasureNotesXml
+      )
+    )
+    .join("");
   const xml = buildAbcScorePartwiseXmlDocument(
     exportContext.title,
     exportContext.composer,
-    partListXml,
+    exportContext.resolvedParts
+      .map((part, index) =>
+        [
+          `<score-part id="${xmlEscape(part.partId)}">`,
+          `<part-name>${xmlEscape(part.partName || part.partId)}</part-name>`,
+          `<midi-instrument id="${xmlEscape(part.partId)}-I1">`,
+          `<midi-channel>${((index % 16) + 1 === 10) ? 11 : ((index % 16) + 1)}</midi-channel>`,
+          `<midi-program>6</midi-program>`,
+          "</midi-instrument>",
+          "</score-part>",
+        ].join("")
+      )
+      .join(""),
     partBodyXml
   );
   return debugPrettyPrint ? prettyPrintXml(xml) : xml;
-};
-
-export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOptions = {}): string => {
-  const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
-    defaultTitle: "mikuscore",
-    defaultComposer: "Unknown",
-    inferTransposeFromPartName: true,
-    overfullCompatibilityMode: options.overfullCompatibilityMode !== false,
-  }) as AbcParsedResult;
-  return buildMusicXmlFromAbcParsed(parsed, abcSource, options);
 };
