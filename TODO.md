@@ -52,6 +52,18 @@
   - External repository step: a human maintainer renamed `igapyon/mikuscore` to `igapyon/miku-score`; this checkout's `origin` remote now uses the canonical URL.
   - Next action: create `miku-score-web` only after the repository rename, with the browser-compatible Main Application contract decided before moving Web files.
 
+- 2026-08-06 | miku-score | Rename release recovery and family follow-up
+  - Applied: prepared version `0.6.1`, regenerated the tracked CLI runtime bundle, and aligned CLI version coverage.
+  - Applied: raised the stdin-to-stdout CLI test timeout to 10 seconds so the first heavy CLI runtime load does not fail under CI startup contention.
+  - Verification: `npm run build`, versioned Release-asset preparation, and bundle smoke succeeded for `0.6.1`.
+  - Release recovery order:
+    1. recommit, publish, and merge the `0.6.1` change;
+    2. a human creates the `v0.6.1` GitHub Release tag;
+    3. verify that the Release workflow uploads `miku-score-0.6.1.mjs` and `miku-score-sources-0.6.1.tgz`.
+  - Human GitHub setting: update the repository Homepage from `https://igapyon.github.io/mikuscore/` to `https://igapyon.github.io/miku-score/`.
+  - Family follow-up: keep Issue #198 open until the Java repository, Agent Skills repository, and downstream `igapyon-agent-skills` references adopt the `miku-score` naming system.
+  - Next phase: after the Release and Homepage work above, create `miku-score-web` with the browser-compatible Main Application contract decided before moving Web files.
+
 ## Specification
 
 - [x] Create the first cross-format mapping table from the MusicXML canonical-state policy.
