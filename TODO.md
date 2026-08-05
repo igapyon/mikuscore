@@ -49,7 +49,7 @@
   - Applied: migrated the local product, package, CLI, Web App, Node.js runtime bundle, Release asset naming, generated files, and current documentation to `miku-score`.
   - Compatibility: the private package exposes only the canonical `miku-score` CLI; existing `mks:` metadata, the v1 analysis namespace, MIDI SysEx `app=mikuscore`, and the published utaformatix3 vendor API remain unchanged.
   - Verification: `npm run build`, CLI help/version, `npm run smoke:bundle`, and versioned Release-asset preparation all succeeded under the canonical name.
-  - Blocking external step: a human maintainer must rename `igapyon/mikuscore` to `igapyon/miku-score`, then update this checkout's remote URL.
+  - External repository step: a human maintainer renamed `igapyon/mikuscore` to `igapyon/miku-score`; this checkout's `origin` remote now uses the canonical URL.
   - Next action: create `miku-score-web` only after the repository rename, with the browser-compatible Main Application contract decided before moving Web files.
 
 ## Specification
