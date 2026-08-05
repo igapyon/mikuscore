@@ -70,6 +70,6 @@ test its own read/write compatibility policy.
 ## External Repository Step
 
 The GitHub repository rename from `igapyon/mikuscore` to
-`igapyon/miku-score` is a human-maintainer action. After it is complete, update
-the local remote URL and verify that all managed links use the new canonical
-repository URL rather than relying on a redirect.
+`igapyon/miku-score` was completed by a human maintainer on 2026-08-05. The
+local `origin` remote uses the new canonical repository URL; managed links
+must use that URL rather than rely on GitHub redirects.
