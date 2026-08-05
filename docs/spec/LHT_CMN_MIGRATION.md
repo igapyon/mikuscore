@@ -2,8 +2,8 @@
 
 Last updated: 2026-03-07
 
-This document records Phase 0 inventory for migrating mikuscore UI to `lht-cmn`.
-Primary target file: `mikuscore-src.html`
+This document records Phase 0 inventory for migrating miku-score UI to `lht-cmn`.
+Primary target file: `miku-score-src.html`
 Compatibility anchor: `src/ts/main.ts` DOM contracts (`id`, `name`, and event wiring).
 
 ## Inventory summary (Phase 0)
@@ -23,7 +23,7 @@ Compatibility anchor: `src/ts/main.ts` DOM contracts (`id`, `name`, and event wi
 
 ## Replacement mapping table
 
-| Current pattern (mikuscore) | Candidate `lht-*` | Preserve IDs / contracts | Compatibility notes |
+| Current pattern (miku-score) | Candidate `lht-*` | Preserve IDs / contracts | Compatibility notes |
 |---|---|---|---|
 | Inline tooltip group (`.md-tooltip-group`, section help and settings help) | `lht-help-tooltip` | none required for tooltip wrapper itself | Replace duplicated icon/tooltip markup first; keep surrounding heading/label structure unchanged. |
 | File chooser button + hidden file input + file name text | `lht-file-select` | `fileInput`, `fileSelectBtn`, `fileNameText` | Must keep current click and `change` flow used in `main.ts`; if component-generated IDs differ, migration is blocked. |

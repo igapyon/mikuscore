@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first-cut CLI scope for `mikuscore`.
+This document defines the first-cut CLI scope for `miku-score`.
 
 Scope note:
 
@@ -59,17 +59,17 @@ The CLI MUST NOT include:
 
 The initial command family is:
 
-- `mikuscore convert --from abc --to musicxml`
-- `mikuscore convert --from musicxml --to abc`
-- `mikuscore convert --help`
-- `mikuscore --help`
+- `miku-score convert --from abc --to musicxml`
+- `miku-score convert --from musicxml --to abc`
+- `miku-score convert --help`
+- `miku-score --help`
 
 Command naming is fixed for Step 1 as:
 
 - `convert --from abc --to musicxml`
 - `convert --from musicxml --to abc`
 
-### `mikuscore convert --from abc --to musicxml`
+### `miku-score convert --from abc --to musicxml`
 
 Purpose:
 
@@ -89,7 +89,7 @@ Behavior:
 - MUST fail with non-zero exit code on invalid or unsupported input that cannot be converted
 - MAY emit warnings/diagnostics to `stderr`
 
-### `mikuscore convert --from musicxml --to abc`
+### `miku-score convert --from musicxml --to abc`
 
 Purpose:
 
@@ -129,8 +129,8 @@ Behavior:
 ### Help Rule
 
 - `--help` is part of the Step 1 contract
-- `mikuscore --help` MUST print top-level usage/help text
-- `mikuscore convert --help` MUST print command-specific help text
+- `miku-score --help` MUST print top-level usage/help text
+- `miku-score convert --help` MUST print command-specific help text
 - help output SHOULD go to `stdout`
 - successful help output MUST exit with code `0`
 
@@ -149,10 +149,10 @@ Recommended first-cut top-level help shape:
 
 ```text
 Usage:
-  mikuscore convert --from abc --to musicxml [--in <file>] [--out <file>]
-  mikuscore convert --from musicxml --to abc [--in <file>] [--out <file>]
-  mikuscore convert --help
-  mikuscore --help
+  miku-score convert --from abc --to musicxml [--in <file>] [--out <file>]
+  miku-score convert --from musicxml --to abc [--in <file>] [--out <file>]
+  miku-score convert --help
+  miku-score --help
 
 Commands:
   convert   Convert score text between supported formats
@@ -169,9 +169,9 @@ Recommended first-cut command help shape for `convert`:
 
 ```text
 Usage:
-  mikuscore convert --from abc --to musicxml [--in <file>] [--out <file>]
-  mikuscore convert --from musicxml --to abc [--in <file>] [--out <file>]
-  mikuscore convert --help
+  miku-score convert --from abc --to musicxml [--in <file>] [--out <file>]
+  miku-score convert --from musicxml --to abc [--in <file>] [--out <file>]
+  miku-score convert --help
 
 Description:
   Convert score text between supported formats.

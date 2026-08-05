@@ -5,8 +5,8 @@ import { execFileSync } from "node:child_process";
 const ROOT = process.cwd();
 const ENTRY_TS = "src/ts/main.ts";
 const ENTRY_JS = ENTRY_TS.replace(/\.ts$/, ".js");
-const TEMPLATE = "mikuscore-src.html";
-const DIST = "mikuscore.html";
+const TEMPLATE = "miku-score-src.html";
+const DIST = "miku-score.html";
 const INDEX_TEMPLATE = "index-src.html";
 const INDEX_DIST = "index.html";
 const SAMPLE1_MXL_PATH = "src/samples/musicxml/sample1.mxl";
@@ -28,9 +28,9 @@ const CSS_PATH = "src/css/app.css";
 const VEROVIO_JS_PATH = "src/js/verovio.js";
 const MIDI_WRITER_JS_PATH = "src/js/midi-writer.js";
 const LHT_CMN_JS_PATH = "lht-cmn/js/components.js";
-const UF3P_MIKUSCORE_IIFE_JS_PATH = "src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js";
+const UF3P_MIKU_SCORE_IIFE_JS_PATH = "src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js";
 const JS_OUT = "src/js/main.js";
-const TMP_DIR = ".mikuscore-build";
+const TMP_DIR = ".miku-score-build";
 const TMP_TSBUILDINFO = `${TMP_DIR}/build.tsbuildinfo`;
 
 const normalize = (p) => p.split(path.sep).join("/");
@@ -237,7 +237,7 @@ const inlineTemplate = (jsBundle) => {
   const verovioJs = readText(VEROVIO_JS_PATH);
   const midiWriterJs = readText(MIDI_WRITER_JS_PATH);
   const lhtCmnJs = readText(LHT_CMN_JS_PATH);
-  const uf3pMikuscoreIifeJs = readText(UF3P_MIKUSCORE_IIFE_JS_PATH);
+  const uf3pMikuScoreIifeJs = readText(UF3P_MIKU_SCORE_IIFE_JS_PATH);
   const hasTokenCssLink = template.includes(`href="${TOKEN_CSS_PATH}"`);
   const hasCoreCssLink = template.includes("href=\"src/css/md3/core-spec.css\"");
 
@@ -302,12 +302,12 @@ const inlineTemplate = (jsBundle) => {
     `<script>\n${lhtCmnJs}\n</script>`
   );
 
-  const withUf3pMikuscoreIifeJs = withLhtCmnJs.replace(
+  const withUf3pMikuScoreIifeJs = withLhtCmnJs.replace(
     /<script\s+src="src\/vendor\/utaformatix3\/utaformatix3-ts-plus\.mikuscore\.iife\.js"><\/script>/,
-    `<script>\n${uf3pMikuscoreIifeJs}\n</script>`
+    `<script>\n${uf3pMikuScoreIifeJs}\n</script>`
   );
 
-  return withUf3pMikuscoreIifeJs.replace(
+  return withUf3pMikuScoreIifeJs.replace(
     /<script\s+src="src\/js\/main\.js"><\/script>/,
     `<script>\n${jsBundle}\n</script>`
   );

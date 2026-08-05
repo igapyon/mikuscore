@@ -19,7 +19,7 @@ export type PreviewSvgIdMapResult = {
   mapMode: PreviewSvgIdMapMode;
 };
 
-const hasEmbeddedMikuscoreNoteIds = (renderedNoteIds: string[]): boolean => {
+const hasEmbeddedMikuScoreNoteIds = (renderedNoteIds: string[]): boolean => {
   return renderedNoteIds.some((id) => id.startsWith("mks-"));
 };
 
@@ -29,7 +29,7 @@ export const preparePreviewSvgIdMap = (
   renderedNoteIds: string[],
   buildFallbackSvgIdMap: (noteNodeIds: string[], renderedNoteIds: string[]) => Map<string, string>
 ): PreviewSvgIdMapResult => {
-  if (renderedNoteIds.length > 0 && !hasEmbeddedMikuscoreNoteIds(renderedNoteIds)) {
+  if (renderedNoteIds.length > 0 && !hasEmbeddedMikuScoreNoteIds(renderedNoteIds)) {
     return {
       map: buildFallbackSvgIdMap(sourceNoteNodeIds, renderedNoteIds),
       mapMode: "fallback-seq",
@@ -100,7 +100,7 @@ export const renderScorePreview = async (params: RenderScorePreviewParams): Prom
     );
     params.setSvgIdMap(map);
     if (params.debugLog) {
-      console.warn("[mikuscore][click-map] render map prepared:", {
+      console.warn("[miku-score][click-map] render map prepared:", {
         mapMode,
         mappedNotes: map.size,
         renderedNoteIds: renderedNoteIds.slice(0, 20),

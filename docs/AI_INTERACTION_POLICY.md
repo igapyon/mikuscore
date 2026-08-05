@@ -1,6 +1,6 @@
 # AI Interaction Policy
 
-This document records the current `mikuscore` policy for interacting with generative models.
+This document records the current `miku-score` policy for interacting with generative models.
 
 It complements:
 
@@ -13,11 +13,11 @@ It complements:
 - Full-score handoff to a generative model uses `ABC`.
 - New score generation by a generative model uses `ABC`.
 - A dedicated AI-facing JSON patch/projection interface is not part of the current product contract.
-- AI interaction is one bridge use case for mikuscore, not the sole or primary product identity.
+- AI interaction is one bridge use case for miku-score, not the sole or primary product identity.
 
 ## Why this policy is simpler now
 
-`mikuscore` currently prioritizes:
+`miku-score` currently prioritizes:
 
 - canonical score preservation
 - practical readability for generative models
@@ -29,9 +29,9 @@ This sits inside the broader product role of moving score data between tools and
 ## Current constraint
 
 - Humans may still explicitly choose `ABC` when working with external generative models.
-- `mikuscore` does not currently claim a supported AI-facing JSON workflow.
+- `miku-score` does not currently claim a supported AI-facing JSON workflow.
 - Existing JSON-related notes and examples should be treated as deferred design material, not current behavior guarantees.
-- If older cross-repository design memos mention AI JSON, measure-detail JSON, or projection/patch style score workflows for `mikuscore`, read those references as future-direction material unless this document or a current product spec explicitly reactivates them.
+- If older cross-repository design memos mention AI JSON, measure-detail JSON, or projection/patch style score workflows for `miku-score`, read those references as future-direction material unless this document or a current product spec explicitly reactivates them.
 
 ## Deferred future note
 

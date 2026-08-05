@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first candidate `render` command family for the future `mikuscore` CLI.
+This document defines the first candidate `render` command family for the future `miku-score` CLI.
 
 Scope note:
 
@@ -29,12 +29,12 @@ That means:
 
 The strongest current candidate shape is:
 
-- `mikuscore render svg [--from <format>] [--in <file>] [--out <file>]`
+- `miku-score render svg [--from <format>] [--in <file>] [--out <file>]`
 
 Examples:
 
-- `mikuscore render svg --in score.musicxml`
-- `mikuscore render svg --from abc --in score.abc`
+- `miku-score render svg --in score.musicxml`
+- `miku-score render svg --from abc --in score.abc`
 
 ## Render Target
 

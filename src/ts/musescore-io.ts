@@ -4441,7 +4441,7 @@ const readMusicXmlSubtitle = (score: Element): string => {
 const readMusicXmlExportTitle = (score: Element): string => {
   return readTrimmedMusicXmlText(score, "work > work-title")
     || readTrimmedMusicXmlText(score, "movement-title")
-    || "mikuscore export";
+    || "miku-score export";
 };
 
 const readMusicXmlExportMetadata = (score: Element) => {

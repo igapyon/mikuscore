@@ -1,28 +1,28 @@
-# mikuscore
+# miku-score
 
-![mikuscore OGP image](screenshots/mikuscore-ogp.png)
+![miku-score OGP image](screenshots/miku-score-ogp.png)
 
-mikuscore is a MusicXML-first score converter for people who need to move score data between formats.  
+miku-score is a MusicXML-first score converter for people who need to move score data between formats.
 It treats MusicXML as the central interchange format and helps bridge notation tools, file formats, and AI-oriented workflows.
 
-It is distributed as a single-file web app (`mikuscore.html`) and is designed to run offline in a browser.
+It is distributed as a single-file web app (`miku-score.html`) and is designed to run offline in a browser.
 
-## What mikuscore is for
+## What miku-score is for
 
-mikuscore is a practical tool for:
+miku-score is a practical tool for:
 
 - moving score data from one format to another
 - normalizing score data around MusicXML
 - bridging notation software, exchange files, and AI-friendly handoff workflows
 
-## What mikuscore is not
+## What miku-score is not
 
 - not a full score engraving editor
 - not a replacement for MuseScore or other dedicated notation editors
 - not a promise of lossless conversion between every format pair
 
 If you want to edit notation in depth, use a notation editor such as MuseScore.  
-mikuscore is for converting, inspecting, and handing score data off.
+miku-score is for converting, inspecting, and handing score data off.
 
 ## Core idea
 
@@ -50,18 +50,18 @@ mikuscore is for converting, inspecting, and handing score data off.
 
 ## Related projects
 
-- `mikuscore-skills`
-  - agent skills for embedding `mikuscore` into generative-AI workflows and making `mikuscore` score-conversion features easier to use from generative AI
-  - https://github.com/igapyon/mikuscore-skills
+- `miku-score-skills`
+  - agent skills for embedding `miku-score` into generative-AI workflows and making `miku-score` score-conversion features easier to use from generative AI
+  - https://github.com/igapyon/miku-score-skills
 - `miku-abc-player`
-  - a companion web app that makes an ABC-limited subset of `mikuscore` easier to use
+  - a companion web app that makes an ABC-limited subset of `miku-score` easier to use
   - https://github.com/igapyon/miku-abc-player
 
 ## Quick start
 
 ### Web app
 
-- open `mikuscore.html` in a browser
+- open `miku-score.html` in a browser
 - load a score file
 - convert and export
 - inspect diagnostics if conversion details matter
@@ -100,14 +100,16 @@ For `state validate-command` / `state apply-command`, command payloads may targe
 For CLI and development details, see `docs/DEVELOPMENT.md` and `docs/spec/CLI_STEP1.md`.
 
 For downstream packaging, `npm run build:cli-runtime` generates
-`bundle/mikuscore.mjs`, a single-file Node.js CLI runtime artifact.
+`bundle/miku-score.mjs`, a single-file Node.js CLI runtime artifact. This
+generated runtime bundle is intentionally tracked as a distribution contract;
+other files under `bundle/` are local generated artifacts.
 
 ## Screenshots
 
-![mikuscore screenshot 1](screenshots/screen1.png)
-![mikuscore screenshot 2](screenshots/screen2.png)
-![mikuscore screenshot 3](screenshots/screen3.png)
-![mikuscore screenshot 4](screenshots/screen4.png)
+![miku-score screenshot 1](screenshots/screen1.png)
+![miku-score screenshot 2](screenshots/screen2.png)
+![miku-score screenshot 3](screenshots/screen3.png)
+![miku-score screenshot 4](screenshots/screen4.png)
 
 ## Documents
 
@@ -121,6 +123,8 @@ User-facing documents:
 Contributor and repository workflow:
 
 - `docs/DEVELOPMENT.md`
+- `docs/miku-soft-reference.md`
+- `docs/MIGRATION_MIKUSCORE_TO_MIKU_SCORE.md`
 - `CONTRIBUTING.md`
 - `TODO.md`
 
@@ -140,10 +144,10 @@ Implementation specs:
 
 ## 日本語
 
-mikuscore は、譜面データを別形式へ持ち替えたい人のための、MusicXML-first な譜面変換ツールです。  
+miku-score は、譜面データを別形式へ持ち替えたい人のための、MusicXML-first な譜面変換ツールです。
 MusicXML を変換の中心に置き、譜面ソフト、交換用ファイル、生成 AI 向けワークフローの橋渡しを行います。
 
-配布形態は単一 HTML (`mikuscore.html`) で、ブラウザでオフライン動作します。
+配布形態は単一 HTML (`miku-score.html`) で、ブラウザでオフライン動作します。
 
 ### 用途
 
@@ -158,7 +162,7 @@ MusicXML を変換の中心に置き、譜面ソフト、交換用ファイル�
 - すべての形式間で完全な無損失変換を保証するものではありません
 
 譜面をしっかり編集したい場合は、MuseScore などの既存エディタの利用を推奨します。  
-mikuscore は、変換・確認・受け渡しのためのツールです。
+miku-score は、変換・確認・受け渡しのためのツールです。
 
 ### 対応フォーマット
 
@@ -172,16 +176,16 @@ mikuscore は、変換・確認・受け渡しのためのツールです。
 
 ### 関連プロジェクト
 
-- `mikuscore-skills`
-  - `mikuscore` を生成 AI に組み込み、生成 AI から `mikuscore` の譜面変換機能を利用しやすくするための agent skills
-  - https://github.com/igapyon/mikuscore-skills
+- `miku-score-skills`
+  - `miku-score` を生成 AI に組み込み、生成 AI から `miku-score` の譜面変換機能を利用しやすくするための agent skills
+  - https://github.com/igapyon/miku-score-skills
 - `miku-abc-player`
-  - `mikuscore` の機能を ABC に限定して使いやすくした companion web app
+  - `miku-score` の機能を ABC に限定して使いやすくした companion web app
   - https://github.com/igapyon/miku-abc-player
 
 ### はじめかた
 
-- `mikuscore.html` をブラウザで開く
+- `miku-score.html` をブラウザで開く
 - 譜面ファイルを読み込む
 - 変換して書き出す
 - 必要なら診断情報を確認する

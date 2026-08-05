@@ -7,7 +7,7 @@
   that import into or export from MusicXML.
 - "Supported" means available in product flows, not full notation parity.
 - Supported formats may still change behavior as compatibility and parity work progress.
-- mikuscore is a converter, not a promise of lossless editing parity across all formats.
+- miku-score is a converter, not a promise of lossless editing parity across all formats.
 
 ## Current Coverage
 
@@ -27,7 +27,7 @@
 - Enharmonic spelling, articulation detail, repeat semantics, and layout constructs can differ by source format.
 - When exact preservation is not possible, diagnostics and metadata should provide traceability.
 - For notation editing beyond conversion-oriented inspection, use a dedicated notation editor.
-- Quick playback in mikuscore is a lightweight feature and may not work reliably on large scores (long duration, many parts, dense events).
+- Quick playback in miku-score is a lightweight feature and may not work reliably on large scores (long duration, many parts, dense events).
 - For reliable playback of large scores, export MIDI and use an external MIDI-capable playback app.
 
 ## Related Specs

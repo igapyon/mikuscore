@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first candidate `state` command family for the future `mikuscore` CLI.
+This document defines the first candidate `state` command family for the future `miku-score` CLI.
 
 Scope note:
 
@@ -47,16 +47,16 @@ may cross multiple top-level families, but `state` itself remains centered on ca
 
 The strongest current candidate first cut is:
 
-- `mikuscore state summarize`
-- `mikuscore state inspect-measure`
-- `mikuscore state validate-command`
-- `mikuscore state apply-command`
-- `mikuscore state diff`
+- `miku-score state summarize`
+- `miku-score state inspect-measure`
+- `miku-score state validate-command`
+- `miku-score state apply-command`
+- `miku-score state diff`
 
 If patch envelopes become necessary later, likely additions are:
 
-- `mikuscore state validate-patch`
-- `mikuscore state apply-patch`
+- `miku-score state validate-patch`
+- `miku-score state apply-patch`
 
 ## Shared I/O Direction
 

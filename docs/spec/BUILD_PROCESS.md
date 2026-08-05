@@ -16,15 +16,15 @@ Scope note:
 
 ## Target Artifact
 
-- Development templates: `mikuscore-src.html`, `index-src.html` (editable source templates)
-- Distribution artifacts: `mikuscore.html`, `index.html`, `bundle/mikuscore.mjs` (generated files, do not edit directly)
+- Development templates: `miku-score-src.html`, `index-src.html` (editable source templates)
+- Distribution artifacts: `miku-score.html`, `index.html`, `bundle/miku-score.mjs` (generated files, do not edit directly)
 - Release staging artifacts: `release-assets/` (generated local output, do not commit)
 
 ## Suggested Project Layout (MVP)
 
-- `mikuscore-src.html`
+- `miku-score-src.html`
 - `index-src.html`
-- `mikuscore.html` (generated)
+- `miku-score.html` (generated)
 - `index.html` (generated)
 - `src/css/app.css`
 - `src/ts/main.ts`
@@ -42,8 +42,8 @@ npm run build
 `build` SHOULD perform the following steps:
 
 1. Compile `src/ts/**/*.ts` to `src/js/**/*.js`
-2. Validate `mikuscore-src.html` tag order (CSS and JS include order)
-3. Inline local CSS and JS into `mikuscore.html`
+2. Validate `miku-score-src.html` tag order (CSS and JS include order)
+3. Inline local CSS and JS into `miku-score.html`
 4. Render static landing templates such as `index-src.html`
 5. Output generated HTML artifacts
 6. Output the single-file Node.js CLI runtime artifact
@@ -70,19 +70,19 @@ For verification and daily commands (`typecheck`, `test:*`, `check:all`, `clean`
 
 ## Runtime Constraints (MUST)
 
-- `mikuscore.html` MUST run offline (no network required)
-- `mikuscore.html` MUST NOT fetch external CDN/resources at runtime
+- `miku-score.html` MUST run offline (no network required)
+- `miku-score.html` MUST NOT fetch external CDN/resources at runtime
 - all required scripts/styles MUST be embedded or locally bundled
-- behavior of generated `mikuscore.html` MUST match development source behavior
-- `bundle/mikuscore.mjs` MUST NOT depend on source-tree-relative TypeScript files at runtime
-- `bundle/mikuscore.mjs` SHOULD bundle Node.js runtime package dependencies needed for normal CLI execution, while leaving Node built-ins external
+- behavior of generated `miku-score.html` MUST match development source behavior
+- `bundle/miku-score.mjs` MUST NOT depend on source-tree-relative TypeScript files at runtime
+- `bundle/miku-score.mjs` SHOULD bundle Node.js runtime package dependencies needed for normal CLI execution, while leaving Node built-ins external
 
 ## Editing Rules
 
-- `mikuscore.html`, `index.html`, and `bundle/mikuscore.mjs` are generated; do not edit them directly
+- `miku-score.html`, `index.html`, and `bundle/miku-score.mjs` are generated; do not edit them directly
 - `release-assets/` is generated staging output; do not edit or commit it
-- edit `mikuscore-src.html`, `index-src.html`, and files under `src/`
-- PRs SHOULD include regenerated `mikuscore.html` when behavior changes
+- edit `miku-score-src.html`, `index-src.html`, and files under `src/`
+- PRs SHOULD include regenerated `miku-score.html` when behavior changes
 
 ## Notes
 

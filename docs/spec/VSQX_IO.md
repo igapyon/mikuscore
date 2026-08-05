@@ -46,7 +46,7 @@ The integration guide is:
 
 The bridge dependency means VSQX behavior belongs to a thin adapter around the
 vendored runtime. Product-level MusicXML normalization and diagnostics should
-remain visible on the mikuscore side.
+remain visible on the miku-score side.
 
 ## Import (`VSQX -> MusicXML`)
 

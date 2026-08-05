@@ -31,6 +31,27 @@
     - identify the first low-risk cleanup target, likely a dense MusicXML-to-ABC export helper cluster or ABC-to-MusicXML note XML cluster
     - only consider file splits after the related helper cluster has a clear name and focused tests
 
+## Maintenance Record
+
+- 2026-08-05 | miku-score | Node.js main application with historical Web surface | routine repository hygiene
+  - Applied: aligned local-output ignore rules while retaining the tracked CLI runtime bundle as an explicit distribution exception.
+  - Confirmed: existing `docs/.DS_Store` is ignored local Finder metadata and was left untouched.
+  - Verification: `git check-ignore` coverage and final Git diff/status review.
+  - Next action: resume the ABC I/O refactoring pass with focused characterization coverage.
+
+- 2026-08-05 | miku-score | miku-soft standardization baseline
+  - Applied: replaced copied shared miku-soft design documents with `docs/miku-soft-reference.md`.
+  - Current state: this repository remains a historical combined `10 Main Application` and `11 Web App` layout.
+  - Pending decisions: create `miku-score-web`; choose its upstream browser-compatible API/runtime contract; decide whether the main application publishes separate CLI and runtime bundles.
+  - Deferred follow-up: after those decisions, perform the Node/Web separation workflow before changing release assets or GitHub Actions.
+
+- 2026-08-05 | miku-score | Issue #198 Main Application rename
+  - Applied: migrated the local product, package, CLI, Web App, Node.js runtime bundle, Release asset naming, generated files, and current documentation to `miku-score`.
+  - Compatibility: the private package exposes only the canonical `miku-score` CLI; existing `mks:` metadata, the v1 analysis namespace, MIDI SysEx `app=mikuscore`, and the published utaformatix3 vendor API remain unchanged.
+  - Verification: `npm run build`, CLI help/version, `npm run smoke:bundle`, and versioned Release-asset preparation all succeeded under the canonical name.
+  - Blocking external step: a human maintainer must rename `igapyon/mikuscore` to `igapyon/miku-score`, then update this checkout's remote URL.
+  - Next action: create `miku-score-web` only after the repository rename, with the browser-compatible Main Application contract decided before moving Web files.
+
 ## Specification
 
 - [x] Create the first cross-format mapping table from the MusicXML canonical-state policy.
@@ -89,7 +110,7 @@
 
 - [ ] Add a CLI surface sync check whenever `src/ts/cli-api.ts` grows new or newly composable entry points.
   - Scope:
-    - verify command/help/test coverage stays aligned across `src/ts/cli-api.ts`, `scripts/mikuscore-cli.mjs`, and `tests/unit/mikuscore-cli.spec.ts`
+    - verify command/help/test coverage stays aligned across `src/ts/cli-api.ts`, `scripts/miku-score-cli.mjs`, and `tests/unit/miku-score-cli.spec.ts`
     - explicitly review newly composable one-shot routes such as `abc -> midi`, not only direct one-function facade additions
   - Expected follow-up:
     - add a lightweight maintenance checklist or coverage table so CLI-exposed routes do not get missed during future facade expansion
@@ -107,7 +128,7 @@
 
 - [ ] Decide whether to keep the current local TypeScript-on-demand loader as the long-term CLI bootstrap.
   - Current path:
-    - `scripts/mikuscore-cli.mjs`
+    - `scripts/miku-score-cli.mjs`
     - `scripts/lib/load-cli-api.mjs`
   - Re-evaluate whether Step 2 should keep this loader or move to a build-produced CLI entry.
 
@@ -120,8 +141,8 @@
 
 - [ ] Harden Step 2 MIDI conversion pairs.
   - Current first cut exists for:
-    - `mikuscore convert --from midi --to musicxml`
-    - `mikuscore convert --from musicxml --to midi`
+    - `miku-score convert --from midi --to musicxml`
+    - `miku-score convert --from musicxml --to midi`
   - Next checks:
     - keep MIDI export options internal for now; do not expose CLI flags yet
     - revisit CLI-level MIDI export options such as profile / metadata toggles only after the current fixed defaults prove insufficient
@@ -132,33 +153,33 @@
   - Required external ask:
     - request a non-browser callable entrypoint or equivalent runtime shape from the integration/upstream side before wiring `musicxml <-> vsqx` into the CLI
   - Intended follow-up after that lands:
-    - add `mikuscore convert --from vsqx --to musicxml`
-    - add `mikuscore convert --from musicxml --to vsqx`
+    - add `miku-score convert --from vsqx --to musicxml`
+    - add `miku-score convert --from musicxml --to vsqx`
     - add matching CLI help and regression tests
 
 - [x] Add MEI CLI conversion pairs around the existing reusable format I/O.
   - Target pairs:
-    - `mikuscore convert --from mei --to musicxml`
-    - `mikuscore convert --from musicxml --to mei`
+    - `miku-score convert --from mei --to musicxml`
+    - `miku-score convert --from musicxml --to mei`
   - Result:
     - extend `src/ts/cli-api.ts` with `mei` facade entries
-    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - wire `scripts/miku-score-cli.mjs` help and convert handlers
     - add CLI regression tests for stdin/file input, `--out`, and representative failures
 
 - [x] Add LilyPond CLI conversion pairs around the existing reusable format I/O.
   - Target pairs:
-    - `mikuscore convert --from lilypond --to musicxml`
-    - `mikuscore convert --from musicxml --to lilypond`
+    - `miku-score convert --from lilypond --to musicxml`
+    - `miku-score convert --from musicxml --to lilypond`
   - Result:
     - extend `src/ts/cli-api.ts` with `lilypond` facade entries
-    - wire `scripts/mikuscore-cli.mjs` help and convert handlers
+    - wire `scripts/miku-score-cli.mjs` help and convert handlers
     - add CLI regression tests for stdin/file input, `--out`, and representative failures
 
 - [x] Implement Step 3 conversion/render pairs.
   - Current first cut exists for:
-    - `mikuscore convert --from musescore --to musicxml`
-    - `mikuscore convert --from musicxml --to musescore`
-    - `mikuscore render svg`
+    - `miku-score convert --from musescore --to musicxml`
+    - `miku-score convert --from musicxml --to musescore`
+    - `miku-score render svg`
   - Next checks:
     - expand file I/O support so `--from musicxml` can read `.mxl`
     - expand file I/O support so `--from musescore` can read `.mscz`
@@ -188,15 +209,15 @@
       - cover `MuseScore text -> .mscz bytes`
       - keep plain `.musicxml` / `.xml` / `.mscx` writes unchanged
     - [x] Refactor the CLI script to route file input through extension-aware readers.
-      - `mikuscore convert --from musicxml --in score.mxl ...`
-      - `mikuscore convert --from musescore --in score.mscz ...`
+      - `miku-score convert --from musicxml --in score.mxl ...`
+      - `miku-score convert --from musescore --in score.mscz ...`
       - keep stdin path on the current text-only reader
     - [x] Refactor the CLI script to route file output through extension-aware writers.
-      - `mikuscore convert --to musicxml --out score.mxl ...`
-      - `mikuscore convert --to musescore --out score.mscz ...`
+      - `miku-score convert --to musicxml --out score.mxl ...`
+      - `miku-score convert --to musescore --out score.mscz ...`
       - keep stdout path on the current text/binary writer behavior
     - [x] Add focused facade/API coverage around reusable ZIP helpers if the seam moves into `src/ts`.
-      - avoid pushing ZIP branching back into `scripts/mikuscore-cli.mjs`
+      - avoid pushing ZIP branching back into `scripts/miku-score-cli.mjs`
       - keep conversion/business logic in reusable modules, not in the shell entrypoint
     - [x] Add CLI regression tests for ZIP file input.
       - `.mxl -> musicxml`
@@ -223,7 +244,7 @@
   - Motivation:
     - `mikuproject` shows that a CLI can be designed simultaneously for human operators, Agent Skills, and the downstream generative-AI interaction layer
     - the valuable lesson is not only "add AI commands", but "design the CLI contract so each layer can use it safely"
-  - Preserve these candidate principles for future `mikuscore` discussion:
+  - Preserve these candidate principles for future `miku-score` discussion:
     - keep human-readable command naming and composable stdio behavior
     - keep the main artifact on `stdout` and diagnostics on `stderr`
     - support machine-readable diagnostics when the caller is an agent or another tool
@@ -237,7 +258,7 @@
   - Rationale:
     - current real-world CLI usage appears low enough that command-surface reconstruction is still feasible
     - `mikuproject` suggests that clearer top-level responsibility split can scale well
-    - `mikuscore` should keep `convert --from ... --to ...` inside `convert`, rather than multiplying fixed pair commands
+    - `miku-score` should keep `convert --from ... --to ...` inside `convert`, rather than multiplying fixed pair commands
   - Intended role split:
     - `convert`: interchange with external formats
     - `render`: derived outputs such as SVG, including user-facing one-shot flows like `ABC -> SVG` even if implemented internally as `ABC -> MusicXML -> SVG`
@@ -318,7 +339,7 @@
   - Rationale:
     - batch orchestration can live outside the CLI if single-shot behavior is composable
     - lyrics diagnostics is interesting but currently too heavy for the current first-cut scope
-    - `mikuscore` should strengthen canonical `MusicXML` editing before expanding MIDI-side tuning controls
+    - `miku-score` should strengthen canonical `MusicXML` editing before expanding MIDI-side tuning controls
 
 ## Facade
 
@@ -337,7 +358,7 @@
     - `renderMusicXmlToSvg(...)`
   - Result:
     - keep `src/ts/cli-api.ts` as a small non-UI facade over format-oriented reusable modules
-    - keep command routing, file I/O, and CLI diagnostics in `scripts/mikuscore-cli.mjs`
+    - keep command routing, file I/O, and CLI diagnostics in `scripts/miku-score-cli.mjs`
 
 - [ ] Re-evaluate `core/` boundaries only if reuse pressure becomes real.
   - Do not move conversion facade code into `core/` without a concrete need.
@@ -543,7 +564,7 @@
     - `src/ts/musescore-io.ts`: next priority because MuseScore import/export/helper logic is still concentrated in one large module.
     - `src/ts/musicxml-io.ts`: watch only; keep it under light review unless helper growth accelerates.
   - Explicit non-targets for this pass:
-    - `bundle/mikuscore.mjs` is a generated bundle and should not be refactored directly.
+    - `bundle/miku-score.mjs` is a generated bundle and should not be refactored directly.
     - `src/js/main.js` is generated output; change TypeScript sources instead.
   - Start checklist:
     - run `npm run typecheck` and `npm run test:unit` before structural edits to establish the baseline

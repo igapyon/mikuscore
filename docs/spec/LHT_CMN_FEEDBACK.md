@@ -2,7 +2,7 @@
 
 Last updated: 2026-03-08
 Target: `lht-cmn` maintainers
-Source project: `mikuscore`
+Source project: `miku-score`
 
 This note now tracks only open or partially-resolved integration issues. Items already reflected in `lht-cmn` were removed from this file and are tracked historically in `LHT_CMN_FEEDBACK_STATUS.md`.
 
@@ -12,7 +12,7 @@ This note now tracks only open or partially-resolved integration issues. Items a
 
 - Observed:
   - `lht-help-tooltip` already has runtime placement logic such as `placement="auto"`, viewport measurement, and resize follow-up.
-  - However, a later `mikuscore` integration regression showed that hover behavior could still break even when the app used `<lht-help-tooltip>` normally.
+  - However, a later `miku-score` integration regression showed that hover behavior could still break even when the app used `<lht-help-tooltip>` normally.
   - The root cause was missing component-owned base CSS for tooltip anchoring and visibility, especially around:
     - `position: relative` on the anchor container
     - `position: absolute` on the tooltip layer

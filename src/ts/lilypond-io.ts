@@ -3037,7 +3037,7 @@ export const exportMusicXmlDomToLilyPond = (doc: Document): string => {
   const title =
     doc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ||
     doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ||
-    "mikuscore export";
+    "miku-score export";
   const composer = extractSimpleComposerFromDoc(doc);
   const firstMeasure = doc.querySelector("score-partwise > part > measure");
   const beats = Number.parseInt(firstMeasure?.querySelector(":scope > attributes > time > beats")?.textContent || "4", 10);

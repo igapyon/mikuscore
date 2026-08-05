@@ -4,7 +4,7 @@
     <work-title>Roundtrip Piano Tempo</work-title>
   </work>
   <identification>
-    <creator type="composer">mikuscore-test</creator>
+    <creator type="composer">miku-score-test</creator>
   </identification>
   <part-list>
     <score-part id="P1">

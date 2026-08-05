@@ -15,7 +15,7 @@ import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
-const cliPath = path.resolve(repoRoot, "scripts/mikuscore-cli.mjs");
+const cliPath = path.resolve(repoRoot, "scripts/miku-score-cli.mjs");
 
 const tempDirs: string[] = [];
 
@@ -25,7 +25,7 @@ afterEach(() => {
   }
 });
 
-describe("mikuscore cli", () => {
+describe("miku-score cli", () => {
   it("prints top-level and command help", () => {
     const topLevel = runCli(["--help"]);
     const convertHelp = runCli(["convert", "--help"]);
@@ -33,23 +33,31 @@ describe("mikuscore cli", () => {
     const stateHelp = runCli(["state", "--help"]);
 
     expect(topLevel.status).toBe(0);
-    expect(topLevel.stdout).toContain("mikuscore convert --from abc --to musicxml");
-    expect(topLevel.stdout).toContain("mikuscore convert --from abc --to midi");
-    expect(topLevel.stdout).toContain("mikuscore convert --from midi --to musicxml");
-    expect(topLevel.stdout).toContain("mikuscore convert --from mei --to musicxml");
-    expect(topLevel.stdout).toContain("mikuscore convert --from lilypond --to musicxml");
-    expect(topLevel.stdout).toContain("mikuscore convert --from musescore --to musicxml");
-    expect(topLevel.stdout).toContain("mikuscore render svg");
-    expect(topLevel.stdout).toContain("mikuscore state summarize");
+    expect(topLevel.stdout).toContain("miku-score convert --from abc --to musicxml");
+    expect(topLevel.stdout).toContain("miku-score convert --from abc --to midi");
+    expect(topLevel.stdout).toContain("miku-score convert --from midi --to musicxml");
+    expect(topLevel.stdout).toContain("miku-score convert --from mei --to musicxml");
+    expect(topLevel.stdout).toContain("miku-score convert --from lilypond --to musicxml");
+    expect(topLevel.stdout).toContain("miku-score convert --from musescore --to musicxml");
+    expect(topLevel.stdout).toContain("miku-score render svg");
+    expect(topLevel.stdout).toContain("miku-score state summarize");
+    expect(topLevel.stdout).toContain("Default behavior:");
+    expect(topLevel.stdout).toContain("Generated artifacts:");
+    expect(topLevel.stdout).toContain("Overwrite behavior:");
+    expect(topLevel.stdout).toContain("Machine-readable output:");
+    expect(topLevel.stdout).toContain("Exit codes:");
     expect(topLevel.stderr).toBe("");
 
     expect(convertHelp.status).toBe(0);
     expect(convertHelp.stdout).toContain("Convert score text between supported formats");
+    expect(convertHelp.stdout).toContain("--diagnostics json emits diagnostics JSON to stderr");
+    expect(convertHelp.stdout).toContain("An existing --out file is replaced without a prompt");
     expect(convertHelp.stderr).toBe("");
 
     expect(renderHelp.status).toBe(0);
     expect(renderHelp.stdout).toContain("supported one-shot source formats");
     expect(renderHelp.stdout).toContain("--from <format>");
+    expect(renderHelp.stdout).toContain("Exit codes:");
     expect(renderHelp.stderr).toBe("");
 
     expect(stateHelp.status).toBe(0);
@@ -60,6 +68,8 @@ describe("mikuscore cli", () => {
     expect(stateHelp.stdout).toContain("apply-command");
     expect(stateHelp.stdout).toContain("diff");
     expect(stateHelp.stdout).toContain("selector/anchor_selector");
+    expect(stateHelp.stdout).toContain("State results are the primary stdout or --out result");
+    expect(stateHelp.stdout).toContain("Exit codes:");
     expect(stateHelp.stderr).toBe("");
   }, 10000);
 
@@ -67,7 +77,7 @@ describe("mikuscore cli", () => {
     const result = runCli(["--version"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.5.0");
+    expect(result.stdout.trim()).toBe("0.6.0");
     expect(result.stderr).toBe("");
   }, 10000);
 
@@ -586,7 +596,7 @@ function runCli(args: string[], options: { input?: string } = {}) {
 }
 
 function createTempDir() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "mikuscore-cli-test-"));
+  const dir = mkdtempSync(path.join(os.tmpdir(), "miku-score-cli-test-"));
   tempDirs.push(dir);
   return dir;
 }

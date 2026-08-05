@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>mikuscore</title>
+  <title>miku-score</title>
   <style>
     :root {
       --bg: #f6f4f8;
@@ -124,12 +124,12 @@
 </head>
 <body>
   <main class="card">
-    <h1>mikuscore</h1>
+    <h1>miku-score</h1>
     <p class="sub">Updated: {{BUILD_DATE}}</p>
     <section class="lang-block" aria-label="English">
       <h2>English</h2>
       <p>
-        mikuscore is a browser-based score format converter centered on MusicXML.
+        miku-score is a browser-based score format converter centered on MusicXML.
         It runs offline as a single-file web app.
       </p>
       <ul>
@@ -141,29 +141,29 @@
       <p><strong>Supported formats:</strong> MusicXML (`.musicxml` / `.xml` / `.mxl`), MuseScore (`.mscx` / `.mscz`), MIDI (`.mid` / `.midi`), VSQX (`.vsqx`), ABC (`.abc`), MEI (`.mei`, experimental), LilyPond (`.ly`, experimental).</p>
       <p>
         A CLI is also available for scripted workflows, centered on `convert`, `render`, and `state`. Related projects include
-        mikuscore-skills, which embeds mikuscore into generative-AI workflows,
-        and miku-abc-player, which makes an ABC-limited subset of mikuscore easier to use.
+        miku-score-skills, which embeds miku-score into generative-AI workflows,
+        and miku-abc-player, which makes an ABC-limited subset of miku-score easier to use.
       </p>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html?v=202602270655">Open mikuscore</a>
-        <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="link-btn" href="./miku-score.html?v=202602270655">Open miku-score</a>
+        <a class="link-btn-secondary" href="https://github.com/igapyon/miku-score" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
     <hr class="divider" />
     <section class="shots" aria-label="Screenshots">
       <h2>Screenshots / スクリーンショット</h2>
       <div class="shots-grid">
-        <img src="screenshots/screen1.png" alt="mikuscore screenshot 1" />
-        <img src="screenshots/screen2.png" alt="mikuscore screenshot 2" />
-        <img src="screenshots/screen3.png" alt="mikuscore screenshot 3" />
-        <img src="screenshots/screen4.png" alt="mikuscore screenshot 4" />
+        <img src="screenshots/screen1.png" alt="miku-score screenshot 1" />
+        <img src="screenshots/screen2.png" alt="miku-score screenshot 2" />
+        <img src="screenshots/screen3.png" alt="miku-score screenshot 3" />
+        <img src="screenshots/screen4.png" alt="miku-score screenshot 4" />
       </div>
     </section>
     <hr class="divider" />
     <section class="lang-block" aria-label="日本語">
       <h2>日本語</h2>
       <p>
-        mikuscore は、MusicXML を中核に据えたブラウザベースの譜面フォーマット変換ソフトです。
+        miku-score は、MusicXML を中核に据えたブラウザベースの譜面フォーマット変換ソフトです。
         単一 HTML 配布でオフライン動作します。
       </p>
       <ul>
@@ -175,19 +175,19 @@
       <p><strong>対応フォーマット:</strong> MusicXML（`.musicxml` / `.xml` / `.mxl`）、MuseScore（`.mscx` / `.mscz`）、MIDI（`.mid` / `.midi`）、VSQX（`.vsqx`）、ABC（`.abc`）、MEI（`.mei`、実験的対応）、LilyPond（`.ly`、実験的対応）。</p>
       <p>
         スクリプト利用向けには `convert` / `render` / `state` を中心にした CLI もあります。関連プロダクトとして、
-        mikuscore-skills は mikuscore を生成 AI ワークフローに組み込むための agent skills、
-        miku-abc-player は mikuscore の機能を ABC に限定して使いやすくした companion web app です。
+        miku-score-skills は miku-score を生成 AI ワークフローに組み込むための agent skills、
+        miku-abc-player は miku-score の機能を ABC に限定して使いやすくした companion web app です。
       </p>
       <div class="link-row">
-        <a class="link-btn" href="./mikuscore.html?v=202602270655">mikuscore を開く</a>
-        <a class="link-btn-secondary" href="https://github.com/igapyon/mikuscore" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a class="link-btn" href="./miku-score.html?v=202602270655">miku-score を開く</a>
+        <a class="link-btn-secondary" href="https://github.com/igapyon/miku-score" target="_blank" rel="noopener noreferrer">GitHub</a>
       </div>
     </section>
   </main>
   <script>
     (() => {
-      // Cache-busting: append a timestamp query right before opening mikuscore.html.
-      const selector = 'a[href^="./mikuscore.html"]';
+      // Cache-busting: append a timestamp query right before opening miku-score.html.
+      const selector = 'a[href^="./miku-score.html"]';
       const buildVersionStamp = () => {
         const d = new Date();
         return (

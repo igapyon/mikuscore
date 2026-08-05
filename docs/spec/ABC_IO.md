@@ -20,22 +20,22 @@ The module is responsible for:
 
 ## Positioning
 
-`mikuscore` handles ABC in three layers:
+`miku-score` handles ABC in three layers:
 
 - **Standard ABC surface**
   - ordinary ABC headers, body tokens, and supported musical decorations
 - **Compatibility behavior**
   - pragmatic parsing support for real-world ABC variants commonly seen in `abcjs` / `abcm2ps` style inputs
-- **`mikuscore` extension metadata**
+- **`miku-score` extension metadata**
   - `%@mks ...` comment lines used to preserve roundtrip-relevant information that plain ABC cannot carry reliably
 
 This distinction is important:
 
 - compatibility behavior is about accepting real-world ABC variance without failing unnecessarily
-- `mikuscore` extension metadata is not part of the standard ABC musical surface
-- `%@mks ...` lines are `mikuscore`-specific comment hints for restoration and roundtrip support
+- `miku-score` extension metadata is not part of the standard ABC musical surface
+- `%@mks ...` lines are `miku-score`-specific comment hints for restoration and roundtrip support
 
-`mikuscore` treats ABC as a supported score interchange format.
+`miku-score` treats ABC as a supported score interchange format.
 Compatibility behavior and extension metadata are support mechanisms for practical import/export and roundtrip stability, not an indication that ABC support is merely experimental.
 
 ### Practical ecosystem note
@@ -43,7 +43,7 @@ Compatibility behavior and extension metadata are support mechanisms for practic
 In practice, ABC support cannot be defined only by a narrow reading of the base grammar.
 Real-world ABC interchange is also shaped by de facto ecosystem behavior, especially inputs and conventions commonly accepted by tools such as `abcjs` and `abcm2ps`.
 
-For `mikuscore`, these ecosystems are not treated as normative specifications by themselves.
+For `miku-score`, these ecosystems are not treated as normative specifications by themselves.
 However, they are treated as important evidence for what counts as common, practical ABC interchange behavior in the wild.
 
 This means:
@@ -53,7 +53,7 @@ This means:
 - such compatibility acceptance must still be documented explicitly in spec text and tests
 - de facto compatibility is not the same thing as accepting arbitrary malformed input
 
-Because of that, `mikuscore` uses the following stance:
+Because of that, `miku-score` uses the following stance:
 
 - preserve a clear distinction between standard ABC surface syntax and compatibility-only behavior
 - accept widely used real-world variants when their musical intent is clear enough
@@ -97,7 +97,7 @@ MusicXML.
 | Skipped | Unsupported directives, unsupported inline fields, symbol lines, unsupported field continuation, unsupported decorations/text forms, malformed leftovers, and unsupported `V:` property fragments should be skipped with warnings when safely recoverable |
 | Rejected | ABC input with no usable body, no notes/rests, unrecoverable token parsing, or structurally ambiguous content that cannot safely produce canonical MusicXML |
 
-The standard ABC surface, compatibility behavior, and `mikuscore` extension
+The standard ABC surface, compatibility behavior, and `miku-score` extension
 metadata MUST remain distinguishable in this document and tests.
 
 ---
@@ -130,7 +130,7 @@ The parser accepts three categories of input:
 
 ### Current information-field stance
 
-`mikuscore` currently treats the following as the supported core ABC field subset:
+`miku-score` currently treats the following as the supported core ABC field subset:
 
 - `X:`
 - `T:`
@@ -146,7 +146,7 @@ They may be lexically tolerated by the header scan, but they are not claimed as 
 
 ### Current inline-field stance
 
-`mikuscore` currently treats the following as the supported inline-field subset:
+`miku-score` currently treats the following as the supported inline-field subset:
 
 - `[K:...]`
 - `[M:...]`
@@ -159,7 +159,7 @@ They are skipped with warnings rather than treated as semantically supported beh
 
 ### Current body-side standalone core-field compatibility
 
-`mikuscore` also accepts a narrow compatibility subset where body-side standalone core field lines or tokens are treated like the corresponding inline fields after body parsing has begun:
+`miku-score` also accepts a narrow compatibility subset where body-side standalone core field lines or tokens are treated like the corresponding inline fields after body parsing has begun:
 
 - `K:...`
 - `M:...`
@@ -172,7 +172,7 @@ Body-side standalone single-letter fields outside that bounded compatibility sub
 
 ### Current field-continuation stance
 
-`mikuscore` does not currently treat continued information-field lines as part of the supported ABC interchange subset.
+`miku-score` does not currently treat continued information-field lines as part of the supported ABC interchange subset.
 
 This means:
 
@@ -181,7 +181,7 @@ This means:
 - continuation support is intentionally deferred unless practical input evidence makes it necessary
 - unsupported continued header-field text should be skipped with warnings rather than falling through into body note/rest parsing
 
-However, `mikuscore` now applies one bounded compatibility rule for body parsing:
+However, `miku-score` now applies one bounded compatibility rule for body parsing:
 
 - a trailing body-line continuation marker `\` is stripped before body tokenization
 - this avoids treating the continuation marker itself as note/rest text in the next parse stage
@@ -189,7 +189,7 @@ However, `mikuscore` now applies one bounded compatibility rule for body parsing
 
 ### Current symbol-line stance
 
-`mikuscore` does not currently treat standard `s:` symbol lines as part of the supported ABC interchange subset.
+`miku-score` does not currently treat standard `s:` symbol lines as part of the supported ABC interchange subset.
 
 This means:
 
@@ -219,9 +219,9 @@ Current `%%score` handling is intentionally bounded:
 - this currently targets practical multi-staff grouping, not full ABC staff-layout parity
 - `brace` / `bracket` / `staves` and related broader `V:` property semantics remain outside the supported standard subset
 
-#### 3. `mikuscore` extension metadata
+#### 3. `miku-score` extension metadata
 
-- optional `mikuscore` metadata comments:
+- optional `miku-score` metadata comments:
   - `%@mks key ...`
   - `%@mks measure ...`
   - `%@mks transpose ...`
@@ -251,7 +251,7 @@ Parser is intentionally lenient for real-world ABC:
 
 ### Current overlay policy
 
-`mikuscore` currently treats ABC overlay syntax `&` as bounded import-side compatibility behavior:
+`miku-score` currently treats ABC overlay syntax `&` as bounded import-side compatibility behavior:
 
 - accepted on import
 - preserved by expanding overlay material into synthetic overlay voices / parts
@@ -262,7 +262,7 @@ This is an intentional scope boundary, not an accidental gap.
 
 ### Current beam / whitespace policy
 
-`mikuscore` currently uses a bounded beam policy:
+`miku-score` currently uses a bounded beam policy:
 
 - on import, inter-note whitespace between beamable notes is treated as an explicit beam-break hint
 - this affects the current voice/measure parse stream and is used when forming MusicXML beam state
@@ -276,7 +276,7 @@ This means:
 
 ### Current supported `V:` property subset
 
-In the standard ABC path, `mikuscore` currently treats the following `V:` properties as the supported working subset:
+In the standard ABC path, `miku-score` currently treats the following `V:` properties as the supported working subset:
 
 - `name=...`
   - supported on import and export
@@ -313,7 +313,7 @@ Compatibility note:
 
 ### Current clef / transposition stance
 
-`mikuscore` currently uses a bounded clef / transposition policy:
+`miku-score` currently uses a bounded clef / transposition policy:
 
 - supported standard clef subset in `V:` metadata:
   - `treble`
@@ -375,7 +375,7 @@ Current fallback rule:
 
 ### Current annotation stance
 
-`mikuscore` currently uses a bounded annotation policy for quoted non-harmonic text:
+`miku-score` currently uses a bounded annotation policy for quoted non-harmonic text:
 
 - common quoted non-harmonic text attached to notes is supported as MusicXML direction words / annotations
 - quoted text that does not fit the supported harmony inventory falls back to annotation/words rather than being forced into `harmony`
@@ -388,7 +388,7 @@ Current limits:
 
 ### Current order-of-constructs stance
 
-`mikuscore` currently uses a bounded practical-acceptance stance for ABC construct ordering:
+`miku-score` currently uses a bounded practical-acceptance stance for ABC construct ordering:
 
 - common construct orderings already handled by the parser are supported
 - practical acceptance of structurally recognizable real-world ABC is preferred over strict rejection based only on narrower construct-order readings
@@ -402,9 +402,9 @@ Current limits:
 
 #### Supported decorations and grace forms
 
-- decorations: `!trill!` (also accepts `!tr!` / `!triller!` on import), long-trill delimiters `!trill(!` / `!trill)!`, `!turn!` (also accepts `!lowerturn!` as inverted-turn on import), `!turnx!`, `!invertedturn!`, `!invertedturnx!`, `!mordent!`/`!pralltriller!` (including `!prall!`, `!pralltrill!`, `!uppermordent!`, `!lowermordent!`, `!invertedmordent!`, `!inverted-mordent!` aliases), `!schleifer!`, `!shake!`, `!roll!` (also accepts `!arpeggio!` / `!arpeggiate!` on import), `!slide!` (canonical import/export for MusicXML slide start; explicit stop still uses `mikuscore` extension `!slide-stop!`), phrase marks `!shortphrase!`, `!mediumphrase!`, `!longphrase!` (roundtrip via MusicXML `other-articulation`), `!staccato!` (also accepts `!stacc!` / `!stac!` on import), `!wedge!`/`!staccatissimo!` (also accepts `!spiccato!` on import), `!accent!` (also accepts `!>!` / `!emphasis!` on import), `!tenuto!`, `!stress!`, `!unstress!`, `!fermata!` / `!invertedfermata!` (also accepts `!inverted fermata!` on import), `!marcato!` (also accepts `!strong accent!` / `!strongaccent!` / `!strong-accent!` on import), `!breath!` (also accepts `!breathmark!` / `!breath mark!` / `!breath-mark!` on import), `!caesura!`, `!segno!`, `!coda!`, `!fine!`, `!dacapo!` (also accepts `!da capo!` / `!da-capo!` / `!D.C.!` on import), `!dalsegno!` (also accepts `!dal segno!` / `!dal-segno!` / `!D.S.!` on import), `!tocoda!` (also accepts `!to coda!` / `!to-coda!` on import), `!dacoda!`, fingering decorations `!0!`, `!1!`, `!2!`, `!3!`, `!4!`, `!5!` (single-digit technical fingering export prefers these standard forms over `!fingering:TEXT!`), wedge decorations `!crescendo(!`, `!crescendo)!`, `!diminuendo(!`, `!diminuendo)!` (also accepts aliases `!cresc(!`, `!cresc)!`, `!dim(!`, `!dim)!`, `!decresc(!`, `!decresc)!`, `!decrescendo(!`, `!decrescendo)!`, `!<(!`, `!<)!`, `!>(!`, `!>)!` on import), dynamics `!pppp!`, `!ppp!`, `!pp!`, `!p!`, `!mp!`, `!mf!`, `!f!`, `!ff!`, `!fff!`, `!ffff!`, `!fp!`, `!fz!`, `!rfz!`, `!sf!`, `!sfp!`, `!sfz!`, `!upbow!` / `!downbow!` (also accepts `!up bow!` / `!down bow!` / `!up-bow!` / `!down-bow!` on import), `!doubletongue!` / `!tripletongue!` (also accepts `!double tongue!` / `!triple tongue!` / `!double-tongue!` / `!triple-tongue!` on import), `!heel!` / `!toe!` (also accepts `!heel mark!` / `!toe mark!` on import), `!open!` (also accepts `!openstring!` / `!open string!` / `!open-string!` on import), `!snap!` (also accepts `!snappizzicato!` / `!snap pizzicato!` / `!snap-pizzicato!` on import), `!harmonic!`, `!stopped!` (including `!plus!`, `!stopped horn!`, `!stopped-horn!` aliases), `!thumb!` (also accepts `!thumbposition!` / `!thumb-position!` / `!thumbpos!` / `!thumb pos!` / `!thumb position!` on import)
+- decorations: `!trill!` (also accepts `!tr!` / `!triller!` on import), long-trill delimiters `!trill(!` / `!trill)!`, `!turn!` (also accepts `!lowerturn!` as inverted-turn on import), `!turnx!`, `!invertedturn!`, `!invertedturnx!`, `!mordent!`/`!pralltriller!` (including `!prall!`, `!pralltrill!`, `!uppermordent!`, `!lowermordent!`, `!invertedmordent!`, `!inverted-mordent!` aliases), `!schleifer!`, `!shake!`, `!roll!` (also accepts `!arpeggio!` / `!arpeggiate!` on import), `!slide!` (canonical import/export for MusicXML slide start; explicit stop still uses `miku-score` extension `!slide-stop!`), phrase marks `!shortphrase!`, `!mediumphrase!`, `!longphrase!` (roundtrip via MusicXML `other-articulation`), `!staccato!` (also accepts `!stacc!` / `!stac!` on import), `!wedge!`/`!staccatissimo!` (also accepts `!spiccato!` on import), `!accent!` (also accepts `!>!` / `!emphasis!` on import), `!tenuto!`, `!stress!`, `!unstress!`, `!fermata!` / `!invertedfermata!` (also accepts `!inverted fermata!` on import), `!marcato!` (also accepts `!strong accent!` / `!strongaccent!` / `!strong-accent!` on import), `!breath!` (also accepts `!breathmark!` / `!breath mark!` / `!breath-mark!` on import), `!caesura!`, `!segno!`, `!coda!`, `!fine!`, `!dacapo!` (also accepts `!da capo!` / `!da-capo!` / `!D.C.!` on import), `!dalsegno!` (also accepts `!dal segno!` / `!dal-segno!` / `!D.S.!` on import), `!tocoda!` (also accepts `!to coda!` / `!to-coda!` on import), `!dacoda!`, fingering decorations `!0!`, `!1!`, `!2!`, `!3!`, `!4!`, `!5!` (single-digit technical fingering export prefers these standard forms over `!fingering:TEXT!`), wedge decorations `!crescendo(!`, `!crescendo)!`, `!diminuendo(!`, `!diminuendo)!` (also accepts aliases `!cresc(!`, `!cresc)!`, `!dim(!`, `!dim)!`, `!decresc(!`, `!decresc)!`, `!decrescendo(!`, `!decrescendo)!`, `!<(!`, `!<)!`, `!>(!`, `!>)!` on import), dynamics `!pppp!`, `!ppp!`, `!pp!`, `!p!`, `!mp!`, `!mf!`, `!f!`, `!ff!`, `!fff!`, `!ffff!`, `!fp!`, `!fz!`, `!rfz!`, `!sf!`, `!sfp!`, `!sfz!`, `!upbow!` / `!downbow!` (also accepts `!up bow!` / `!down bow!` / `!up-bow!` / `!down-bow!` on import), `!doubletongue!` / `!tripletongue!` (also accepts `!double tongue!` / `!triple tongue!` / `!double-tongue!` / `!triple-tongue!` on import), `!heel!` / `!toe!` (also accepts `!heel mark!` / `!toe mark!` on import), `!open!` (also accepts `!openstring!` / `!open string!` / `!open-string!` on import), `!snap!` (also accepts `!snappizzicato!` / `!snap pizzicato!` / `!snap-pizzicato!` on import), `!harmonic!`, `!stopped!` (including `!plus!`, `!stopped horn!`, `!stopped-horn!` aliases), `!thumb!` (also accepts `!thumbposition!` / `!thumb-position!` / `!thumbpos!` / `!thumb pos!` / `!thumb position!` on import)
 - standard shorthand decoration symbols on import: `~` (roll), `H` (fermata), `L` (accent), `M` (lowermordent), `O` (coda), `P` (uppermordent), `S` (segno), `T` (trill), `u` (up-bow), `v` (down-bow)
-- mikuscore extension decorations: `!delayedturn!`, `!delayedinvertedturn!`, `!tremolo-single-N!`, `!tremolo-start-N!`, `!tremolo-stop-N!`, `!gliss-start!`, `!gliss-stop!`, `!slide-start!` (legacy import alias for standard `!slide!`), `!slide-stop!`, `!rehearsal:TEXT!`, `!fingering:TEXT!`, `!string:TEXT!`, `!pluck:TEXT!`
+- miku-score extension decorations: `!delayedturn!`, `!delayedinvertedturn!`, `!tremolo-single-N!`, `!tremolo-start-N!`, `!tremolo-stop-N!`, `!gliss-start!`, `!gliss-stop!`, `!slide-start!` (legacy import alias for standard `!slide!`), `!slide-stop!`, `!rehearsal:TEXT!`, `!fingering:TEXT!`, `!string:TEXT!`, `!pluck:TEXT!`
 - grace groups `{...}` including slash grace variant (`{/g}`)
 
 #### Pending standard-decoration policy notes
@@ -420,7 +420,7 @@ Current limits:
   - import aliases stay broad
   - canonical export remains `!mordent!` for lower mordent and `!pralltriller!` for upper/inverted mordent
 - `!slide!`
-  - current standard support is start-side only; explicit stop currently remains a `mikuscore` extension via `!slide-stop!`
+  - current standard support is start-side only; explicit stop currently remains a `miku-score` extension via `!slide-stop!`
 
 ### Parse result characteristics
 
@@ -451,7 +451,7 @@ Fatal parse failures (e.g., no body, no notes/rests, unrecoverable token parse) 
 Exports:
 
 - `X:1`
-- `T:` from `work-title` or `movement-title` (fallback `mikuscore`)
+- `T:` from `work-title` or `movement-title` (fallback `miku-score`)
 - `C:` from composer creator if present
 - `M:` from first measure time (fallback `4/4`)
 - `L:1/8` (fixed)
@@ -481,15 +481,15 @@ Exports:
 - serializes each part as ABC measure stream (`|` separated)
 - supported standard ornament/decorations now include `trill`, `turn`, `invertedturn`, `mordent`, `pralltriller`, `schleifer`, `shake`, `roll`, selected articulations/technicals/dynamics, and selected jump markers
 
-### `mikuscore` extension metadata on export
+### `miku-score` extension metadata on export
 
-For lossless or safer roundtrip behavior, `mikuscore` may emit extension comment lines after the ABC body:
+For lossless or safer roundtrip behavior, `miku-score` may emit extension comment lines after the ABC body:
 
 - `%@mks key voice=... measure=... fifths=...` (legacy/import-compatibility path; standard export now prefers `K:` / inline `[K:...]`)
 - `%@mks measure voice=... measure=... number=... implicit=... [times=...] [ending-stop=... ending-type=discontinue]`
 - `%@mks transpose voice=... chromatic=... [diatonic=...]`
 
-These lines are `mikuscore` extension metadata, not part of the standard ABC musical surface.
+These lines are `miku-score` extension metadata, not part of the standard ABC musical surface.
 
 ---
 
@@ -514,7 +514,7 @@ Generation policy:
 
 ### Current repeat / ending policy
 
-`mikuscore` currently uses this bounded repeat / ending policy:
+`miku-score` currently uses this bounded repeat / ending policy:
 
 - standard ABC surface is preferred for common cases:
   - `|:`
@@ -532,7 +532,7 @@ This means:
 
 ### Current slur policy
 
-`mikuscore` currently uses a bounded slur policy:
+`miku-score` currently uses a bounded slur policy:
 
 - ABC `(` / `)` slur markers are supported in common note-to-note cases
 - MusicXML note-level slur start/stop presence is exported/imported in simple cases
@@ -546,7 +546,7 @@ Current limits:
 
 ### Current tuplet stance
 
-`mikuscore` currently uses a bounded tuplet policy:
+`miku-score` currently uses a bounded tuplet policy:
 
 - common ABC tuplet syntax `(n[:q][:r])` is supported in ordinary note sequences
 - MusicXML roundtrip through `<time-modification>` and note-level `<tuplet>` start/stop is supported in the current path
@@ -559,7 +559,7 @@ Current limits:
 
 ### Current lyric stance
 
-`mikuscore` currently uses a bounded lyric policy for ABC `w:` underlay:
+`miku-score` currently uses a bounded lyric policy for ABC `w:` underlay:
 
 - common `w:` lyric import/export is supported
 - common single-verse lyric alignment in ordinary note sequences is supported
@@ -594,7 +594,7 @@ Current limits:
 
 ### Current `U:` stance
 
-`mikuscore` currently treats `U:` as bounded import-first functionality:
+`miku-score` currently treats `U:` as bounded import-first functionality:
 
 - supported
   - single-character user-defined decoration aliases on import
@@ -649,5 +649,5 @@ Supported mappings:
 
 - This module is intentionally compatibility-oriented and pragmatic.
 - It does not aim to be a complete strict ABC standard implementation.
-- ABC is a supported format in `mikuscore`; behavior prioritizes stable import/export and roundtrip reliability for practical workflows.
-- `%@mks ...` comments are `mikuscore` extension metadata for roundtrip support, not standard ABC musical notation.
+- ABC is a supported format in `miku-score`; behavior prioritizes stable import/export and roundtrip reliability for practical workflows.
+- `%@mks ...` comments are `miku-score` extension metadata for roundtrip support, not standard ABC musical notation.

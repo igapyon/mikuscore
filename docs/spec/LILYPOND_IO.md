@@ -63,7 +63,7 @@ not a guarantee of preserving every engraving directive from a source file.
 
 ## `mks` Comment Metadata
 
-LilyPond import/export uses `%@mks ...` comments as mikuscore extension
+LilyPond import/export uses `%@mks ...` comments as miku-score extension
 metadata. These comments are not standard LilyPond musical syntax.
 
 Current supported comment families include:

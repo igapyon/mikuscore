@@ -61,7 +61,7 @@ function collectGraph(rootDir) {
 }
 
 function compileGraph(rootDir) {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mikuscore-cli-api-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "miku-score-cli-api-"));
   fs.writeFileSync(path.join(tempDir, "package.json"), JSON.stringify({ type: "commonjs" }), "utf8");
 
   for (const tsId of collectGraph(rootDir)) {
@@ -111,7 +111,7 @@ function buildGraphFingerprint(rootDir, graph) {
 function ensureCompiledCache(rootDir) {
   const graph = collectGraph(rootDir);
   const fingerprint = buildGraphFingerprint(rootDir, graph);
-  const cacheDir = path.join(os.tmpdir(), "mikuscore-cli-api-cache", fingerprint);
+  const cacheDir = path.join(os.tmpdir(), "miku-score-cli-api-cache", fingerprint);
   const packageJsonPath = path.join(cacheDir, "package.json");
   const entryPath = path.join(cacheDir, ENTRY_TS.replace(/\.ts$/, ".js"));
   const verovioCjsPath = path.join(cacheDir, "verovio.cjs");

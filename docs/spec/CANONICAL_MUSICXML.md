@@ -2,13 +2,13 @@
 
 ## Purpose
 
-This document defines the canonical score-state policy for mikuscore.
+This document defines the canonical score-state policy for miku-score.
 
-mikuscore is MusicXML-first. MusicXML is the canonical score state used for
+miku-score is MusicXML-first. MusicXML is the canonical score state used for
 conversion, inspection, diagnostics, light editing, CLI state commands, Web
 preview/download flows, and Agent Skills handoff workflows.
 
-This does not mean that mikuscore promises byte-for-byte preservation of every
+This does not mean that miku-score promises byte-for-byte preservation of every
 input file. It means that product semantics are centered on a current
 MusicXML state, and surrounding formats are imported into or exported from that
 state.
@@ -17,21 +17,21 @@ Cross-format mapping outcomes are indexed in `docs/spec/FORMAT_MAPPING.md`.
 
 ## Canonical State Rule
 
-The canonical state is a MusicXML document that mikuscore can parse, inspect,
+The canonical state is a MusicXML document that miku-score can parse, inspect,
 validate, edit in bounded ways, and serialize.
 
 The canonical state SHOULD preserve source MusicXML structure as much as
-practical. When input comes from another format, mikuscore MAY synthesize the
+practical. When input comes from another format, miku-score MAY synthesize the
 MusicXML structure required to represent the imported score.
 
 The canonical state MUST NOT silently imply full fidelity for source-format
-features that MusicXML cannot represent, that mikuscore does not currently
+features that MusicXML cannot represent, that miku-score does not currently
 map, or that were approximated during import.
 
 ## Product Boundary
 
 The miku-soft layer responsibilities are already defined by the shared
-miku-soft references. For mikuscore, apply them as follows:
+miku-soft references. For miku-score, apply them as follows:
 
 - The `10 Main Application` layer owns MusicXML canonical semantics,
   conversion behavior, diagnostics, CLI contracts, runtime bundles, and
@@ -58,7 +58,7 @@ Formats other than MusicXML are surrounding formats.
 | MIDI | Surrounding performance-event format | Import requires notation reconstruction; export derives playback events from MusicXML |
 | ABC | Surrounding compact text notation | Useful for AI/human handoff; import/export through MusicXML with documented subset and `mks` hints where needed |
 | MEI | Surrounding notation/archive format | Experimental import/export through MusicXML; diagnostics should make unsupported mappings visible |
-| LilyPond | Surrounding text engraving format | Experimental import/export through MusicXML; `mks` hints may preserve mikuscore-specific roundtrip metadata |
+| LilyPond | Surrounding text engraving format | Experimental import/export through MusicXML; `mks` hints may preserve miku-score-specific roundtrip metadata |
 | VSQX | Surrounding singing/vocal timing format | Import/export through vendored integration; treat vocal/timing information as source-format-specific unless mapped into MusicXML explicitly |
 
 ## Import Policy
@@ -69,7 +69,7 @@ diagnostic.
 An importer SHOULD classify each source feature into one of these outcomes:
 
 - preserved in normal MusicXML
-- represented through mikuscore extension metadata such as `mks:meta:*`
+- represented through miku-score extension metadata such as `mks:meta:*`
 - retained as source-preservation metadata such as `mks:src:*`
 - approximated with a warning diagnostic
 - skipped with a warning diagnostic
@@ -84,7 +84,7 @@ resulting MusicXML loadable, inspectable, and renderable.
 Export to a surrounding format MUST start from the current canonical MusicXML
 state.
 
-An exporter SHOULD classify each MusicXML or mikuscore extension feature into
+An exporter SHOULD classify each MusicXML or miku-score extension feature into
 one of these outcomes:
 
 - represented in the target format
@@ -111,7 +111,7 @@ format, part, measure, staff, voice, and feature type when available.
 
 ## Roundtrip Policy
 
-mikuscore does not guarantee byte-for-byte roundtrip equality across formats.
+miku-score does not guarantee byte-for-byte roundtrip equality across formats.
 
 Roundtrip confidence SHOULD be based on musical and structural invariants:
 
@@ -144,7 +144,7 @@ The current CLI `state` family is the main public surface for this flow.
 
 ## Non-Goals
 
-mikuscore is not a full score engraving editor, a full MuseScore replacement,
+miku-score is not a full score engraving editor, a full MuseScore replacement,
 or a guarantee of lossless conversion between every format pair.
 
 Deep layout editing, global re-engraving, full voice reconstruction, and

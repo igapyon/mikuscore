@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`mikuscore` aims to be a respectful and practical collaboration space for bug reports, feature requests, design discussion, documentation work, and code contributions.
+`miku-score` aims to be a respectful and practical collaboration space for bug reports, feature requests, design discussion, documentation work, and code contributions.
 
 The goal is not to avoid disagreement. The goal is to keep discussion specific, constructive, and safe for participants.
 
@@ -32,7 +32,7 @@ This code of conduct applies to project spaces such as:
 - Pull requests
 - Discussions and review comments
 - Documentation contributions
-- Other project-related public collaboration spaces managed for `mikuscore`
+- Other project-related public collaboration spaces managed for `miku-score`
 
 ## Maintainer Responsibility
 
@@ -53,7 +53,7 @@ If a public thread would make the issue worse, prefer a private contact path ins
 
 ## Project Style
 
-For `mikuscore`, the preferred collaboration style is:
+For `miku-score`, the preferred collaboration style is:
 
 - specific
 - respectful

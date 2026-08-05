@@ -73,7 +73,7 @@ const createTimestampedDownloadPayload = (
   extension: string,
   content: BlobPart,
   type: string,
-  stem = "mikuscore"
+  stem = "miku-score"
 ): DownloadFilePayload => {
   const ts = buildFileTimestamp();
   return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
@@ -110,13 +110,13 @@ export const createMusicXmlDownloadPayload = async (
   if (options.compressed === true) {
     const mxlBytes = await makeMxlBytes(formattedXml);
     return createDownloadPayload(
-      `mikuscore-${ts}.mxl`,
+      `miku-score-${ts}.mxl`,
       bytesToArrayBuffer(mxlBytes),
       MIME_MXL
     );
   }
   const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-  return createDownloadPayload(`mikuscore-${ts}.${extension}`, formattedXml, MIME_XML);
+  return createDownloadPayload(`miku-score-${ts}.${extension}`, formattedXml, MIME_XML);
 };
 
 export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload => {
@@ -124,7 +124,7 @@ export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload =
 };
 
 export const createJsonDownloadPayload = (jsonText: string, stem = "measure-detail"): DownloadFilePayload => {
-  return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `mikuscore-${stem}`);
+  return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `miku-score-${stem}`);
 };
 
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
@@ -260,9 +260,9 @@ export const createMuseScoreDownloadPayload = async (
   const ts = buildFileTimestamp();
   if (options.compressed === true) {
     const msczBytes = await makeMsczBytes(formattedMscx);
-    return createDownloadPayload(`mikuscore-${ts}.mscz`, bytesToArrayBuffer(msczBytes), MIME_ZIP);
+    return createDownloadPayload(`miku-score-${ts}.mscz`, bytesToArrayBuffer(msczBytes), MIME_ZIP);
   }
-  return createDownloadPayload(`mikuscore-${ts}.mscx`, formattedMscx, MIME_XML);
+  return createDownloadPayload(`miku-score-${ts}.mscx`, formattedMscx, MIME_XML);
 };
 
 export const createZipBundleDownloadPayload = async (
@@ -270,7 +270,7 @@ export const createZipBundleDownloadPayload = async (
   options: { baseName?: string; compressed?: boolean } = {}
 ): Promise<DownloadFilePayload> => {
   const ts = buildFileTimestamp();
-  const safeBase = String(options.baseName || "mikuscore-all").trim() || "mikuscore-all";
+  const safeBase = String(options.baseName || "miku-score-all").trim() || "miku-score-all";
   const zipEntries: ZipEntryPayload[] = [];
   for (const entry of entries) {
     const fileName = String(entry.fileName || "").trim();

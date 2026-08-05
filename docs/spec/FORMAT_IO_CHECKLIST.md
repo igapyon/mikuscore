@@ -104,7 +104,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 - [ ] Unsupported extension message is updated
 - [ ] Export button and action are wired
 - [ ] Error messages use existing UI message policy
-- [ ] `mikuscore-src.html` and generated `mikuscore.html` stay in sync via build
+- [ ] `miku-score-src.html` and generated `miku-score.html` stay in sync via build
 
 ---
 
@@ -120,9 +120,9 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
 ### `miscellaneous-field` Usage Patterns (MUST classify explicitly)
 
 - [ ] Classify each `miscellaneous-field` mapping into one of the following:
-  - **mikuscore extension metadata** (`mks:meta:*`):
-    - Purpose: preserve mikuscore-specific semantics/provenance when a target format cannot represent them natively (not debug-only).
-    - Example: mikuscore extension comments/hints and restoration metadata required for compatible roundtrip behavior.
+  - **miku-score extension metadata** (`mks:meta:*`):
+    - Purpose: preserve miku-score-specific semantics/provenance when a target format cannot represent them natively (not debug-only).
+    - Example: miku-score extension comments/hints and restoration metadata required for compatible roundtrip behavior.
   - **Structured conversion diagnostics** (`mks:diag:*`):
     - Purpose: record warnings/repair actions that occurred during conversion, so issues are not silently hidden.
     - Example: `mks:diag:0001 = level=warn;code=OVERFULL_CLAMPED;fmt=mei;measure=8;staff=1;action=clamped;droppedTicks=240`.
@@ -143,7 +143,7 @@ When adding a new format (e.g. ABC / MEI / future formats), use this checklist t
   - event addressing key (`voice + measure + event`)
   - fallback when hint is absent or invalid
   - safety against conflicts with existing source comments
-- [ ] If such hints are `mikuscore`-specific (for example `%@mks ...`), document them explicitly as `mikuscore` extension metadata rather than as standard format syntax.
+- [ ] If such hints are `miku-score`-specific (for example `%@mks ...`), document them explicitly as `miku-score` extension metadata rather than as standard format syntax.
 - [ ] Keep namespace separation strict (`mks:src:*` vs `mks:meta:*` vs `mks:diag:*` vs `mks:dbg:*`) to avoid mixing source data, functional extension metadata, diagnostics, and debug traces.
 
 ### LilyPond Note (Current `mks` usage)

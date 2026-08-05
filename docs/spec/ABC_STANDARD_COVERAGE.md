@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document tracks `mikuscore` coverage against the ABC standard at a chapter-by-chapter level.
+This document tracks `miku-score` coverage against the ABC standard at a chapter-by-chapter level.
 
 Unlike `TODO.md`, this file is intended to be the coverage baseline and completion reference.
 Implementation TODO items should be derived from this file, not the other way around.
@@ -10,7 +10,7 @@ Implementation TODO items should be derived from this file, not the other way ar
 ## Version Policy
 
 - Latest formal ABC standard at the time of writing: `2.2`
-- Current `mikuscore` audit baseline: `2.1`
+- Current `miku-score` audit baseline: `2.1`
 - Reason:
   - most currently implemented/imported behavior and earlier audit work were organized against the widely used `2.1` chapter structure
   - `2.2` additions should be tracked explicitly as deltas, not mixed invisibly into the `2.1` baseline table
@@ -19,7 +19,7 @@ Practical rule:
 
 - use the `2.1` table below as the main completion baseline
 - track `2.2` additions separately in a small delta section
-- do not mark a chapter fully `supported` if support depends only on `mikuscore` extensions or de facto compatibility behavior outside the standard surface
+- do not mark a chapter fully `supported` if support depends only on `miku-score` extensions or de facto compatibility behavior outside the standard surface
 
 ## Status Labels
 
@@ -30,7 +30,7 @@ Practical rule:
 - `unsupported`
   - not currently supported in the normal ABC import/export path
 - `ext-only`
-  - behavior exists only through `mikuscore` extension metadata or `mikuscore`-specific decorations, not through standard ABC surface syntax
+  - behavior exists only through `miku-score` extension metadata or `miku-score`-specific decorations, not through standard ABC surface syntax
 
 ## Work-Type Labels
 
@@ -54,16 +54,16 @@ Practical rule:
 
 - This is a conservative baseline.
 - When there is doubt, the status should be `partial`, not `supported`.
-- Coverage is judged from practical `mikuscore` import/export behavior, not from parser token acceptance alone.
+- Coverage is judged from practical `miku-score` import/export behavior, not from parser token acceptance alone.
 - For decoration aliases and compatibility forms, see `docs/spec/ABC_IO.md`.
 
 ## Scope
 
 - Baseline reference: ABC 2.1 standard
 - Delta reference: ABC 2.2 additions relevant to score interchange
-- Focus: chapters that materially affect score interchange in `mikuscore`
+- Focus: chapters that materially affect score interchange in `miku-score`
 - Out of scope for now:
-  - stylesheet directives and formatting-only details that `mikuscore` does not aim to preserve
+  - stylesheet directives and formatting-only details that `miku-score` does not aim to preserve
   - prose-only appendices and tutorial material
 
 ## Operating Procedure
@@ -101,7 +101,7 @@ At that point, further progress should usually happen in `TODO.md`, `docs/spec/A
 
 ## Coverage Table
 
-| ABC 2.1 area | Status | Current interpretation for `mikuscore` |
+| ABC 2.1 area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | 3.1 Information fields | partial | Core fields such as `X:`, `T:`, `C:`, `M:`, `L:`, `K:`, `Q:`, and `V:` are handled, but not the full field family or all field semantics. |
 | 3.2 Use of fields within the tune body | partial | Inline body fields `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` are supported, and a narrow compatibility subset also accepts standalone body-side `K:` / `M:` / `L:` / `Q:` lines or tokens. Full field-level parity is not yet claimed. |
@@ -130,7 +130,7 @@ At that point, further progress should usually happen in `TODO.md`, `docs/spec/A
 | 5.2 Verses | partial | `w:` underlay works in common cases, but full multi-verse coverage is not yet claimed. |
 | 5.3 Numbering | unsupported | No complete support claim yet. |
 | 6.1 Typesetting | unsupported | Formatting/typesetting directives are not a current parity target. |
-| 6.2 Playback | unsupported | ABC playback semantics are not a standard-coverage target for `mikuscore`. |
+| 6.2 Playback | unsupported | ABC playback semantics are not a standard-coverage target for `miku-score`. |
 | 7.1 Voice properties | partial | `V:` handling exists for common voice metadata, but standard voice-property breadth is not fully covered. |
 | 7.2 Breaking lines | unsupported | Line-breaking semantics are not a current preserved interchange feature. |
 | 7.3 Inline fields | partial | Core inline field support exists, but broader field coverage remains partial. |
@@ -145,7 +145,7 @@ Start here when converting coverage findings into concrete TODO items.
 
 #### 3.1 Information fields
 
-| Field group | Status | Current interpretation for `mikuscore` |
+| Field group | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Core identification / title / attribution: `X:`, `T:`, `C:` | supported | Supported in ordinary import/export flows. |
 | Core musical defaults: `M:`, `L:`, `K:`, `Q:` | supported | Supported in ordinary import/export flows, including inline-core variants where implemented. |
@@ -154,7 +154,7 @@ Start here when converting coverage findings into concrete TODO items.
 
 ### 3.1 Information-Field Policy Notes
 
-Current bounded subset for `mikuscore` header-field support:
+Current bounded subset for `miku-score` header-field support:
 
 - supported core subset
   - `X:`, `T:`, `C:`
@@ -162,7 +162,7 @@ Current bounded subset for `mikuscore` header-field support:
   - `V:` remains covered separately under the voice-property policy
 - unsupported non-core field family
   - standard information fields outside the current core subset are not part of the supported ABC interchange target
-  - they may be lexically tolerated in the header scan, but `mikuscore` does not currently claim semantic import/export support for them
+  - they may be lexically tolerated in the header scan, but `miku-score` does not currently claim semantic import/export support for them
 - export policy
   - standard ABC export emits only the current core subset and `V:` sections needed by the current bounded target
 
@@ -174,7 +174,7 @@ Practical result mode for `ABC-COV-001`:
 
 #### 3.2 Use of fields within the tune body
 
-| Inline field group | Status | Current interpretation for `mikuscore` |
+| Inline field group | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Core inline fields: `[K:...]`, `[M:...]`, `[L:...]`, `[Q:...]`, `[V:...]` | supported | These are supported in the current standard path. |
 | Standalone body-side core field lines/tokens: `K:...`, `M:...`, `L:...`, `Q:...` | partial | Accepted as bounded compatibility shorthand for the corresponding inline fields after body parsing has begun. |
@@ -182,7 +182,7 @@ Practical result mode for `ABC-COV-001`:
 
 ### 3.2 / 7.3 Inline-Field Policy Notes
 
-Current bounded subset for `mikuscore` inline-field support:
+Current bounded subset for `miku-score` inline-field support:
 
 - supported
   - `[K:...]`
@@ -212,13 +212,13 @@ Practical result mode for `ABC-COV-002`:
 
 #### 3.3 Field continuation
 
-| Area | Status | Current interpretation for `mikuscore` |
+| Area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Continued information-field lines | unsupported | No current support claim or dedicated reconstruction policy. |
 
 ### 3.3 Field-Continuation Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - unsupported in the present bounded ABC target
   - continued information-field lines are not part of the supported interchange subset
@@ -256,7 +256,7 @@ Practical result mode for `ABC-COV-003`:
 
 ### 4.6 Clefs and Transposition
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common clefs in `V:` metadata (`treble`, `bass`, `alto`, `tenor`, `c3`, `c4`) | supported | Common working set is supported, including compatibility shorthand on import. |
 | Broader standard clef forms and exact parity | partial | Full standard breadth and export parity are not yet closed. |
@@ -264,7 +264,7 @@ Practical result mode for `ABC-COV-003`:
 
 ### 4.6 Clef / Transposition Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - supported in the bounded subset
   - common standard `V:` clef values: `treble`, `bass`, `alto`, `tenor`, `c3`, `c4`
@@ -288,7 +288,7 @@ Practical result mode for `ABC-COV-004`:
 
 ### 4.7 Beams
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Duration-based beam reconstruction | supported | Normal export reconstructs beams from note values. |
 | Whitespace as explicit beam-separation intent | partial | Import recognizes it as a beam-break hint within a voice/measure beam run, but export does not preserve original ABC spacing textually. |
@@ -296,7 +296,7 @@ Practical result mode for `ABC-COV-004`:
 
 ### 4.7 Beam Policy Notes
 
-Current bounded subset for `mikuscore`:
+Current bounded subset for `miku-score`:
 
 - import side
   - whitespace between beamable notes is treated as an explicit beam-break hint
@@ -306,8 +306,8 @@ Current bounded subset for `mikuscore`:
   - canonical export does not currently encode beam grouping through preserved ABC spacing patterns
   - exported ABC uses ordinary token spacing and leaves beam reconstruction largely to downstream ABC consumers
 - roundtrip claim
-  - `mikuscore` currently preserves beam-break intent on ABC import into MusicXML
-  - `mikuscore` does not currently claim export-side preservation of original ABC whitespace used only as beam layout intent
+  - `miku-score` currently preserves beam-break intent on ABC import into MusicXML
+  - `miku-score` does not currently claim export-side preservation of original ABC whitespace used only as beam layout intent
 
 Practical result mode for `ABC-COV-005`:
 
@@ -319,7 +319,7 @@ Practical result mode for `ABC-COV-005`:
 
 #### 4.8 Repeat / bar symbols
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common repeat barlines | supported | Standard repeat/barline handling works in common cases. |
 | Repeat counts beyond ordinary `:|` behavior | partial | Backward repeat is supported in the standard surface; explicit repeat counts beyond the ordinary case currently rely on `%@mks measure ... times=...` extension metadata. |
@@ -327,14 +327,14 @@ Practical result mode for `ABC-COV-005`:
 
 #### 4.9 First and second repeats
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common first/second ending syntax (`[1`, `[2`, `|1`, `:|2`) | supported | Common surface forms are supported. |
 | Broader alternate-ending coverage and edge forms | partial | Full closure is not yet claimed. |
 
 #### 4.10 Variant endings
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common variant-ending surface syntax | supported | Common standard syntax works in the current path. |
 | Ending stop type `discontinue` | partial | Ordinary start/stop endings are supported in the standard surface; `discontinue` currently relies on `%@mks measure ... ending-stop=... ending-type=discontinue` extension metadata. |
@@ -342,7 +342,7 @@ Practical result mode for `ABC-COV-005`:
 
 ### 4.8-4.10 Repeat / Ending Policy Notes
 
-Current bounded subset for `mikuscore`:
+Current bounded subset for `miku-score`:
 
 - standard ABC surface support
   - common repeat barlines: `|:` and `:|`
@@ -362,7 +362,7 @@ Practical result mode for `ABC-COV-006`:
 
 ### 4.11 Ties and Slurs
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Tie syntax and common reconstruction | supported | Common tie handling is solid, including whole-chord tie paths. |
 | Slur syntax acceptance | supported | Common unnumbered slur start/stop syntax is accepted. |
@@ -370,14 +370,14 @@ Practical result mode for `ABC-COV-006`:
 
 ### 4.11 Slur Policy Notes
 
-Current bounded subset for `mikuscore` slur handling:
+Current bounded subset for `miku-score` slur handling:
 
 - supported
   - ordinary ABC `(` / `)` slur markers in common note-to-note cases
   - MusicXML note-level slur start/stop presence in simple cases
 - current interpretation limits
   - slur handling is currently presence-based, not identity-based
-  - `mikuscore` does not currently claim faithful preservation of slur numbering, nested slur identity, or other exact span-matching semantics
+  - `miku-score` does not currently claim faithful preservation of slur numbering, nested slur identity, or other exact span-matching semantics
   - ABC slur stop without a preceding non-rest note is treated as unsupported and currently yields a warning
 - tie distinction
   - ties remain stronger than slurs and are tracked separately; chord ties are preserved more faithfully than generic slur span identity
@@ -390,14 +390,14 @@ Practical result mode for `ABC-COV-007`:
 
 ### 4.13 Tuplets
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Core tuplet syntax and common roundtrip | supported | Core parse/export works in the current path. |
 | Full standard ratio nuance and edge semantics | partial | Full audit closure is not yet complete. |
 
 ### 4.13 Tuplet Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - supported in the bounded subset
   - common ABC tuplet syntax `(n[:q][:r])` in ordinary note sequences
@@ -418,7 +418,7 @@ Practical result mode for `ABC-COV-008`:
 
 ### 4.14 Decorations (ABC 2.1)
 
-| Decoration group | Status | Current interpretation for `mikuscore` |
+| Decoration group | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Trill family: `!trill!`, `!trill(!`, `!trill)!` | supported | Standard trill and extended trill start/stop now import/export and roundtrip. |
 | Turn family: `!turn!`, `!turnx!`, `!invertedturn!`, `!invertedturnx!` | supported | Standard turn and slashed-turn variants now import/export and roundtrip. |
@@ -430,7 +430,7 @@ Practical result mode for `ABC-COV-008`:
 | Fingering shorthand: `!0!`-`!5!` | supported | Standard fingering shorthand now imports/exports and roundtrips. |
 | `!+!` / `!plus!` | partial | Import aliases are accepted, but current standard-path policy is the narrow `stopped` technical interpretation with canonical export `!stopped!`. |
 | `!snap!` | supported | Supported in common import/export paths. |
-| `!slide!` | partial | Standard slide-start form is supported; explicit stop remains outside the standard surface in current policy and uses `mikuscore` extension `!slide-stop!`. |
+| `!slide!` | partial | Standard slide-start form is supported; explicit stop remains outside the standard surface in current policy and uses `miku-score` extension `!slide-stop!`. |
 | `!wedge!` | supported | Supported through the staccatissimo path. |
 | `!upbow!` / `!downbow!` | supported | Standard forms and common aliases are supported. |
 | `!open!` | supported | Supported in common import/export paths. |
@@ -443,7 +443,7 @@ Practical result mode for `ABC-COV-008`:
 
 ### 4.14 Standard Shorthand Decoration Symbols
 
-| Symbol | Status | Current interpretation for `mikuscore` |
+| Symbol | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | `~` | supported | Imports as `roll`. |
 | `H` | supported | Imports as `fermata`. |
@@ -476,17 +476,17 @@ These notes are the current canonical policy for standard-decoration handling.
 - `!slide!`
   - standard support is start-side only in the current policy
   - canonical start-side export remains `!slide!`
-  - explicit stop remains a `mikuscore` extension via `!slide-stop!`
+  - explicit stop remains a `miku-score` extension via `!slide-stop!`
 
 ### 4.15 Symbol Lines
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | `s:` symbol lines | unsupported | No current support claim. |
 
 ### 4.15 Symbol-Line Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - out of practical scope for the present bounded ABC target
   - standard `s:` symbol lines are not part of the supported interchange subset
@@ -503,14 +503,14 @@ Practical result mode for `ABC-COV-010`:
 
 ### 4.16 Redefinable Symbols
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | `U:` single-character import aliases | supported | Current import path supports user-defined decoration aliases. |
 | Broader `U:` parity, export, and exact standard semantics | partial | Current support is import-first; export parity and broader semantics are not claimed. |
 
 ### 4.16 `U:` Policy Notes
 
-Current bounded subset for `mikuscore`:
+Current bounded subset for `miku-score`:
 
 - supported
   - import of `U:` single-character decoration aliases
@@ -529,7 +529,7 @@ Practical result mode for `ABC-COV-011`:
 
 ### 4.18 Chord Symbols
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common harmonic quoted symbols | supported | The current bounded inventory roundtrips through MusicXML `harmony`. |
 | Broader quality inventory and edge spelling | partial | Coverage remains incomplete; unsupported chord-like quoted text falls back to annotation/words instead of being forced into `harmony`. |
@@ -537,7 +537,7 @@ Practical result mode for `ABC-COV-011`:
 
 ### 4.18 Chord-Symbol Policy Notes
 
-Current bounded subset for `mikuscore` quoted chord-symbol support:
+Current bounded subset for `miku-score` quoted chord-symbol support:
 
 - supported root spelling
   - `A`-`G`
@@ -564,14 +564,14 @@ Practical result mode for `ABC-COV-012`:
 
 ### 4.19 Annotations
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common quoted non-harmonic text | supported | Common quoted non-harmonic text is mapped as direction words / annotations in the current bounded subset. |
 | Broader annotation placement and behavior | unsupported | No full standard support claim yet. |
 
 ### 4.19 Annotation Policy Notes
 
-Current bounded subset for `mikuscore` annotation handling:
+Current bounded subset for `miku-score` annotation handling:
 
 - supported
   - quoted non-harmonic text attached to notes is imported as MusicXML direction words
@@ -589,14 +589,14 @@ Practical result mode for `ABC-COV-013`:
 
 ### 4.20 Order of abc constructs
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common construct orderings seen in practical ABC | partial | Many common orders work, but there is no complete conformance claim. |
 | Full order-of-constructs conformance | unsupported | Not yet audited to closure. |
 
 ### 4.20 Order-of-Constructs Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - supported in the bounded practical sense
   - accept the common construct orderings already handled by the current parser
@@ -619,27 +619,27 @@ Practical result mode for `ABC-COV-014`:
 
 #### 5.1 Alignment
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Common lyric alignment for `w:` underlay | partial | Works in common cases. |
 | Full alignment nuance across rests, spacers, grace, and complex spacing | unsupported | Not yet audited to closure. |
 
 #### 5.2 Verses
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Single-verse underlay | supported | Common `w:` import path exists. |
 | Multi-verse behavior and edge semantics | partial | Not yet fully audited. |
 
 #### 5.3 Numbering
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Verse numbering semantics | unsupported | No current support claim. |
 
 ### 5.1-5.3 Lyrics Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - supported in the bounded subset
   - common `w:` underlay import/export
@@ -663,39 +663,39 @@ Practical result mode for `ABC-COV-015`:
 
 #### 7.1 Voice properties
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Voice identity / lane selection (`V:id`) | supported | Standard voice selection and per-voice body routing are supported in normal import/export flow. |
 | Voice name (`name=...`) | supported | Import/export of `name=...` is supported in the current standard path. |
 | Common clef metadata (`clef=treble`, `clef=bass`, `clef=alto`, `clef=tenor`, `clef=c3`, `clef=c4`) | supported | Common working clef subset is supported on import/export; bare clef shorthand is accepted as compatibility behavior. |
 | Voice transpose property (`transpose=...`) | partial | Import path accepts a bounded chromatic transpose value, but standard `V:` transpose is not yet emitted on export; export currently relies on `%@mks transpose ...` extension metadata for roundtrip restoration. |
-| Extension-assisted voice transpose roundtrip (`%@mks transpose ...`) | ext-only | Voice transpose can be preserved on export/import roundtrip through `mikuscore` extension metadata even where the standard `V:` property is not emitted. |
+| Extension-assisted voice transpose roundtrip (`%@mks transpose ...`) | ext-only | Voice transpose can be preserved on export/import roundtrip through `miku-score` extension metadata even where the standard `V:` property is not emitted. |
 | Broader standard voice properties (`staves`, `brace`, `bracket`, `merge`, `middle`, `gchords`, etc.) | unsupported | No current support claim in the standard ABC path; grouped multi-staff import is currently driven by bounded `%%score (...)` handling rather than these `V:` properties, and unsupported properties should still be skipped with warnings. |
 | Full standard voice-property breadth | unsupported | No complete support claim yet. |
 
 #### 7.2 Breaking lines
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Line-breaking semantics | unsupported | Not a current preserved interchange target. |
 
 #### 7.3 Inline fields
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Core inline-field subset | supported | The current core subset is supported. |
 | Broader inline-field breadth | unsupported | No complete support claim yet. |
 
 #### 7.4 Voice overlay
 
-| Sub-area | Status | Current interpretation for `mikuscore` |
+| Sub-area | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | Import acceptance of `&` overlay syntax | supported | Overlay syntax is accepted on import. |
 | Faithful preservation as one part with synchronized voices | unsupported | Current import expands overlays into synthetic parts instead. |
 
 ### 7.4 Overlay Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - supported
   - accept ABC overlay syntax `&` on import
@@ -717,14 +717,14 @@ Practical result mode for `ABC-COV-017`:
 
 This section tracks standard items that are better treated as post-2.1 additions rather than silently folded into the baseline table.
 
-| ABC 2.2 delta item | Status | Current interpretation for `mikuscore` |
+| ABC 2.2 delta item | Status | Current interpretation for `miku-score` |
 |---|---|---|
 | `!editorial!` decoration | supported | Supported as a bounded accidental-decoration modifier on the following explicit accidental, mapped to MusicXML `accidental@editorial="yes"`. |
 | `!courtesy!` decoration | supported | Supported as a bounded accidental-decoration modifier on the following explicit accidental, mapped to MusicXML `accidental@cautionary="yes"`. |
 
 ### ABC 2.2 Delta Policy Notes
 
-Current policy for `mikuscore`:
+Current policy for `miku-score`:
 
 - `!editorial!`
   - now included in the bounded supported roadmap
@@ -783,7 +783,7 @@ When closing a backlog item above, prefer one of these explicit outcomes:
 - `defer intentionally`
   - record that it is not in the current supported roadmap
 - `out of practical scope`
-  - record that `mikuscore` does not currently target this standard area
+  - record that `miku-score` does not currently target this standard area
 
 ## Initial Stance by Backlog Item
 
@@ -860,7 +860,7 @@ These are not final decisions, but they currently look like the strongest candid
     - canonical `!arpeggio!` export for the current MusicXML `arpeggiate` carrier
     - canonical `!stopped!` export for `!+!` / `!plus!` import aliases
     - canonical `!mordent!` / `!pralltriller!` export for mordent-family import aliases
-    - standard `!slide!` as start-side support, with explicit stop kept as `mikuscore` extension `!slide-stop!`
+    - standard `!slide!` as start-side support, with explicit stop kept as `miku-score` extension `!slide-stop!`
 - `ABC-COV-016`
   - closed as `support bounded subset`
   - `7.1 Voice properties` is now decomposed into:

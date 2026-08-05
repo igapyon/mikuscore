@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first implementation-oriented plan for rebuilding the `mikuscore` CLI around the future taxonomy.
+This document defines the first implementation-oriented plan for rebuilding the `miku-score` CLI around the future taxonomy.
 
 Scope note:
 

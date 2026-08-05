@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the conversion-diagnostics policy for mikuscore import
+This document defines the conversion-diagnostics policy for miku-score import
 and export paths.
 
 It is separate from `docs/spec/DIAGNOSTICS.md`, which is the core bounded-edit

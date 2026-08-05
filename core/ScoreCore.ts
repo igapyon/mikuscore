@@ -408,7 +408,7 @@ export class ScoreCore {
         const context = this.describeNoteContext(note);
         const noteXml = this.compactNodeXml(note);
         if (typeof console !== "undefined") {
-          console.error("[mikuscore][save][invalid-duration]", context, noteXml);
+          console.error("[miku-score][save][invalid-duration]", context, noteXml);
         }
         return {
           code: "MVP_INVALID_NOTE_DURATION",

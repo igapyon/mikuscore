@@ -1,16 +1,16 @@
-# miscellaneous-field Metadata (mikuscore)
+# miscellaneous-field Metadata (miku-score)
 
-このドキュメントは、mikuscore が MusicXML の
+このドキュメントは、miku-score が MusicXML の
 `attributes > miscellaneous > miscellaneous-field` に付与する情報を整理したものです。
 
 ## Scope
 
-- 対象: mikuscore が生成・追記する `miscellaneous-field`
+- 対象: miku-score が生成・追記する `miscellaneous-field`
 - 非対象: 外部ツールが独自に付与したフィールド仕様
 
 ## Namespace Policy
 
-新規実装の目標は、mikuscore 付与情報を `mks:` 配下に集約すること。
+新規実装の目標は、miku-score 付与情報を `mks:` 配下に集約すること。
 
 - `mks:meta:*`: ラウンドトリップ復元に使う安定メタデータ
 - `mks:diag:*`: 変換時の警告/劣化情報

@@ -201,8 +201,8 @@ let isFileLoadInProgress = false;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
-const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
-const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
+const LOCAL_DRAFT_STORAGE_KEY = "miku-score.localDraft.v1";
+const PLAYBACK_SETTINGS_STORAGE_KEY = "miku-score.playbackSettings.v1";
 const DEFAULT_MIDI_PROGRAM = "electric_piano_2";
 const DEFAULT_PLAYBACK_WAVEFORM = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
@@ -544,10 +544,10 @@ const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
         return;
     for (const d of diagnostics) {
-        console.error(`[mikuscore][${phase}][${d.code}] ${d.message}`);
+        console.error(`[miku-score][${phase}][${d.code}] ${d.message}`);
     }
     for (const w of warnings) {
-        console.warn(`[mikuscore][${phase}][${w.code}] ${w.message}`);
+        console.warn(`[miku-score][${phase}][${w.code}] ${w.message}`);
     }
 };
 const dumpOverfullContext = (xml, voice) => {
@@ -556,7 +556,7 @@ const dumpOverfullContext = (xml, voice) => {
         return;
     const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
     if (!doc) {
-        console.error("[mikuscore][debug] XML parse failed while dumping overfull context.");
+        console.error("[miku-score][debug] XML parse failed while dumping overfull context.");
         return;
     }
     const measures = Array.from(doc.querySelectorAll("part > measure"));
@@ -594,7 +594,7 @@ const dumpOverfullContext = (xml, voice) => {
         if (occupied <= capacity)
             continue;
         found = true;
-        console.groupCollapsed(`[mikuscore][debug][MEASURE_OVERFULL] measure=${number} occupied=${occupied} capacity=${capacity}`);
+        console.groupCollapsed(`[miku-score][debug][MEASURE_OVERFULL] measure=${number} occupied=${occupied} capacity=${capacity}`);
         console.log({
             measure: number,
             voice,
@@ -608,7 +608,7 @@ const dumpOverfullContext = (xml, voice) => {
         console.groupEnd();
     }
     if (!found) {
-        console.warn("[mikuscore][debug] no overfull measure found while dumping context.");
+        console.warn("[miku-score][debug] no overfull measure found while dumping context.");
     }
 };
 const readLocalDraft = () => {
@@ -1643,7 +1643,7 @@ const renderAll = () => {
 };
 const setUiMappingDiagnostic = (message) => {
     if (DEBUG_LOG) {
-        console.warn(`[mikuscore][click-map][MVP_TARGET_NOT_FOUND] ${message}`);
+        console.warn(`[miku-score][click-map][MVP_TARGET_NOT_FOUND] ${message}`);
     }
     state.lastDispatchResult = {
         ok: false,
@@ -1929,7 +1929,7 @@ const resolveNodeIdFromSvgTarget = (target, clickEvent) => {
         }
     }
     if (DEBUG_LOG) {
-        console.warn("[mikuscore][click-map] unresolved candidates:", {
+        console.warn("[miku-score][click-map] unresolved candidates:", {
             tag: target.tagName,
             className: target.getAttribute("class"),
             candidates: directCandidates,
@@ -2034,7 +2034,7 @@ const onVerovioScoreClick = (event) => {
     const nodeId = (_a = resolveNodeIdFromSvgTarget(event.target, event)) !== null && _a !== void 0 ? _a : resolveNodeIdFromNearestPoint(event);
     if (DEBUG_LOG) {
         const clicked = event.target instanceof Element ? event.target.closest("[id]") : null;
-        console.warn("[mikuscore][click-map] resolution:", {
+        console.warn("[miku-score][click-map] resolution:", {
             clickedId: (_b = clicked === null || clicked === void 0 ? void 0 : clicked.getAttribute("id")) !== null && _b !== void 0 ? _b : null,
             mappedNodeId: nodeId,
             mapSize: currentSvgIdToNodeId.size,
@@ -2335,7 +2335,7 @@ const autoSaveCurrentXml = (persistLocalDraft = false) => {
                 dumpOverfullContext(debugXml, DEFAULT_VOICE);
             }
             else if (DEBUG_LOG) {
-                console.warn("[mikuscore][debug] no in-memory XML to dump.");
+                console.warn("[miku-score][debug] no in-memory XML to dump.");
             }
         }
         return;
@@ -2351,7 +2351,7 @@ const loadFromText = (xml) => {
     }
     catch (err) {
         if (DEBUG_LOG) {
-            console.error("[mikuscore][load] load failed:", err);
+            console.error("[miku-score][load] load failed:", err);
         }
         state.loaded = false;
         state.lastDispatchResult = {
@@ -2970,7 +2970,7 @@ const onConvertRestToNote = () => {
 };
 const failExport = (format, reason) => {
     const message = `${format} export failed: ${reason}`;
-    console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
+    console.error(`[miku-score][export][${format.toLowerCase()}] ${reason}`);
     state.lastDispatchResult = {
         ok: false,
         dirtyChanged: false,
@@ -3231,7 +3231,7 @@ const onDownloadMeasureMusicXml = () => {
     const safeMeasureNumber = measureNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
     try {
         (0, download_flow_1.triggerFileDownload)({
-            fileName: `mikuscore-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
+            fileName: `miku-score-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
             blob: new Blob([(0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText)], { type: "application/xml;charset=utf-8" }),
         });
     }
@@ -8762,11 +8762,11 @@ exports.sampleXml1 = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE scor
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderMeasureEditorPreview = exports.renderScorePreview = exports.preparePreviewSvgIdMap = void 0;
 const verovio_out_1 = require("./verovio-out");
-const hasEmbeddedMikuscoreNoteIds = (renderedNoteIds) => {
+const hasEmbeddedMikuScoreNoteIds = (renderedNoteIds) => {
     return renderedNoteIds.some((id) => id.startsWith("mks-"));
 };
 const preparePreviewSvgIdMap = (renderBundle, sourceNoteNodeIds, renderedNoteIds, buildFallbackSvgIdMap) => {
-    if (renderedNoteIds.length > 0 && !hasEmbeddedMikuscoreNoteIds(renderedNoteIds)) {
+    if (renderedNoteIds.length > 0 && !hasEmbeddedMikuScoreNoteIds(renderedNoteIds)) {
         return {
             map: buildFallbackSvgIdMap(sourceNoteNodeIds, renderedNoteIds),
             mapMode: "fallback-seq",
@@ -8813,7 +8813,7 @@ const renderScorePreview = async (params) => {
         const { map, mapMode } = (0, exports.preparePreviewSvgIdMap)(renderBundle, params.noteNodeIds, renderedNoteIds, params.buildFallbackSvgIdMap);
         params.setSvgIdMap(map);
         if (params.debugLog) {
-            console.warn("[mikuscore][click-map] render map prepared:", {
+            console.warn("[miku-score][click-map] render map prepared:", {
                 mapMode,
                 mappedNotes: map.size,
                 renderedNoteIds: renderedNoteIds.slice(0, 20),
@@ -9717,10 +9717,10 @@ const summarizeDiagnostics = (diagnostics) => {
 };
 const logPlaybackFailureDiagnostics = (label, diagnostics) => {
     if (!diagnostics.length) {
-        console.warn(`[mikuscore][playback] ${label}: no diagnostics.`);
+        console.warn(`[miku-score][playback] ${label}: no diagnostics.`);
         return;
     }
-    console.error(`[mikuscore][playback] ${label}:`);
+    console.error(`[miku-score][playback] ${label}:`);
     for (const d of diagnostics) {
         console.error(`- [${d.code}] ${d.message}`);
     }
@@ -10458,7 +10458,7 @@ const startPlayback = async (options, params) => {
                 options.dumpOverfullContext(debugXml, options.editableVoice);
             }
             else if (options.debugLog) {
-                console.warn("[mikuscore][debug] no in-memory XML to dump.");
+                console.warn("[miku-score][debug] no in-memory XML to dump.");
             }
         }
         options.renderAll();
@@ -11632,7 +11632,7 @@ const createDownloadPayload = (fileName, content, type) => {
         blob: new Blob([content], { type }),
     };
 };
-const createTimestampedDownloadPayload = (extension, content, type, stem = "mikuscore") => {
+const createTimestampedDownloadPayload = (extension, content, type, stem = "miku-score") => {
     const ts = buildFileTimestamp();
     return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
 };
@@ -11661,10 +11661,10 @@ const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
     const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
     if (options.compressed === true) {
         const mxlBytes = await (0, zip_io_1.makeMxlBytes)(formattedXml);
-        return createDownloadPayload(`mikuscore-${ts}.mxl`, (0, zip_io_1.bytesToArrayBuffer)(mxlBytes), MIME_MXL);
+        return createDownloadPayload(`miku-score-${ts}.mxl`, (0, zip_io_1.bytesToArrayBuffer)(mxlBytes), MIME_MXL);
     }
     const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-    return createDownloadPayload(`mikuscore-${ts}.${extension}`, formattedXml, MIME_XML);
+    return createDownloadPayload(`miku-score-${ts}.${extension}`, formattedXml, MIME_XML);
 };
 exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
 const createSvgDownloadPayload = (svgText) => {
@@ -11672,7 +11672,7 @@ const createSvgDownloadPayload = (svgText) => {
 };
 exports.createSvgDownloadPayload = createSvgDownloadPayload;
 const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
-    return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `mikuscore-${stem}`);
+    return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `miku-score-${stem}`);
 };
 exports.createJsonDownloadPayload = createJsonDownloadPayload;
 const createVsqxDownloadPayload = (vsqxText) => {
@@ -11764,14 +11764,14 @@ const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScor
     const ts = buildFileTimestamp();
     if (options.compressed === true) {
         const msczBytes = await (0, zip_io_1.makeMsczBytes)(formattedMscx);
-        return createDownloadPayload(`mikuscore-${ts}.mscz`, (0, zip_io_1.bytesToArrayBuffer)(msczBytes), MIME_ZIP);
+        return createDownloadPayload(`miku-score-${ts}.mscz`, (0, zip_io_1.bytesToArrayBuffer)(msczBytes), MIME_ZIP);
     }
-    return createDownloadPayload(`mikuscore-${ts}.mscx`, formattedMscx, MIME_XML);
+    return createDownloadPayload(`miku-score-${ts}.mscx`, formattedMscx, MIME_XML);
 };
 exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
 const createZipBundleDownloadPayload = async (entries, options = {}) => {
     const ts = buildFileTimestamp();
-    const safeBase = String(options.baseName || "mikuscore-all").trim() || "mikuscore-all";
+    const safeBase = String(options.baseName || "miku-score-all").trim() || "miku-score-all";
     const zipEntries = [];
     for (const entry of entries) {
         const fileName = String(entry.fileName || "").trim();
@@ -15227,7 +15227,7 @@ const readMusicXmlSubtitle = (score) => {
 const readMusicXmlExportTitle = (score) => {
     return readTrimmedMusicXmlText(score, "work > work-title")
         || readTrimmedMusicXmlText(score, "movement-title")
-        || "mikuscore export";
+        || "miku-score export";
 };
 const readMusicXmlExportMetadata = (score) => {
     return {
@@ -18863,7 +18863,7 @@ const exportMusicXmlDomToLilyPond = (doc) => {
     }
     const title = ((_h = (_g = doc.querySelector("score-partwise > work > work-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) ||
         ((_k = (_j = doc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) ||
-        "mikuscore export";
+        "miku-score export";
     const composer = extractSimpleComposerFromDoc(doc);
     const firstMeasure = doc.querySelector("score-partwise > part > measure");
     const beats = Number.parseInt(((_l = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector(":scope > attributes > time > beats")) === null || _l === void 0 ? void 0 : _l.textContent) || "4", 10);
@@ -20172,7 +20172,7 @@ const exportMusicXmlDomToMei = (doc, options = {}) => {
     }
     const title = ((_b = (_a = doc.querySelector("score-partwise > work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) ||
         ((_d = (_c = doc.querySelector("score-partwise > movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) ||
-        "mikuscore";
+        "miku-score";
     const scoreDefSource = doc.querySelector("score-partwise > part > measure > attributes");
     const meterCount = parseIntSafe((_e = scoreDefSource === null || scoreDefSource === void 0 ? void 0 : scoreDefSource.querySelector(":scope > time > beats")) === null || _e === void 0 ? void 0 : _e.textContent, 4);
     const meterUnit = parseIntSafe((_f = scoreDefSource === null || scoreDefSource === void 0 ? void 0 : scoreDefSource.querySelector(":scope > time > beat-type")) === null || _f === void 0 ? void 0 : _f.textContent, 4);
@@ -20302,7 +20302,7 @@ const exportMusicXmlDomToMei = (doc, options = {}) => {
     return [
         `<?xml version="1.0" encoding="UTF-8"?>`,
         `<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="${esc(meiVersion)}">`,
-        `<meiHead><fileDesc><titleStmt><title>${esc(title)}</title></titleStmt><pubStmt><p>Generated by mikuscore</p></pubStmt></fileDesc></meiHead>`,
+        `<meiHead><fileDesc><titleStmt><title>${esc(title)}</title></titleStmt><pubStmt><p>Generated by miku-score</p></pubStmt></fileDesc></meiHead>`,
         `<music><body><mdiv><score>`,
         scoreDefLines.join(""),
         `<section>${measuresOut.join("")}</section>`,
@@ -22452,7 +22452,7 @@ const convertMeiToMusicXml = (meiSource, options = {}) => {
     else {
         throw new Error("MEI root must be <mei> or <meiCorpus>.");
     }
-    const title = firstDescendantText(meiImportRoot, "title") || "mikuscore";
+    const title = firstDescendantText(meiImportRoot, "title") || "miku-score";
     const scoreDefs = collectScoreDefsInDocOrder(meiImportRoot);
     const staffDefsInDocOrder = collectStaffDefsInDocOrder(meiImportRoot);
     const scoreDef = scoreDefs[0];
@@ -26811,7 +26811,7 @@ const appendAbcExportParts = (parts, exportContext) => {
 };
 const exportMusicXmlDomToAbc = (doc) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
-    const title = (_f = (_c = (_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = doc.querySelector("movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "mikuscore";
+    const title = (_f = (_c = (_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = doc.querySelector("movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "miku-score";
     const composer = (_j = (_h = (_g = doc.querySelector('identification > creator[type="composer"]')) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
     const firstMeasure = doc.querySelector("score-partwise > part > measure");
     const meterBeats = (_m = (_l = (_k = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > time > beats")) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "4";
@@ -27121,7 +27121,7 @@ const buildAbcMusicXmlExportContext = (parsed) => {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     const resolvedParts = resolveAbcParsedPartsForExport(parsed.parts);
     const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
-    const title = ((_a = parsed.meta) === null || _a === void 0 ? void 0 : _a.title) || "mikuscore";
+    const title = ((_a = parsed.meta) === null || _a === void 0 ? void 0 : _a.title) || "miku-score";
     const composer = ((_b = parsed.meta) === null || _b === void 0 ? void 0 : _b.composer) || "Unknown";
     const beats = ((_d = (_c = parsed.meta) === null || _c === void 0 ? void 0 : _c.meter) === null || _d === void 0 ? void 0 : _d.beats) || 4;
     const beatType = ((_f = (_e = parsed.meta) === null || _e === void 0 ? void 0 : _e.meter) === null || _f === void 0 ? void 0 : _f.beatType) || 4;
@@ -27160,7 +27160,7 @@ const buildAbcScorePartwiseXmlDocument = (title, composer, partListXml, partBody
 const convertAbcToMusicXml = (abcSource, options = {}) => {
     var _a, _b, _c;
     const parsed = exports.AbcCompatParser.parseForMusicXml(abcSource, {
-        defaultTitle: "mikuscore",
+        defaultTitle: "miku-score",
         defaultComposer: "Unknown",
         inferTransposeFromPartName: true,
         overfullCompatibilityMode: options.overfullCompatibilityMode !== false,
@@ -28647,7 +28647,7 @@ class ScoreCore {
                 const context = this.describeNoteContext(note);
                 const noteXml = this.compactNodeXml(note);
                 if (typeof console !== "undefined") {
-                    console.error("[mikuscore][save][invalid-duration]", context, noteXml);
+                    console.error("[miku-score][save][invalid-duration]", context, noteXml);
                 }
                 return {
                     code: "MVP_INVALID_NOTE_DURATION",

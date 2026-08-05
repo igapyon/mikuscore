@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines high-level architecture boundaries for mikuscore MVP.
+This document defines high-level architecture boundaries for miku-score MVP.
 
 Scope note:
 
@@ -83,7 +83,7 @@ UI MUST NOT mutate XML DOM directly.
 
 ## Runtime and Build Model
 
-- Runtime distribution: single self-contained HTML (`mikuscore.html`)
+- Runtime distribution: single self-contained HTML (`miku-score.html`)
 - Development model: split TypeScript source files
 - Build model: compile TS and inline local CSS/JS into one HTML
 - Runtime dependency rule: no external CDN/API required

@@ -5,7 +5,7 @@ Status:
 - removed from the current normative spec surface
 - retained only as a compatibility pointer during the transition
 
-`mikuscore` does not currently define an active AI-facing JSON interface as part of the present product contract.
+`miku-score` does not currently define an active AI-facing JSON interface as part of the present product contract.
 
 For the current policy, see:
 

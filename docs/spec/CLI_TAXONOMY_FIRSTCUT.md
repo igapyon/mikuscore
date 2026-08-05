@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document records the next candidate CLI taxonomy for `mikuscore`.
+This document records the next candidate CLI taxonomy for `miku-score`.
 
 Scope note:
 
@@ -32,9 +32,9 @@ Purpose:
 
 Examples:
 
-- `mikuscore convert --from abc --to musicxml`
-- `mikuscore convert --from musicxml --to abc`
-- `mikuscore convert --from midi --to musicxml`
+- `miku-score convert --from abc --to musicxml`
+- `miku-score convert --from musicxml --to abc`
+- `miku-score convert --from midi --to musicxml`
 
 Rules:
 
@@ -50,8 +50,8 @@ Purpose:
 
 Examples:
 
-- `mikuscore render svg --in score.musicxml`
-- future one-shot example: `mikuscore render svg --from abc --in score.abc`
+- `miku-score render svg --in score.musicxml`
+- future one-shot example: `miku-score render svg --from abc --in score.abc`
 
 Rules:
 
@@ -67,11 +67,11 @@ Purpose:
 
 Candidate first-cut examples:
 
-- `mikuscore state summarize`
-- `mikuscore state inspect-measure`
-- `mikuscore state validate-command`
-- `mikuscore state apply-command`
-- `mikuscore state diff`
+- `miku-score state summarize`
+- `miku-score state inspect-measure`
+- `miku-score state validate-command`
+- `miku-score state apply-command`
+- `miku-score state diff`
 
 Rules:
 
@@ -91,7 +91,7 @@ This split aims to satisfy several constraints at once:
 
 ## Relationship To Existing Core Commands
 
-`mikuscore` already has a bounded internal command model:
+`miku-score` already has a bounded internal command model:
 
 - `change_to_pitch`
 - `change_duration`
@@ -106,10 +106,10 @@ Preferred direction:
 - top-level CLI stays phase-oriented: `state inspect`, `state validate`, `state apply`, `state diff`
 - machine-facing payloads inside those `state` commands SHOULD reuse the existing core command catalog
 
-This means `mikuscore` SHOULD avoid a surface such as:
+This means `miku-score` SHOULD avoid a surface such as:
 
-- `mikuscore change-to-pitch ...`
-- `mikuscore change-duration ...`
+- `miku-score change-to-pitch ...`
+- `miku-score change-duration ...`
 
 and instead prefer workflow-oriented commands with bounded command payloads.
 

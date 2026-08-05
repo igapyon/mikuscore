@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const PRODUCT = "mikuscore";
+const PRODUCT = "miku-score";
 const ROOT = process.cwd();
 
 const releaseDir = path.join(ROOT, "release-assets");
@@ -32,7 +32,7 @@ if (!/^\d+\.\d+\.\d+(?:\.\d+)?\s*$/.test(version.stdout)) {
 }
 
 const help = runNode(["--help"]);
-if (!help.stdout.includes("mikuscore convert") || !help.stdout.includes("Options:")) {
+if (!help.stdout.includes("miku-score convert") || !help.stdout.includes("Options:")) {
   throw new Error("Unexpected --help output.");
 }
 

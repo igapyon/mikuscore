@@ -2,7 +2,7 @@
 
 ## English
 ## Purpose
-Define the current screen specification for `mikuscore` based on the actual UI text and tooltips in `mikuscore-src.html`.
+Define the current screen specification for `miku-score` based on the actual UI text and tooltips in `miku-score-src.html`.
 
 Scope note:
 
@@ -12,8 +12,8 @@ Scope note:
 ## Global Layout
 - Single-page application.
 - Top brand header:
-  - `mikuscore` title
-  - `About mikuscore` info chip `(i)`
+  - `miku-score` title
+  - `About miku-score` info chip `(i)`
   - GitHub link
 - 4-step tab navigation:
   - `Input`
@@ -21,7 +21,7 @@ Scope note:
   - `Edit`
   - `Export`
 
-### Brand Tooltip `(i)` (`About mikuscore`)
+### Brand Tooltip `(i)` (`About miku-score`)
 - Browser-based MusicXML-first score converter.
 - Uses MusicXML as the central interchange format for moving score data between formats.
 - Supports loading score data, previewing structure, checking diagnostics, playback, and export/download in one screen.
@@ -34,7 +34,7 @@ Scope note:
   - `4) Export or hand off in another format`
 - Positioning guidance:
   - Use dedicated notation software for large-scale or complex notation editing.
-  - Use mikuscore for conversion-oriented tasks.
+  - Use miku-score for conversion-oriented tasks.
 
 ## Tabs / Interaction
 - Clicking a top tab opens the corresponding panel.
@@ -166,7 +166,7 @@ Scope note:
 - `4 Export`
 
 ### Header Tooltip `(i)` (`Export help`)
-- Take work out of mikuscore.
+- Take work out of miku-score.
 - Main flow is `MusicXML` export.
 - `ABC` and lightweight `MIDI` export are for quick checks.
 - Complex production/export should be handled in dedicated software.
@@ -234,9 +234,9 @@ Scope note:
   - if compression is turned ON, `.xml extension` switch is turned OFF.
 
 ### File Naming Policy
-- MusicXML text: `mikuscore-YYYYMMDDhhmm.musicxml` (default) or `mikuscore-YYYYMMDDhhmm.xml` (when enabled)
-- `mikuscore-YYYYMMDDhhmm.abc`
-- `mikuscore-YYYYMMDDhhmm.mid`
+- MusicXML text: `miku-score-YYYYMMDDhhmm.musicxml` (default) or `miku-score-YYYYMMDDhhmm.xml` (when enabled)
+- `miku-score-YYYYMMDDhhmm.abc`
+- `miku-score-YYYYMMDDhhmm.mid`
 
 ## Diagnostics / UI Messaging
 - `inputUiMessage` and `uiMessage` are used for inline feedback.
@@ -256,7 +256,7 @@ Scope note:
 - 例外として、未決定事項や検討中メモは日本語のみで記述する場合があります。
 
 ### 要点
-- 本文書は `mikuscore-src.html` の画面文言・配置インベントリです。
+- 本文書は `miku-score-src.html` の画面文言・配置インベントリです。
 - 規範的な UI 挙動は `docs/spec/UI_SPEC.md` を参照してください。
 - 主要導線は `Input / Score / Edit / Export` の4パネルです。
 - `MIDI & Playback Settings` と `General Settings` の詳細仕様は English セクションを参照してください。

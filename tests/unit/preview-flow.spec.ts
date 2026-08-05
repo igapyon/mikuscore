@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { preparePreviewSvgIdMap } from "../../src/ts/preview-flow";
 
 describe("preview-flow SVG id map preparation", () => {
-  it("uses the direct render map when rendered note ids already include mikuscore ids", () => {
+  it("uses the direct render map when rendered note ids already include miku-score ids", () => {
     const directMap = new Map([["mks-note-1", "node-1"]]);
     const fallbackMap = new Map([["vrv-note-1", "node-1"]]);
     let fallbackCalled = false;
@@ -27,7 +27,7 @@ describe("preview-flow SVG id map preparation", () => {
     expect(fallbackCalled).toBe(false);
   });
 
-  it("builds a sequential fallback map when verovio rendered ids do not include mikuscore ids", () => {
+  it("builds a sequential fallback map when verovio rendered ids do not include miku-score ids", () => {
     const directMap = new Map([["mks-note-1", "node-1"]]);
     const fallbackMap = new Map([["vrv-note-1", "node-1"]]);
     let fallbackArgs: { noteNodeIds: string[]; renderedNoteIds: string[] } | null = null;

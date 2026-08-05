@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>mikuscore</title>
+  <title>miku-score</title>
   <link rel="stylesheet" href="lht-cmn/css/components.css" />
   <link rel="stylesheet" href="src/css/app.css" />
 </head>
@@ -24,23 +24,23 @@
               <path d="M9 3v12.4a3.6 3.6 0 1 1-1.2-2.7V6.2l9-2.2v9.6a3.6 3.6 0 1 1-1.2-2.7V5.6L9 7.1Z" />
             </svg>
           </span>
-          <span>mikuscore</span>
-          <lht-help-tooltip label="About mikuscore" wide>
-            mikuscore is a browser-based MusicXML-first score converter for moving score data between formats.
+          <span>miku-score</span>
+          <lht-help-tooltip label="About miku-score" wide>
+            miku-score is a browser-based MusicXML-first score converter for moving score data between formats.
             It uses MusicXML as the central interchange format and helps bridge notation tools, exchange files, and AI-oriented workflows.
             It supports loading score data, previewing structure, checking diagnostics, and exporting to other formats in one screen.
             MEI support is currently experimental.
-            mikuscore intentionally keeps the feature set focused on conversion, inspection, and handoff rather than deep notation editing.
+            miku-score intentionally keeps the feature set focused on conversion, inspection, and handoff rather than deep notation editing.
             It is smartphone-centered, but it can also be used on PCs.
             Workflow: 1) Choose input and load 2) Inspect the score and diagnostics 3) Verify by playback if needed 4) Export or hand off in another format.
-            Use tools like MuseScore for large-scale or complex notation editing, and use mikuscore for conversion-oriented tasks.
+            Use tools like MuseScore for large-scale or complex notation editing, and use miku-score for conversion-oriented tasks.
           </lht-help-tooltip>
           <a
-            href="https://github.com/igapyon/mikuscore"
+            href="https://github.com/igapyon/miku-score"
             class="ms-hero-link"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Open mikuscore GitHub repository"
+            aria-label="Open miku-score GitHub repository"
           >
             <svg aria-hidden="true" viewBox="0 0 16 16" class="ms-btn-icon" fill="currentColor">
               <use href="#md-icon-github" xlink:href="#md-icon-github"></use>
@@ -50,7 +50,7 @@
         </h1>
       </header>
 
-      <div class="ms-top-tabs" role="tablist" aria-label="mikuscore sections">
+      <div class="ms-top-tabs" role="tablist" aria-label="miku-score sections">
         <button type="button" class="ms-top-tab is-active" data-tab="input">
           <span class="ms-top-tab-no">1</span>
           <span class="ms-top-tab-label">Input</span>
@@ -75,7 +75,7 @@
             <span class="ms-step-no">1</span>Input
             <lht-help-tooltip label="Input help">
               <span class="ms-section-help-tooltip">
-                To use mikuscore, first load your score here (from file/source) or create a new score.
+                To use miku-score, first load your score here (from file/source) or create a new score.
                 Supported file types: MusicXML (`.musicxml`, `.xml`, `.mxl`), ABC (`.abc`), MIDI (`.mid`, `.midi`), VSQX (`.vsqx`), MEI (`.mei`), LilyPond (`.ly`), MuseScore (`.mscx`, `.mscz`).
                 You can move to Score/Edit/Output after completing this step.
               </span>
@@ -473,9 +473,9 @@
             <span class="ms-step-no">4</span>Output
             <lht-help-tooltip label="Output help">
               <span class="ms-section-help-tooltip">
-                Output is where you take your work out of mikuscore.
+                Output is where you take your work out of miku-score.
                 The main flow is exporting your edited result as MusicXML.
-                In addition, mikuscore also supports ABC/MEI/LilyPond/MuseScore export and lightweight MIDI output for quick checks.
+                In addition, miku-score also supports ABC/MEI/LilyPond/MuseScore export and lightweight MIDI output for quick checks.
                 MIDI export is handy for simple confirmation, while complex production/export work is best done in dedicated software.
               </span>
             </lht-help-tooltip>

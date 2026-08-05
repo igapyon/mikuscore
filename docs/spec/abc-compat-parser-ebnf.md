@@ -15,9 +15,9 @@ The parser should be understood in three layers:
 
 - standard ABC surface
 - compatibility behavior for real-world ABC variance
-- `mikuscore` extension metadata comments (`%@mks ...`) used for roundtrip support
+- `miku-score` extension metadata comments (`%@mks ...`) used for roundtrip support
 
-ABC is a supported format in `mikuscore`.
+ABC is a supported format in `miku-score`.
 This grammar therefore documents the implemented compatibility baseline for supported import behavior, rather than an experimental parser sketch.
 
 ## Practical Interpretation
@@ -26,11 +26,11 @@ ABC interoperability is influenced not only by the narrow core grammar, but also
 
 For that reason, this document should be read as:
 
-- a grammar baseline for the standard ABC surface actually implemented by `mikuscore`
+- a grammar baseline for the standard ABC surface actually implemented by `miku-score`
 - a record of compatibility behavior accepted for common real-world inputs
 - not a promise that every informal ABC variant in the wild is accepted
 
-For `mikuscore`, `abcjs` / `abcm2ps` behavior is not itself the normative grammar.
+For `miku-score`, `abcjs` / `abcm2ps` behavior is not itself the normative grammar.
 Instead, it is evidence for de facto interoperability expectations that may justify explicit compatibility rules in this document.
 
 De facto compatibility should therefore be understood as:
@@ -50,7 +50,7 @@ When extending compatibility, the preferred policy is:
 - Header: `X,T,C,M,L,K,U,V` and `%%score`
 - Body: note/rest (`z/x`), accidentals, length, tie (`-`), broken rhythm (`>` `<`), barlines, chords, tuplets, overlay (`&`)
 - Compatibility behavior: `M:C`, `M:C|`, inline text skip (`"..."`), standalone octave marker tolerance (`,` / `'`)
-- `mikuscore` extension metadata comments: `%@mks ...`
+- `miku-score` extension metadata comments: `%@mks ...`
 
 ## EBNF
 
@@ -132,10 +132,10 @@ digit            = "0".."9" ;
 - Do not let unknown directive-tail fragments silently fall through into body note parsing.
 - Prefer warning on unsupported bare `V:` tail words over later note/rest parse failure caused by directive leftovers.
 
-## `mikuscore` Extension Notes
+## `miku-score` Extension Notes
 - Accept `%@mks` metadata comments (`key`, `measure`, `transpose`) and feed roundtrip metadata when present.
 - These comments are not part of the standard ABC musical surface.
-- They are `mikuscore`-specific extension metadata used for restoration and roundtrip support.
+- They are `miku-score`-specific extension metadata used for restoration and roundtrip support.
 
 ## Growth Policy
 - Parsing robustness first (warning-first policy).
@@ -154,5 +154,5 @@ digit            = "0".."9" ;
 - ABC 2.1 を基準に、実データ互換（`abcjs` / `abcm2ps` 系）を取り込みます。
 - EBNF は English セクションを正本として扱います。
 - 互換挙動（`M:C`, `M:C|`, standalone `,` / `'` など）を許容します。
-- `%@mks` は `mikuscore` 独自拡張コメントとして扱います。
+- `%@mks` は `miku-score` 独自拡張コメントとして扱います。
 - 文法・意味解釈の拡張時は回帰テストを追加します。

@@ -800,7 +800,7 @@ K:C
     expect(words).toContain("Fmaj13");
   });
 
-  it("ABC->MusicXML parses mikuscore rehearsal decoration as rehearsal direction", () => {
+  it("ABC->MusicXML parses miku-score rehearsal decoration as rehearsal direction", () => {
     const abc = `X:1
 T:Rehearsal
 M:4/4
@@ -1454,7 +1454,7 @@ K:C
     expect(abc).toContain('"Dsus4/F#"F');
   });
 
-  it("MusicXML->ABC exports rehearsal direction as mikuscore rehearsal decoration and roundtrips it", () => {
+  it("MusicXML->ABC exports rehearsal direction as miku-score rehearsal decoration and roundtrips it", () => {
     const xml = `<score-partwise version="3.1">
   <part-list>
     <score-part id="P1"><part-name>Part 1</part-name></score-part>
@@ -2802,7 +2802,7 @@ K:C
     expect(notes[2]?.querySelector(':scope > notations > ornaments > wavy-line[type="stop"]')).not.toBeNull();
   });
 
-  it("ABC->MusicXML parses mikuscore tremolo decorations", () => {
+  it("ABC->MusicXML parses miku-score tremolo decorations", () => {
     const abc = `X:1
 T:Tremolo
 M:4/4
@@ -2824,7 +2824,7 @@ K:C
     expect(tremolos[2]?.textContent?.trim()).toBe("2");
   });
 
-  it("ABC->MusicXML parses mikuscore glissando/slide decorations", () => {
+  it("ABC->MusicXML parses miku-score glissando/slide decorations", () => {
     const abc = `X:1
 T:Spanners
 M:4/4
@@ -3290,7 +3290,7 @@ K:C
     expect(notes[1]?.querySelector(":scope > notations > technical > triple-tongue")).not.toBeNull();
   });
 
-  it("ABC->MusicXML parses mikuscore fingering and string decorations", () => {
+  it("ABC->MusicXML parses miku-score fingering and string decorations", () => {
     const abc = `X:1
 T:Fingering and string
 M:4/4
@@ -3493,7 +3493,7 @@ K:C
     expect(fingerings).toEqual(["0", "1", "2", "3", "4", "5"]);
   });
 
-  it("ABC->MusicXML parses mikuscore pluck decorations", () => {
+  it("ABC->MusicXML parses miku-score pluck decorations", () => {
     const abc = `X:1
 T:Pluck
 M:4/4
@@ -5437,7 +5437,7 @@ K:C
     expect(outDoc.querySelector("note > notations > ornaments > delayed-turn")).not.toBeNull();
   });
 
-  it("MusicXML->ABC exports tremolo as mikuscore decorations and roundtrips it", () => {
+  it("MusicXML->ABC exports tremolo as miku-score decorations and roundtrips it", () => {
     const xmlWithTremolo = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list>
@@ -5610,7 +5610,7 @@ K:C
     expect(tremolo?.textContent?.trim()).toBe("2");
   });
 
-  it("MusicXML->ABC exports glissando/slide as mikuscore decorations and roundtrips them", () => {
+  it("MusicXML->ABC exports glissando/slide as miku-score decorations and roundtrips them", () => {
     const xmlWithSpanners = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list>
@@ -7689,7 +7689,7 @@ K:C
     expect(outDoc.querySelector("note > notations > technical > toe")).not.toBeNull();
   });
 
-  it("MusicXML->ABC exports fingering and string as mikuscore decorations and roundtrips them", () => {
+  it("MusicXML->ABC exports fingering and string as miku-score decorations and roundtrips them", () => {
     const xmlWithFingeringsAndStrings = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list>
@@ -7986,7 +7986,7 @@ K:C
     expect(outDoc.querySelector("note > notations > technical > string")?.textContent?.trim()).toBe("2");
   });
 
-  it("MusicXML->ABC exports pluck as mikuscore decorations and roundtrips it", () => {
+  it("MusicXML->ABC exports pluck as miku-score decorations and roundtrips it", () => {
     const xmlWithPluck = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list>
@@ -10366,7 +10366,7 @@ K:C
     expect(abc).not.toContain("=D");
   });
 
-  it("MusicXML->ABC stores trill accidental-mark in mikuscore comment and restores it", () => {
+  it("MusicXML->ABC stores trill accidental-mark in miku-score comment and restores it", () => {
     const xmlWithTrillWidth = `<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <part-list>

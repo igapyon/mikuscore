@@ -60,10 +60,10 @@ const summarizeDiagnostics = (diagnostics: Diagnostic[]): string => {
 
 const logPlaybackFailureDiagnostics = (label: string, diagnostics: Diagnostic[]): void => {
   if (!diagnostics.length) {
-    console.warn(`[mikuscore][playback] ${label}: no diagnostics.`);
+    console.warn(`[miku-score][playback] ${label}: no diagnostics.`);
     return;
   }
-  console.error(`[mikuscore][playback] ${label}:`);
+  console.error(`[miku-score][playback] ${label}:`);
   for (const d of diagnostics) {
     console.error(`- [${d.code}] ${d.message}`);
   }
@@ -933,7 +933,7 @@ export const startPlayback = async (
       if (debugXml) {
         options.dumpOverfullContext(debugXml, options.editableVoice);
       } else if (options.debugLog) {
-        console.warn("[mikuscore][debug] no in-memory XML to dump.");
+        console.warn("[miku-score][debug] no in-memory XML to dump.");
       }
     }
     options.renderAll();

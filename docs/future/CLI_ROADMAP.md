@@ -25,27 +25,27 @@
 
 Current implemented Step 1 scope:
 
-- `mikuscore convert --from abc --to musicxml`
-- `mikuscore convert --from musicxml --to abc`
-- `mikuscore convert --from midi --to musicxml`
-- `mikuscore convert --from musicxml --to midi`
-- `mikuscore convert --from mei --to musicxml`
-- `mikuscore convert --from musicxml --to mei`
-- `mikuscore convert --from lilypond --to musicxml`
-- `mikuscore convert --from musicxml --to lilypond`
-- `mikuscore convert --from musescore --to musicxml`
-- `mikuscore convert --from musicxml --to musescore`
-- `mikuscore render svg`
-- `mikuscore render svg --from abc`
-- `mikuscore state summarize`
-- `mikuscore state inspect-measure`
-- `mikuscore state validate-command`
-- `mikuscore state apply-command`
-- `mikuscore state diff`
-- `mikuscore --help`
-- `mikuscore convert --help`
-- `mikuscore render --help`
-- `mikuscore state --help`
+- `miku-score convert --from abc --to musicxml`
+- `miku-score convert --from musicxml --to abc`
+- `miku-score convert --from midi --to musicxml`
+- `miku-score convert --from musicxml --to midi`
+- `miku-score convert --from mei --to musicxml`
+- `miku-score convert --from musicxml --to mei`
+- `miku-score convert --from lilypond --to musicxml`
+- `miku-score convert --from musicxml --to lilypond`
+- `miku-score convert --from musescore --to musicxml`
+- `miku-score convert --from musicxml --to musescore`
+- `miku-score render svg`
+- `miku-score render svg --from abc`
+- `miku-score state summarize`
+- `miku-score state inspect-measure`
+- `miku-score state validate-command`
+- `miku-score state apply-command`
+- `miku-score state diff`
+- `miku-score --help`
+- `miku-score convert --help`
+- `miku-score render --help`
+- `miku-score state --help`
 
 Current Step 1 policy is defined in:
 
@@ -69,7 +69,7 @@ This means:
 
 This is intentionally closer to the successful `mikuproject` style of separating command responsibility at the top level.
 
-At the same time, `mikuscore` should keep `convert --from ... --to ...` for format-pair scaling, rather than exploding the command surface into one fixed command per format pair.
+At the same time, `miku-score` should keep `convert --from ... --to ...` for format-pair scaling, rather than exploding the command surface into one fixed command per format pair.
 
 In other words:
 
@@ -78,22 +78,22 @@ In other words:
 
 ## Shared CLI Pattern
 
-The `mikuproject` CLI command family was developed in a shape that intentionally resembles `mikuscore`.
+The `mikuproject` CLI command family was developed in a shape that intentionally resembles `miku-score`.
 
-So the relationship here is not "import a foreign command system into `mikuscore`".
+So the relationship here is not "import a foreign command system into `miku-score`".
 
 It is closer to:
 
-- `mikuscore` established the early `convert`-first CLI pattern
+- `miku-score` established the early `convert`-first CLI pattern
 - `mikuproject` expanded that style into a larger command tree
-- `mikuproject` later evolved that pattern in ways that are often worth studying back in `mikuscore`
-- `mikuscore` can reuse those infrastructure lessons without changing its product identity
+- `mikuproject` later evolved that pattern in ways that are often worth studying back in `miku-score`
+- `miku-score` can reuse those infrastructure lessons without changing its product identity
 
 For specification work, `mikuproject` should therefore be treated as an evolved sibling implementation of the same general CLI style.
 
 The important nuance is:
 
-- similarity alone does not mean `mikuscore` should copy the larger command surface
+- similarity alone does not mean `miku-score` should copy the larger command surface
 - but the direction of `mikuproject` evolution is strong evidence for which CLI infrastructure ideas scale well in practice
 
 The most reusable infrastructure lessons are:
@@ -105,7 +105,7 @@ The most reusable infrastructure lessons are:
 - validate stdin/file input combinations consistently before command execution
 - keep the main artifact on `stdout` and diagnostics on `stderr`, including machine-readable diagnostics when requested
 
-For `mikuscore`, these are more urgent than broadening the command family again.
+For `miku-score`, these are more urgent than broadening the command family again.
 
 In other words, the next CLI step is likely infrastructure hardening before major surface expansion.
 
@@ -126,18 +126,18 @@ Likely next slices are:
 
 If the CLI is rebuilt while compatibility cost is still low, the strongest current candidate is:
 
-- `mikuscore convert ...`
-- `mikuscore render ...`
-- `mikuscore state ...`
+- `miku-score convert ...`
+- `miku-score render ...`
+- `miku-score state ...`
 
 Suggested role split:
 
 - `convert`
   - external interchange only
-  - example: `mikuscore convert --from abc --to musicxml`
+  - example: `miku-score convert --from abc --to musicxml`
 - `render`
   - derived artifact generation
-  - example: `mikuscore render svg --in score.musicxml`
+  - example: `miku-score render svg --in score.musicxml`
   - a user-facing one-shot `ABC -> SVG` flow may still be offered here even if it internally routes through `ABC -> MusicXML -> SVG`
 - `state`
   - canonical `MusicXML` inspection and mutation
@@ -161,7 +161,7 @@ The current first-cut specification notes for this direction are:
 
 ## State Family And Core Command Alignment
 
-`mikuscore` already has an internal command model for bounded score edits:
+`miku-score` already has an internal command model for bounded score edits:
 
 - `change_to_pitch`
 - `change_duration`
@@ -181,16 +181,16 @@ The more coherent direction is:
 
 In practice, that suggests a shape such as:
 
-- `mikuscore state summarize`
-- `mikuscore state inspect-measure`
-- `mikuscore state validate-command`
-- `mikuscore state apply-command`
-- `mikuscore state diff`
+- `miku-score state summarize`
+- `miku-score state inspect-measure`
+- `miku-score state validate-command`
+- `miku-score state apply-command`
+- `miku-score state diff`
 
 or, if batching several core commands together becomes useful:
 
-- `mikuscore state validate-patch`
-- `mikuscore state apply-patch`
+- `miku-score state validate-patch`
+- `miku-score state apply-patch`
 
 with payloads that contain one or more existing core commands.
 
@@ -200,7 +200,7 @@ In other words:
 
 - the CLI surface should be organized around workflow phases
 - the payload schema should reuse the current core command catalog
-- `mikuscore` should avoid creating separate top-level verbs like `mikuscore change-to-pitch ...`
+- `miku-score` should avoid creating separate top-level verbs like `miku-score change-to-pitch ...`
 
 That separation is important because it keeps human-facing command discovery manageable while still giving agents and other tools a precise mutation contract.
 
@@ -208,8 +208,8 @@ That separation is important because it keeps human-facing command discovery man
 
 Implemented first-cut Step 2 additions:
 
-- `mikuscore convert --from midi --to musicxml`
-- `mikuscore convert --from musicxml --to midi`
+- `miku-score convert --from midi --to musicxml`
+- `miku-score convert --from musicxml --to midi`
 
 Rationale:
 
@@ -220,8 +220,8 @@ Rationale:
 
 Implemented first-cut Step 3 additions:
 
-- `mikuscore convert --from musescore --to musicxml`
-- `mikuscore convert --from musicxml --to musescore`
+- `miku-score convert --from musescore --to musicxml`
+- `miku-score convert --from musicxml --to musescore`
 
 Rationale:
 

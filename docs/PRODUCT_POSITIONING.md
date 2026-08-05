@@ -2,7 +2,7 @@
 
 ## Summary
 
-mikuscore is a MusicXML-first score converter for moving score data between formats.
+miku-score is a MusicXML-first score converter for moving score data between formats.
 It is not positioned as a score editor, and it does not try to replace dedicated notation editors such as MuseScore.
 
 ## Target Use Cases
@@ -17,8 +17,8 @@ It is not positioned as a score editor, and it does not try to replace dedicated
 - MusicXML-first architecture.
 - Preservation-first conversion policy.
 - Conversion diagnostics and metadata for traceability.
-- Single-file web app distribution (`mikuscore.html`) with offline runtime.
-- Clear separation of roles: use notation editors for editing, use mikuscore for conversion and handoff.
+- Single-file web app distribution (`miku-score.html`) with offline runtime.
+- Clear separation of roles: use notation editors for editing, use miku-score for conversion and handoff.
 
 ## Non-goals
 

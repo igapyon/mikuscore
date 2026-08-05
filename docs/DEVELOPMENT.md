@@ -26,25 +26,31 @@ Practical command split:
 - `npm run build`: faster day-to-day build (`typecheck` + `test:build` + `build:dist`)
 - `npm run build:full`: fuller build path (`typecheck` + `test:build:full` + `build:dist`)
 - `npm run build:cli-runtime`: generate the single-file Node.js CLI runtime artifact
-- `npm run prepare:release-assets`: stage versioned GitHub Release assets under `release-assets/` for a `TAG_NAME` such as `v0.5.0`
-- `npm run smoke:bundle`: verify the staged CLI release asset, or `bundle/mikuscore.mjs` when no staged asset exists
+- `npm run prepare:release-assets`: stage versioned GitHub Release assets under `release-assets/` for a `TAG_NAME` such as `v0.6.0`
+- `npm run smoke:bundle`: verify the staged CLI release asset, or `bundle/miku-score.mjs` when no staged asset exists
 - `npm run test:slow`: heavy suites currently split out of the day-to-day build path
 - `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
 - `npm run check:all`: full verification (`typecheck` + full `test:all` + `build:dist`)
 
 Generated HTML note:
 
-- `mikuscore.html` is generated from `mikuscore-src.html`
+- `miku-score.html` is generated from `miku-score-src.html`
 - `index.html` is generated from `index-src.html`
-- `bundle/mikuscore.mjs` is generated from the CLI entrypoint and CLI API graph
+- `bundle/miku-score.mjs` is generated from the CLI entrypoint and CLI API graph
 - `{{BUILD_DATE}}` placeholders are filled during the build
 
 ## CLI Notes
 
 Current CLI uses a `convert` / `render` / initial `state` command surface.
 
-The repository CLI entrypoint is `scripts/mikuscore-cli.mjs`. The generated
-single-file runtime artifact is `bundle/mikuscore.mjs`; it is intended for
+The current `--help` output is the operator-facing CLI contract. It describes
+stdin/stdout defaults, explicit `--out` overwrite behavior, generated-artifact
+scope, machine-readable diagnostics, and exit codes for each command family.
+The text is intentionally self-contained so that shell and agent callers do
+not need to infer I/O behavior from implementation details.
+
+The repository CLI entrypoint is `scripts/miku-score-cli.mjs`. The generated
+single-file runtime artifact is `bundle/miku-score.mjs`; it is intended for
 downstream packaging and local agent runtimes that need one JavaScript CLI file
 instead of a source-tree lookup path.
 The artifact is bundled for Node.js and includes the CLI runtime dependency
@@ -53,23 +59,23 @@ graph such as `jsdom`; it should not require repository `src/` files or
 
 Available commands:
 
-- `mikuscore convert --from abc --to musicxml`
-- `mikuscore convert --from musicxml --to abc`
-- `mikuscore convert --from midi --to musicxml`
-- `mikuscore convert --from musicxml --to midi`
-- `mikuscore convert --from mei --to musicxml`
-- `mikuscore convert --from musicxml --to mei`
-- `mikuscore convert --from lilypond --to musicxml`
-- `mikuscore convert --from musicxml --to lilypond`
-- `mikuscore convert --from musescore --to musicxml`
-- `mikuscore convert --from musicxml --to musescore`
-- `mikuscore render svg`
-- `mikuscore render svg --from abc ...`
-- `mikuscore state summarize`
-- `mikuscore state inspect-measure`
-- `mikuscore state validate-command`
-- `mikuscore state apply-command`
-- `mikuscore state diff`
+- `miku-score convert --from abc --to musicxml`
+- `miku-score convert --from musicxml --to abc`
+- `miku-score convert --from midi --to musicxml`
+- `miku-score convert --from musicxml --to midi`
+- `miku-score convert --from mei --to musicxml`
+- `miku-score convert --from musicxml --to mei`
+- `miku-score convert --from lilypond --to musicxml`
+- `miku-score convert --from musicxml --to lilypond`
+- `miku-score convert --from musescore --to musicxml`
+- `miku-score convert --from musicxml --to musescore`
+- `miku-score render svg`
+- `miku-score render svg --from abc ...`
+- `miku-score state summarize`
+- `miku-score state inspect-measure`
+- `miku-score state validate-command`
+- `miku-score state apply-command`
+- `miku-score state diff`
 
 Input/output contract:
 
@@ -131,19 +137,19 @@ GitHub Actions release automation is limited to `v*` tag pushes. It does not add
 Local release asset preparation uses the same scripts that the tag workflow calls:
 
 - `npm run build`
-- `TAG_NAME=v0.5.0 npm run prepare:release-assets`
+- `TAG_NAME=v0.6.0 npm run prepare:release-assets`
 - `npm run smoke:bundle`
 
 The release staging command checks `TAG_NAME` against `package.json` version, then writes prepared assets under `release-assets/`. The staged directory is local generated output and is ignored by Git.
 
 Observed sibling-project direction:
 
-- `mikuproject` CLI grew in a way that intentionally resembles the earlier `mikuscore` CLI surface
+- `mikuproject` CLI grew in a way that intentionally resembles the earlier `miku-score` CLI surface
 - because of that, similarities are expected and should be read as family resemblance, not accidental convergence
-- `mikuproject` has also evolved beyond the earlier `mikuscore` baseline, and that direction contains many reusable ideas
-- the parts most worth reusing back into `mikuscore` are infrastructure patterns first, not the larger command count itself
+- `mikuproject` has also evolved beyond the earlier `miku-score` baseline, and that direction contains many reusable ideas
+- the parts most worth reusing back into `miku-score` are infrastructure patterns first, not the larger command count itself
 - initial reuse is now present in the current CLI via centralized help output, `CliUsageError` / `CliProcessingError`, explicit `--out -`, optional `--diagnostics text|json`, and the first `state` family entrypoints
-- if `mikuscore` CLI behavior changes in those areas, update `mikuscore-skills` assumptions as well because downstream agent workflows are sensitive to stderr/stdout and exit-code contracts
+- if `miku-score` CLI behavior changes in those areas, update `miku-score-skills` assumptions as well because downstream agent workflows are sensitive to stderr/stdout and exit-code contracts
 
 ## Documentation Map
 
@@ -164,8 +170,8 @@ Product docs:
 
 Related-project note:
 
-- `mikuscore-skills` and `miku-abc-player` embed `mikuscore` as an upstream dependency
-- when `mikuscore` changes in a way that affects behavior, contracts, generated assets, or handoff assumptions, remember that those downstream projects may need to pull the updated upstream
+- `miku-score-skills` and `miku-abc-player` embed `miku-score` as an upstream dependency
+- when `miku-score` changes in a way that affects behavior, contracts, generated assets, or handoff assumptions, remember that those downstream projects may need to pull the updated upstream
 - keep this follow-up visible in PRs and development notes when the change is likely to affect downstream consumers
 
 Specification docs:

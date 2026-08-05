@@ -2,7 +2,7 @@
 
 Last updated: 2026-03-07
 Target: `lht-cmn` maintainers / integrators
-Source project: `mikuscore`
+Source project: `miku-score`
 
 This note maps the previous `LHT_CMN_FEEDBACK.md` requests to the current `lht-cmn` update status.
 
@@ -19,7 +19,7 @@ Status labels used in this file:
 | `lht-*` must be self-contained from the app's point of view | Reflected | README now states `lht-*` is self-contained and app code should not manage `md-*` registration. See `lht-cmn/README.md:22` and `lht-cmn/README.md:89` |
 | Apply the self-contained rule across all components | Reflected | Policy is documented, and `help-tooltip`, `command-block`, `file-select`, `switch-help`, `text-field-help` now have fallbacks. The chosen implementation path is fallback-oriented rather than internal `md-*` registration. See `lht-cmn/js/components.js:23`, `lht-cmn/js/components.js:217`, `lht-cmn/js/components.js:322`, `lht-cmn/js/components.js:1030`, `lht-cmn/js/components.js:1132`, and `lht-cmn/js/components.js:1239` |
 | `lht-help-tooltip`: built-in viewport collision handling | Partially reflected | `placement="auto|left|right|top|bottom"` and runtime positioning logic were added, but a later integration regression showed that the component still lacked some self-owned base positioning CSS (`md-tooltip-group` / `md-tooltip` anchoring), so hover behavior could break even when app-side usage was correct. See `lht-cmn/js/components.js:16`, `lht-cmn/README.md:183`, and `lht-cmn/css/components.css:42` |
-| `lht-help-tooltip` should bundle the minimum base CSS needed for correct hover/positioning | Partially reflected | `lht-cmn` owns the tooltip behavior conceptually, but this was not fully true in practice until the `mikuscore` integration restored missing base CSS. This should be treated as part of the component contract and covered by regression tests. See `lht-cmn/css/components.css:42` and `docs/spec/LHT_CMN_FEEDBACK.md` |
+| `lht-help-tooltip` should bundle the minimum base CSS needed for correct hover/positioning | Partially reflected | `lht-cmn` owns the tooltip behavior conceptually, but this was not fully true in practice until the `miku-score` integration restored missing base CSS. This should be treated as part of the component contract and covered by regression tests. See `lht-cmn/css/components.css:42` and `docs/spec/LHT_CMN_FEEDBACK.md` |
 | Prevent pre-upgrade content flash centrally | Reflected | `components.css` now hides uninitialized `lht-*` until `data-initialized="true"`. See `lht-cmn/css/components.css:13` and `lht-cmn/README.md:101` |
 | `lht-file-select`: explicit event ownership | Reflected | `auto-open`, `lht-file-select:before-open`, and `lht-file-select:change` are implemented and documented. See `lht-cmn/js/components.js:1022`, `lht-cmn/js/components.js:1075`, and `lht-cmn/README.md:256` |
 | `lht-error-alert`: support `warning` and `info` | Reflected | `variant` support and ARIA behavior are implemented and documented. See `lht-cmn/js/components.js:727`, `lht-cmn/js/components.js:792`, `lht-cmn/css/components.css:382`, and `lht-cmn/README.md:296` |

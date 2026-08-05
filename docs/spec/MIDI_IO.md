@@ -51,7 +51,7 @@ from timed events and is inherently approximate.
 | Outcome | Current MIDI policy |
 |---|---|
 | Normal MusicXML | Import reconstructs score/part/measure structure, note/rest timing, quantized durations, voices through auto voice split, drum part separation, program metadata, tempo, time signatures, and key signatures when available |
-| `mks:meta:*` | Export may emit mikuscore text meta events such as metadata version, title, movement title, composer, pickup ticks, and part-name/track hints |
+| `mks:meta:*` | Export may emit miku-score text meta events such as metadata version, title, movement title, composer, pickup ticks, and part-name/track hints |
 | `mks:src:*` | Not a primary current MIDI mechanism; raw event preservation is not a first-cut guarantee |
 | `mks:diag:*` | Planned/stabilizing diagnostics should cover unsupported divisions, broken note pairing, quantization clamping, dropped events, voice assignment/overflow, drum separation, and unmapped drum notes |
 | Approximated | Import necessarily approximates notation from performance events, including quantization, rests, enharmonic spelling, voice assignment, beams, articulations, and score layout |
@@ -211,8 +211,8 @@ The module includes a built-in raw SMF Type-1 writer path in addition to `midi-w
   - tempo meta (`FF 51`)
   - time signature meta (`FF 58`)
   - key signature meta (`FF 59`)
-  - optional mikuscore SysEx chunks
-  - optional mikuscore text meta (`FF 01`, `mks:*`)
+  - optional miku-score SysEx chunks
+  - optional miku-score text meta (`FF 01`, `mks:*`)
 - `MTrk #N` (note tracks by `trackId`):
   - program change per used channel (except ch10)
   - note-on / note-off events
@@ -248,7 +248,7 @@ For same-tick same-pitch situations, event ordering is configurable:
 - `buildMidiBytesForPlayback(..., options)` supports:
   - `embedMksSysEx?: boolean` (default: `true`)
   - `emitMksTextMeta?: boolean` (default: `true`)
-- `embedMksSysEx` controls mikuscore SysEx payload emission on the meta track.
+- `embedMksSysEx` controls miku-score SysEx payload emission on the meta track.
 - `emitMksTextMeta` controls text meta lines such as:
   - `mks:meta-version:1`
   - `mks:title:*`

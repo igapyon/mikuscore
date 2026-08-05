@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This document defines harmonization analysis and performance-expression extensions for mikuscore.
+This document defines harmonization analysis and performance-expression extensions for miku-score.
 
 - Target: MusicXML import/export and in-app playback expression control.
 - Non-target: Rewriting existing note structures for analysis.
@@ -197,9 +197,9 @@ Rules:
 ## 9. Compatibility and Round-Trip Policy
 
 - Standard-only consumers MUST be able to ignore `mks:*` safely.
-- mikuscore MUST preserve `other-harmony` and `other-play` unknown fields during save.
+- miku-score MUST preserve `other-harmony` and `other-play` unknown fields during save.
 - If `dirty === false`, XML text MUST remain byte-identical to input.
-- If a third-party tool strips `other-*`, mikuscore SHOULD surface a non-fatal warning and MAY re-analyze.
+- If a third-party tool strips `other-*`, miku-score SHOULD surface a non-fatal warning and MAY re-analyze.
 
 ## 10. Rollback and Failure Semantics
 
@@ -237,7 +237,7 @@ Rules:
 
 ## 1. 対象範囲
 
-本仕様は、mikuscore における和声解析と演奏表現拡張を定義する。
+本仕様は、miku-score における和声解析と演奏表現拡張を定義する。
 
 - 対象: MusicXML の入出力、およびアプリ内再生時の表現制御。
 - 非対象: 解析付与のための既存ノート構造の改変。
@@ -432,9 +432,9 @@ Rules:
 ## 9. 互換性とラウンドトリップ
 
 - 標準のみを扱うツールは `mks:*` を安全に無視できなければならない（MUST）。
-- mikuscore は未知の `other-harmony` / `other-play` フィールドを保持しなければならない（MUST）。
+- miku-score は未知の `other-harmony` / `other-play` フィールドを保持しなければならない（MUST）。
 - `dirty === false` の場合、XML文字列は入力とバイト一致しなければならない（MUST）。
-- 外部ツールで `other-*` が除去された場合、mikuscore は非致命警告を表示し、必要に応じて再解析してよい（SHOULD/MAY）。
+- 外部ツールで `other-*` が除去された場合、miku-score は非致命警告を表示し、必要に応じて再解析してよい（SHOULD/MAY）。
 
 ## 10. ロールバックと失敗時動作
 

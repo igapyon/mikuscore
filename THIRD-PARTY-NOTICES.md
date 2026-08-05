@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-This document records third-party software and materials that are bundled with, directly used by, or explicitly referenced by `mikuscore`.
+This document records third-party software and materials that are bundled with, directly used by, or explicitly referenced by `miku-score`.
 
 It is maintained as a practical repository notice file, not as a substitute for upstream license texts.
 

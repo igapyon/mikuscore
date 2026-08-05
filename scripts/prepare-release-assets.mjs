@@ -1,9 +1,9 @@
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const PRODUCT = "mikuscore";
+const PRODUCT = "miku-score";
 const ROOT = process.cwd();
 const RELEASE_DIR = "release-assets";
 const RUNTIME_BUNDLE = `bundle/${PRODUCT}.mjs`;
@@ -41,14 +41,22 @@ mkdirSync(path.join(ROOT, RELEASE_DIR), { recursive: true });
 copyFileSync(path.join(ROOT, RUNTIME_BUNDLE), path.join(ROOT, RELEASE_DIR, `${PRODUCT}-${version}.mjs`));
 
 const excludedSources = new Set([
-  "bundle/mikuscore.mjs",
+  "bundle/miku-score.mjs",
   "index.html",
-  "mikuscore.html",
+  "miku-score.html",
   "src/js/main.js",
 ]);
-const sourceFiles = run("git", ["ls-files"])
-  .split(/\r?\n/)
-  .filter((entry) => entry && !excludedSources.has(entry) && !entry.startsWith("release-assets/"));
+const sourceFiles = [...new Set(
+  run("git", ["ls-files", "--cached", "--modified", "--others", "--exclude-standard"])
+    .split(/\r?\n/)
+    .filter(
+      (entry) =>
+        entry &&
+        !excludedSources.has(entry) &&
+        !entry.startsWith("release-assets/") &&
+        existsSync(path.join(ROOT, entry))
+    )
+)].sort();
 
 const tempDir = mkdtempSync(path.join(os.tmpdir(), `${PRODUCT}-release-`));
 try {

@@ -8,12 +8,12 @@
   - `docs/spec/MUSESCORE_IO.md`
 
 ## 背景
-- mikuscore の内部正本は MusicXML とする。
+- miku-score の内部正本は MusicXML とする。
 - 一方、配布元が MuseScore の曲データでは、作者の実質原本は MuseScore 形式（`.mscz/.mscx`）である可能性が高い。
-- したがって、`MuseScore -> mikuscore変換 -> MusicXML` の結果が、MuseScore公式の `MusicXMLエクスポート` と意味的に同等かを継続確認する価値が高い。
+- したがって、`MuseScore -> miku-score変換 -> MusicXML` の結果が、MuseScore公式の `MusicXMLエクスポート` と意味的に同等かを継続確認する価値が高い。
 
 ## 目的
-- mikuscore の MuseScore インポート機能が、MuseScore公式エクスポート相当の再現力を持つか検証する。
+- miku-score の MuseScore インポート機能が、MuseScore公式エクスポート相当の再現力を持つか検証する。
 - 仕様上の表現差（XML順序やID差）ではなく、楽譜意味（記譜意味）の一致を評価する。
 
 ## 運用レベル（必須/任意）
@@ -25,7 +25,7 @@
 1. 同一曲について以下を準備する。
    - `source.mscz`（または `source.mscx`）
    - MuseScore公式エクスポート `reference.musicxml`（または `.mxl`）
-2. mikuscore 変換で `source.mscz/.mscx -> candidate.musicxml` を生成する。
+2. miku-score 変換で `source.mscz/.mscx -> candidate.musicxml` を生成する。
 3. `candidate.musicxml` と `reference.musicxml` を正規化して比較する。
 
 ## 比較ポリシー
@@ -74,7 +74,7 @@
 
 ## 当面の運用（CI未導入・repo外）
 - ライセンスや再配布条件が未確定な間は、実曲fixtureをリポジトリに置かない。
-- 比較データは Git 非管理ディレクトリで管理する（例: `tests/local-data/roundtrip/musescore/` または `~/mikuscore-private-fixtures/`）。
+- 比較データは Git 非管理ディレクトリで管理する（例: `tests/local-data/roundtrip/musescore/` または `~/miku-score-private-fixtures/`）。
 - 当面はローカル実行で次を行う。
   1. `MuseScore -> candidate_from_musescore.musicxml`
   2. `MIDI -> candidate_from_midi.musicxml`
@@ -120,7 +120,7 @@
     - `sempre legato`（Expression text）
 
 ## 期待効果
-- 「MuseScoreでは出るのにmikuscoreでは欠ける」不具合を早期検出できる。
+- 「MuseScoreでは出るのにmiku-scoreでは欠ける」不具合を早期検出できる。
 - 仕様変更時に、どの記譜要素へ影響したかを定量的に追跡できる。
 - MusicXML正本方針を維持したまま、MuseScore互換品質を継続改善できる。
 

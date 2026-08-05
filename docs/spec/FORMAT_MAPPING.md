@@ -2,14 +2,14 @@
 
 ## Purpose
 
-This document is the first cross-format mapping table for mikuscore.
+This document is the first cross-format mapping table for miku-score.
 
 It refines the canonical MusicXML state policy in
 `docs/spec/CANONICAL_MUSICXML.md` by classifying each surrounding format
 against the same set of outcomes:
 
 - represented in normal MusicXML
-- preserved through mikuscore extension metadata (`mks:meta:*`)
+- preserved through miku-score extension metadata (`mks:meta:*`)
 - preserved as source-format metadata (`mks:src:*`)
 - approximated with diagnostics
 - skipped with diagnostics
@@ -24,7 +24,7 @@ avoid treating every converter as a separate product.
 | Term | Meaning |
 |---|---|
 | Normal MusicXML | Standard MusicXML elements and attributes used as the canonical score state |
-| `mks:meta:*` | mikuscore extension metadata needed for product behavior or roundtrip support |
+| `mks:meta:*` | miku-score extension metadata needed for product behavior or roundtrip support |
 | `mks:src:*` | source-format-only data retained for traceability or possible reconstruction |
 | `mks:diag:*` | structured conversion diagnostics stored in MusicXML metadata when useful |
 | Approximated | Converted into a close MusicXML representation but not guaranteed equivalent |
@@ -35,7 +35,7 @@ avoid treating every converter as a separate product.
 
 | Format | Role | Canonical relationship |
 |---|---|---|
-| MusicXML | Canonical notation state | The score state mikuscore reads, validates, edits, serializes, renders, and exports from |
+| MusicXML | Canonical notation state | The score state miku-score reads, validates, edits, serializes, renders, and exports from |
 | MuseScore | Surrounding notation format | High-priority import/export through MusicXML with parity checks |
 | MIDI | Surrounding performance-event format | Export derives performance events from MusicXML; import reconstructs notation from timed events |
 | ABC | Surrounding compact text notation | Practical AI/human handoff notation imported/exported through MusicXML |
@@ -77,8 +77,8 @@ Source spec: `docs/spec/ABC_IO.md`.
 Notes:
 
 - ABC support distinguishes standard ABC surface, real-world compatibility
-  behavior, and mikuscore extension metadata.
-- `%@mks ...` is mikuscore-specific extension metadata, not standard ABC
+  behavior, and miku-score extension metadata.
+- `%@mks ...` is miku-score-specific extension metadata, not standard ABC
   musical notation.
 - Exact ABC source whitespace is not canonical roundtrip data.
 
@@ -91,7 +91,7 @@ Source spec: `docs/spec/MIDI_IO.md`.
 | Outcome | Current policy |
 |---|---|
 | Normal MusicXML | Imported MIDI reconstructs parts/tracks, measures, notes/rests, durations, voices/lane equivalents where possible, tempo, key/time metadata where available, and quantized notation structure |
-| `mks:meta:*` | MIDI export may emit mikuscore text meta events such as title, movement title, composer, pickup ticks, part-name/track hints, and metadata version |
+| `mks:meta:*` | MIDI export may emit miku-score text meta events such as title, movement title, composer, pickup ticks, part-name/track hints, and metadata version |
 | `mks:src:*` | Not the primary current MIDI mechanism; source-event trace preservation is not a first-cut guarantee |
 | `mks:diag:*` | Conversion diagnostics should describe quantization, pairing, unsupported division, malformed events, and other import/export issues when available |
 | Approximated | MIDI import necessarily reconstructs notation from timed events; quantization, enharmonic spelling, voices, beams, articulations, and rests may be inferred |
@@ -114,7 +114,7 @@ Source spec: `docs/spec/MUSESCORE_IO.md`.
 | Outcome | Current policy |
 |---|---|
 | Normal MusicXML | Time/key/tempo, staff/voice events, notes/rests, tuplets, slurs, ties, ottava, trills, dynamics, directions, repeats, barlines, accidental spelling where recoverable, and beam information |
-| `mks:meta:*` | May be used when mikuscore-specific roundtrip behavior becomes necessary |
+| `mks:meta:*` | May be used when miku-score-specific roundtrip behavior becomes necessary |
 | `mks:src:*` | Source chunks may be stored in `mks:src:mscx:*` when source metadata is enabled |
 | `mks:diag:*` | Import warnings may be exported to `miscellaneous-field` entries when debug metadata is enabled |
 | Approximated | Implicit beams may be inferred when MuseScore beam mode is absent; unsupported layout or engraving details may be approximated |
@@ -136,7 +136,7 @@ Source spec: `docs/spec/MEI_IO.md`.
 | Outcome | Current policy |
 |---|---|
 | Normal MusicXML | Basic score, part/staff, measure, pitch, rest, duration, key, meter, clef, and supported notation structures where implemented |
-| `mks:meta:*` | Allowed for mikuscore-specific roundtrip hints if required by future MEI parity work |
+| `mks:meta:*` | Allowed for miku-score-specific roundtrip hints if required by future MEI parity work |
 | `mks:src:*` | Candidate home for MEI-only source constructs that do not map cleanly to MusicXML |
 | `mks:diag:*` | Should record unsupported MEI constructs, repairs, approximation, and dropped material when practical |
 | Approximated | MEI structures without direct MusicXML equivalents may be approximated into the closest canonical MusicXML representation |
@@ -183,7 +183,7 @@ Source specs: `docs/spec/VSQX_IO.md` and
 | Outcome | Current policy |
 |---|---|
 | Normal MusicXML | Vocal pitch/timing material that can be represented as score notes, rests, measures, tempo, and related canonical MusicXML structures |
-| `mks:meta:*` | Allowed for mikuscore-specific roundtrip or provenance metadata when VSQX information cannot be represented directly |
+| `mks:meta:*` | Allowed for miku-score-specific roundtrip or provenance metadata when VSQX information cannot be represented directly |
 | `mks:src:*` | Candidate home for VSQX-only singer, lyric, phoneme, or parameter data when retained for traceability |
 | `mks:diag:*` | Should record unsupported VSQX parameters, approximation, dropped vocal controls, and integration limitations |
 | Approximated | Singing/vocal timing and pitch data may be approximated into notated MusicXML; expressive vocal parameters may not have score equivalents |

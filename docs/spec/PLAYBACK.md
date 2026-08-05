@@ -140,7 +140,7 @@ Therefore quick playback in MIDI-like mode MUST reflect the same nuance policy a
 
 When reliable playback is required for large scores:
 
-- Export to MIDI (`.mid`) from mikuscore.
+- Export to MIDI (`.mid`) from miku-score.
 - Play the exported MIDI in an external MIDI-capable player / DAW / notation app.
 
 ## Error and diagnostics policy

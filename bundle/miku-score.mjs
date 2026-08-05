@@ -133959,7 +133959,7 @@ var require_api = __commonJS({
   }
 });
 
-// .mikuscore-build/cli-runtime-entry.mjs
+// .miku-score-build/cli-runtime-entry.mjs
 var import_jsdom = __toESM(require_api(), 1);
 import fs from "node:fs";
 import os from "node:os";
@@ -133970,37 +133970,70 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var repoRoot = path.resolve(__dirname, "..");
 var DIAGNOSTICS_VERSION = 1;
-var PACKAGE_VERSION = "0.5.0";
+var PACKAGE_VERSION = "0.6.0";
 var HELP_TEXT = {
   top: [
     "Usage:",
-    "  mikuscore convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from midi --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore render svg [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore state summarize [--in <file>|-] [--diagnostics text|json]",
-    "  mikuscore state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]",
-    "  mikuscore state validate-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--diagnostics text|json]",
-    "  mikuscore state apply-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore state diff --before <file> --after <file> [--diagnostics text|json]",
-    "  mikuscore render --help",
-    "  mikuscore state --help",
-    "  mikuscore convert --help",
-    "  mikuscore --version",
-    "  mikuscore --help",
+    "  miku-score convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from midi --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musescore --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to musescore [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score render svg [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score state summarize [--in <file>|-] [--diagnostics text|json]",
+    "  miku-score state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]",
+    "  miku-score state validate-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--diagnostics text|json]",
+    "  miku-score state apply-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score state diff --before <file> --after <file> [--diagnostics text|json]",
+    "  miku-score render --help",
+    "  miku-score state --help",
+    "  miku-score convert --help",
+    "  miku-score --version",
+    "  miku-score --help",
+    "",
+    "Description:",
+    "  Convert, render, and inspect score data from a command line.",
     "",
     "Commands:",
     "  convert   Convert score text between supported formats",
     "  render    Render derived outputs such as SVG",
     "  state     Inspect canonical MusicXML state",
+    "",
+    "Default behavior:",
+    "  Read --in from stdin, write the primary result to stdout, and emit text diagnostics to stderr.",
+    "",
+    "Inputs:",
+    "  --in <file>|-  Read from a file or stdin; stdin is the default.",
+    "",
+    "Outputs:",
+    "  --out <file>|-  Write the primary result to a file or stdout; stdout is the default.",
+    "",
+    "Generated artifacts:",
+    "  The CLI creates no implicit artifact files. It writes only the path supplied with --out.",
+    "",
+    "Overwrite behavior:",
+    "  An existing --out file is replaced without a prompt. Its parent directory must already exist.",
+    "",
+    "Machine-readable output:",
+    "  Primary results stay on stdout unless --out is used. --diagnostics json emits a JSON diagnostics object to stderr.",
+    "",
+    "Diagnostics:",
+    "  --diagnostics text is the default. Warnings and errors use stderr; diagnostics JSON has version 1.",
+    "",
+    "Exit codes:",
+    "  0  Completed successfully, including --help and --version.",
+    "  1  Conversion, rendering, or state processing failed.",
+    "  2  Command usage is invalid.",
+    "",
+    "References:",
+    "  docs/DEVELOPMENT.md",
+    "  docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md",
     "",
     "Options:",
     "  --from <format>          Source format",
@@ -134013,17 +134046,20 @@ var HELP_TEXT = {
   ].join("\n"),
   convert: [
     "Usage:",
-    "  mikuscore convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore convert --help",
+    "  miku-score convert --from abc --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from abc --to midi [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to abc [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from mei --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to mei [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from lilypond --to musicxml [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --from musicxml --to lilypond [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score convert --help",
     "",
     "Description:",
     "  Convert score text between supported formats.",
+    "",
+    "Default behavior:",
+    "  Requires --from and --to. Input defaults to stdin, converted output defaults to stdout, and diagnostics default to text on stderr.",
     "",
     "Supported pairs:",
     "  --from abc --to musicxml",
@@ -134048,6 +134084,27 @@ var HELP_TEXT = {
     "  stdout          Used when --out is omitted",
     "  file paths      --to musicxml writes .mxl when --out ends with .mxl; --to musescore writes .mscz when --out ends with .mscz",
     "",
+    "Generated artifacts:",
+    "  No artifact path is inferred. The CLI writes only the file supplied with --out.",
+    "",
+    "Overwrite behavior:",
+    "  An existing --out file is replaced without a prompt. Its parent directory must already exist.",
+    "",
+    "Machine-readable output:",
+    "  Converted data is the primary stdout or --out result. --diagnostics json emits diagnostics JSON to stderr.",
+    "",
+    "Diagnostics:",
+    "  --diagnostics text is the default. Warnings and errors use stderr; diagnostics JSON has version 1.",
+    "",
+    "Exit codes:",
+    "  0  Conversion completed successfully.",
+    "  1  Conversion processing failed.",
+    "  2  Command usage is invalid.",
+    "",
+    "References:",
+    "  docs/DEVELOPMENT.md",
+    "  docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md",
+    "",
     "Options:",
     "  --from <format>          Source format",
     "  --to <format>            Target format",
@@ -134056,11 +134113,14 @@ var HELP_TEXT = {
   ].join("\n"),
   render: [
     "Usage:",
-    "  mikuscore render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore render --help",
+    "  miku-score render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score render --help",
     "",
     "Description:",
     "  Render derived outputs from canonical MusicXML input or supported one-shot source formats.",
+    "",
+    "Default behavior:",
+    "  --from defaults to musicxml. Input defaults to stdin, rendered output defaults to stdout, and diagnostics default to text on stderr.",
     "",
     "Available targets:",
     "  svg",
@@ -134074,6 +134134,27 @@ var HELP_TEXT = {
     "  --out <file>|-  Write rendered output to file or stdout",
     "  stdout          Used when --out is omitted",
     "",
+    "Generated artifacts:",
+    "  No artifact path is inferred. The CLI writes only the file supplied with --out.",
+    "",
+    "Overwrite behavior:",
+    "  An existing --out file is replaced without a prompt. Its parent directory must already exist.",
+    "",
+    "Machine-readable output:",
+    "  Rendered SVG is the primary stdout or --out result. --diagnostics json emits diagnostics JSON to stderr.",
+    "",
+    "Diagnostics:",
+    "  --diagnostics text is the default. Warnings and errors use stderr; diagnostics JSON has version 1.",
+    "",
+    "Exit codes:",
+    "  0  Rendering completed successfully.",
+    "  1  Rendering processing failed.",
+    "  2  Command usage is invalid.",
+    "",
+    "References:",
+    "  docs/DEVELOPMENT.md",
+    "  docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md",
+    "",
     "Options:",
     "  --from <format>          Source format",
     "  --diagnostics text|json  Select diagnostics format",
@@ -134081,15 +134162,18 @@ var HELP_TEXT = {
   ].join("\n"),
   state: [
     "Usage:",
-    "  mikuscore state summarize [--in <file>|-] [--diagnostics text|json]",
-    "  mikuscore state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]",
-    "  mikuscore state validate-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--diagnostics text|json]",
-    "  mikuscore state apply-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--out <file>|-] [--diagnostics text|json]",
-    "  mikuscore state diff --before <file> --after <file> [--diagnostics text|json]",
-    "  mikuscore state --help",
+    "  miku-score state summarize [--in <file>|-] [--diagnostics text|json]",
+    "  miku-score state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]",
+    "  miku-score state validate-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--diagnostics text|json]",
+    "  miku-score state apply-command [--in <file>|-] [--command <json>|--command-file <file>|-] [--out <file>|-] [--diagnostics text|json]",
+    "  miku-score state diff --before <file> --after <file> [--diagnostics text|json]",
+    "  miku-score state --help",
     "",
     "Description:",
     "  Inspect canonical MusicXML state.",
+    "",
+    "Default behavior:",
+    "  State commands read canonical MusicXML from stdin unless --in is supplied. Diagnostics default to text on stderr.",
     "",
     "Available commands:",
     "  summarize   Emit a compact JSON summary of canonical MusicXML state",
@@ -134101,6 +134185,34 @@ var HELP_TEXT = {
     "Command payload note:",
     "  state validate-command/apply-command accept core command JSON.",
     "  Targeting may use targetNodeId/anchorNodeId directly or selector/anchor_selector from inspect-measure output.",
+    "",
+    "Inputs:",
+    "  --in <file>|-  Read canonical MusicXML from a file or stdin; stdin is the default.",
+    "  --before/--after  state diff requires two MusicXML file paths.",
+    "",
+    "Outputs:",
+    "  summarize, inspect-measure, validate-command, and diff emit JSON. apply-command emits MusicXML and accepts --out.",
+    "",
+    "Generated artifacts:",
+    "  No artifact path is inferred. Only state apply-command writes a file when --out is supplied.",
+    "",
+    "Overwrite behavior:",
+    "  state apply-command replaces an existing --out file without a prompt. Its parent directory must already exist.",
+    "",
+    "Machine-readable output:",
+    "  State results are the primary stdout or --out result. --diagnostics json emits diagnostics JSON to stderr.",
+    "",
+    "Diagnostics:",
+    "  --diagnostics text is the default. Warnings and errors use stderr; diagnostics JSON has version 1.",
+    "",
+    "Exit codes:",
+    "  0  State operation completed successfully.",
+    "  1  State processing failed.",
+    "  2  Command usage is invalid.",
+    "",
+    "References:",
+    "  docs/DEVELOPMENT.md",
+    "  docs/spec/CLI_DIAGNOSTICS_FIRSTCUT.md",
     "",
     "Options:",
     "  --diagnostics text|json  Select diagnostics format",
@@ -135418,7 +135530,7 @@ var BUNDLED_CLI_MODULES = {
             const context = this.describeNoteContext(note);
             const noteXml = this.compactNodeXml(note);
             if (typeof console !== "undefined") {
-              console.error("[mikuscore][save][invalid-duration]", context, noteXml);
+              console.error("[miku-score][save][invalid-duration]", context, noteXml);
             }
             return {
               code: "MVP_INVALID_NOTE_DURATION",
@@ -139914,7 +140026,7 @@ var BUNDLED_CLI_MODULES = {
       return "";
     };
     const readMusicXmlExportTitle = (score) => {
-      return readTrimmedMusicXmlText(score, "work > work-title") || readTrimmedMusicXmlText(score, "movement-title") || "mikuscore export";
+      return readTrimmedMusicXmlText(score, "work > work-title") || readTrimmedMusicXmlText(score, "movement-title") || "miku-score export";
     };
     const readMusicXmlExportMetadata = (score) => {
       return {
@@ -146928,7 +147040,7 @@ var BUNDLED_CLI_MODULES = {
       if (parts.length === 0) {
         throw new Error("MusicXML part is missing.");
       }
-      const title = ((_b = (_a = doc.querySelector("score-partwise > work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || ((_d = (_c = doc.querySelector("score-partwise > movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) || "mikuscore";
+      const title = ((_b = (_a = doc.querySelector("score-partwise > work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) || ((_d = (_c = doc.querySelector("score-partwise > movement-title")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) || "miku-score";
       const scoreDefSource = doc.querySelector("score-partwise > part > measure > attributes");
       const meterCount = parseIntSafe((_e = scoreDefSource === null || scoreDefSource === void 0 ? void 0 : scoreDefSource.querySelector(":scope > time > beats")) === null || _e === void 0 ? void 0 : _e.textContent, 4);
       const meterUnit = parseIntSafe((_f = scoreDefSource === null || scoreDefSource === void 0 ? void 0 : scoreDefSource.querySelector(":scope > time > beat-type")) === null || _f === void 0 ? void 0 : _f.textContent, 4);
@@ -147064,7 +147176,7 @@ var BUNDLED_CLI_MODULES = {
       return [
         `<?xml version="1.0" encoding="UTF-8"?>`,
         `<mei xmlns="http://www.music-encoding.org/ns/mei" meiversion="${esc(meiVersion)}">`,
-        `<meiHead><fileDesc><titleStmt><title>${esc(title)}</title></titleStmt><pubStmt><p>Generated by mikuscore</p></pubStmt></fileDesc></meiHead>`,
+        `<meiHead><fileDesc><titleStmt><title>${esc(title)}</title></titleStmt><pubStmt><p>Generated by miku-score</p></pubStmt></fileDesc></meiHead>`,
         `<music><body><mdiv><score>`,
         scoreDefLines.join(""),
         `<section>${measuresOut.join("")}</section>`,
@@ -149105,7 +149217,7 @@ var BUNDLED_CLI_MODULES = {
       } else {
         throw new Error("MEI root must be <mei> or <meiCorpus>.");
       }
-      const title = firstDescendantText(meiImportRoot, "title") || "mikuscore";
+      const title = firstDescendantText(meiImportRoot, "title") || "miku-score";
       const scoreDefs = collectScoreDefsInDocOrder(meiImportRoot);
       const staffDefsInDocOrder = collectStaffDefsInDocOrder(meiImportRoot);
       const scoreDef = scoreDefs[0];
@@ -152057,7 +152169,7 @@ var BUNDLED_CLI_MODULES = {
         const partName = ((_d = (_c = scorePart.querySelector(":scope > part-name")) === null || _c === void 0 ? void 0 : _c.textContent) === null || _d === void 0 ? void 0 : _d.trim()) || ((_f = (_e = scorePart.querySelector(":scope > part-abbreviation")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) || partId;
         partNameById.set(partId, partName);
       }
-      const title = ((_h = (_g = doc.querySelector("score-partwise > work > work-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) || ((_k = (_j = doc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) || "mikuscore export";
+      const title = ((_h = (_g = doc.querySelector("score-partwise > work > work-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) || ((_k = (_j = doc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) || "miku-score export";
       const composer = extractSimpleComposerFromDoc(doc);
       const firstMeasure = doc.querySelector("score-partwise > part > measure");
       const beats = Number.parseInt(((_l = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector(":scope > attributes > time > beats")) === null || _l === void 0 ? void 0 : _l.textContent) || "4", 10);
@@ -156413,7 +156525,7 @@ var BUNDLED_CLI_MODULES = {
     };
     const exportMusicXmlDomToAbc = (doc) => {
       var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
-      const title = (_f = (_c = (_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = doc.querySelector("movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "mikuscore";
+      const title = (_f = (_c = (_b = (_a = doc.querySelector("work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = doc.querySelector("movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "miku-score";
       const composer = (_j = (_h = (_g = doc.querySelector('identification > creator[type="composer"]')) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
       const firstMeasure = doc.querySelector("score-partwise > part > measure");
       const meterBeats = (_m = (_l = (_k = firstMeasure === null || firstMeasure === void 0 ? void 0 : firstMeasure.querySelector("attributes > time > beats")) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : "4";
@@ -156700,7 +156812,7 @@ ${exportContext.metaLines.join("\n")}
       var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
       const resolvedParts = resolveAbcParsedPartsForExport(parsed.parts);
       const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
-      const title = ((_a = parsed.meta) === null || _a === void 0 ? void 0 : _a.title) || "mikuscore";
+      const title = ((_a = parsed.meta) === null || _a === void 0 ? void 0 : _a.title) || "miku-score";
       const composer = ((_b = parsed.meta) === null || _b === void 0 ? void 0 : _b.composer) || "Unknown";
       const beats = ((_d = (_c = parsed.meta) === null || _c === void 0 ? void 0 : _c.meter) === null || _d === void 0 ? void 0 : _d.beats) || 4;
       const beatType = ((_f = (_e = parsed.meta) === null || _e === void 0 ? void 0 : _e.meter) === null || _f === void 0 ? void 0 : _f.beatType) || 4;
@@ -156737,7 +156849,7 @@ ${exportContext.metaLines.join("\n")}
     const convertAbcToMusicXml = (abcSource, options = {}) => {
       var _a, _b, _c;
       const parsed = exports.AbcCompatParser.parseForMusicXml(abcSource, {
-        defaultTitle: "mikuscore",
+        defaultTitle: "miku-score",
         defaultComposer: "Unknown",
         inferTransposeFromPartName: true,
         overfullCompatibilityMode: options.overfullCompatibilityMode !== false
@@ -157923,7 +158035,7 @@ function resolveBundledModule(fromId, specifier) {
   throw new Error("Cannot resolve bundled CLI module: " + specifier + " from " + fromId);
 }
 function installBundledVerovio() {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mikuscore-verovio-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "miku-score-verovio-"));
   const verovioPath = path.join(tempDir, "verovio.cjs");
   fs.writeFileSync(verovioPath, BUNDLED_VEROVIO_JS, "utf8");
   const requireFromTemp = createRequire(path.join(tempDir, "package.json"));
@@ -158054,7 +158166,7 @@ function parseArgs(argv) {
   return { command, options };
 }
 function getPackageVersion() {
-  if (PACKAGE_VERSION !== "__MIKUSCORE_PACKAGE_VERSION__") {
+  if (PACKAGE_VERSION !== "__MIKU_SCORE_PACKAGE_VERSION__") {
     return PACKAGE_VERSION;
   }
   const packageJsonPath = path.join(repoRoot, "package.json");

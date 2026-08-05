@@ -268,8 +268,8 @@ let isFileLoadInProgress = false;
 const NOTE_CLICK_SNAP_PX = 170;
 const DEFAULT_DIVISIONS = 480;
 const MAX_NEW_PARTS = 16;
-const LOCAL_DRAFT_STORAGE_KEY = "mikuscore.localDraft.v1";
-const PLAYBACK_SETTINGS_STORAGE_KEY = "mikuscore.playbackSettings.v1";
+const LOCAL_DRAFT_STORAGE_KEY = "miku-score.localDraft.v1";
+const PLAYBACK_SETTINGS_STORAGE_KEY = "miku-score.playbackSettings.v1";
 const DEFAULT_MIDI_PROGRAM: MidiProgramPreset = "electric_piano_2";
 const DEFAULT_PLAYBACK_WAVEFORM: "sine" | "triangle" | "square" = "triangle";
 const DEFAULT_PLAYBACK_USE_MIDI_LIKE = true;
@@ -675,10 +675,10 @@ const logDiagnostics = (
 ): void => {
   if (!DEBUG_LOG) return;
   for (const d of diagnostics) {
-    console.error(`[mikuscore][${phase}][${d.code}] ${d.message}`);
+    console.error(`[miku-score][${phase}][${d.code}] ${d.message}`);
   }
   for (const w of warnings) {
-    console.warn(`[mikuscore][${phase}][${w.code}] ${w.message}`);
+    console.warn(`[miku-score][${phase}][${w.code}] ${w.message}`);
   }
 };
 
@@ -686,7 +686,7 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
   if (!DEBUG_LOG) return;
   const doc = parseMusicXmlDocument(xml);
   if (!doc) {
-    console.error("[mikuscore][debug] XML parse failed while dumping overfull context.");
+    console.error("[miku-score][debug] XML parse failed while dumping overfull context.");
     return;
   }
 
@@ -734,7 +734,7 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
     found = true;
 
     console.groupCollapsed(
-      `[mikuscore][debug][MEASURE_OVERFULL] measure=${number} occupied=${occupied} capacity=${capacity}`
+      `[miku-score][debug][MEASURE_OVERFULL] measure=${number} occupied=${occupied} capacity=${capacity}`
     );
     console.log({
       measure: number,
@@ -749,7 +749,7 @@ const dumpOverfullContext = (xml: string, voice: string): void => {
     console.groupEnd();
   }
   if (!found) {
-    console.warn("[mikuscore][debug] no overfull measure found while dumping context.");
+    console.warn("[miku-score][debug] no overfull measure found while dumping context.");
   }
 };
 
@@ -1822,7 +1822,7 @@ const renderAll = (): void => {
 
 const setUiMappingDiagnostic = (message: string): void => {
   if (DEBUG_LOG) {
-    console.warn(`[mikuscore][click-map][MVP_TARGET_NOT_FOUND] ${message}`);
+    console.warn(`[miku-score][click-map][MVP_TARGET_NOT_FOUND] ${message}`);
   }
   state.lastDispatchResult = {
     ok: false,
@@ -2117,7 +2117,7 @@ const resolveNodeIdFromSvgTarget = (target: EventTarget | null, clickEvent?: Mou
   }
 
   if (DEBUG_LOG) {
-    console.warn("[mikuscore][click-map] unresolved candidates:", {
+    console.warn("[miku-score][click-map] unresolved candidates:", {
       tag: target.tagName,
       className: target.getAttribute("class"),
       candidates: directCandidates,
@@ -2226,7 +2226,7 @@ const onVerovioScoreClick = (event: MouseEvent): void => {
   const nodeId = resolveNodeIdFromSvgTarget(event.target, event) ?? resolveNodeIdFromNearestPoint(event);
   if (DEBUG_LOG) {
     const clicked = event.target instanceof Element ? event.target.closest("[id]") : null;
-    console.warn("[mikuscore][click-map] resolution:", {
+    console.warn("[miku-score][click-map] resolution:", {
       clickedId: clicked?.getAttribute("id") ?? null,
       mappedNodeId: nodeId,
       mapSize: currentSvgIdToNodeId.size,
@@ -2528,7 +2528,7 @@ const autoSaveCurrentXml = (persistLocalDraft = false): void => {
       if (debugXml) {
         dumpOverfullContext(debugXml, DEFAULT_VOICE);
       } else if (DEBUG_LOG) {
-        console.warn("[mikuscore][debug] no in-memory XML to dump.");
+        console.warn("[miku-score][debug] no in-memory XML to dump.");
       }
     }
     return;
@@ -2544,7 +2544,7 @@ const loadFromText = (xml: string): void => {
     core.load(xml);
   } catch (err) {
     if (DEBUG_LOG) {
-      console.error("[mikuscore][load] load failed:", err);
+      console.error("[miku-score][load] load failed:", err);
     }
     state.loaded = false;
     state.lastDispatchResult = {
@@ -3177,7 +3177,7 @@ const failExport = (
   reason: string
 ): void => {
   const message = `${format} export failed: ${reason}`;
-  console.error(`[mikuscore][export][${format.toLowerCase()}] ${reason}`);
+  console.error(`[miku-score][export][${format.toLowerCase()}] ${reason}`);
   state.lastDispatchResult = {
     ok: false,
     dirtyChanged: false,
@@ -3456,7 +3456,7 @@ const onDownloadMeasureMusicXml = (): void => {
   const safeMeasureNumber = measureNumber.replace(/[^a-zA-Z0-9._-]/g, "_");
   try {
     triggerFileDownload({
-      fileName: `mikuscore-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
+      fileName: `miku-score-measure-${safePartId}-${safeMeasureNumber}-${ts}.musicxml`,
       blob: new Blob([prettyPrintMusicXmlText(xmlText)], { type: "application/xml;charset=utf-8" }),
     });
   } catch (err) {

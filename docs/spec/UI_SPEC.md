@@ -2,7 +2,7 @@
 
 ## English
 ## Purpose
-This document defines current MVP UI behavior for `mikuscore`.
+This document defines current MVP UI behavior for `miku-score`.
 
 The UI is only an interaction layer; Core remains the single source of truth for score mutation.
 
@@ -75,9 +75,9 @@ Top-level flow is a 4-step tabbed stepper:
   - If `Export MusicXML text as .xml extension` is ON, compression is forced OFF.
   - If compression is turned ON, `Export MusicXML text as .xml extension` is turned OFF.
 - Download names include timestamp suffix:
-  - MusicXML text export: `mikuscore-YYYYMMDDhhmm.musicxml` (default) or `mikuscore-YYYYMMDDhhmm.xml` (when enabled)
-  - `mikuscore-YYYYMMDDhhmm.abc`
-  - `mikuscore-YYYYMMDDhhmm.mid`
+  - MusicXML text export: `miku-score-YYYYMMDDhhmm.musicxml` (default) or `miku-score-YYYYMMDDhhmm.xml` (when enabled)
+  - `miku-score-YYYYMMDDhhmm.abc`
+  - `miku-score-YYYYMMDDhhmm.mid`
 
 ## Selection / Command Rules
 - Selection key is `nodeId`.

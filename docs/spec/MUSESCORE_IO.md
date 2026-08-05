@@ -44,7 +44,7 @@ notation-tool parity target, but canonical score state remains MusicXML.
 | Outcome | Current MuseScore policy |
 |---|---|
 | Normal MusicXML | Time, key, tempo, staff/voice events, notes, rests, tuplets, slurs, ties, ottava, trills, dynamics, directions, repeats, barlines, accidental spelling where recoverable, beam information, and selected notation semantics |
-| `mks:meta:*` | May be used if future MuseScore roundtrip behavior needs mikuscore-specific extension metadata |
+| `mks:meta:*` | May be used if future MuseScore roundtrip behavior needs miku-score-specific extension metadata |
 | `mks:src:*` | Source chunks may be stored in `mks:src:mscx:*` when `sourceMetadata` is enabled |
 | `mks:diag:*` | Import warnings may be exported to MusicXML `miscellaneous-field` entries when `debugMetadata` is enabled |
 | Approximated | Missing beam modes may be filled through implicit beam inference; unsupported layout or engraving-only details may be approximated or omitted |

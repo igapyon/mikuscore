@@ -5843,7 +5843,7 @@ export const exportMusicXmlDomToAbc = (doc: Document): string => {
   const title =
     doc.querySelector("work > work-title")?.textContent?.trim() ??
     doc.querySelector("movement-title")?.textContent?.trim() ??
-    "mikuscore";
+    "miku-score";
   const composer = doc.querySelector('identification > creator[type="composer"]')?.textContent?.trim() ?? "";
   const firstMeasure = doc.querySelector("score-partwise > part > measure");
   const meterBeats = firstMeasure?.querySelector("attributes > time > beats")?.textContent?.trim() ?? "4";
@@ -6384,7 +6384,7 @@ type AbcMusicXmlExportContext = {
 const buildAbcMusicXmlExportContext = (parsed: AbcParsedResult): AbcMusicXmlExportContext => {
   const resolvedParts = resolveAbcParsedPartsForExport(parsed.parts);
   const measureCount = resolvedParts.reduce((max, part) => Math.max(max, part.measures.length), 1);
-  const title = parsed.meta?.title || "mikuscore";
+  const title = parsed.meta?.title || "miku-score";
   const composer = parsed.meta?.composer || "Unknown";
   const beats = parsed.meta?.meter?.beats || 4;
   const beatType = parsed.meta?.meter?.beatType || 4;
@@ -6430,7 +6430,7 @@ const buildAbcScorePartwiseXmlDocument = (
 
 export const convertAbcToMusicXml = (abcSource: string, options: AbcImportOptions = {}): string => {
   const parsed = AbcCompatParser.parseForMusicXml(abcSource, {
-    defaultTitle: "mikuscore",
+    defaultTitle: "miku-score",
     defaultComposer: "Unknown",
     inferTransposeFromPartName: true,
     overfullCompatibilityMode: options.overfullCompatibilityMode !== false,

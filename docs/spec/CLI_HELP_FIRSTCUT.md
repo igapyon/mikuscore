@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first candidate help-text surface for the future `mikuscore` CLI.
+This document defines the first candidate help-text surface for the future `miku-score` CLI.
 
 Scope note:
 
@@ -32,15 +32,15 @@ The strongest current candidate top-level help shape is:
 
 ```text
 Usage:
-  mikuscore convert --from <format> --to <format> [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
-  mikuscore render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
-  mikuscore state summarize [--in <file>|-] [--diagnostics text|json]
-  mikuscore state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]
-  mikuscore state validate-command [--in <file>|-] [--command <json>|--command-file <file>] [--diagnostics text|json]
-  mikuscore state apply-command [--in <file>|-] [--command <json>|--command-file <file>] [--out <file>|-] [--diagnostics text|json]
-  mikuscore state diff --before <file> --after <file> [--diagnostics text|json]
-  mikuscore <command> --help
-  mikuscore --help
+  miku-score convert --from <format> --to <format> [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
+  miku-score render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
+  miku-score state summarize [--in <file>|-] [--diagnostics text|json]
+  miku-score state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]
+  miku-score state validate-command [--in <file>|-] [--command <json>|--command-file <file>] [--diagnostics text|json]
+  miku-score state apply-command [--in <file>|-] [--command <json>|--command-file <file>] [--out <file>|-] [--diagnostics text|json]
+  miku-score state diff --before <file> --after <file> [--diagnostics text|json]
+  miku-score <command> --help
+  miku-score --help
 
 Commands:
   convert   Convert score data between external formats
@@ -69,15 +69,15 @@ The strongest current candidate command help shape is:
 
 ```text
 Usage:
-  mikuscore convert --from <format> --to <format> [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
-  mikuscore convert --help
+  miku-score convert --from <format> --to <format> [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
+  miku-score convert --help
 
 Description:
   Convert score data between supported external formats.
 
 Examples:
-  mikuscore convert --from abc --to musicxml --in score.abc --out score.musicxml
-  mikuscore convert --from musicxml --to abc --in score.musicxml --out score.abc
+  miku-score convert --from abc --to musicxml --in score.abc --out score.musicxml
+  miku-score convert --from musicxml --to abc --in score.musicxml --out score.abc
 
 Notes:
   MusicXML remains canonical internally.
@@ -91,15 +91,15 @@ The strongest current candidate command help shape is:
 
 ```text
 Usage:
-  mikuscore render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
-  mikuscore render --help
+  miku-score render svg [--from <format>] [--in <file>|-] [--out <file>|-] [--diagnostics text|json]
+  miku-score render --help
 
 Description:
   Generate derived outputs such as SVG from canonical score state.
 
 Examples:
-  mikuscore render svg --in score.musicxml --out score.svg
-  mikuscore render svg --from abc --in score.abc --out score.svg
+  miku-score render svg --in score.musicxml --out score.svg
+  miku-score render svg --from abc --in score.abc --out score.svg
 
 Notes:
   A one-shot ABC -> SVG path may internally route through MusicXML.
@@ -113,22 +113,22 @@ The strongest current candidate command help shape is:
 
 ```text
 Usage:
-  mikuscore state summarize [--in <file>|-] [--diagnostics text|json]
-  mikuscore state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]
-  mikuscore state validate-command [--in <file>|-] [--command <json>|--command-file <file>] [--diagnostics text|json]
-  mikuscore state apply-command [--in <file>|-] [--command <json>|--command-file <file>] [--out <file>|-] [--diagnostics text|json]
-  mikuscore state diff --before <file> --after <file> [--diagnostics text|json]
-  mikuscore state --help
+  miku-score state summarize [--in <file>|-] [--diagnostics text|json]
+  miku-score state inspect-measure --measure <number> [--in <file>|-] [--diagnostics text|json]
+  miku-score state validate-command [--in <file>|-] [--command <json>|--command-file <file>] [--diagnostics text|json]
+  miku-score state apply-command [--in <file>|-] [--command <json>|--command-file <file>] [--out <file>|-] [--diagnostics text|json]
+  miku-score state diff --before <file> --after <file> [--diagnostics text|json]
+  miku-score state --help
 
 Description:
   Inspect, validate, compare, and mutate canonical MusicXML state.
 
 Examples:
-  mikuscore state summarize --in score.musicxml
-  mikuscore state inspect-measure --measure 12 --in score.musicxml
-  mikuscore state validate-command --in score.musicxml --command-file command.json
-  mikuscore state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml
-  mikuscore state diff --before score.before.musicxml --after score.after.musicxml
+  miku-score state summarize --in score.musicxml
+  miku-score state inspect-measure --measure 12 --in score.musicxml
+  miku-score state validate-command --in score.musicxml --command-file command.json
+  miku-score state apply-command --in score.musicxml --command-file command.json --out score.next.musicxml
+  miku-score state diff --before score.before.musicxml --after score.after.musicxml
 
 Notes:
   Command payloads may target notes either by targetNodeId/anchorNodeId

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the first candidate shared diagnostics contract for the future `mikuscore` CLI.
+This document defines the first candidate shared diagnostics contract for the future `miku-score` CLI.
 
 Scope note:
 
@@ -201,7 +201,7 @@ Current first-cut implementation note:
 
 ## "Kept vs Dropped" Direction
 
-One important future diagnostics goal is to make `mikuscore` more trustworthy as a converter by making conversion loss easier to notice.
+One important future diagnostics goal is to make `miku-score` more trustworthy as a converter by making conversion loss easier to notice.
 
 First-cut direction:
 

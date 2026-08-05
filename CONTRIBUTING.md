@@ -1,6 +1,6 @@
-# Contributing to mikuscore
+# Contributing to miku-score
 
-Thank you for contributing to `mikuscore`.
+Thank you for contributing to `miku-score`.
 
 This project accepts bug reports, feature requests, documentation fixes, tests, and pull requests.
 
@@ -15,11 +15,11 @@ See `CODE_OF_CONDUCT.md` for collaboration and behavior expectations in project 
 
 ## Development Notes
 
-- `mikuscore.html` is a generated artifact. Do not edit it directly unless regeneration is intentionally part of the change.
+- `miku-score.html` is a generated artifact. Do not edit it directly unless regeneration is intentionally part of the change.
 - `src/js/main.js` is generated from TypeScript and is committed. If you change `src/ts/`, regenerate `src/js/main.js` as part of the same change when needed.
 - Application logic should normally be edited in `src/ts/` and `core/`.
 - Tests live under `tests/`.
-- `mikuscore` changes can require downstream follow-up in `mikuscore-skills` and `miku-abc-player`, which basically track `devel`. Keep that impact visible when a change affects shared behavior, contract, generated assets, or handoff assumptions.
+- `miku-score` changes can require downstream follow-up in `miku-score-skills` and `miku-abc-player`, which basically track `devel`. Keep that impact visible when a change affects shared behavior, contract, generated assets, or handoff assumptions.
 - Vendored or externally sourced files should be treated carefully:
   - `src/js/verovio.js`
   - `src/js/midi-writer.js`
@@ -60,7 +60,7 @@ In practice, not every change needs every command. A smaller change may only nee
 - Explain what changed and why.
 - Mention any user-visible behavior change.
 - Mention any spec, README, or TODO updates that are part of the change.
-- If downstream follow-up is expected, mention that `mikuscore-skills` and/or `miku-abc-player` may need updates from `devel`.
+- If downstream follow-up is expected, mention that `miku-score-skills` and/or `miku-abc-player` may need updates from `devel`.
 - If a change is intentionally partial, deferred, or scoped down, say so explicitly.
 - If fixtures, samples, or local-only data were used for verification, explain that briefly.
 

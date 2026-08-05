@@ -6,10 +6,10 @@ import * as esbuild from "esbuild";
 const ROOT = process.cwd();
 const ENTRY_TS = "src/ts/cli-api.ts";
 const ENTRY_JS = ENTRY_TS.replace(/\.ts$/, ".js");
-const CLI_SOURCE = "scripts/mikuscore-cli.mjs";
+const CLI_SOURCE = "scripts/miku-score-cli.mjs";
 const VEROVIO_JS = "src/js/verovio.js";
-const OUT = "bundle/mikuscore.mjs";
-const TMP_DIR = ".mikuscore-build";
+const OUT = "bundle/miku-score.mjs";
+const TMP_DIR = ".miku-score-build";
 const TMP_ENTRY = `${TMP_DIR}/cli-runtime-entry.mjs`;
 const importRe = /(?:import|export)\s+[^"']*?from\s+["'](.+?)["']|import\s*\(\s*["'](.+?)["']\s*\)/g;
 
@@ -152,7 +152,7 @@ function resolveBundledModule(fromId, specifier) {
 }
 
 function installBundledVerovio() {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "mikuscore-verovio-"));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "miku-score-verovio-"));
   const verovioPath = path.join(tempDir, "verovio.cjs");
   fs.writeFileSync(verovioPath, BUNDLED_VEROVIO_JS, "utf8");
   const requireFromTemp = createRequire(path.join(tempDir, "package.json"));
@@ -243,7 +243,7 @@ const buildCliSource = (runtimeLoader) => {
     withRuntimeLoader
       .replace(/^#!\/usr\/bin\/env node\n/, "")
       .replace(
-        'const PACKAGE_VERSION = "__MIKUSCORE_PACKAGE_VERSION__";',
+        'const PACKAGE_VERSION = "__MIKU_SCORE_PACKAGE_VERSION__";',
         `const PACKAGE_VERSION = ${JSON.stringify(packageVersion)};`
       ),
   ].join("\n");
@@ -274,7 +274,7 @@ const run = async () => {
     external: ["canvas"],
     plugins: [
       {
-        name: "mikuscore-jsdom-single-file-patches",
+        name: "miku-score-jsdom-single-file-patches",
         setup(build) {
           build.onLoad({ filter: /XMLHttpRequest-impl\.js$/ }, (args) => {
             if (path.resolve(args.path) !== jsdomXhrImplPath) return undefined;

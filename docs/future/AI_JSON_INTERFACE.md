@@ -3,7 +3,7 @@
 ## Status
 
 - Deferred future work.
-- Not part of the current `mikuscore` product contract.
+- Not part of the current `miku-score` product contract.
 - Not a normative spec for present behavior.
 
 ## Purpose of this note
@@ -47,14 +47,14 @@ That implies several desirable properties:
 - AI-facing exchange should prefer bounded projections, validation, and staged apply flows over unconstrained whole-document rewrites
 - handoff units should be small enough for reliable AI interaction, not only convenient for a human at a terminal
 
-For `mikuscore`, one strong candidate is to keep the actual mutation contract close to the existing core command catalog rather than inventing a separate whole-measure rewrite model.
+For `miku-score`, one strong candidate is to keep the actual mutation contract close to the existing core command catalog rather than inventing a separate whole-measure rewrite model.
 
 That would mean:
 
 - human-facing CLI phases may still look like `state inspect` / `state validate` / `state apply`
 - but the machine-facing payload inside those phases may compile down to bounded commands such as `change_to_pitch` or `change_duration`
 
-This does not mean `mikuscore` should copy the `mikuproject` AI command tree directly.
+This does not mean `miku-score` should copy the `mikuproject` AI command tree directly.
 
 It means future AI-facing interface work should be judged partly by how well it serves all three layers together, not only by whether a single AI prompt can produce an output.
 
