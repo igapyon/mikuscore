@@ -133970,7 +133970,7 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var repoRoot = path.resolve(__dirname, "..");
 var DIAGNOSTICS_VERSION = 1;
-var PACKAGE_VERSION = "0.6.0";
+var PACKAGE_VERSION = "0.6.1";
 var HELP_TEXT = {
   top: [
     "Usage:",

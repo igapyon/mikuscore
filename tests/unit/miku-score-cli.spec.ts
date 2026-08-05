@@ -77,7 +77,7 @@ describe("miku-score cli", () => {
     const result = runCli(["--version"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.6.0");
+    expect(result.stdout.trim()).toBe("0.6.1");
     expect(result.stderr).toBe("");
   }, 10000);
 
@@ -88,7 +88,7 @@ describe("miku-score cli", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("<work-title>STDIN</work-title>");
-  });
+  }, 10000);
 
   it("converts ABC directly to MIDI", () => {
     const result = runCli(["convert", "--from", "abc", "--to", "midi"], {
