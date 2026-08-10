@@ -8,11 +8,15 @@ import { resolveLoadFlow } from "../../src/ts/load-flow";
 
 const baseParams = () => ({
   isNewType: false,
-  isAbcType: false,
+  sourceType: "xml" as const,
   isFileMode: true,
   selectedFile: null as File | null,
   xmlSourceText: "",
+  museScoreSourceText: "",
+  vsqxSourceText: "",
   abcSourceText: "",
+  meiSourceText: "",
+  lilyPondSourceText: "",
   createNewMusicXml: () => "<score-partwise version=\"4.0\"/>",
   formatImportedMusicXml: (xml: string) => `FORMATTED:${xml}`,
   convertAbcToMusicXml: (_abc: string) => "<score-partwise version=\"4.0\"/>",
@@ -195,5 +199,34 @@ describe("load-flow MuseScore file input", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+  });
+});
+
+describe("load-flow direct input adapter", () => {
+  it("delegates direct ABC text and preserves the editor source text", async () => {
+    const result = await resolveLoadFlow({
+      ...baseParams(),
+      isFileMode: false,
+      sourceType: "abc",
+      abcSourceText: "X:1\nK:C\nC|",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.xmlToLoad).toContain("FORMATTED:<score-partwise");
+    expect(result.nextAbcInputText).toBe("X:1\nK:C\nC|");
+  });
+
+  it("keeps missing-file and unsupported-extension policy in the Web adapter", async () => {
+    const missing = await resolveLoadFlow(baseParams());
+    const unsupported = await resolveLoadFlow({
+      ...baseParams(),
+      selectedFile: new File(["text"], "score.txt", { type: "text/plain" }),
+    });
+
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.diagnosticMessage).toBe("Please select a file.");
+    expect(unsupported.ok).toBe(false);
+    if (!unsupported.ok) expect(unsupported.diagnosticMessage).toContain("Unsupported file extension");
   });
 });

@@ -77,7 +77,7 @@ describe("miku-score cli", () => {
     const result = runCli(["--version"]);
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe("0.6.1");
+    expect(result.stdout.trim()).toBe("0.7.0");
     expect(result.stderr).toBe("");
   }, 10000);
 

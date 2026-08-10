@@ -687,7 +687,7 @@ async function runEncodedImportCommand(inputPath, outPath, api, to, run) {
 
 async function runAbcToSvgRenderCommand(inputPath, api) {
   const inputText = await readTextInput(inputPath);
-  const imported = api.abc.importToMusicXml(inputText);
+  const imported = await api.abc.importToMusicXml(inputText);
   if (!imported.ok || typeof imported.output !== "string") {
     throw new CliCommandFailure(imported, "ABC to MusicXML conversion failed.");
   }
@@ -708,11 +708,11 @@ async function runAbcToSvgRenderCommand(inputPath, api) {
 
 async function runAbcToMidiConvertCommand(inputPath, api) {
   const inputText = await readTextInput(inputPath);
-  const imported = api.abc.importToMusicXml(inputText);
+  const imported = await api.abc.importToMusicXml(inputText);
   if (!imported.ok || typeof imported.output !== "string") {
     throw new CliCommandFailure(imported, "ABC to MusicXML conversion failed.");
   }
-  const exported = api.midi.exportFromMusicXml(imported.output);
+  const exported = await api.midi.exportFromMusicXml(imported.output);
   if (!exported.ok) {
     throw new CliCommandFailure(exported, "MusicXML to MIDI conversion failed.");
   }

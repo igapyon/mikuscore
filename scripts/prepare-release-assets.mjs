@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,8 @@ import { spawnSync } from "node:child_process";
 const PRODUCT = "miku-score";
 const ROOT = process.cwd();
 const RELEASE_DIR = "release-assets";
-const RUNTIME_BUNDLE = `bundle/${PRODUCT}.mjs`;
+const CLI_BUNDLE = `bundle/${PRODUCT}.mjs`;
+const BROWSER_RUNTIME_BUNDLE = `bundle/${PRODUCT}-runtime.mjs`;
 
 const run = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
@@ -38,7 +40,14 @@ if (version !== packageVersion && !version.startsWith(`${packageVersion}.`)) {
 rmSync(path.join(ROOT, RELEASE_DIR), { recursive: true, force: true });
 mkdirSync(path.join(ROOT, RELEASE_DIR), { recursive: true });
 
-copyFileSync(path.join(ROOT, RUNTIME_BUNDLE), path.join(ROOT, RELEASE_DIR, `${PRODUCT}-${version}.mjs`));
+const releaseCliName = `${PRODUCT}-${version}.mjs`;
+const releaseRuntimeName = `${PRODUCT}-runtime-${version}.mjs`;
+const releaseManifestName = `${PRODUCT}-runtime-${version}.json`;
+const releaseSourcesName = `${PRODUCT}-sources-${version}.tgz`;
+const releaseChecksumsName = `${PRODUCT}-SHA256SUMS-${version}.txt`;
+
+copyFileSync(path.join(ROOT, CLI_BUNDLE), path.join(ROOT, RELEASE_DIR, releaseCliName));
+copyFileSync(path.join(ROOT, BROWSER_RUNTIME_BUNDLE), path.join(ROOT, RELEASE_DIR, releaseRuntimeName));
 
 const excludedSources = new Set([
   "bundle/miku-score.mjs",
@@ -66,7 +75,7 @@ try {
     "tar",
     [
       "-czf",
-      path.join(ROOT, RELEASE_DIR, `${PRODUCT}-sources-${version}.tgz`),
+      path.join(ROOT, RELEASE_DIR, releaseSourcesName),
       "-T",
       fileListPath,
     ],
@@ -76,5 +85,30 @@ try {
   rmSync(tempDir, { recursive: true, force: true });
 }
 
-console.log(`Prepared ${RELEASE_DIR}/${PRODUCT}-${version}.mjs`);
-console.log(`Prepared ${RELEASE_DIR}/${PRODUCT}-sources-${version}.tgz`);
+run("node", [
+  "scripts/create-browser-runtime-manifest.mjs",
+  path.join(RELEASE_DIR, releaseRuntimeName),
+  "--release-tag",
+  tagName,
+  "--out",
+  path.join(RELEASE_DIR, releaseManifestName),
+]);
+
+const checksumNames = [
+  releaseCliName,
+  releaseRuntimeName,
+  releaseManifestName,
+  releaseSourcesName,
+];
+const checksumText = checksumNames
+  .map((assetName) => `${sha256File(path.join(ROOT, RELEASE_DIR, assetName))}  ${assetName}`)
+  .join("\n");
+writeFileSync(path.join(ROOT, RELEASE_DIR, releaseChecksumsName), `${checksumText}\n`, "utf8");
+
+for (const assetName of [...checksumNames, releaseChecksumsName]) {
+  console.log(`Prepared ${RELEASE_DIR}/${assetName}`);
+}
+
+function sha256File(filePath) {
+  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}

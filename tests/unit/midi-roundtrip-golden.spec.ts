@@ -18,6 +18,7 @@ import {
   collectMidiTimeSignatureEventsFromMusicXmlDoc,
   convertMidiToMusicXml,
 } from "../../src/ts/midi-io";
+import { getBrowserMidiWriterRuntime } from "../../src/ts/midi-writer-browser";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 import { loadFixture } from "./fixtureLoader";
 
@@ -222,7 +223,8 @@ const runRoundtrip = (fixtureName: string): { srcDoc: Document; dstDoc: Document
     collectMidiControlEventsFromMusicXmlDoc(srcDoc, ticksPerQuarter),
     collectMidiTempoEventsFromMusicXmlDoc(srcDoc, ticksPerQuarter),
     collectMidiTimeSignatureEventsFromMusicXmlDoc(srcDoc, ticksPerQuarter),
-    collectMidiKeySignatureEventsFromMusicXmlDoc(srcDoc, ticksPerQuarter)
+    collectMidiKeySignatureEventsFromMusicXmlDoc(srcDoc, ticksPerQuarter),
+    { midiWriterRuntime: getBrowserMidiWriterRuntime() }
   );
   const imported = convertMidiToMusicXml(midiBytes, { quantizeGrid: "1/16" });
   expect(imported.ok).toBe(true);

@@ -3,6 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  appendMeasureToMusicXml,
+  extractMeasureEditorMusicXml,
+  replaceMeasureInMusicXml,
+} from "./measure-operations";
+import {
+  stripMetadataFromMusicXml,
+  summarizeImportedDiagWarnings,
+  type MksMetadataOutputSettings,
+} from "./musicxml-output";
+import { createNewScoreMusicXml } from "./new-score";
+import { prepareMusicXmlRenderDocument } from "./render-document";
 import { ScoreCore } from "../../core/ScoreCore";
 import { getMeasureCapacity, getOccupiedTime } from "../../core/timeIndex";
 import type {
@@ -15,7 +27,8 @@ import type {
   Pitch,
   SaveResult,
 } from "../../core/interfaces";
-import { clefXmlFromAbcClef, convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
+import { installAbcBrowserCompatibilityOnWindow } from "./abc-browser-compat";
+import { convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
@@ -27,11 +40,9 @@ import {
 import {
   applyImplicitBeamsToMusicXmlText,
   buildRenderDocWithNodeIds,
-  extractMeasureEditorDocument,
   normalizeImportedMusicXmlText,
   parseMusicXmlDocument,
   prettyPrintMusicXmlText,
-  replaceMeasureInMainDocument,
   serializeMusicXmlDocument,
 } from "./musicxml-io";
 import {
@@ -49,9 +60,9 @@ import {
 import { normalizeMidiExportProfile, type MidiExportProfile } from "./midi-musescore-io";
 import { resolveLoadFlow } from "./load-flow";
 import { extractZipEntryBytesByPath, listZipRootEntryPathsByExtensions } from "./mxl-io";
+import { PLAYBACK_TICKS_PER_QUARTER } from "./playback-model";
 import {
   createBasicWaveSynthEngine,
-  PLAYBACK_TICKS_PER_QUARTER,
   startMeasurePlayback as startMeasurePlaybackFlow,
   startPlayback as startPlaybackFlow,
   stopPlayback as stopPlaybackFlow,
@@ -594,73 +605,12 @@ const onResetPlaybackSettings = (): void => {
   renderControlState();
 };
 
-type MksMetadataOutputSettings = {
-  keepMeta: boolean;
-  keepSrc: boolean;
-  keepDbg: boolean;
-};
-
 const getMksMetadataOutputSettings = (): MksMetadataOutputSettings => {
   return {
     keepMeta: keepMksMetaMetadataInMusicXml.checked,
     keepSrc: keepMksSrcMetadataInMusicXml.checked,
     keepDbg: keepMksDbgMetadataInMusicXml.checked,
   };
-};
-
-const shouldRemoveMksField = (fieldName: string, settings: MksMetadataOutputSettings): boolean => {
-  const lowered = fieldName.trim().toLowerCase();
-  if (!lowered.startsWith("mks:")) return false;
-  if (lowered.startsWith("mks:meta:")) return !settings.keepMeta;
-  if (lowered.startsWith("mks:src:")) return !settings.keepSrc;
-  if (lowered.startsWith("mks:dbg:")) return !settings.keepDbg;
-  return false;
-};
-
-const stripMetadataFromMusicXml = (xml: string, settings: MksMetadataOutputSettings): string => {
-  if (settings.keepMeta && settings.keepSrc && settings.keepDbg) return xml;
-  const doc = parseMusicXmlDocument(xml);
-  if (!doc) return xml;
-  const fields = Array.from(
-    doc.querySelectorAll(
-      'part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'
-    )
-  );
-  for (const field of fields) {
-    const name = field.getAttribute("name") ?? "";
-    if (!shouldRemoveMksField(name, settings)) continue;
-    field.remove();
-  }
-  for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
-    if (misc.querySelector("miscellaneous-field")) continue;
-    misc.remove();
-  }
-  for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
-    if (attributes.children.length > 0) continue;
-    attributes.remove();
-  }
-  return serializeMusicXmlDocument(doc);
-};
-
-const summarizeImportedDiagWarnings = (xml: string): string => {
-  const doc = parseMusicXmlDocument(xml);
-  if (!doc) return "";
-  let overfullReflowCount = 0;
-  let parserWarningCount = 0;
-  const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
-  for (const field of fields) {
-    const name = (field.getAttribute("name") || "").trim().toLowerCase();
-    if (name === "mks:diag:count") continue;
-    const payload = field.textContent?.trim() ?? "";
-    const m = payload.match(/(?:^|;)code=([^;]+)/);
-    const code = (m?.[1] ?? "").trim().toUpperCase();
-    if (code === "OVERFULL_REFLOWED") overfullReflowCount += 1;
-    if (code === "ABC_IMPORT_WARNING") parserWarningCount += 1;
-  }
-  const parts: string[] = [];
-  if (overfullReflowCount > 0) parts.push(`ABC overfull auto-reflow: ${overfullReflowCount}`);
-  if (parserWarningCount > 0) parts.push(`ABC parser warnings: ${parserWarningCount}`);
-  return parts.join(" / ");
 };
 
 const resolveMusicXmlOutput = (): string => {
@@ -1944,90 +1894,13 @@ const navigateSelectedMeasure = (direction: MeasureNavDirection): void => {
   highlightSelectedMeasureInMainPreview();
 };
 
-const normalizeTextForRenderKey = (value: string | null | undefined): string => {
-  return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-};
-
-const localNameOf = (el: Element): string => (el.localName || el.tagName || "").toLowerCase();
-
-const directChildrenByName = (parent: Element, name: string): Element[] =>
-  Array.from(parent.children).filter((child) => localNameOf(child) === name.toLowerCase());
-
-const firstDescendantByName = (parent: Element, name: string): Element | null => {
-  const nsHit = parent.getElementsByTagNameNS("*", name).item(0);
-  if (nsHit) return nsHit;
-  return parent.getElementsByTagName(name).item(0);
-};
-
-const extractTempoDirectionRenderKey = (direction: Element): string | null => {
-  const directSound = directChildrenByName(direction, "sound")[0] ?? null;
-  const directionType = directChildrenByName(direction, "direction-type")[0] ?? null;
-  const metronome = directionType ? firstDescendantByName(directionType, "metronome") : null;
-  const wordsEl = directionType ? firstDescendantByName(directionType, "words") : null;
-  const perMinuteEl = metronome ? firstDescendantByName(metronome, "per-minute") : null;
-  const beatUnitEl = metronome ? firstDescendantByName(metronome, "beat-unit") : null;
-  const directOffset = directChildrenByName(direction, "offset")[0] ?? null;
-
-  const soundTempo = normalizeTextForRenderKey(directSound?.getAttribute("tempo"));
-  const perMinute = normalizeTextForRenderKey(perMinuteEl?.textContent);
-  const beatUnit = normalizeTextForRenderKey(beatUnitEl?.textContent);
-  const words = normalizeTextForRenderKey(wordsEl?.textContent);
-  const hasTempoSignal = Boolean(soundTempo || perMinute || words);
-  if (!hasTempoSignal) return null;
-  const offset = normalizeTextForRenderKey(directOffset?.textContent || "0");
-  return `off=${offset}|sound=${soundTempo}|pm=${perMinute}|unit=${beatUnit}|words=${words}`;
-};
-
-const dedupeGlobalTempoDirectionsInRenderDoc = (doc: Document): void => {
-  const root = doc.documentElement;
-  if (!root || localNameOf(root) !== "score-partwise") return;
-  const parts = directChildrenByName(root, "part");
-  if (parts.length <= 1) return;
-  const seen = new Set<string>();
-  for (let pi = 0; pi < parts.length; pi += 1) {
-    const part = parts[pi];
-    const measures = directChildrenByName(part, "measure");
-    for (const measure of measures) {
-      const measureNo = (measure.getAttribute("number") ?? "").trim();
-      const directions = directChildrenByName(measure, "direction");
-      for (const direction of directions) {
-        const tempoKey = extractTempoDirectionRenderKey(direction);
-        if (!tempoKey) continue;
-        const dedupeKey = `m=${measureNo}|${tempoKey}`;
-        if (seen.has(dedupeKey)) {
-          direction.remove();
-          continue;
-        }
-        seen.add(dedupeKey);
-      }
-    }
-  }
-};
-
 const buildRenderXmlForVerovio = (
   xml: string
 ): { renderDoc: Document | null; svgIdToNodeId: Map<string, string>; noteCount: number } => {
-  const sourceDoc = parseMusicXmlDocument(xml);
-  if (!sourceDoc) {
-    return {
-      renderDoc: null,
-      svgIdToNodeId: new Map<string, string>(),
-      noteCount: 0,
-    };
-  }
-  if (!state.loaded) {
-    dedupeGlobalTempoDirectionsInRenderDoc(sourceDoc);
-    return {
-      renderDoc: sourceDoc,
-      svgIdToNodeId: new Map<string, string>(),
-      noteCount: 0,
-    };
-  }
-  const renderBundle = buildRenderDocWithNodeIds(sourceDoc, state.noteNodeIds.slice(), "mks-main");
-  if (renderBundle.renderDoc) {
-    dedupeGlobalTempoDirectionsInRenderDoc(renderBundle.renderDoc);
-  }
-  return renderBundle;
+  return prepareMusicXmlRenderDocument(xml, {
+    nodeIds: state.loaded ? state.noteNodeIds : [],
+    idPrefix: "mks-main",
+  });
 };
 
 const deriveRenderedNoteIds = (root: Element): string[] => {
@@ -2188,11 +2061,7 @@ const resolveDraftNodeIdFromNearestPoint = (clickEvent: MouseEvent): string | nu
 };
 
 const extractMeasureEditorXml = (xml: string, partId: string, measureNumber: string): string | null => {
-  const sourceDoc = parseMusicXmlDocument(xml);
-  if (!sourceDoc) return null;
-  const extractedDoc = extractMeasureEditorDocument(sourceDoc, partId, measureNumber);
-  if (!extractedDoc) return null;
-  return serializeMusicXmlDocument(extractedDoc);
+  return extractMeasureEditorMusicXml(xml, partId, measureNumber);
 };
 
 const initializeMeasureEditor = (location: NoteLocation): void => {
@@ -2708,78 +2577,15 @@ const onDiscardLocalDraft = (): void => {
 
 const createNewMusicXml = (): string => {
   const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
-  const partCount = usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount();
   const parsedFifths = Number(newKeyFifthsSelect.value);
-  const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
-  const beats = normalizeNewTimeBeats();
-  const beatType = normalizeNewTimeBeatType();
-  const divisions = 480;
-  const measureCount = 8;
-  const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
-  const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();
-
-  const partListXml = Array.from({ length: partCount }, (_, i) => {
-    const partId = `P${i + 1}`;
-    const midiChannel = ((i % 16) + 1 === 10) ? 11 : ((i % 16) + 1);
-    const midiProgram = usePianoGrandStaffTemplate ? 1 : 6;
-    const partName = usePianoGrandStaffTemplate ? "Piano" : `Part ${i + 1}`;
-    return [
-      `<score-part id="${partId}">`,
-      `<part-name>${partName}</part-name>`,
-      `<midi-instrument id="${partId}-I1">`,
-      `<midi-channel>${midiChannel}</midi-channel>`,
-      `<midi-program>${midiProgram}</midi-program>`,
-      "</midi-instrument>",
-      "</score-part>",
-    ].join("");
-  }).join("");
-
-  const partsXml = Array.from({ length: partCount }, (_, i) => {
-    const partId = `P${i + 1}`;
-    const clefKeyword = normalizeClefKeyword(clefs[i] ?? "treble");
-    const clefXml = clefXmlFromAbcClef(clefKeyword);
-    const measuresXml = Array.from({ length: measureCount }, (_unused, m) => {
-      const number = m + 1;
-      const attrs = m === 0
-        ? [
-            "<attributes>",
-            `<divisions>${divisions}</divisions>`,
-            `<key><fifths>${fifths}</fifths><mode>major</mode></key>`,
-            `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`,
-            usePianoGrandStaffTemplate
-              ? "<staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef>"
-              : clefXml,
-            "</attributes>",
-          ].join("")
-        : "";
-      const measureBody = usePianoGrandStaffTemplate
-        ? `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${measureDuration}</duration></backup><note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>2</staff></note>`
-        : `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`;
-      return [
-        `<measure number="${number}">`,
-        attrs,
-        measureBody,
-        "</measure>",
-      ].join("");
-    }).join("");
-    return [
-      `<part id="${partId}">`,
-      measuresXml,
-      "</part>",
-    ].join("");
-  }).join("");
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<score-partwise version="3.1">
-  <work>
-    <work-title>Untitled</work-title>
-  </work>
-  <identification>
-    <creator type="composer">Unknown</creator>
-  </identification>
-  <part-list>${partListXml}</part-list>
-  ${partsXml}
-</score-partwise>`;
+  return createNewScoreMusicXml({
+    usePianoGrandStaffTemplate,
+    partCount: usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount(),
+    fifths: Number.isFinite(parsedFifths) ? parsedFifths : 0,
+    beats: normalizeNewTimeBeats(),
+    beatType: normalizeNewTimeBeatType(),
+    clefs: usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs(),
+  });
 };
 
 const requireSelectedNode = (): string | null => {
@@ -2894,102 +2700,6 @@ const flashStepButton = (button: HTMLButtonElement): void => {
   }, 140);
 };
 
-const replaceMeasureInMainXml = (sourceXml: string, partId: string, measureNumber: string, measureXml: string): string | null => {
-  const mainDoc = parseMusicXmlDocument(sourceXml);
-  const measureDoc = parseMusicXmlDocument(measureXml);
-  if (!mainDoc || !measureDoc) return null;
-  const mergedDoc = replaceMeasureInMainDocument(mainDoc, partId, measureNumber, measureDoc);
-  if (!mergedDoc) return null;
-  return serializeMusicXmlDocument(mergedDoc);
-};
-
-const toPositiveInteger = (value: number | null | undefined): number | null => {
-  if (!Number.isFinite(value)) return null;
-  const rounded = Math.round(value as number);
-  return rounded > 0 ? rounded : null;
-};
-
-const resolveEffectiveStavesAtEnd = (part: Element): number => {
-  const measures = Array.from(part.querySelectorAll(":scope > measure"));
-  let staves = 1;
-  for (const measure of measures) {
-    const text = measure.querySelector(":scope > attributes > staves")?.textContent?.trim() ?? "";
-    const parsed = Number(text);
-    if (Number.isInteger(parsed) && parsed > 0) staves = parsed;
-  }
-  return staves;
-};
-
-const resolveHasTrebleBassGrandStaffAtEnd = (part: Element): boolean => {
-  const measures = Array.from(part.querySelectorAll(":scope > measure"));
-  let clef1 = "";
-  let clef2 = "";
-  for (const measure of measures) {
-    const nextClef1 = measure.querySelector(':scope > attributes > clef[number="1"] > sign')?.textContent?.trim() ?? "";
-    const nextClef2 = measure.querySelector(':scope > attributes > clef[number="2"] > sign')?.textContent?.trim() ?? "";
-    if (nextClef1) clef1 = nextClef1;
-    if (nextClef2) clef2 = nextClef2;
-  }
-  return clef1 === "G" && clef2 === "F";
-};
-
-const createMeasureRestNoteXml = (duration: number, voice: string, staff: string | null): string => {
-  return [
-    "<note>",
-    '<rest measure="yes"/>',
-    `<duration>${duration}</duration>`,
-    `<voice>${voice}</voice>`,
-    staff ? `<staff>${staff}</staff>` : "",
-    "</note>",
-  ].join("");
-};
-
-const deriveNextMeasureNumber = (part: Element): string => {
-  const measures = Array.from(part.querySelectorAll(":scope > measure"));
-  const lastMeasure = measures[measures.length - 1] ?? null;
-  if (!lastMeasure) return "1";
-  const raw = lastMeasure.getAttribute("number")?.trim() ?? "";
-  const numeric = Number(raw);
-  if (Number.isInteger(numeric) && numeric >= 0) return String(numeric + 1);
-  return String(measures.length + 1);
-};
-
-const appendMeasureToMainXml = (sourceXml: string): string | null => {
-  const doc = parseMusicXmlDocument(sourceXml);
-  if (!doc) return null;
-  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
-  if (!parts.length) return null;
-
-  for (const part of parts) {
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    const lastMeasure = measures[measures.length - 1] ?? null;
-    if (!lastMeasure) continue;
-    const capacity = toPositiveInteger(getMeasureCapacity(lastMeasure)) ?? 3840;
-    const nextNumber = deriveNextMeasureNumber(part);
-    const staves = resolveEffectiveStavesAtEnd(part);
-    const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
-
-    const measure = doc.createElement("measure");
-    measure.setAttribute("number", nextNumber);
-    if (isGrandStaff) {
-      const lane1 = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", "1"))?.querySelector("note");
-      const backup = doc.createElement("backup");
-      const backupDur = doc.createElement("duration");
-      backupDur.textContent = String(capacity);
-      backup.appendChild(backupDur);
-      const lane2 = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", "2"))?.querySelector("note");
-      if (lane1) measure.appendChild(doc.importNode(lane1, true));
-      measure.appendChild(backup);
-      if (lane2) measure.appendChild(doc.importNode(lane2, true));
-    } else {
-      const rest = parseMusicXmlDocument(createMeasureRestNoteXml(capacity, "1", null))?.querySelector("note");
-      if (rest) measure.appendChild(doc.importNode(rest, true));
-    }
-    part.appendChild(measure);
-  }
-  return serializeMusicXmlDocument(doc);
-};
-
 const onAppendMeasureAtEnd = (): void => {
   if (!state.loaded) return;
   if (draftCore && draftCore.isDirty()) {
@@ -3011,7 +2721,7 @@ const onAppendMeasureAtEnd = (): void => {
   }
   const mainXml = core.debugSerializeCurrentXml();
   if (!mainXml) return;
-  const nextXml = appendMeasureToMainXml(mainXml);
+  const nextXml = appendMeasureToMusicXml(mainXml);
   if (!nextXml) {
     state.lastDispatchResult = {
       ok: false,
@@ -3049,7 +2759,7 @@ const onMeasureApply = (): void => {
 
   const mainXml = core.debugSerializeCurrentXml();
   if (!mainXml) return;
-  const merged = replaceMeasureInMainXml(
+  const merged = replaceMeasureInMusicXml(
     mainXml,
     selectedMeasure.partId,
     selectedMeasure.measureNumber,
@@ -3779,6 +3489,7 @@ playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: t
 renderNewPartClefControls();
 applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
+installAbcBrowserCompatibilityOnWindow();
 installVsqxMusicXmlNormalizationHook((xml) =>
   applyImplicitBeamsToMusicXmlText(normalizeImportedMusicXmlText(xml))
 );

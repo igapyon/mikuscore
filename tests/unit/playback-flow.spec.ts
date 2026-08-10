@@ -8,10 +8,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildMeasureTimelineForPart,
   compactSynthScheduleForPlayback,
-  createBasicWaveSynthEngine,
-  startPlayback,
   type SynthSchedule,
-} from "../../src/ts/playback-flow";
+} from "../../src/ts/playback-model";
+import { createBasicWaveSynthEngine, startPlayback } from "../../src/ts/playback-flow";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
 type MutableWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };

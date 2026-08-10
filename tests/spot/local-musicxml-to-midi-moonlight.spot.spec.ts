@@ -19,6 +19,7 @@ import {
   type GraceTimingMode,
   type RawMidiRetriggerPolicy,
 } from "../../src/ts/midi-io";
+import { getBrowserMidiWriterRuntime } from "../../src/ts/midi-writer-browser";
 import { parseMusicXmlDocument } from "../../src/ts/musicxml-io";
 
 type NoteEvent = {
@@ -322,7 +323,14 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
         collectMidiTempoEventsFromMusicXmlDoc(sourceDoc, tpq),
         collectMidiTimeSignatureEventsFromMusicXmlDoc(sourceDoc, tpq),
         collectMidiKeySignatureEventsFromMusicXmlDoc(sourceDoc, tpq),
-        { embedMksSysEx: true, ticksPerQuarter: tpq, normalizeForParity, rawWriter, rawRetriggerPolicy }
+        {
+          embedMksSysEx: true,
+          ticksPerQuarter: tpq,
+          normalizeForParity,
+          rawWriter,
+          midiWriterRuntime: getBrowserMidiWriterRuntime(),
+          rawRetriggerPolicy,
+        }
       );
     };
     const candidateMidMidiMode = buildCandidateMidi("midi");
@@ -674,7 +682,12 @@ describe("Local parity (moonlight): musicxml => midi vs reference midi", () => {
       collectMidiTempoEventsFromMusicXmlDoc(sourceDoc, ticksPerQuarter),
       collectMidiTimeSignatureEventsFromMusicXmlDoc(sourceDoc, ticksPerQuarter),
       collectMidiKeySignatureEventsFromMusicXmlDoc(sourceDoc, ticksPerQuarter),
-      { embedMksSysEx: true, ticksPerQuarter, normalizeForParity: true }
+      {
+        embedMksSysEx: true,
+        ticksPerQuarter,
+        normalizeForParity: true,
+        midiWriterRuntime: getBrowserMidiWriterRuntime(),
+      }
     );
 
     const quantizeGrids = ["1/8", "1/16", "1/32"] as const;

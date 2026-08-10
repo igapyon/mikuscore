@@ -20,8 +20,8 @@ import {
 import { extractMusicXmlTextFromMxl, extractTextFromZipByExtensions } from "../../src/ts/zip-io";
 
 describe("cli-api", () => {
-  it("imports ABC to MusicXML", () => {
-    const result = importAbcToMusicXml("X:1\nT:CLI\nM:4/4\nL:1/4\nK:C\nC D E F|\n");
+  it("imports ABC to MusicXML", async () => {
+    const result = await importAbcToMusicXml("X:1\nT:CLI\nM:4/4\nL:1/4\nK:C\nC D E F|\n");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -29,15 +29,15 @@ describe("cli-api", () => {
     expect(result.output).toContain("<work-title>CLI</work-title>");
   });
 
-  it("fails on invalid ABC", () => {
-    const result = importAbcToMusicXml("");
+  it("fails on invalid ABC", async () => {
+    const result = await importAbcToMusicXml("");
 
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]).toContain("Failed to parse ABC");
   });
 
-  it("exports MusicXML to ABC", () => {
-    const result = exportMusicXmlToAbc(`<?xml version="1.0" encoding="UTF-8"?>
+  it("exports MusicXML to ABC", async () => {
+    const result = await exportMusicXmlToAbc(`<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="4.0">
  <part-list>
   <score-part id="P1"><part-name>Music</part-name></score-part>
@@ -63,15 +63,15 @@ describe("cli-api", () => {
     expect(result.output).toContain("K:C");
   });
 
-  it("fails on invalid MusicXML", () => {
-    const result = exportMusicXmlToAbc("<not-xml");
+  it("fails on invalid MusicXML", async () => {
+    const result = await exportMusicXmlToAbc("<not-xml");
 
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]).toContain("Failed to parse MusicXML");
   });
 
-  it("imports MIDI to MusicXML", () => {
-    const result = importMidiToMusicXml(buildSimpleMidi());
+  it("imports MIDI to MusicXML", async () => {
+    const result = await importMidiToMusicXml(buildSimpleMidi());
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -79,8 +79,8 @@ describe("cli-api", () => {
     expect(result.output).toContain("<score-partwise");
   });
 
-  it("exports MusicXML to MIDI bytes", () => {
-    const result = exportMusicXmlToMidi(validMusicXml("MIDI export"));
+  it("exports MusicXML to MIDI bytes", async () => {
+    const result = await exportMusicXmlToMidi(validMusicXml("MIDI export"));
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -89,8 +89,8 @@ describe("cli-api", () => {
     expect(Array.from(bytes.slice(0, 4))).toEqual([0x4d, 0x54, 0x68, 0x64]);
   });
 
-  it("imports MuseScore to MusicXML", () => {
-    const result = importMuseScoreToMusicXml(validMuseScoreXml("Muse import"));
+  it("imports MuseScore to MusicXML", async () => {
+    const result = await importMuseScoreToMusicXml(validMuseScoreXml("Muse import"));
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -99,8 +99,8 @@ describe("cli-api", () => {
     expect(result.output).toContain("<work-title>Muse import</work-title>");
   });
 
-  it("exports MusicXML to MuseScore text", () => {
-    const result = exportMusicXmlToMuseScore(validMusicXml("Muse export"));
+  it("exports MusicXML to MuseScore text", async () => {
+    const result = await exportMusicXmlToMuseScore(validMusicXml("Muse export"));
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -167,7 +167,7 @@ describe("cli-api", () => {
   });
 
   it("roundtrips MusicXML through .mscz helper I/O via MuseScore facade", async () => {
-    const exported = exportMusicXmlToMuseScore(validMusicXml("Roundtrip MSCZ"));
+    const exported = await exportMusicXmlToMuseScore(validMusicXml("Roundtrip MSCZ"));
     expect(exported.ok).toBe(true);
     if (!exported.ok || typeof exported.output !== "string") return;
 
@@ -179,7 +179,7 @@ describe("cli-api", () => {
     expect(decoded.ok).toBe(true);
     if (!decoded.ok || typeof decoded.output !== "string") return;
 
-    const imported = importMuseScoreToMusicXml(decoded.output);
+    const imported = await importMuseScoreToMusicXml(decoded.output);
     expect(imported.ok).toBe(true);
     if (!imported.ok || typeof imported.output !== "string") return;
     expect(imported.output).toContain("<score-partwise");
