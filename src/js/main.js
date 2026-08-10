@@ -8,8 +8,13 @@ const modules = {
  */
 var _a, _b;
 Object.defineProperty(exports, "__esModule", { value: true });
+const measure_operations_1 = require("./measure-operations");
+const musicxml_output_1 = require("./musicxml-output");
+const new_score_1 = require("./new-score");
+const render_document_1 = require("./render-document");
 const ScoreCore_1 = require("../../core/ScoreCore");
 const timeIndex_1 = require("../../core/timeIndex");
+const abc_browser_compat_1 = require("./abc-browser-compat");
 const abc_io_1 = require("./abc-io");
 const mei_io_1 = require("./mei-io");
 const lilypond_io_1 = require("./lilypond-io");
@@ -20,6 +25,7 @@ const download_flow_1 = require("./download-flow");
 const midi_musescore_io_1 = require("./midi-musescore-io");
 const load_flow_1 = require("./load-flow");
 const mxl_io_1 = require("./mxl-io");
+const playback_model_1 = require("./playback-model");
 const playback_flow_1 = require("./playback-flow");
 const preview_flow_1 = require("./preview-flow");
 const sampleXml1_1 = require("./sampleXml1");
@@ -470,75 +476,10 @@ const getMksMetadataOutputSettings = () => {
         keepDbg: keepMksDbgMetadataInMusicXml.checked,
     };
 };
-const shouldRemoveMksField = (fieldName, settings) => {
-    const lowered = fieldName.trim().toLowerCase();
-    if (!lowered.startsWith("mks:"))
-        return false;
-    if (lowered.startsWith("mks:meta:"))
-        return !settings.keepMeta;
-    if (lowered.startsWith("mks:src:"))
-        return !settings.keepSrc;
-    if (lowered.startsWith("mks:dbg:"))
-        return !settings.keepDbg;
-    return false;
-};
-const stripMetadataFromMusicXml = (xml, settings) => {
-    var _a;
-    if (settings.keepMeta && settings.keepSrc && settings.keepDbg)
-        return xml;
-    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
-    if (!doc)
-        return xml;
-    const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
-    for (const field of fields) {
-        const name = (_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "";
-        if (!shouldRemoveMksField(name, settings))
-            continue;
-        field.remove();
-    }
-    for (const misc of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
-        if (misc.querySelector("miscellaneous-field"))
-            continue;
-        misc.remove();
-    }
-    for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
-        if (attributes.children.length > 0)
-            continue;
-        attributes.remove();
-    }
-    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
-};
-const summarizeImportedDiagWarnings = (xml) => {
-    var _a, _b, _c;
-    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
-    if (!doc)
-        return "";
-    let overfullReflowCount = 0;
-    let parserWarningCount = 0;
-    const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
-    for (const field of fields) {
-        const name = (field.getAttribute("name") || "").trim().toLowerCase();
-        if (name === "mks:diag:count")
-            continue;
-        const payload = (_b = (_a = field.textContent) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : "";
-        const m = payload.match(/(?:^|;)code=([^;]+)/);
-        const code = ((_c = m === null || m === void 0 ? void 0 : m[1]) !== null && _c !== void 0 ? _c : "").trim().toUpperCase();
-        if (code === "OVERFULL_REFLOWED")
-            overfullReflowCount += 1;
-        if (code === "ABC_IMPORT_WARNING")
-            parserWarningCount += 1;
-    }
-    const parts = [];
-    if (overfullReflowCount > 0)
-        parts.push(`ABC overfull auto-reflow: ${overfullReflowCount}`);
-    if (parserWarningCount > 0)
-        parts.push(`ABC parser warnings: ${parserWarningCount}`);
-    return parts.join(" / ");
-};
 const resolveMusicXmlOutput = () => {
     if (!state.lastSuccessfulSaveXml)
         return "";
-    return stripMetadataFromMusicXml(state.lastSuccessfulSaveXml, getMksMetadataOutputSettings());
+    return (0, musicxml_output_1.stripMetadataFromMusicXml)(state.lastSuccessfulSaveXml, getMksMetadataOutputSettings());
 };
 const logDiagnostics = (phase, diagnostics, warnings = []) => {
     if (!DEBUG_LOG)
@@ -1766,87 +1707,11 @@ const navigateSelectedMeasure = (direction) => {
     // Keep Score-tab measure highlight synced even while navigating from Edit tab.
     highlightSelectedMeasureInMainPreview();
 };
-const normalizeTextForRenderKey = (value) => {
-    return (value !== null && value !== void 0 ? value : "").replace(/\s+/g, " ").trim().toLowerCase();
-};
-const localNameOf = (el) => (el.localName || el.tagName || "").toLowerCase();
-const directChildrenByName = (parent, name) => Array.from(parent.children).filter((child) => localNameOf(child) === name.toLowerCase());
-const firstDescendantByName = (parent, name) => {
-    const nsHit = parent.getElementsByTagNameNS("*", name).item(0);
-    if (nsHit)
-        return nsHit;
-    return parent.getElementsByTagName(name).item(0);
-};
-const extractTempoDirectionRenderKey = (direction) => {
-    var _a, _b, _c;
-    const directSound = (_a = directChildrenByName(direction, "sound")[0]) !== null && _a !== void 0 ? _a : null;
-    const directionType = (_b = directChildrenByName(direction, "direction-type")[0]) !== null && _b !== void 0 ? _b : null;
-    const metronome = directionType ? firstDescendantByName(directionType, "metronome") : null;
-    const wordsEl = directionType ? firstDescendantByName(directionType, "words") : null;
-    const perMinuteEl = metronome ? firstDescendantByName(metronome, "per-minute") : null;
-    const beatUnitEl = metronome ? firstDescendantByName(metronome, "beat-unit") : null;
-    const directOffset = (_c = directChildrenByName(direction, "offset")[0]) !== null && _c !== void 0 ? _c : null;
-    const soundTempo = normalizeTextForRenderKey(directSound === null || directSound === void 0 ? void 0 : directSound.getAttribute("tempo"));
-    const perMinute = normalizeTextForRenderKey(perMinuteEl === null || perMinuteEl === void 0 ? void 0 : perMinuteEl.textContent);
-    const beatUnit = normalizeTextForRenderKey(beatUnitEl === null || beatUnitEl === void 0 ? void 0 : beatUnitEl.textContent);
-    const words = normalizeTextForRenderKey(wordsEl === null || wordsEl === void 0 ? void 0 : wordsEl.textContent);
-    const hasTempoSignal = Boolean(soundTempo || perMinute || words);
-    if (!hasTempoSignal)
-        return null;
-    const offset = normalizeTextForRenderKey((directOffset === null || directOffset === void 0 ? void 0 : directOffset.textContent) || "0");
-    return `off=${offset}|sound=${soundTempo}|pm=${perMinute}|unit=${beatUnit}|words=${words}`;
-};
-const dedupeGlobalTempoDirectionsInRenderDoc = (doc) => {
-    var _a;
-    const root = doc.documentElement;
-    if (!root || localNameOf(root) !== "score-partwise")
-        return;
-    const parts = directChildrenByName(root, "part");
-    if (parts.length <= 1)
-        return;
-    const seen = new Set();
-    for (let pi = 0; pi < parts.length; pi += 1) {
-        const part = parts[pi];
-        const measures = directChildrenByName(part, "measure");
-        for (const measure of measures) {
-            const measureNo = ((_a = measure.getAttribute("number")) !== null && _a !== void 0 ? _a : "").trim();
-            const directions = directChildrenByName(measure, "direction");
-            for (const direction of directions) {
-                const tempoKey = extractTempoDirectionRenderKey(direction);
-                if (!tempoKey)
-                    continue;
-                const dedupeKey = `m=${measureNo}|${tempoKey}`;
-                if (seen.has(dedupeKey)) {
-                    direction.remove();
-                    continue;
-                }
-                seen.add(dedupeKey);
-            }
-        }
-    }
-};
 const buildRenderXmlForVerovio = (xml) => {
-    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
-    if (!sourceDoc) {
-        return {
-            renderDoc: null,
-            svgIdToNodeId: new Map(),
-            noteCount: 0,
-        };
-    }
-    if (!state.loaded) {
-        dedupeGlobalTempoDirectionsInRenderDoc(sourceDoc);
-        return {
-            renderDoc: sourceDoc,
-            svgIdToNodeId: new Map(),
-            noteCount: 0,
-        };
-    }
-    const renderBundle = (0, musicxml_io_1.buildRenderDocWithNodeIds)(sourceDoc, state.noteNodeIds.slice(), "mks-main");
-    if (renderBundle.renderDoc) {
-        dedupeGlobalTempoDirectionsInRenderDoc(renderBundle.renderDoc);
-    }
-    return renderBundle;
+    return (0, render_document_1.prepareMusicXmlRenderDocument)(xml, {
+        nodeIds: state.loaded ? state.noteNodeIds : [],
+        idPrefix: "mks-main",
+    });
 };
 const deriveRenderedNoteIds = (root) => {
     const direct = Array.from(root.querySelectorAll('[id^="mks-"], [id*="mks-"]')).map((el) => el.id);
@@ -1992,13 +1857,7 @@ const resolveDraftNodeIdFromNearestPoint = (clickEvent) => {
     return resolveNodeIdFromNearestPointInArea(clickEvent, measureEditorArea, draftSvgIdToNodeId, NOTE_CLICK_SNAP_PX);
 };
 const extractMeasureEditorXml = (xml, partId, measureNumber) => {
-    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
-    if (!sourceDoc)
-        return null;
-    const extractedDoc = (0, musicxml_io_1.extractMeasureEditorDocument)(sourceDoc, partId, measureNumber);
-    if (!extractedDoc)
-        return null;
-    return (0, musicxml_io_1.serializeMusicXmlDocument)(extractedDoc);
+    return (0, measure_operations_1.extractMeasureEditorMusicXml)(xml, partId, measureNumber);
 };
 const initializeMeasureEditor = (location) => {
     var _a;
@@ -2147,7 +2006,7 @@ const refreshNotesFromCore = () => {
         scoreComposerText = "";
     }
 };
-const synthEngine = (0, playback_flow_1.createBasicWaveSynthEngine)({ ticksPerQuarter: playback_flow_1.PLAYBACK_TICKS_PER_QUARTER });
+const synthEngine = (0, playback_flow_1.createBasicWaveSynthEngine)({ ticksPerQuarter: playback_model_1.PLAYBACK_TICKS_PER_QUARTER });
 const unlockAudioOnGesture = () => {
     void synthEngine.unlockFromUserGesture();
 };
@@ -2167,7 +2026,7 @@ const installGlobalAudioUnlock = () => {
 };
 const playbackFlowOptions = {
     engine: synthEngine,
-    ticksPerQuarter: playback_flow_1.PLAYBACK_TICKS_PER_QUARTER,
+    ticksPerQuarter: playback_model_1.PLAYBACK_TICKS_PER_QUARTER,
     editableVoice: DEFAULT_VOICE,
     getPlaybackWaveform: () => {
         return normalizeWaveformSetting(playbackWaveform.value);
@@ -2486,7 +2345,7 @@ const onLoadClick = async () => {
             xmlInput.value = result.nextXmlInputText;
         }
         state.importWarningSummary =
-            selectedSourceType === "abc" ? summarizeImportedDiagWarnings(result.xmlToLoad) : "";
+            selectedSourceType === "abc" ? (0, musicxml_output_1.summarizeImportedDiagWarnings)(result.xmlToLoad) : "";
         // Persist immediately on explicit load actions (Load / Load sample).
         writeLocalDraft(result.xmlToLoad);
         loadFromText(result.xmlToLoad);
@@ -2503,76 +2362,15 @@ const onDiscardLocalDraft = () => {
 };
 const createNewMusicXml = () => {
     const usePianoGrandStaffTemplate = newTemplatePianoGrandStaff.checked;
-    const partCount = usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount();
     const parsedFifths = Number(newKeyFifthsSelect.value);
-    const fifths = Number.isFinite(parsedFifths) ? Math.max(-7, Math.min(7, Math.round(parsedFifths))) : 0;
-    const beats = normalizeNewTimeBeats();
-    const beatType = normalizeNewTimeBeatType();
-    const divisions = 480;
-    const measureCount = 8;
-    const measureDuration = Math.max(1, Math.round(divisions * beats * (4 / beatType)));
-    const clefs = usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs();
-    const partListXml = Array.from({ length: partCount }, (_, i) => {
-        const partId = `P${i + 1}`;
-        const midiChannel = ((i % 16) + 1 === 10) ? 11 : ((i % 16) + 1);
-        const midiProgram = usePianoGrandStaffTemplate ? 1 : 6;
-        const partName = usePianoGrandStaffTemplate ? "Piano" : `Part ${i + 1}`;
-        return [
-            `<score-part id="${partId}">`,
-            `<part-name>${partName}</part-name>`,
-            `<midi-instrument id="${partId}-I1">`,
-            `<midi-channel>${midiChannel}</midi-channel>`,
-            `<midi-program>${midiProgram}</midi-program>`,
-            "</midi-instrument>",
-            "</score-part>",
-        ].join("");
-    }).join("");
-    const partsXml = Array.from({ length: partCount }, (_, i) => {
-        var _a;
-        const partId = `P${i + 1}`;
-        const clefKeyword = normalizeClefKeyword((_a = clefs[i]) !== null && _a !== void 0 ? _a : "treble");
-        const clefXml = (0, abc_io_1.clefXmlFromAbcClef)(clefKeyword);
-        const measuresXml = Array.from({ length: measureCount }, (_unused, m) => {
-            const number = m + 1;
-            const attrs = m === 0
-                ? [
-                    "<attributes>",
-                    `<divisions>${divisions}</divisions>`,
-                    `<key><fifths>${fifths}</fifths><mode>major</mode></key>`,
-                    `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`,
-                    usePianoGrandStaffTemplate
-                        ? "<staves>2</staves><clef number=\"1\"><sign>G</sign><line>2</line></clef><clef number=\"2\"><sign>F</sign><line>4</line></clef>"
-                        : clefXml,
-                    "</attributes>",
-                ].join("")
-                : "";
-            const measureBody = usePianoGrandStaffTemplate
-                ? `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>1</staff></note><backup><duration>${measureDuration}</duration></backup><note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice><staff>2</staff></note>`
-                : `<note><rest measure="yes"/><duration>${measureDuration}</duration><voice>1</voice></note>`;
-            return [
-                `<measure number="${number}">`,
-                attrs,
-                measureBody,
-                "</measure>",
-            ].join("");
-        }).join("");
-        return [
-            `<part id="${partId}">`,
-            measuresXml,
-            "</part>",
-        ].join("");
-    }).join("");
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<score-partwise version="3.1">
-  <work>
-    <work-title>Untitled</work-title>
-  </work>
-  <identification>
-    <creator type="composer">Unknown</creator>
-  </identification>
-  <part-list>${partListXml}</part-list>
-  ${partsXml}
-</score-partwise>`;
+    return (0, new_score_1.createNewScoreMusicXml)({
+        usePianoGrandStaffTemplate,
+        partCount: usePianoGrandStaffTemplate ? 1 : normalizeNewPartCount(),
+        fifths: Number.isFinite(parsedFifths) ? parsedFifths : 0,
+        beats: normalizeNewTimeBeats(),
+        beatType: normalizeNewTimeBeatType(),
+        clefs: usePianoGrandStaffTemplate ? ["treble"] : listCurrentNewPartClefs(),
+    });
 };
 const requireSelectedNode = () => {
     if (!draftCore) {
@@ -2686,112 +2484,6 @@ const flashStepButton = (button) => {
         button.classList.remove("is-pressed");
     }, 140);
 };
-const replaceMeasureInMainXml = (sourceXml, partId, measureNumber, measureXml) => {
-    const mainDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
-    const measureDoc = (0, musicxml_io_1.parseMusicXmlDocument)(measureXml);
-    if (!mainDoc || !measureDoc)
-        return null;
-    const mergedDoc = (0, musicxml_io_1.replaceMeasureInMainDocument)(mainDoc, partId, measureNumber, measureDoc);
-    if (!mergedDoc)
-        return null;
-    return (0, musicxml_io_1.serializeMusicXmlDocument)(mergedDoc);
-};
-const toPositiveInteger = (value) => {
-    if (!Number.isFinite(value))
-        return null;
-    const rounded = Math.round(value);
-    return rounded > 0 ? rounded : null;
-};
-const resolveEffectiveStavesAtEnd = (part) => {
-    var _a, _b, _c;
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    let staves = 1;
-    for (const measure of measures) {
-        const text = (_c = (_b = (_a = measure.querySelector(":scope > attributes > staves")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
-        const parsed = Number(text);
-        if (Number.isInteger(parsed) && parsed > 0)
-            staves = parsed;
-    }
-    return staves;
-};
-const resolveHasTrebleBassGrandStaffAtEnd = (part) => {
-    var _a, _b, _c, _d, _e, _f;
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    let clef1 = "";
-    let clef2 = "";
-    for (const measure of measures) {
-        const nextClef1 = (_c = (_b = (_a = measure.querySelector(':scope > attributes > clef[number="1"] > sign')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
-        const nextClef2 = (_f = (_e = (_d = measure.querySelector(':scope > attributes > clef[number="2"] > sign')) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
-        if (nextClef1)
-            clef1 = nextClef1;
-        if (nextClef2)
-            clef2 = nextClef2;
-    }
-    return clef1 === "G" && clef2 === "F";
-};
-const createMeasureRestNoteXml = (duration, voice, staff) => {
-    return [
-        "<note>",
-        '<rest measure="yes"/>',
-        `<duration>${duration}</duration>`,
-        `<voice>${voice}</voice>`,
-        staff ? `<staff>${staff}</staff>` : "",
-        "</note>",
-    ].join("");
-};
-const deriveNextMeasureNumber = (part) => {
-    var _a, _b, _c;
-    const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
-    if (!lastMeasure)
-        return "1";
-    const raw = (_c = (_b = lastMeasure.getAttribute("number")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
-    const numeric = Number(raw);
-    if (Number.isInteger(numeric) && numeric >= 0)
-        return String(numeric + 1);
-    return String(measures.length + 1);
-};
-const appendMeasureToMainXml = (sourceXml) => {
-    var _a, _b, _c, _d, _e;
-    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
-    if (!doc)
-        return null;
-    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
-    if (!parts.length)
-        return null;
-    for (const part of parts) {
-        const measures = Array.from(part.querySelectorAll(":scope > measure"));
-        const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
-        if (!lastMeasure)
-            continue;
-        const capacity = (_b = toPositiveInteger((0, timeIndex_1.getMeasureCapacity)(lastMeasure))) !== null && _b !== void 0 ? _b : 3840;
-        const nextNumber = deriveNextMeasureNumber(part);
-        const staves = resolveEffectiveStavesAtEnd(part);
-        const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
-        const measure = doc.createElement("measure");
-        measure.setAttribute("number", nextNumber);
-        if (isGrandStaff) {
-            const lane1 = (_c = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "1"))) === null || _c === void 0 ? void 0 : _c.querySelector("note");
-            const backup = doc.createElement("backup");
-            const backupDur = doc.createElement("duration");
-            backupDur.textContent = String(capacity);
-            backup.appendChild(backupDur);
-            const lane2 = (_d = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "2"))) === null || _d === void 0 ? void 0 : _d.querySelector("note");
-            if (lane1)
-                measure.appendChild(doc.importNode(lane1, true));
-            measure.appendChild(backup);
-            if (lane2)
-                measure.appendChild(doc.importNode(lane2, true));
-        }
-        else {
-            const rest = (_e = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", null))) === null || _e === void 0 ? void 0 : _e.querySelector("note");
-            if (rest)
-                measure.appendChild(doc.importNode(rest, true));
-        }
-        part.appendChild(measure);
-    }
-    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
-};
 const onAppendMeasureAtEnd = () => {
     if (!state.loaded)
         return;
@@ -2815,7 +2507,7 @@ const onAppendMeasureAtEnd = () => {
     const mainXml = core.debugSerializeCurrentXml();
     if (!mainXml)
         return;
-    const nextXml = appendMeasureToMainXml(mainXml);
+    const nextXml = (0, measure_operations_1.appendMeasureToMusicXml)(mainXml);
     if (!nextXml) {
         state.lastDispatchResult = {
             ok: false,
@@ -2853,7 +2545,7 @@ const onMeasureApply = () => {
     const mainXml = core.debugSerializeCurrentXml();
     if (!mainXml)
         return;
-    const merged = replaceMeasureInMainXml(mainXml, selectedMeasure.partId, selectedMeasure.measureNumber, draftSave.xml);
+    const merged = (0, measure_operations_1.replaceMeasureInMusicXml)(mainXml, selectedMeasure.partId, selectedMeasure.measureNumber, draftSave.xml);
     if (!merged) {
         setUiMappingDiagnostic("Failed to apply measure changes.");
         return;
@@ -3020,7 +2712,7 @@ const onDownloadMidi = () => {
         failExport("MIDI", "Current MusicXML could not be parsed.");
         return;
     }
-    const parsedForCheck = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(sourceDoc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, {
+    const parsedForCheck = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(sourceDoc, playback_model_1.PLAYBACK_TICKS_PER_QUARTER, {
         mode: "midi",
         graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
         metricAccentEnabled: metricAccentEnabledInput.checked,
@@ -3030,7 +2722,7 @@ const onDownloadMidi = () => {
         failExport("MIDI", "No notes to export (MIDI events are empty).");
         return;
     }
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_model_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
     if (!payload) {
         failExport("MIDI", "Could not build MIDI payload from current MusicXML.");
         return;
@@ -3154,7 +2846,7 @@ const onDownloadAll = async () => {
             failExport("All", "Could not build MuseScore payload from current MusicXML.");
             return;
         }
-        const midiPayload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
+        const midiPayload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_model_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
         if (!midiPayload) {
             failExport("All", "Could not build MIDI payload from current MusicXML.");
             return;
@@ -3251,7 +2943,7 @@ const onDownloadMeasureMidi = () => {
         failExport("MIDI", "Current measure MusicXML could not be parsed.");
         return;
     }
-    const parsedForCheck = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(sourceDoc, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, {
+    const parsedForCheck = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(sourceDoc, playback_model_1.PLAYBACK_TICKS_PER_QUARTER, {
         mode: "midi",
         graceTimingMode: normalizeGraceTimingMode(graceTimingModeSelect.value),
         metricAccentEnabled: metricAccentEnabledInput.checked,
@@ -3261,7 +2953,7 @@ const onDownloadMeasureMidi = () => {
         failExport("MIDI", "No notes to export (MIDI events are empty).");
         return;
     }
-    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_flow_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
+    const payload = (0, download_flow_1.createMidiDownloadPayload)(xmlText, playback_model_1.PLAYBACK_TICKS_PER_QUARTER, normalizeMidiProgram(midiProgramSelect.value), forceMidiProgramOverride.checked, normalizeGraceTimingMode(graceTimingModeSelect.value), metricAccentEnabledInput.checked, normalizeMetricAccentProfile(metricAccentProfileSelect.value), (0, midi_musescore_io_1.normalizeMidiExportProfile)(midiExportProfileSelect.value), keepMksMetaMetadataInMusicXml.checked);
     if (!payload) {
         failExport("MIDI", "Could not build MIDI payload from current measure MusicXML.");
         return;
@@ -3546,6 +3238,7 @@ playMeasureBtn.addEventListener("touchstart", unlockAudioOnGesture, { passive: t
 renderNewPartClefControls();
 applyInitialXmlInputValue();
 applyInitialPlaybackSettings();
+(0, abc_browser_compat_1.installAbcBrowserCompatibilityOnWindow)();
 (0, vsqx_io_1.installVsqxMusicXmlNormalizationHook)((xml) => (0, musicxml_io_1.applyImplicitBeamsToMusicXmlText)((0, musicxml_io_1.normalizeImportedMusicXmlText)(xml)));
 installGlobalAudioUnlock();
 loadFromText(xmlInput.value);
@@ -4102,10 +3795,6 @@ const midiToPitchText = (midiNumber) => {
     const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
     const octave = Math.floor(n / 12) - 1;
     return `${names[n % 12]}${octave}`;
-};
-const getMidiWriterRuntime = () => {
-    var _a;
-    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
 };
 const normalizeTicksPerQuarter = (ticksPerQuarter) => {
     if (!Number.isFinite(ticksPerQuarter))
@@ -6809,13 +6498,13 @@ const collectMidiKeySignatureEventsFromMusicXmlDoc = (doc, ticksPerQuarter) => {
 };
 exports.collectMidiKeySignatureEventsFromMusicXmlDoc = collectMidiKeySignatureEventsFromMusicXmlDoc;
 const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_piano_2", trackProgramOverrides = new Map(), controlEvents = [], tempoEvents = [], timeSignatureEvents = [], keySignatureEvents = [], options = {}) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
     const rawWriter = options.rawWriter === true;
-    const midiWriter = rawWriter ? null : getMidiWriterRuntime();
+    const midiWriter = rawWriter ? null : (_a = options.midiWriterRuntime) !== null && _a !== void 0 ? _a : null;
     if (!rawWriter && !midiWriter) {
         throw new Error("midi-writer.js is not loaded.");
     }
-    const writerTicksPerQuarter = normalizeTicksPerQuarter((_a = options.ticksPerQuarter) !== null && _a !== void 0 ? _a : 480);
+    const writerTicksPerQuarter = normalizeTicksPerQuarter((_b = options.ticksPerQuarter) !== null && _b !== void 0 ? _b : 480);
     if (midiWriter) {
         setMidiWriterHeaderTicksPerQuarter(midiWriter, writerTicksPerQuarter);
     }
@@ -6824,7 +6513,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     const tracksById = new Map();
     for (const event of sourceEvents) {
         const key = event.trackId || "__default__";
-        const bucket = (_b = tracksById.get(key)) !== null && _b !== void 0 ? _b : [];
+        const bucket = (_c = tracksById.get(key)) !== null && _c !== void 0 ? _c : [];
         bucket.push(event);
         tracksById.set(key, bucket);
     }
@@ -6832,12 +6521,12 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     const sortedTrackIds = Array.from(tracksById.keys()).sort((a, b) => a.localeCompare(b));
     const emitMksTextMeta = options.emitMksTextMeta !== false;
     const mksTextMetaLines = emitMksTextMeta ? ["mks:meta-version:1"] : [];
-    const metaTitle = String((_d = (_c = options.metadata) === null || _c === void 0 ? void 0 : _c.title) !== null && _d !== void 0 ? _d : "").trim();
-    const metaMovementTitle = String((_f = (_e = options.metadata) === null || _e === void 0 ? void 0 : _e.movementTitle) !== null && _f !== void 0 ? _f : "").trim();
-    const metaComposer = String((_h = (_g = options.metadata) === null || _g === void 0 ? void 0 : _g.composer) !== null && _h !== void 0 ? _h : "").trim();
+    const metaTitle = String((_e = (_d = options.metadata) === null || _d === void 0 ? void 0 : _d.title) !== null && _e !== void 0 ? _e : "").trim();
+    const metaMovementTitle = String((_g = (_f = options.metadata) === null || _f === void 0 ? void 0 : _f.movementTitle) !== null && _g !== void 0 ? _g : "").trim();
+    const metaComposer = String((_j = (_h = options.metadata) === null || _h === void 0 ? void 0 : _h.composer) !== null && _j !== void 0 ? _j : "").trim();
     const metaTrackTitle = (metaTitle || metaMovementTitle || "Untitled").replace(/\s+/g, " ").trim() || "Untitled";
     const standardTextMetaLines = [`title:${metaTrackTitle}`];
-    const metaPickupTicks = Math.max(0, Math.round((_k = (_j = options.metadata) === null || _j === void 0 ? void 0 : _j.pickupTicks) !== null && _k !== void 0 ? _k : 0));
+    const metaPickupTicks = Math.max(0, Math.round((_l = (_k = options.metadata) === null || _k === void 0 ? void 0 : _k.pickupTicks) !== null && _l !== void 0 ? _l : 0));
     if (emitMksTextMeta) {
         if (metaTitle)
             mksTextMetaLines.push(`mks:title:${encodeURIComponent(metaTitle)}`);
@@ -6850,8 +6539,8 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
             mksTextMetaLines.push(`mks:pickup-ticks:${metaPickupTicks}`);
         for (let index = 0; index < sortedTrackIds.length; index += 1) {
             const trackId = sortedTrackIds[index];
-            const trackEvents = (_l = tracksById.get(trackId)) !== null && _l !== void 0 ? _l : [];
-            const trackName = (_p = (_o = (_m = trackEvents[0]) === null || _m === void 0 ? void 0 : _m.trackName) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
+            const trackEvents = (_m = tracksById.get(trackId)) !== null && _m !== void 0 ? _m : [];
+            const trackName = (_q = (_p = (_o = trackEvents[0]) === null || _o === void 0 ? void 0 : _o.trackName) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
             if (!trackName)
                 continue;
             mksTextMetaLines.push(`mks:part-name-track:${index + 1}:${encodeURIComponent(trackName)}`);
@@ -6915,7 +6604,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
         dedupedKeySignatureEvents.unshift({ startTicks: 0, fifths: 0, mode: "major" });
     }
     const exportDiagnostics = [];
-    const sourceDiagnostics = ((_q = options.diagnostics) !== null && _q !== void 0 ? _q : [])
+    const sourceDiagnostics = ((_r = options.diagnostics) !== null && _r !== void 0 ? _r : [])
         .map((entry) => String(entry || "").trim())
         .filter((entry) => entry.length > 0);
     exportDiagnostics.push(...sourceDiagnostics);
@@ -6955,7 +6644,7 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
         return buildRawMidiBytesForPlayback(sourceEvents, trackProgramOverrides, controlEvents, dedupedTempoEvents, exportedTimeSignatureEvents, dedupedKeySignatureEvents, writerTicksPerQuarter, normalizedProgramPreset, {
             embedMksSysEx,
             sysexChunkTexts: sysexChunks,
-            retriggerPolicy: (_r = options.rawRetriggerPolicy) !== null && _r !== void 0 ? _r : "off_before_on",
+            retriggerPolicy: (_s = options.rawRetriggerPolicy) !== null && _s !== void 0 ? _s : "off_before_on",
             textMetaLines: [...standardTextMetaLines, ...mksTextMetaLines],
             metaTrackName: metaTrackTitle,
         });
@@ -7037,13 +6726,13 @@ const buildMidiBytesForPlayback = (events, tempo, programPreset = "electric_pian
     const groupedControlEvents = new Map();
     for (const controlEvent of controlEvents) {
         const key = `${controlEvent.trackId}::${normalizeMidiChannel(controlEvent.channel)}`;
-        const bucket = (_s = groupedControlEvents.get(key)) !== null && _s !== void 0 ? _s : [];
+        const bucket = (_t = groupedControlEvents.get(key)) !== null && _t !== void 0 ? _t : [];
         bucket.push(controlEvent);
         groupedControlEvents.set(key, bucket);
     }
     const sortedControlKeys = Array.from(groupedControlEvents.keys()).sort((a, b) => a.localeCompare(b));
     for (const controlKey of sortedControlKeys) {
-        const channelEvents = ((_t = groupedControlEvents.get(controlKey)) !== null && _t !== void 0 ? _t : [])
+        const channelEvents = ((_u = groupedControlEvents.get(controlKey)) !== null && _u !== void 0 ? _u : [])
             .slice()
             .sort((a, b) => a.startTicks === b.startTicks
             ? a.controllerNumber === b.controllerNumber
@@ -8890,13 +8579,145 @@ exports.renderMeasureEditorPreview = renderMeasureEditorPreview;
  * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.renderMusicXmlDomToSvg = void 0;
-const DEFAULT_SLUR_NUMBER = "1";
+exports.renderMusicXmlDomToSvg = exports.initializeBrowserVerovioCapability = exports.createBrowserVerovioCapability = exports.BrowserVerovioToolkit = void 0;
+const verovio_render_1 = require("./verovio-render");
 const VEROVIO_INIT_TIMEOUT_MS = 8000;
 let verovioToolkit = null;
 let verovioInitPromise = null;
+const getVerovioRuntime = () => {
+    var _a;
+    return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
+};
+const isVerovioRuntimeReady = (moduleObj) => {
+    return Boolean(moduleObj.calledRun && typeof moduleObj.cwrap === "function");
+};
+const waitForVerovioRuntime = async (moduleObj) => {
+    if (isVerovioRuntimeReady(moduleObj))
+        return;
+    await new Promise((resolve, reject) => {
+        let settled = false;
+        const timeoutId = window.setTimeout(() => {
+            if (settled)
+                return;
+            settled = true;
+            reject(new Error("Timed out while waiting for verovio initialization."));
+        }, VEROVIO_INIT_TIMEOUT_MS);
+        const complete = () => {
+            if (settled)
+                return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            resolve();
+        };
+        const previous = moduleObj.onRuntimeInitialized;
+        moduleObj.onRuntimeInitialized = () => {
+            if (typeof previous === "function")
+                previous();
+            complete();
+        };
+        if (isVerovioRuntimeReady(moduleObj))
+            complete();
+    });
+};
+const ensureVerovioToolkit = async () => {
+    if (verovioToolkit)
+        return verovioToolkit;
+    if (verovioInitPromise)
+        return verovioInitPromise;
+    verovioInitPromise = (async () => {
+        const runtime = getVerovioRuntime();
+        if (!runtime || typeof runtime.toolkit !== "function") {
+            throw new Error("verovio.js is not loaded.");
+        }
+        const moduleObj = runtime.module;
+        if (!moduleObj) {
+            throw new Error("verovio module was not found.");
+        }
+        await waitForVerovioRuntime(moduleObj);
+        verovioToolkit = new runtime.toolkit();
+        return verovioToolkit;
+    })().catch((error) => {
+        verovioInitPromise = null;
+        throw error;
+    });
+    return verovioInitPromise;
+};
+class BrowserVerovioToolkit {
+    constructor() {
+        this.toolkit = null;
+    }
+    setToolkit(toolkit) {
+        this.toolkit = toolkit;
+    }
+    setOptions(options) {
+        this.requireToolkit().setOptions(options);
+    }
+    loadData(xml) {
+        return this.requireToolkit().loadData(xml);
+    }
+    getPageCount() {
+        return this.requireToolkit().getPageCount();
+    }
+    renderToSVG(page, options) {
+        return this.requireToolkit().renderToSVG(page, options);
+    }
+    requireToolkit() {
+        if (!this.toolkit) {
+            throw new Error("verovio toolkit is not initialized.");
+        }
+        return this.toolkit;
+    }
+}
+exports.BrowserVerovioToolkit = BrowserVerovioToolkit;
+/**
+ * Adapts a browser-global Verovio runtime for an explicit consumer. The
+ * returned toolkit is a deferred proxy when Verovio is still initializing;
+ * callers that need rendering must await initializeBrowserVerovioCapability.
+ */
+const createBrowserVerovioCapability = () => {
+    const runtime = getVerovioRuntime();
+    if (!runtime || typeof runtime.toolkit !== "function" || !runtime.module)
+        return null;
+    const toolkit = new BrowserVerovioToolkit();
+    if (isVerovioRuntimeReady(runtime.module))
+        toolkit.setToolkit(new runtime.toolkit());
+    return {
+        toolkit,
+        serializeDocument: (renderDoc) => new XMLSerializer().serializeToString(renderDoc),
+    };
+};
+exports.createBrowserVerovioCapability = createBrowserVerovioCapability;
+const initializeBrowserVerovioCapability = async (capability) => {
+    if (!capability) {
+        throw new Error("verovio.js is not loaded.");
+    }
+    const toolkit = await ensureVerovioToolkit();
+    if (!toolkit)
+        throw new Error("Failed to initialize verovio toolkit.");
+    capability.toolkit.setToolkit(toolkit);
+};
+exports.initializeBrowserVerovioCapability = initializeBrowserVerovioCapability;
+const renderMusicXmlDomToSvg = async (doc, options) => {
+    const toolkit = await ensureVerovioToolkit();
+    if (!toolkit) {
+        throw new Error("Failed to initialize verovio toolkit.");
+    }
+    return (0, verovio_render_1.renderMusicXmlDomWithVerovioToolkit)(doc, options, toolkit, (renderDoc) => new XMLSerializer().serializeToString(renderDoc));
+};
+exports.renderMusicXmlDomToSvg = renderMusicXmlDomToSvg;
+
+  },
+  "src/ts/verovio-render.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.renderMusicXmlDomWithVerovioToolkit = exports.renderMusicXmlWithVerovioToolkit = exports.prepareMusicXmlDomForVerovio = void 0;
+const DEFAULT_SLUR_NUMBER = "1";
 const cloneXmlDocument = (doc) => {
-    const cloned = document.implementation.createDocument("", "", null);
+    const cloned = doc.implementation.createDocument("", "", null);
     const root = cloned.importNode(doc.documentElement, true);
     cloned.appendChild(root);
     return cloned;
@@ -8965,93 +8786,25 @@ const sanitizeSlursForRender = (doc) => {
             const notes = childElementsBySelector(measure, ":scope > note");
             for (const note of notes) {
                 const slurs = childElementsBySelector(note, ":scope > notations > slur");
-                for (const slur of slurs) {
+                for (const slur of slurs)
                     processSlurForRender(slur, openSlurs);
-                }
             }
         }
         for (const danglingStarts of openSlurs.values()) {
-            for (const startSlur of danglingStarts) {
+            for (const startSlur of danglingStarts)
                 removeSlurAndPruneNotations(startSlur);
-            }
         }
     }
 };
-const getVerovioRuntime = () => {
-    var _a;
-    return (_a = window.verovio) !== null && _a !== void 0 ? _a : null;
-};
-const isVerovioRuntimeReady = (moduleObj) => {
-    return Boolean(moduleObj.calledRun && typeof moduleObj.cwrap === "function");
-};
-const waitForVerovioRuntime = async (moduleObj) => {
-    if (isVerovioRuntimeReady(moduleObj))
-        return;
-    await new Promise((resolve, reject) => {
-        let settled = false;
-        const timeoutId = window.setTimeout(() => {
-            if (settled)
-                return;
-            settled = true;
-            reject(new Error("Timed out while waiting for verovio initialization."));
-        }, VEROVIO_INIT_TIMEOUT_MS);
-        const complete = () => {
-            if (settled)
-                return;
-            settled = true;
-            window.clearTimeout(timeoutId);
-            resolve();
-        };
-        const previous = moduleObj.onRuntimeInitialized;
-        moduleObj.onRuntimeInitialized = () => {
-            if (typeof previous === "function") {
-                previous();
-            }
-            complete();
-        };
-        if (isVerovioRuntimeReady(moduleObj)) {
-            complete();
-        }
-    });
-};
-const ensureVerovioToolkit = async () => {
-    if (verovioToolkit) {
-        return verovioToolkit;
-    }
-    if (verovioInitPromise) {
-        return verovioInitPromise;
-    }
-    verovioInitPromise = (async () => {
-        const runtime = getVerovioRuntime();
-        if (!runtime || typeof runtime.toolkit !== "function") {
-            throw new Error("verovio.js is not loaded.");
-        }
-        const moduleObj = runtime.module;
-        if (!moduleObj) {
-            throw new Error("verovio module was not found.");
-        }
-        await waitForVerovioRuntime(moduleObj);
-        verovioToolkit = new runtime.toolkit();
-        return verovioToolkit;
-    })()
-        .catch((error) => {
-        verovioInitPromise = null;
-        throw error;
-    });
-    return verovioInitPromise;
-};
-const renderMusicXmlDomToSvg = async (doc, options) => {
-    const toolkit = await ensureVerovioToolkit();
-    if (!toolkit) {
-        throw new Error("Failed to initialize verovio toolkit.");
-    }
-    // Keep source DOM intact and only sanitize slur mismatch on render copy.
+const prepareMusicXmlDomForVerovio = (doc) => {
     const renderDoc = cloneXmlDocument(doc);
     sanitizeSlursForRender(renderDoc);
-    const xml = new XMLSerializer().serializeToString(renderDoc);
+    return renderDoc;
+};
+exports.prepareMusicXmlDomForVerovio = prepareMusicXmlDomForVerovio;
+const renderMusicXmlWithVerovioToolkit = (xml, options, toolkit) => {
     toolkit.setOptions(options);
-    const loaded = toolkit.loadData(xml);
-    if (!loaded) {
+    if (!toolkit.loadData(xml)) {
         throw new Error("verovio loadData failed.");
     }
     const pageCount = toolkit.getPageCount();
@@ -9064,7 +8817,12 @@ const renderMusicXmlDomToSvg = async (doc, options) => {
     }
     return { svg, pageCount };
 };
-exports.renderMusicXmlDomToSvg = renderMusicXmlDomToSvg;
+exports.renderMusicXmlWithVerovioToolkit = renderMusicXmlWithVerovioToolkit;
+const renderMusicXmlDomWithVerovioToolkit = (doc, options, toolkit, serializeDocument) => {
+    const renderDoc = (0, exports.prepareMusicXmlDomForVerovio)(doc);
+    return (0, exports.renderMusicXmlWithVerovioToolkit)(serializeDocument(renderDoc), options, toolkit);
+};
+exports.renderMusicXmlDomWithVerovioToolkit = renderMusicXmlDomWithVerovioToolkit;
 
   },
   "src/ts/musicxml-io.js": function (require, module, exports) {
@@ -9697,15 +9455,8 @@ exports.replaceMeasureInMainDocument = replaceMeasureInMainDocument;
  * SPDX-License-Identifier: Apache-2.0
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = exports.buildMeasureTimelineForPart = exports.createBasicWaveSynthEngine = exports.compactSynthScheduleForPlayback = exports.PLAYBACK_TICKS_PER_QUARTER = void 0;
-const midi_io_1 = require("./midi-io");
-const musicxml_io_1 = require("./musicxml-io");
-exports.PLAYBACK_TICKS_PER_QUARTER = 480;
-const DENSE_PLAYBACK_EVENT_THRESHOLD = 2048;
-const DENSE_PLAYBACK_MAX_EVENTS = 4096;
-const DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET = 48;
-const DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR = 64;
-const DENSE_PLAYBACK_PROTECTED_ONSET_SIZE = 8;
+exports.startMeasurePlayback = exports.startPlayback = exports.stopPlayback = exports.createBasicWaveSynthEngine = void 0;
+const playback_model_1 = require("./playback-model");
 const summarizeDiagnostics = (diagnostics) => {
     if (!diagnostics.length)
         return "unknown reason";
@@ -9731,153 +9482,6 @@ const normalizeWaveform = (value) => {
         return value;
     return "sine";
 };
-const compareScheduleEventsForRetention = (a, b) => {
-    var _a, _b;
-    if (b.ticks !== a.ticks)
-        return b.ticks - a.ticks;
-    if (a.channel === 10 && b.channel !== 10)
-        return -1;
-    if (b.channel === 10 && a.channel !== 10)
-        return 1;
-    if (a.start !== b.start)
-        return a.start - b.start;
-    if (a.midiNumber !== b.midiNumber)
-        return b.midiNumber - a.midiNumber;
-    return ((_a = a.trackId) !== null && _a !== void 0 ? _a : "").localeCompare((_b = b.trackId) !== null && _b !== void 0 ? _b : "");
-};
-const prioritizeOnsetGroupForRetention = (group) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
-    const sortedByMidi = group.slice().sort((a, b) => a.midiNumber === b.midiNumber ? compareScheduleEventsForRetention(a, b) : a.midiNumber - b.midiNumber);
-    const lowestMidi = (_b = (_a = sortedByMidi[0]) === null || _a === void 0 ? void 0 : _a.midiNumber) !== null && _b !== void 0 ? _b : 0;
-    const highestMidi = (_d = (_c = sortedByMidi[sortedByMidi.length - 1]) === null || _c === void 0 ? void 0 : _c.midiNumber) !== null && _d !== void 0 ? _d : 0;
-    const byPitchClass = new Map();
-    for (const event of sortedByMidi) {
-        const pitchClass = ((event.midiNumber % 12) + 12) % 12;
-        const bucket = (_e = byPitchClass.get(pitchClass)) !== null && _e !== void 0 ? _e : [];
-        bucket.push(event);
-        byPitchClass.set(pitchClass, bucket);
-    }
-    const anchors = [];
-    const uniquePitchClasses = [];
-    const octaveOuter = [];
-    const octaveInner = [];
-    for (const event of sortedByMidi) {
-        if (event.midiNumber === lowestMidi || event.midiNumber === highestMidi) {
-            anchors.push(event);
-            continue;
-        }
-        const pitchClass = ((event.midiNumber % 12) + 12) % 12;
-        const bucket = (_f = byPitchClass.get(pitchClass)) !== null && _f !== void 0 ? _f : [];
-        if (bucket.length <= 1) {
-            uniquePitchClasses.push(event);
-            continue;
-        }
-        const bucketLowest = (_h = (_g = bucket[0]) === null || _g === void 0 ? void 0 : _g.midiNumber) !== null && _h !== void 0 ? _h : event.midiNumber;
-        const bucketHighest = (_k = (_j = bucket[bucket.length - 1]) === null || _j === void 0 ? void 0 : _j.midiNumber) !== null && _k !== void 0 ? _k : event.midiNumber;
-        if (event.midiNumber === bucketLowest || event.midiNumber === bucketHighest) {
-            octaveOuter.push(event);
-        }
-        else {
-            octaveInner.push(event);
-        }
-    }
-    const sortBucket = (bucket) => bucket.slice().sort(compareScheduleEventsForRetention);
-    return [
-        ...sortBucket(anchors),
-        ...sortBucket(uniquePitchClasses),
-        ...sortBucket(octaveOuter),
-        ...sortBucket(octaveInner),
-    ];
-};
-const compactSynthScheduleForPlayback = (schedule, ticksPerQuarter) => {
-    var _a, _b;
-    const originalEventCount = Array.isArray(schedule.events) ? schedule.events.length : 0;
-    if (originalEventCount <= DENSE_PLAYBACK_EVENT_THRESHOLD) {
-        return {
-            schedule,
-            summary: {
-                applied: false,
-                originalEventCount,
-                finalEventCount: originalEventCount,
-                droppedUltraShortCount: 0,
-                droppedDenseOnsetCount: 0,
-                droppedBudgetCount: 0,
-            },
-        };
-    }
-    const minDenseEventTicks = Math.max(1, Math.round(ticksPerQuarter / DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR));
-    const keptAfterShortFilter = [];
-    let droppedUltraShortCount = 0;
-    for (const event of schedule.events) {
-        if (((_a = event.ticks) !== null && _a !== void 0 ? _a : 0) < minDenseEventTicks) {
-            droppedUltraShortCount += 1;
-            continue;
-        }
-        keptAfterShortFilter.push(event);
-    }
-    const byOnset = new Map();
-    for (const event of keptAfterShortFilter) {
-        const group = (_b = byOnset.get(event.start)) !== null && _b !== void 0 ? _b : [];
-        group.push(event);
-        byOnset.set(event.start, group);
-    }
-    const orderedOnsets = Array.from(byOnset.keys()).sort((a, b) => a - b);
-    const onsetGroups = orderedOnsets.map((start) => {
-        var _a;
-        const retained = prioritizeOnsetGroupForRetention((_a = byOnset.get(start)) !== null && _a !== void 0 ? _a : []);
-        return retained.slice(0, DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET);
-    });
-    const denseLimitedEvents = [];
-    for (const group of onsetGroups) {
-        denseLimitedEvents.push(...group);
-    }
-    const droppedDenseOnsetCount = keptAfterShortFilter.length - denseLimitedEvents.length;
-    let finalEvents = denseLimitedEvents;
-    let droppedBudgetCount = 0;
-    if (denseLimitedEvents.length > DENSE_PLAYBACK_MAX_EVENTS) {
-        const protectedGroups = onsetGroups.filter((group) => group.length <= DENSE_PLAYBACK_PROTECTED_ONSET_SIZE);
-        const reducibleGroups = onsetGroups
-            .filter((group) => group.length > DENSE_PLAYBACK_PROTECTED_ONSET_SIZE)
-            .map((group) => group.slice());
-        const retained = [];
-        for (const group of protectedGroups) {
-            retained.push(...group);
-        }
-        if (retained.length < DENSE_PLAYBACK_MAX_EVENTS) {
-            const rounds = reducibleGroups.reduce((max, group) => Math.max(max, group.length), 0);
-            for (let round = 0; round < rounds && retained.length < DENSE_PLAYBACK_MAX_EVENTS; round += 1) {
-                for (const group of reducibleGroups) {
-                    const event = group[round];
-                    if (!event)
-                        continue;
-                    retained.push(event);
-                    if (retained.length >= DENSE_PLAYBACK_MAX_EVENTS)
-                        break;
-                }
-            }
-        }
-        if (retained.length > DENSE_PLAYBACK_MAX_EVENTS) {
-            retained.length = DENSE_PLAYBACK_MAX_EVENTS;
-        }
-        finalEvents = retained.sort((a, b) => a.start === b.start ? a.midiNumber - b.midiNumber : a.start - b.start);
-        droppedBudgetCount = denseLimitedEvents.length - finalEvents.length;
-    }
-    return {
-        schedule: {
-            ...schedule,
-            events: finalEvents,
-        },
-        summary: {
-            applied: true,
-            originalEventCount,
-            finalEventCount: finalEvents.length,
-            droppedUltraShortCount,
-            droppedDenseOnsetCount,
-            droppedBudgetCount,
-        },
-    };
-};
-exports.compactSynthScheduleForPlayback = compactSynthScheduleForPlayback;
 const createBasicWaveSynthEngine = (options) => {
     const ticksPerQuarter = Number.isFinite(options.ticksPerQuarter)
         ? Math.max(1, Math.round(options.ticksPerQuarter))
@@ -10023,7 +9627,7 @@ const createBasicWaveSynthEngine = (options) => {
         }
         const runningContext = await ensureAudioContextRunning();
         stop();
-        const compacted = (0, exports.compactSynthScheduleForPlayback)(schedule, ticksPerQuarter);
+        const compacted = (0, playback_model_1.compactSynthScheduleForPlayback)(schedule, ticksPerQuarter);
         const effectiveSchedule = compacted.schedule;
         const normalizedWaveform = normalizeWaveform(waveform);
         const normalizedTempoEvents = (((_a = effectiveSchedule.tempoEvents) === null || _a === void 0 ? void 0 : _a.length)
@@ -10176,6 +9780,319 @@ const createBasicWaveSynthEngine = (options) => {
     return { unlockFromUserGesture, playSchedule, stop };
 };
 exports.createBasicWaveSynthEngine = createBasicWaveSynthEngine;
+const stopPlayback = (options) => {
+    options.engine.stop();
+    options.setIsPlaying(false);
+    options.setActivePlaybackLocation(null);
+    options.setPlaybackText("Playback: stopped");
+    options.renderControlState();
+};
+exports.stopPlayback = stopPlayback;
+const startPlayback = async (options, params) => {
+    var _a;
+    if (!params.isLoaded || options.getIsPlaying())
+        return;
+    options.setActivePlaybackLocation(null);
+    const saveResult = params.core.save();
+    options.onFullSaveResult(saveResult);
+    if (!saveResult.ok) {
+        options.logDiagnostics("playback", saveResult.diagnostics);
+        logPlaybackFailureDiagnostics("save failed", saveResult.diagnostics);
+        if (saveResult.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
+            const debugXml = params.core.debugSerializeCurrentXml();
+            if (debugXml) {
+                options.dumpOverfullContext(debugXml, options.editableVoice);
+            }
+            else if (options.debugLog) {
+                console.warn("[miku-score][debug] no in-memory XML to dump.");
+            }
+        }
+        options.renderAll();
+        options.setPlaybackText(`Playback: save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
+        return;
+    }
+    const useMidiLikePlayback = options.getUseMidiLikePlayback();
+    const playbackPlan = (0, playback_model_1.buildPlaybackPlan)(saveResult.xml, {
+        ticksPerQuarter: options.ticksPerQuarter,
+        useMidiLikePlayback,
+        graceTimingMode: options.getGraceTimingMode(),
+        metricAccentEnabled: options.getMetricAccentEnabled(),
+        metricAccentProfile: options.getMetricAccentProfile(),
+        startFromMeasure: params.startFromMeasure,
+        includeMidiByteLength: true,
+    });
+    if (!playbackPlan.ok) {
+        if (playbackPlan.code === "INVALID_MUSICXML") {
+            options.setPlaybackText("Playback: invalid MusicXML");
+        }
+        else if (playbackPlan.code === "NO_PLAYABLE_NOTES") {
+            options.setPlaybackText("Playback: no playable notes");
+        }
+        else {
+            options.setPlaybackText(`Playback: MIDI generation failed (${playbackPlan.message})`);
+        }
+        options.renderControlState();
+        return;
+    }
+    const waveform = options.getPlaybackWaveform();
+    if (playbackPlan.initialLocation) {
+        options.setActivePlaybackLocation(playbackPlan.initialLocation);
+    }
+    try {
+        await options.engine.playSchedule(playbackPlan.schedule, waveform, (currentTick) => {
+            options.setActivePlaybackLocation((0, playback_model_1.findPlaybackLocationAtTick)(playbackPlan.measureTimeline, currentTick));
+        }, () => {
+            options.setIsPlaying(false);
+            options.setActivePlaybackLocation(null);
+            options.setPlaybackText("Playback: stopped");
+            options.renderControlState();
+        });
+    }
+    catch (error) {
+        options.setPlaybackText("Playback: synth playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
+        options.renderControlState();
+        return;
+    }
+    options.setIsPlaying(true);
+    const fromMeasureLabel = params.startFromMeasure
+        ? ` / from measure ${params.startFromMeasure.measureNumber}`
+        : "";
+    options.setPlaybackText(`Playing: ${playbackPlan.eventCount} notes / mode ${playbackPlan.mode}${fromMeasureLabel} / MIDI ${(_a = playbackPlan.midiByteLength) !== null && _a !== void 0 ? _a : 0} bytes / waveform ${waveform}`);
+    options.renderControlState();
+    options.renderAll();
+};
+exports.startPlayback = startPlayback;
+const startMeasurePlayback = async (options, params) => {
+    if (!params.draftCore || options.getIsPlaying())
+        return;
+    options.setActivePlaybackLocation(null);
+    const saveResult = params.draftCore.save();
+    if (!saveResult.ok) {
+        options.onMeasureSaveDiagnostics(saveResult.diagnostics);
+        options.logDiagnostics("playback", saveResult.diagnostics);
+        logPlaybackFailureDiagnostics("measure save failed", saveResult.diagnostics);
+        options.setPlaybackText(`Playback: measure save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
+        options.renderAll();
+        return;
+    }
+    const useMidiLikePlayback = options.getUseMidiLikePlayback();
+    const playbackPlan = (0, playback_model_1.buildPlaybackPlan)(saveResult.xml, {
+        ticksPerQuarter: options.ticksPerQuarter,
+        useMidiLikePlayback,
+        graceTimingMode: options.getGraceTimingMode(),
+        metricAccentEnabled: options.getMetricAccentEnabled(),
+        metricAccentProfile: options.getMetricAccentProfile(),
+        includeMidiByteLength: false,
+    });
+    if (!playbackPlan.ok) {
+        if (playbackPlan.code === "INVALID_MUSICXML") {
+            options.setPlaybackText("Playback: invalid MusicXML");
+        }
+        else if (playbackPlan.code === "NO_PLAYABLE_NOTES") {
+            options.setPlaybackText("Playback: no playable notes in this measure");
+        }
+        else {
+            options.setPlaybackText(`Playback: measure playback failed (${playbackPlan.message})`);
+        }
+        options.renderControlState();
+        return;
+    }
+    const waveform = options.getPlaybackWaveform();
+    try {
+        await options.engine.playSchedule(playbackPlan.schedule, waveform, (currentTick) => {
+            options.setActivePlaybackLocation((0, playback_model_1.findPlaybackLocationAtTick)(playbackPlan.measureTimeline, currentTick));
+        }, () => {
+            options.setIsPlaying(false);
+            options.setActivePlaybackLocation(null);
+            options.setPlaybackText("Playback: stopped");
+            options.renderControlState();
+        });
+    }
+    catch (error) {
+        options.setPlaybackText("Playback: measure playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
+        options.renderControlState();
+        return;
+    }
+    options.setIsPlaying(true);
+    options.setPlaybackText(`Playing: selected measure / ${playbackPlan.eventCount} notes / mode ${playbackPlan.mode} / waveform ${waveform}`);
+    options.renderControlState();
+};
+exports.startMeasurePlayback = startMeasurePlayback;
+
+  },
+  "core/interfaces.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+
+  },
+  "src/ts/playback-model.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildPlaybackPlan = exports.findPlaybackLocationAtTick = exports.buildMeasureTimelineForPart = exports.compactSynthScheduleForPlayback = exports.PLAYBACK_TICKS_PER_QUARTER = void 0;
+const midi_io_1 = require("./midi-io");
+const musicxml_io_1 = require("./musicxml-io");
+exports.PLAYBACK_TICKS_PER_QUARTER = 480;
+const DENSE_PLAYBACK_EVENT_THRESHOLD = 2048;
+const DENSE_PLAYBACK_MAX_EVENTS = 4096;
+const DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET = 48;
+const DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR = 64;
+const DENSE_PLAYBACK_PROTECTED_ONSET_SIZE = 8;
+const compareScheduleEventsForRetention = (a, b) => {
+    var _a, _b;
+    if (b.ticks !== a.ticks)
+        return b.ticks - a.ticks;
+    if (a.channel === 10 && b.channel !== 10)
+        return -1;
+    if (b.channel === 10 && a.channel !== 10)
+        return 1;
+    if (a.start !== b.start)
+        return a.start - b.start;
+    if (a.midiNumber !== b.midiNumber)
+        return b.midiNumber - a.midiNumber;
+    return ((_a = a.trackId) !== null && _a !== void 0 ? _a : "").localeCompare((_b = b.trackId) !== null && _b !== void 0 ? _b : "");
+};
+const prioritizeOnsetGroupForRetention = (group) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    const sortedByMidi = group.slice().sort((a, b) => a.midiNumber === b.midiNumber
+        ? compareScheduleEventsForRetention(a, b)
+        : a.midiNumber - b.midiNumber);
+    const lowestMidi = (_b = (_a = sortedByMidi[0]) === null || _a === void 0 ? void 0 : _a.midiNumber) !== null && _b !== void 0 ? _b : 0;
+    const highestMidi = (_d = (_c = sortedByMidi[sortedByMidi.length - 1]) === null || _c === void 0 ? void 0 : _c.midiNumber) !== null && _d !== void 0 ? _d : 0;
+    const byPitchClass = new Map();
+    for (const event of sortedByMidi) {
+        const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+        const bucket = (_e = byPitchClass.get(pitchClass)) !== null && _e !== void 0 ? _e : [];
+        bucket.push(event);
+        byPitchClass.set(pitchClass, bucket);
+    }
+    const anchors = [];
+    const uniquePitchClasses = [];
+    const octaveOuter = [];
+    const octaveInner = [];
+    for (const event of sortedByMidi) {
+        if (event.midiNumber === lowestMidi || event.midiNumber === highestMidi) {
+            anchors.push(event);
+            continue;
+        }
+        const pitchClass = ((event.midiNumber % 12) + 12) % 12;
+        const bucket = (_f = byPitchClass.get(pitchClass)) !== null && _f !== void 0 ? _f : [];
+        if (bucket.length <= 1) {
+            uniquePitchClasses.push(event);
+            continue;
+        }
+        const bucketLowest = (_h = (_g = bucket[0]) === null || _g === void 0 ? void 0 : _g.midiNumber) !== null && _h !== void 0 ? _h : event.midiNumber;
+        const bucketHighest = (_k = (_j = bucket[bucket.length - 1]) === null || _j === void 0 ? void 0 : _j.midiNumber) !== null && _k !== void 0 ? _k : event.midiNumber;
+        if (event.midiNumber === bucketLowest || event.midiNumber === bucketHighest) {
+            octaveOuter.push(event);
+        }
+        else {
+            octaveInner.push(event);
+        }
+    }
+    const sortBucket = (bucket) => {
+        return bucket.slice().sort(compareScheduleEventsForRetention);
+    };
+    return [
+        ...sortBucket(anchors),
+        ...sortBucket(uniquePitchClasses),
+        ...sortBucket(octaveOuter),
+        ...sortBucket(octaveInner),
+    ];
+};
+const compactSynthScheduleForPlayback = (schedule, ticksPerQuarter) => {
+    var _a, _b;
+    const originalEventCount = Array.isArray(schedule.events) ? schedule.events.length : 0;
+    if (originalEventCount <= DENSE_PLAYBACK_EVENT_THRESHOLD) {
+        return {
+            schedule,
+            summary: {
+                applied: false,
+                originalEventCount,
+                finalEventCount: originalEventCount,
+                droppedUltraShortCount: 0,
+                droppedDenseOnsetCount: 0,
+                droppedBudgetCount: 0,
+            },
+        };
+    }
+    const minDenseEventTicks = Math.max(1, Math.round(ticksPerQuarter / DENSE_PLAYBACK_MIN_EVENT_TICKS_DIVISOR));
+    const keptAfterShortFilter = [];
+    let droppedUltraShortCount = 0;
+    for (const event of schedule.events) {
+        if (((_a = event.ticks) !== null && _a !== void 0 ? _a : 0) < minDenseEventTicks) {
+            droppedUltraShortCount += 1;
+        }
+        else {
+            keptAfterShortFilter.push(event);
+        }
+    }
+    const byOnset = new Map();
+    for (const event of keptAfterShortFilter) {
+        const group = (_b = byOnset.get(event.start)) !== null && _b !== void 0 ? _b : [];
+        group.push(event);
+        byOnset.set(event.start, group);
+    }
+    const onsetGroups = Array.from(byOnset.keys())
+        .sort((a, b) => a - b)
+        .map((start) => {
+        var _a;
+        return prioritizeOnsetGroupForRetention((_a = byOnset.get(start)) !== null && _a !== void 0 ? _a : [])
+            .slice(0, DENSE_PLAYBACK_MAX_EVENTS_PER_ONSET);
+    });
+    const denseLimitedEvents = [];
+    for (const group of onsetGroups)
+        denseLimitedEvents.push(...group);
+    const droppedDenseOnsetCount = keptAfterShortFilter.length - denseLimitedEvents.length;
+    let finalEvents = denseLimitedEvents;
+    let droppedBudgetCount = 0;
+    if (denseLimitedEvents.length > DENSE_PLAYBACK_MAX_EVENTS) {
+        const protectedGroups = onsetGroups.filter((group) => group.length <= DENSE_PLAYBACK_PROTECTED_ONSET_SIZE);
+        const reducibleGroups = onsetGroups
+            .filter((group) => group.length > DENSE_PLAYBACK_PROTECTED_ONSET_SIZE)
+            .map((group) => group.slice());
+        const retained = [];
+        for (const group of protectedGroups)
+            retained.push(...group);
+        if (retained.length < DENSE_PLAYBACK_MAX_EVENTS) {
+            const rounds = reducibleGroups.reduce((max, group) => Math.max(max, group.length), 0);
+            for (let round = 0; round < rounds && retained.length < DENSE_PLAYBACK_MAX_EVENTS; round += 1) {
+                for (const group of reducibleGroups) {
+                    const event = group[round];
+                    if (!event)
+                        continue;
+                    retained.push(event);
+                    if (retained.length >= DENSE_PLAYBACK_MAX_EVENTS)
+                        break;
+                }
+            }
+        }
+        if (retained.length > DENSE_PLAYBACK_MAX_EVENTS) {
+            retained.length = DENSE_PLAYBACK_MAX_EVENTS;
+        }
+        finalEvents = retained.sort((a, b) => a.start === b.start ? a.midiNumber - b.midiNumber : a.start - b.start);
+        droppedBudgetCount = denseLimitedEvents.length - finalEvents.length;
+    }
+    return {
+        schedule: { ...schedule, events: finalEvents },
+        summary: {
+            applied: true,
+            originalEventCount,
+            finalEventCount: finalEvents.length,
+            droppedUltraShortCount,
+            droppedDenseOnsetCount,
+            droppedBudgetCount,
+        },
+    };
+};
+exports.compactSynthScheduleForPlayback = compactSynthScheduleForPlayback;
 const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) => {
     const normalizedTempoEvents = tempoEvents
         .map((event) => ({
@@ -10190,12 +10107,13 @@ const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) =>
         startTick: Math.max(0, Math.round(event.startTicks)),
         value: Math.max(0, Math.min(127, Math.round(event.controllerValue))),
     }))
-        .sort((a, b) => (a.channel === b.channel ? a.startTick - b.startTick : a.channel - b.channel));
+        .sort((a, b) => a.channel === b.channel
+        ? a.startTick - b.startTick
+        : a.channel - b.channel);
     const pedalRanges = [];
     const rangeStartByChannel = new Map();
     for (const event of cc64Events) {
-        const pedalOn = event.value >= 64;
-        if (pedalOn) {
+        if (event.value >= 64) {
             if (!rangeStartByChannel.has(event.channel)) {
                 rangeStartByChannel.set(event.channel, event.startTick);
             }
@@ -10221,7 +10139,9 @@ const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) =>
         pedalRanges,
         events: events
             .slice()
-            .sort((a, b) => a.startTicks === b.startTicks ? a.midiNumber - b.midiNumber : a.startTicks - b.startTicks)
+            .sort((a, b) => a.startTicks === b.startTicks
+            ? a.midiNumber - b.midiNumber
+            : a.startTicks - b.startTicks)
             .map((event) => ({
             midiNumber: event.midiNumber,
             start: event.startTicks,
@@ -10231,17 +10151,13 @@ const toSynthSchedule = (tempo, events, tempoEvents = [], controlEvents = []) =>
         })),
     };
 };
-const parsePositiveInt = (text) => {
-    const value = Number.parseInt(String(text !== null && text !== void 0 ? text : "").trim(), 10);
-    return Number.isFinite(value) && value > 0 ? value : null;
-};
-const getFirstNumber = (el, selector) => {
+const getFirstNumber = (element, selector) => {
     var _a, _b;
-    const text = (_b = (_a = el.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
+    const text = (_b = (_a = element.querySelector(selector)) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim();
     if (!text)
         return null;
-    const n = Number(text);
-    return Number.isFinite(n) ? n : null;
+    const value = Number(text);
+    return Number.isFinite(value) ? value : null;
 };
 const measureCapacityDivFromContext = (divisions, beats, beatType) => {
     const safeDivisions = Math.max(1, Math.round(divisions));
@@ -10256,31 +10172,31 @@ const estimateMeasureContentSpanDiv = (measure) => {
     const lastStartByVoice = new Map();
     for (const child of Array.from(measure.children)) {
         if (child.tagName === "backup" || child.tagName === "forward") {
-            const dur = getFirstNumber(child, "duration");
-            if (!dur || dur <= 0)
+            const duration = getFirstNumber(child, "duration");
+            if (!duration || duration <= 0)
                 continue;
             if (child.tagName === "backup") {
-                cursorDiv = Math.max(0, cursorDiv - dur);
+                cursorDiv = Math.max(0, cursorDiv - duration);
             }
             else {
-                cursorDiv += dur;
+                cursorDiv += duration;
                 measureMaxDiv = Math.max(measureMaxDiv, cursorDiv);
             }
             continue;
         }
         if (child.tagName !== "note")
             continue;
-        const durationDiv = getFirstNumber(child, "duration");
-        if (!durationDiv || durationDiv <= 0)
+        const duration = getFirstNumber(child, "duration");
+        if (!duration || duration <= 0)
             continue;
         const voice = (_c = (_b = (_a = child.querySelector("voice")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "1";
         const isChord = Boolean(child.querySelector("chord"));
         const startDiv = isChord ? ((_d = lastStartByVoice.get(voice)) !== null && _d !== void 0 ? _d : cursorDiv) : cursorDiv;
         if (!isChord) {
             lastStartByVoice.set(voice, startDiv);
-            cursorDiv += durationDiv;
+            cursorDiv += duration;
         }
-        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + durationDiv);
+        measureMaxDiv = Math.max(measureMaxDiv, cursorDiv, startDiv + duration);
     }
     return measureMaxDiv;
 };
@@ -10298,33 +10214,34 @@ const shouldTreatFirstUnderfullAsPickup = (doc) => {
         const beatType = (_c = getFirstNumber(firstMeasure, "attributes > time > beat-type")) !== null && _c !== void 0 ? _c : 4;
         const capacityDiv = measureCapacityDivFromContext(divisions, beats, beatType);
         const contentDiv = estimateMeasureContentSpanDiv(firstMeasure);
-        if (!(contentDiv > 0 && contentDiv < capacityDiv)) {
+        if (!(contentDiv > 0 && contentDiv < capacityDiv))
             return false;
-        }
     }
     return true;
 };
 const isImplicitMeasure = (measure) => {
     if (!measure)
         return false;
-    const implicitAttr = (measure.getAttribute("implicit") || "").trim().toLowerCase();
-    return implicitAttr === "yes" || implicitAttr === "true" || implicitAttr === "1";
+    const implicit = (measure.getAttribute("implicit") || "").trim().toLowerCase();
+    return implicit === "yes" || implicit === "true" || implicit === "1";
 };
 const hasPreviousMeasureSibling = (measure) => {
-    for (let prev = measure.previousElementSibling; prev; prev = prev.previousElementSibling) {
-        const prevName = (prev.localName || prev.tagName || "").toLowerCase();
-        if (prevName === "measure")
+    for (let previous = measure.previousElementSibling; previous; previous = previous.previousElementSibling) {
+        const name = (previous.localName || previous.tagName || "").toLowerCase();
+        if (name === "measure")
             return true;
     }
     return false;
 };
 const resolveMeasureAdvanceDiv = (measure, measureMaxDiv, currentDivisions, currentBeats, currentBeatType, nextMeasureIsImplicit = false, firstMeasureUnderfullAsPickup = false) => {
     const capacityDiv = measureCapacityDivFromContext(currentDivisions, currentBeats, currentBeatType);
-    if (isImplicitMeasure(measure)) {
+    if (isImplicitMeasure(measure))
         return measureMaxDiv > 0 ? measureMaxDiv : capacityDiv;
-    }
     const isFirstMeasureInPart = !hasPreviousMeasureSibling(measure);
-    if (firstMeasureUnderfullAsPickup && isFirstMeasureInPart && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
+    if (firstMeasureUnderfullAsPickup &&
+        isFirstMeasureInPart &&
+        measureMaxDiv > 0 &&
+        measureMaxDiv < capacityDiv) {
         return measureMaxDiv;
     }
     if (nextMeasureIsImplicit && measureMaxDiv > 0 && measureMaxDiv < capacityDiv) {
@@ -10334,7 +10251,7 @@ const resolveMeasureAdvanceDiv = (measure, measureMaxDiv, currentDivisions, curr
 };
 const buildMeasureTimelineForPart = (doc, partId, fallbackDivisions) => {
     var _a, _b;
-    const part = Array.from(doc.querySelectorAll("score-partwise > part")).find((p) => { var _a; return ((_a = p.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim() === String(partId || "").trim(); });
+    const part = Array.from(doc.querySelectorAll("score-partwise > part")).find((candidate) => { var _a; return ((_a = candidate.getAttribute("id")) !== null && _a !== void 0 ? _a : "").trim() === String(partId || "").trim(); });
     if (!part)
         return [];
     const firstUnderfullAsPickup = shouldTreatFirstUnderfullAsPickup(doc);
@@ -10344,9 +10261,9 @@ const buildMeasureTimelineForPart = (doc, partId, fallbackDivisions) => {
     let tick = 0;
     const ranges = [];
     const measures = Array.from(part.querySelectorAll(":scope > measure"));
-    for (let measureIndex = 0; measureIndex < measures.length; measureIndex += 1) {
-        const measure = measures[measureIndex];
-        const nextMeasure = (_a = measures[measureIndex + 1]) !== null && _a !== void 0 ? _a : null;
+    for (let index = 0; index < measures.length; index += 1) {
+        const measure = measures[index];
+        const nextMeasure = (_a = measures[index + 1]) !== null && _a !== void 0 ? _a : null;
         const nextDivisions = getFirstNumber(measure, "attributes > divisions");
         if (nextDivisions && nextDivisions > 0)
             divisions = nextDivisions;
@@ -10356,14 +10273,16 @@ const buildMeasureTimelineForPart = (doc, partId, fallbackDivisions) => {
             beats = nextBeats;
             beatType = nextBeatType;
         }
-        const measureNumber = ((_b = measure.getAttribute("number")) !== null && _b !== void 0 ? _b : "").trim();
         const measureContentDiv = estimateMeasureContentSpanDiv(measure);
         const advanceDiv = resolveMeasureAdvanceDiv(measure, measureContentDiv, divisions, beats, beatType, isImplicitMeasure(nextMeasure), firstUnderfullAsPickup);
         const measureTicks = Math.max(1, Math.round((advanceDiv / Math.max(1, divisions)) * fallbackDivisions));
         ranges.push({
             startTick: tick,
             endTick: tick + measureTicks,
-            location: { partId, measureNumber },
+            location: {
+                partId,
+                measureNumber: ((_b = measure.getAttribute("number")) !== null && _b !== void 0 ? _b : "").trim(),
+            },
         });
         tick += measureTicks;
     }
@@ -10372,20 +10291,19 @@ const buildMeasureTimelineForPart = (doc, partId, fallbackDivisions) => {
 exports.buildMeasureTimelineForPart = buildMeasureTimelineForPart;
 const findPlaybackLocationAtTick = (ranges, tick) => {
     var _a, _b;
-    if (!ranges.length)
+    if (ranges.length === 0)
         return null;
     const safeTick = Math.max(0, Math.round(tick));
     for (const range of ranges) {
-        if (safeTick >= range.startTick && safeTick < range.endTick) {
+        if (safeTick >= range.startTick && safeTick < range.endTick)
             return range.location;
-        }
     }
     return (_b = (_a = ranges[ranges.length - 1]) === null || _a === void 0 ? void 0 : _a.location) !== null && _b !== void 0 ? _b : null;
 };
+exports.findPlaybackLocationAtTick = findPlaybackLocationAtTick;
 const trimMeasureTimelineFromTick = (ranges, startTick) => {
-    if (!ranges.length || !Number.isFinite(startTick) || startTick <= 0) {
+    if (ranges.length === 0 || !Number.isFinite(startTick) || startTick <= 0)
         return ranges;
-    }
     const safeStartTick = Math.max(0, Math.round(startTick));
     return ranges
         .filter((range) => range.endTick > safeStartTick)
@@ -10396,9 +10314,10 @@ const trimMeasureTimelineFromTick = (ranges, startTick) => {
     }));
 };
 const resolveMeasureStartTickInPart = (doc, startFromMeasure, fallbackDivisions) => {
+    var _a, _b, _c;
     const ranges = (0, exports.buildMeasureTimelineForPart)(doc, startFromMeasure.partId, fallbackDivisions);
-    const hit = ranges.find((range) => { var _a; return range.location.measureNumber === String((_a = startFromMeasure.measureNumber) !== null && _a !== void 0 ? _a : "").trim(); });
-    return hit ? hit.startTick : null;
+    const measureNumber = String((_a = startFromMeasure.measureNumber) !== null && _a !== void 0 ? _a : "").trim();
+    return (_c = (_b = ranges.find((range) => range.location.measureNumber === measureNumber)) === null || _b === void 0 ? void 0 : _b.startTick) !== null && _c !== void 0 ? _c : null;
 };
 const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startTick) => {
     if (!Number.isFinite(startTick) || startTick <= 0) {
@@ -10408,24 +10327,23 @@ const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startT
     const trimmedEvents = parsedPlayback.events
         .filter((event) => event.startTicks >= safeStartTick)
         .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
-    const sortedTempo = (tempoEvents !== null && tempoEvents !== void 0 ? tempoEvents : [])
+    const sortedTempo = tempoEvents
         .slice()
         .map((event) => ({
         startTicks: Math.max(0, Math.round(event.startTicks)),
         bpm: Math.max(1, Math.round(event.bpm || parsedPlayback.tempo || 120)),
     }))
         .sort((a, b) => a.startTicks - b.startTicks);
-    const lastTempoBeforeOrAtStart = sortedTempo
+    const tempoAtStart = sortedTempo
         .slice()
         .reverse()
         .find((event) => event.startTicks <= safeStartTick);
     const trimmedTempoEvents = sortedTempo
         .filter((event) => event.startTicks > safeStartTick)
         .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
-    if (lastTempoBeforeOrAtStart) {
-        trimmedTempoEvents.unshift({ startTicks: 0, bpm: lastTempoBeforeOrAtStart.bpm });
-    }
-    const trimmedControlEvents = (controlEvents !== null && controlEvents !== void 0 ? controlEvents : [])
+    if (tempoAtStart)
+        trimmedTempoEvents.unshift({ startTicks: 0, bpm: tempoAtStart.bpm });
+    const trimmedControlEvents = controlEvents
         .filter((event) => event.startTicks >= safeStartTick)
         .map((event) => ({ ...event, startTicks: event.startTicks - safeStartTick }));
     return {
@@ -10434,210 +10352,93 @@ const trimPlaybackFromTick = (parsedPlayback, tempoEvents, controlEvents, startT
         controlEvents: trimmedControlEvents,
     };
 };
-const stopPlayback = (options) => {
-    options.engine.stop();
-    options.setIsPlaying(false);
-    options.setActivePlaybackLocation(null);
-    options.setPlaybackText("Playback: stopped");
-    options.renderControlState();
-};
-exports.stopPlayback = stopPlayback;
-const startPlayback = async (options, params) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v;
-    if (!params.isLoaded || options.getIsPlaying())
-        return;
-    options.setActivePlaybackLocation(null);
-    const saveResult = params.core.save();
-    options.onFullSaveResult(saveResult);
-    if (!saveResult.ok) {
-        options.logDiagnostics("playback", saveResult.diagnostics);
-        logPlaybackFailureDiagnostics("save failed", saveResult.diagnostics);
-        if (saveResult.diagnostics.some((d) => d.code === "MEASURE_OVERFULL")) {
-            const debugXml = params.core.debugSerializeCurrentXml();
-            if (debugXml) {
-                options.dumpOverfullContext(debugXml, options.editableVoice);
-            }
-            else if (options.debugLog) {
-                console.warn("[miku-score][debug] no in-memory XML to dump.");
+const buildPlaybackPlan = (xmlText, options) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+    if (!playbackDoc) {
+        return { ok: false, code: "INVALID_MUSICXML", message: "invalid MusicXML" };
+    }
+    try {
+        const mode = options.useMidiLikePlayback ? "midi" : "playback";
+        let parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter, {
+            mode,
+            graceTimingMode: options.graceTimingMode,
+            metricAccentEnabled: options.metricAccentEnabled,
+            metricAccentProfile: options.metricAccentProfile,
+            includeTieInPlaybackLikeMode: !options.useMidiLikePlayback,
+            applyDefaultDetacheInPlaybackLikeMode: !options.useMidiLikePlayback,
+        });
+        let tempoEvents = options.useMidiLikePlayback
+            ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+            : [];
+        let controlEvents = options.useMidiLikePlayback
+            ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+            : [];
+        const anchorPartId = (_e = (_b = (_a = options.startFromMeasure) === null || _a === void 0 ? void 0 : _a.partId) !== null && _b !== void 0 ? _b : (_d = (_c = playbackDoc.querySelector("score-partwise > part")) === null || _c === void 0 ? void 0 : _c.getAttribute("id")) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
+        let playbackStartTick = 0;
+        if (options.startFromMeasure) {
+            const startTick = resolveMeasureStartTickInPart(playbackDoc, options.startFromMeasure, options.ticksPerQuarter);
+            if (startTick !== null && startTick > 0) {
+                playbackStartTick = startTick;
+                const trimmed = trimPlaybackFromTick(parsedPlayback, tempoEvents, controlEvents, startTick);
+                parsedPlayback = trimmed.parsedPlayback;
+                tempoEvents = trimmed.tempoEvents;
+                controlEvents = trimmed.controlEvents;
             }
         }
-        options.renderAll();
-        options.setPlaybackText(`Playback: save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
-        return;
-    }
-    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
-    if (!playbackDoc) {
-        options.setPlaybackText("Playback: invalid MusicXML");
-        options.renderControlState();
-        return;
-    }
-    const useMidiLikePlayback = options.getUseMidiLikePlayback();
-    const playbackMode = useMidiLikePlayback ? "midi" : "playback";
-    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter, {
-        mode: playbackMode,
-        graceTimingMode: options.getGraceTimingMode(),
-        metricAccentEnabled: options.getMetricAccentEnabled(),
-        metricAccentProfile: options.getMetricAccentProfile(),
-        includeTieInPlaybackLikeMode: !useMidiLikePlayback,
-        applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
-    });
-    let effectiveParsedPlayback = parsedPlayback;
-    let effectiveTempoEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    let effectiveControlEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const playbackAnchorPartId = (_e = (_b = (_a = params.startFromMeasure) === null || _a === void 0 ? void 0 : _a.partId) !== null && _b !== void 0 ? _b : (_d = (_c = playbackDoc.querySelector("score-partwise > part")) === null || _c === void 0 ? void 0 : _c.getAttribute("id")) === null || _d === void 0 ? void 0 : _d.trim()) !== null && _e !== void 0 ? _e : "";
-    let playbackStartTick = 0;
-    if (params.startFromMeasure) {
-        const startTick = resolveMeasureStartTickInPart(playbackDoc, params.startFromMeasure, options.ticksPerQuarter);
-        if (startTick !== null && startTick > 0) {
-            playbackStartTick = startTick;
-            const trimmed = trimPlaybackFromTick(effectiveParsedPlayback, effectiveTempoEvents, effectiveControlEvents, startTick);
-            effectiveParsedPlayback = trimmed.parsedPlayback;
-            effectiveTempoEvents = trimmed.tempoEvents;
-            effectiveControlEvents = trimmed.controlEvents;
+        const events = parsedPlayback.events;
+        if (events.length === 0) {
+            return { ok: false, code: "NO_PLAYABLE_NOTES", message: "no playable notes" };
         }
-    }
-    const events = effectiveParsedPlayback.events;
-    if (events.length === 0) {
-        options.setPlaybackText("Playback: no playable notes");
-        options.renderControlState();
-        return;
-    }
-    const timeSignatureEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const keySignatureEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const waveform = options.getPlaybackWaveform();
-    const measureTimeline = playbackAnchorPartId
-        ? trimMeasureTimelineFromTick((0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter), playbackStartTick)
-        : [];
-    if (params.startFromMeasure) {
-        options.setActivePlaybackLocation(params.startFromMeasure);
-    }
-    let midiBytes;
-    try {
-        const scoreTitle = (_l = (_h = (_g = (_f = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : (_k = (_j = playbackDoc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
-        const movementTitle = (_p = (_o = (_m = playbackDoc.querySelector("score-partwise > movement-title")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
-        const scoreComposer = (_v = (_s = (_r = (_q = playbackDoc
-            .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : (_u = (_t = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _t === void 0 ? void 0 : _t.textContent) === null || _u === void 0 ? void 0 : _u.trim()) !== null && _v !== void 0 ? _v : "";
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(events, effectiveParsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), effectiveControlEvents, effectiveTempoEvents, timeSignatureEvents, keySignatureEvents, {
-            metadata: {
-                title: scoreTitle,
-                movementTitle,
-                composer: scoreComposer,
-            },
-        });
-    }
-    catch (error) {
-        options.setPlaybackText("Playback: MIDI generation failed (" + (error instanceof Error ? error.message : String(error)) + ")");
-        options.renderControlState();
-        return;
-    }
-    try {
-        await options.engine.playSchedule(toSynthSchedule(effectiveParsedPlayback.tempo, events, effectiveTempoEvents, effectiveControlEvents), waveform, (currentTick) => {
-            options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
-        }, () => {
-            options.setIsPlaying(false);
-            options.setActivePlaybackLocation(null);
-            options.setPlaybackText("Playback: stopped");
-            options.renderControlState();
-        });
+        const measureTimeline = anchorPartId
+            ? trimMeasureTimelineFromTick((0, exports.buildMeasureTimelineForPart)(playbackDoc, anchorPartId, options.ticksPerQuarter), playbackStartTick)
+            : [];
+        let midiByteLength = null;
+        if (options.includeMidiByteLength === true) {
+            const timeSignatureEvents = options.useMidiLikePlayback
+                ? (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+                : [];
+            const keySignatureEvents = options.useMidiLikePlayback
+                ? (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
+                : [];
+            try {
+                const title = (_l = (_h = (_g = (_f = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _f === void 0 ? void 0 : _f.textContent) === null || _g === void 0 ? void 0 : _g.trim()) !== null && _h !== void 0 ? _h : (_k = (_j = playbackDoc.querySelector("score-partwise > movement-title")) === null || _j === void 0 ? void 0 : _j.textContent) === null || _k === void 0 ? void 0 : _k.trim()) !== null && _l !== void 0 ? _l : "";
+                const movementTitle = (_p = (_o = (_m = playbackDoc.querySelector("score-partwise > movement-title")) === null || _m === void 0 ? void 0 : _m.textContent) === null || _o === void 0 ? void 0 : _o.trim()) !== null && _p !== void 0 ? _p : "";
+                const composer = (_v = (_s = (_r = (_q = playbackDoc
+                    .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _q === void 0 ? void 0 : _q.textContent) === null || _r === void 0 ? void 0 : _r.trim()) !== null && _s !== void 0 ? _s : (_u = (_t = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _t === void 0 ? void 0 : _t.textContent) === null || _u === void 0 ? void 0 : _u.trim()) !== null && _v !== void 0 ? _v : "";
+                midiByteLength = (0, midi_io_1.buildMidiBytesForPlayback)(events, parsedPlayback.tempo, "electric_piano_2", (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc), controlEvents, tempoEvents, timeSignatureEvents, keySignatureEvents, {
+                    rawWriter: true,
+                    ticksPerQuarter: options.ticksPerQuarter,
+                    metadata: { title, movementTitle, composer },
+                }).length;
+            }
+            catch (error) {
+                return {
+                    ok: false,
+                    code: "MIDI_GENERATION_FAILED",
+                    message: error instanceof Error ? error.message : String(error),
+                };
+            }
+        }
+        return {
+            ok: true,
+            mode,
+            schedule: toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents),
+            eventCount: events.length,
+            midiByteLength,
+            measureTimeline,
+            initialLocation: (_w = options.startFromMeasure) !== null && _w !== void 0 ? _w : null,
+        };
     }
     catch (error) {
-        options.setPlaybackText("Playback: synth playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
-        options.renderControlState();
-        return;
+        return {
+            ok: false,
+            code: "MIDI_GENERATION_FAILED",
+            message: error instanceof Error ? error.message : String(error),
+        };
     }
-    options.setIsPlaying(true);
-    const fromMeasureLabel = params.startFromMeasure
-        ? ` / from measure ${params.startFromMeasure.measureNumber}`
-        : "";
-    options.setPlaybackText(`Playing: ${events.length} notes / mode ${playbackMode}${fromMeasureLabel} / MIDI ${midiBytes.length} bytes / waveform ${waveform}`);
-    options.renderControlState();
-    options.renderAll();
 };
-exports.startPlayback = startPlayback;
-const startMeasurePlayback = async (options, params) => {
-    var _a, _b, _c;
-    if (!params.draftCore || options.getIsPlaying())
-        return;
-    options.setActivePlaybackLocation(null);
-    const saveResult = params.draftCore.save();
-    if (!saveResult.ok) {
-        options.onMeasureSaveDiagnostics(saveResult.diagnostics);
-        options.logDiagnostics("playback", saveResult.diagnostics);
-        logPlaybackFailureDiagnostics("measure save failed", saveResult.diagnostics);
-        options.setPlaybackText(`Playback: measure save failed (${summarizeDiagnostics(saveResult.diagnostics)})`);
-        options.renderAll();
-        return;
-    }
-    const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(saveResult.xml);
-    if (!playbackDoc) {
-        options.setPlaybackText("Playback: invalid MusicXML");
-        options.renderControlState();
-        return;
-    }
-    const useMidiLikePlayback = options.getUseMidiLikePlayback();
-    const playbackMode = useMidiLikePlayback ? "midi" : "playback";
-    const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter, {
-        mode: playbackMode,
-        graceTimingMode: options.getGraceTimingMode(),
-        metricAccentEnabled: options.getMetricAccentEnabled(),
-        metricAccentProfile: options.getMetricAccentProfile(),
-        includeTieInPlaybackLikeMode: !useMidiLikePlayback,
-        applyDefaultDetacheInPlaybackLikeMode: !useMidiLikePlayback,
-    });
-    const events = parsedPlayback.events;
-    if (events.length === 0) {
-        options.setPlaybackText("Playback: no playable notes in this measure");
-        options.renderControlState();
-        return;
-    }
-    const tempoEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const controlEvents = useMidiLikePlayback
-        ? (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, options.ticksPerQuarter)
-        : [];
-    const waveform = options.getPlaybackWaveform();
-    const playbackAnchorPartId = (_c = (_b = (_a = playbackDoc.querySelector("score-partwise > part")) === null || _a === void 0 ? void 0 : _a.getAttribute("id")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
-    const measureTimeline = playbackAnchorPartId
-        ? (0, exports.buildMeasureTimelineForPart)(playbackDoc, playbackAnchorPartId, options.ticksPerQuarter)
-        : [];
-    try {
-        await options.engine.playSchedule(toSynthSchedule(parsedPlayback.tempo, events, tempoEvents, controlEvents), waveform, (currentTick) => {
-            options.setActivePlaybackLocation(findPlaybackLocationAtTick(measureTimeline, currentTick));
-        }, () => {
-            options.setIsPlaying(false);
-            options.setActivePlaybackLocation(null);
-            options.setPlaybackText("Playback: stopped");
-            options.renderControlState();
-        });
-    }
-    catch (error) {
-        options.setPlaybackText("Playback: measure playback failed (" + (error instanceof Error ? error.message : String(error)) + ")");
-        options.renderControlState();
-        return;
-    }
-    options.setIsPlaying(true);
-    options.setPlaybackText(`Playing: selected measure / ${events.length} notes / mode ${playbackMode} / waveform ${waveform}`);
-    options.renderControlState();
-};
-exports.startMeasurePlayback = startMeasurePlayback;
-
-  },
-  "core/interfaces.js": function (require, module, exports) {
-"use strict";
-/*
- * Copyright 2026 Toshiki Iga
- * SPDX-License-Identifier: Apache-2.0
- */
-Object.defineProperty(exports, "__esModule", { value: true });
+exports.buildPlaybackPlan = buildPlaybackPlan;
 
   },
   "src/ts/mxl-io.js": function (require, module, exports) {
@@ -11137,56 +10938,116 @@ exports.extractZipEntryBytesByPath = extractZipEntryBytesByPath;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveLoadFlow = void 0;
-const mxl_io_1 = require("./mxl-io");
-const looksLikeScorePartwise = (xmlText) => {
-    return /<\s*score-partwise(?:\s|>)/i.test(xmlText);
-};
+const load_input_1 = require("./load-input");
+const failure = (message) => ({
+    ok: false,
+    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+    diagnosticMessage: message,
+});
 const readBinaryFile = async (file) => {
     const withArrayBuffer = file;
     if (typeof withArrayBuffer.arrayBuffer === "function") {
-        const buffer = await withArrayBuffer.arrayBuffer();
-        return new Uint8Array(buffer);
+        return new Uint8Array(await withArrayBuffer.arrayBuffer());
     }
-    const blob = file;
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-            const result = reader.result;
-            if (!(result instanceof ArrayBuffer)) {
+            if (!(reader.result instanceof ArrayBuffer)) {
                 reject(new Error("Failed to read binary file."));
                 return;
             }
-            resolve(new Uint8Array(result));
+            resolve(new Uint8Array(reader.result));
         };
-        reader.onerror = () => {
-            var _a;
-            reject((_a = reader.error) !== null && _a !== void 0 ? _a : new Error("Failed to read binary file."));
-        };
-        reader.readAsArrayBuffer(blob);
+        reader.onerror = () => { var _a; return reject((_a = reader.error) !== null && _a !== void 0 ? _a : new Error("Failed to read binary file.")); };
+        reader.readAsArrayBuffer(file);
     });
 };
 const readTextFile = async (file) => {
     const withText = file;
-    if (typeof withText.text === "function") {
+    if (typeof withText.text === "function")
         return withText.text();
-    }
-    const blob = file;
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-            const result = reader.result;
-            if (typeof result !== "string") {
+            if (typeof reader.result !== "string") {
                 reject(new Error("Failed to read text file."));
                 return;
             }
-            resolve(result);
+            resolve(reader.result);
         };
-        reader.onerror = () => {
-            var _a;
-            reject((_a = reader.error) !== null && _a !== void 0 ? _a : new Error("Failed to read text file."));
-        };
-        reader.readAsText(blob);
+        reader.onerror = () => { var _a; return reject((_a = reader.error) !== null && _a !== void 0 ? _a : new Error("Failed to read text file.")); };
+        reader.readAsText(file);
     });
+};
+const inputFormatForFileName = (fileName) => {
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith(".mxl"))
+        return "mxl";
+    if (lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml"))
+        return "musicxml";
+    if (lowerName.endsWith(".abc"))
+        return "abc";
+    if (lowerName.endsWith(".mid") || lowerName.endsWith(".midi"))
+        return "midi";
+    if (lowerName.endsWith(".vsqx"))
+        return "vsqx";
+    if (lowerName.endsWith(".mei"))
+        return "mei";
+    if (lowerName.endsWith(".ly"))
+        return "lilypond";
+    if (lowerName.endsWith(".mscx"))
+        return "musescore";
+    if (lowerName.endsWith(".mscz"))
+        return "mscz";
+    return null;
+};
+const isBinaryFormat = (format) => {
+    return format === "mxl" || format === "midi" || format === "mscz";
+};
+const convertersFromParams = (params) => ({
+    convertAbcToMusicXml: params.convertAbcToMusicXml,
+    convertMeiToMusicXml: params.convertMeiToMusicXml,
+    convertLilyPondToMusicXml: params.convertLilyPondToMusicXml,
+    convertMuseScoreToMusicXml: params.convertMuseScoreToMusicXml,
+    formatImportedMusicXml: params.formatImportedMusicXml,
+    convertVsqxToMusicXml: params.convertVsqxToMusicXml,
+    convertMidiToMusicXml: params.convertMidiToMusicXml,
+});
+const toLoadFlowResult = (result, abcSourceText) => {
+    if (!result.ok) {
+        return {
+            ok: false,
+            diagnosticCode: result.diagnosticCode,
+            diagnosticMessage: result.diagnosticMessage,
+        };
+    }
+    return {
+        ok: true,
+        xmlToLoad: result.xml,
+        collapseInputSection: true,
+        nextXmlInputText: result.xml,
+        ...(abcSourceText === undefined ? {} : { nextAbcInputText: abcSourceText }),
+    };
+};
+const convertInput = async (format, data, converters) => {
+    const request = { format, data };
+    return (0, load_input_1.convertLoadInputToMusicXml)(request, converters);
+};
+const directInputFromParams = (params) => {
+    switch (params.sourceType) {
+        case "xml":
+            return { format: "musicxml", sourceText: params.xmlSourceText };
+        case "abc":
+            return { format: "abc", sourceText: params.abcSourceText };
+        case "vsqx":
+            return { format: "vsqx", sourceText: params.vsqxSourceText };
+        case "mei":
+            return { format: "mei", sourceText: params.meiSourceText };
+        case "lilypond":
+            return { format: "lilypond", sourceText: params.lilyPondSourceText };
+        case "musescore":
+            return { format: "musescore", sourceText: params.museScoreSourceText };
+    }
 };
 const resolveLoadFlow = async (params) => {
     if (params.isNewType) {
@@ -11198,344 +11059,191 @@ const resolveLoadFlow = async (params) => {
             nextXmlInputText: sourceText,
         };
     }
-    let sourceText = "";
+    const converters = convertersFromParams(params);
     if (params.isFileMode) {
         const selected = params.selectedFile;
-        if (!selected) {
-            return {
-                ok: false,
-                diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: "Please select a file.",
-            };
+        if (!selected)
+            return failure("Please select a file.");
+        const format = inputFormatForFileName(selected.name);
+        if (!format) {
+            return failure("Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.");
         }
-        const lowerName = selected.name.toLowerCase();
-        const isAbcFile = lowerName.endsWith(".abc");
-        const isMxl = lowerName.endsWith(".mxl");
-        const isMusicXmlLike = lowerName.endsWith(".musicxml") || lowerName.endsWith(".xml");
-        const isMidiFile = lowerName.endsWith(".mid") || lowerName.endsWith(".midi");
-        const isVsqxFile = lowerName.endsWith(".vsqx");
-        const isMeiFile = lowerName.endsWith(".mei");
-        const isLilyPondFile = lowerName.endsWith(".ly");
-        const isMuseScoreXmlFile = lowerName.endsWith(".mscx");
-        const isMuseScoreZipFile = lowerName.endsWith(".mscz");
-        if (isMxl) {
-            try {
-                sourceText = await (0, mxl_io_1.extractMusicXmlTextFromMxl)(await selected.arrayBuffer());
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse MXL: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-            const normalized = params.formatImportedMusicXml(sourceText);
-            return {
-                ok: true,
-                xmlToLoad: normalized,
-                collapseInputSection: true,
-                nextXmlInputText: normalized,
-            };
-        }
-        if (isMusicXmlLike) {
-            sourceText = await readTextFile(selected);
-            const normalized = params.formatImportedMusicXml(sourceText);
-            return {
-                ok: true,
-                xmlToLoad: normalized,
-                collapseInputSection: true,
-                nextXmlInputText: normalized,
-            };
-        }
-        if (isAbcFile) {
-            sourceText = await readTextFile(selected);
-            try {
-                const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
-                return {
-                    ok: true,
-                    xmlToLoad: convertedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: convertedXml,
-                    nextAbcInputText: sourceText,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isMidiFile) {
-            try {
-                const converted = params.convertMidiToMusicXml(await readBinaryFile(selected));
-                if (!converted.ok) {
-                    const first = converted.diagnostics[0];
-                    return {
-                        ok: false,
-                        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                        diagnosticMessage: `Failed to parse MIDI: ${first ? `${first.message} (${first.code})` : "Unknown parse error."}`,
-                    };
-                }
-                const formattedXml = params.formatImportedMusicXml(converted.xml);
-                return {
-                    ok: true,
-                    xmlToLoad: formattedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: formattedXml,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse MIDI: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isVsqxFile) {
-            try {
-                const converted = params.convertVsqxToMusicXml(await readTextFile(selected));
-                if (!converted.ok) {
-                    const first = converted.diagnostics[0];
-                    return {
-                        ok: false,
-                        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                        diagnosticMessage: `Failed to parse VSQX: ${first ? `${first.message} (${first.code})` : "Unknown parse error."}`,
-                    };
-                }
-                const formattedXml = params.formatImportedMusicXml(converted.xml);
-                return {
-                    ok: true,
-                    xmlToLoad: formattedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: formattedXml,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse VSQX: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isMeiFile) {
-            sourceText = await readTextFile(selected);
-            try {
-                const convertedXml = params.formatImportedMusicXml(params.convertMeiToMusicXml(sourceText));
-                return {
-                    ok: true,
-                    xmlToLoad: convertedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: convertedXml,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse MEI: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isLilyPondFile) {
-            sourceText = await readTextFile(selected);
-            try {
-                const convertedXml = params.formatImportedMusicXml(params.convertLilyPondToMusicXml(sourceText));
-                return {
-                    ok: true,
-                    xmlToLoad: convertedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: convertedXml,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse LilyPond: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isMuseScoreZipFile) {
-            try {
-                try {
-                    // Prefer MuseScore XML entry first; generic MXL fallback can pick unrelated XML entries.
-                    const mscxText = await (0, mxl_io_1.extractTextFromZipByExtensions)(await selected.arrayBuffer(), [".mscx"]);
-                    const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(mscxText));
-                    return {
-                        ok: true,
-                        xmlToLoad: convertedXml,
-                        collapseInputSection: true,
-                        nextXmlInputText: convertedXml,
-                    };
-                }
-                catch (_a) {
-                    // Fallback: if this ZIP actually carries MusicXML, accept it as-is.
-                    sourceText = await (0, mxl_io_1.extractMusicXmlTextFromMxl)(await selected.arrayBuffer());
-                    if (looksLikeScorePartwise(sourceText)) {
-                        const normalized = params.formatImportedMusicXml(sourceText);
-                        return {
-                            ok: true,
-                            xmlToLoad: normalized,
-                            collapseInputSection: true,
-                            nextXmlInputText: normalized,
-                        };
-                    }
-                    // Last resort: try interpreting the extracted XML as MuseScore XML text.
-                    const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(sourceText));
-                    return {
-                        ok: true,
-                        xmlToLoad: convertedXml,
-                        collapseInputSection: true,
-                        nextXmlInputText: convertedXml,
-                    };
-                }
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        if (isMuseScoreXmlFile) {
-            sourceText = await readTextFile(selected);
-            try {
-                const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(sourceText));
-                return {
-                    ok: true,
-                    xmlToLoad: convertedXml,
-                    collapseInputSection: true,
-                    nextXmlInputText: convertedXml,
-                };
-            }
-            catch (error) {
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`,
-                };
-            }
-        }
-        return {
-            ok: false,
-            diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-            diagnosticMessage: "Unsupported file extension. Use .musicxml, .xml, .mxl, .abc, .mid, .midi, .vsqx, .mei, .ly, .mscx, or .mscz.",
-        };
-    }
-    if (params.sourceType === "xml") {
-        const normalized = params.formatImportedMusicXml(params.xmlSourceText);
-        return {
-            ok: true,
-            xmlToLoad: normalized,
-            collapseInputSection: true,
-            nextXmlInputText: normalized,
-        };
-    }
-    if (params.sourceType === "abc") {
-        sourceText = params.abcSourceText;
         try {
-            const convertedXml = params.formatImportedMusicXml(params.convertAbcToMusicXml(sourceText));
-            return {
-                ok: true,
-                xmlToLoad: convertedXml,
-                collapseInputSection: true,
-                nextXmlInputText: convertedXml,
-            };
+            const data = isBinaryFormat(format)
+                ? await readBinaryFile(selected)
+                : await readTextFile(selected);
+            const result = await convertInput(format, data, converters);
+            return toLoadFlowResult(result, format === "abc" && typeof data === "string" ? data : undefined);
         }
         catch (error) {
-            return {
-                ok: false,
-                diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: `Failed to parse ABC: ${error instanceof Error ? error.message : String(error)}`,
-            };
+            return failure(`Failed to read ${selected.name}: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    if (params.sourceType === "vsqx") {
-        try {
-            const converted = params.convertVsqxToMusicXml(params.vsqxSourceText);
-            if (!converted.ok) {
-                const first = converted.diagnostics[0];
-                return {
-                    ok: false,
-                    diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                    diagnosticMessage: `Failed to parse VSQX: ${first ? `${first.message} (${first.code})` : "Unknown parse error."}`,
-                };
-            }
-            const convertedXml = params.formatImportedMusicXml(converted.xml);
-            return {
-                ok: true,
-                xmlToLoad: convertedXml,
-                collapseInputSection: true,
-                nextXmlInputText: convertedXml,
-            };
-        }
-        catch (error) {
-            return {
-                ok: false,
-                diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: `Failed to parse VSQX: ${error instanceof Error ? error.message : String(error)}`,
-            };
-        }
-    }
-    if (params.sourceType === "mei") {
-        try {
-            const convertedXml = params.formatImportedMusicXml(params.convertMeiToMusicXml(params.meiSourceText));
-            return {
-                ok: true,
-                xmlToLoad: convertedXml,
-                collapseInputSection: true,
-                nextXmlInputText: convertedXml,
-            };
-        }
-        catch (error) {
-            return {
-                ok: false,
-                diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: `Failed to parse MEI: ${error instanceof Error ? error.message : String(error)}`,
-            };
-        }
-    }
-    if (params.sourceType === "lilypond") {
-        try {
-            const convertedXml = params.formatImportedMusicXml(params.convertLilyPondToMusicXml(params.lilyPondSourceText));
-            return {
-                ok: true,
-                xmlToLoad: convertedXml,
-                collapseInputSection: true,
-                nextXmlInputText: convertedXml,
-            };
-        }
-        catch (error) {
-            return {
-                ok: false,
-                diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-                diagnosticMessage: `Failed to parse LilyPond: ${error instanceof Error ? error.message : String(error)}`,
-            };
-        }
-    }
-    try {
-        const convertedXml = params.formatImportedMusicXml(params.convertMuseScoreToMusicXml(params.museScoreSourceText));
-        return {
-            ok: true,
-            xmlToLoad: convertedXml,
-            collapseInputSection: true,
-            nextXmlInputText: convertedXml,
-        };
-    }
-    catch (error) {
-        return {
-            ok: false,
-            diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
-            diagnosticMessage: `Failed to parse MuseScore: ${error instanceof Error ? error.message : String(error)}`,
-        };
-    }
+    const direct = directInputFromParams(params);
+    const result = await convertInput(direct.format, direct.sourceText, converters);
+    return toLoadFlowResult(result, direct.format === "abc" ? direct.sourceText : undefined);
 };
 exports.resolveLoadFlow = resolveLoadFlow;
+
+  },
+  "src/ts/load-input.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.convertLoadInputToMusicXml = void 0;
+const zip_io_1 = require("./zip-io");
+const success = (xml, diagnostics = [], warnings = []) => ({
+    ok: true,
+    xml,
+    diagnostics,
+    warnings,
+});
+const failure = (message, diagnostics = [], warnings = []) => {
+    const normalizedDiagnostics = diagnostics.length > 0
+        ? diagnostics
+        : [{ code: "MVP_INVALID_COMMAND_PAYLOAD", message }];
+    return {
+        ok: false,
+        diagnosticCode: "MVP_INVALID_COMMAND_PAYLOAD",
+        diagnosticMessage: message,
+        diagnostics: normalizedDiagnostics,
+        warnings,
+    };
+};
+const errorMessage = (error) => {
+    return error instanceof Error ? error.message : String(error);
+};
+const looksLikeScorePartwise = (xmlText) => {
+    return /<\s*score-partwise(?:\s|>)/i.test(xmlText);
+};
+const requireText = (request) => {
+    if (typeof request.data === "string")
+        return request.data;
+    return failure(`Expected text input for ${request.format}.`);
+};
+const requireBytes = (request) => {
+    if (request.data instanceof Uint8Array)
+        return request.data;
+    return failure(`Expected binary input for ${request.format}.`);
+};
+const isFailure = (value) => {
+    return typeof value === "object" && !(value instanceof Uint8Array) && "ok" in value && value.ok === false;
+};
+const formatConvertedXml = (xml, converters, diagnostics = [], warnings = []) => {
+    return success(converters.formatImportedMusicXml(xml), diagnostics, warnings);
+};
+const structuredConversionFailure = (label, converted) => {
+    const first = converted.diagnostics[0];
+    const detail = first ? `${first.message} (${first.code})` : "Unknown parse error.";
+    return failure(`Failed to parse ${label}: ${detail}`, converted.diagnostics, converted.warnings);
+};
+const convertLoadInputToMusicXml = async (request, converters) => {
+    if (request.format === "musicxml") {
+        const source = requireText(request);
+        if (isFailure(source))
+            return source;
+        try {
+            return formatConvertedXml(source, converters);
+        }
+        catch (error) {
+            return failure(`Failed to parse MusicXML: ${errorMessage(error)}`);
+        }
+    }
+    if (request.format === "mxl") {
+        const bytes = requireBytes(request);
+        if (isFailure(bytes))
+            return bytes;
+        try {
+            const source = await (0, zip_io_1.extractMusicXmlTextFromMxl)((0, zip_io_1.bytesToArrayBuffer)(bytes));
+            return formatConvertedXml(source, converters);
+        }
+        catch (error) {
+            return failure(`Failed to parse MXL: ${errorMessage(error)}`);
+        }
+    }
+    if (request.format === "midi") {
+        const bytes = requireBytes(request);
+        if (isFailure(bytes))
+            return bytes;
+        try {
+            const converted = converters.convertMidiToMusicXml(bytes);
+            if (!converted.ok)
+                return structuredConversionFailure("MIDI", converted);
+            return formatConvertedXml(converted.xml, converters, converted.diagnostics, converted.warnings);
+        }
+        catch (error) {
+            return failure(`Failed to parse MIDI: ${errorMessage(error)}`);
+        }
+    }
+    if (request.format === "mscz") {
+        const bytes = requireBytes(request);
+        if (isFailure(bytes))
+            return bytes;
+        const archiveBuffer = (0, zip_io_1.bytesToArrayBuffer)(bytes);
+        try {
+            try {
+                const mscxText = await (0, zip_io_1.extractTextFromZipByExtensions)(archiveBuffer, [".mscx"]);
+                return formatConvertedXml(converters.convertMuseScoreToMusicXml(mscxText), converters);
+            }
+            catch (_a) {
+                const source = await (0, zip_io_1.extractMusicXmlTextFromMxl)(archiveBuffer);
+                if (looksLikeScorePartwise(source)) {
+                    return formatConvertedXml(source, converters);
+                }
+                return formatConvertedXml(converters.convertMuseScoreToMusicXml(source), converters);
+            }
+        }
+        catch (error) {
+            return failure(`Failed to parse MuseScore: ${errorMessage(error)}`);
+        }
+    }
+    if (request.format === "vsqx") {
+        const source = requireText(request);
+        if (isFailure(source))
+            return source;
+        try {
+            const converted = converters.convertVsqxToMusicXml(source);
+            if (!converted.ok)
+                return structuredConversionFailure("VSQX", converted);
+            return formatConvertedXml(converted.xml, converters, converted.diagnostics, converted.warnings);
+        }
+        catch (error) {
+            return failure(`Failed to parse VSQX: ${errorMessage(error)}`);
+        }
+    }
+    const textSource = requireText(request);
+    if (isFailure(textSource))
+        return textSource;
+    try {
+        if (request.format === "abc") {
+            return formatConvertedXml(converters.convertAbcToMusicXml(textSource), converters);
+        }
+        if (request.format === "mei") {
+            return formatConvertedXml(converters.convertMeiToMusicXml(textSource), converters);
+        }
+        if (request.format === "lilypond") {
+            return formatConvertedXml(converters.convertLilyPondToMusicXml(textSource), converters);
+        }
+        if (request.format === "musescore") {
+            return formatConvertedXml(converters.convertMuseScoreToMusicXml(textSource), converters);
+        }
+    }
+    catch (error) {
+        const label = request.format === "abc"
+            ? "ABC"
+            : request.format === "mei"
+                ? "MEI"
+                : request.format === "lilypond"
+                    ? "LilyPond"
+                    : "MuseScore";
+        return failure(`Failed to parse ${label}: ${errorMessage(error)}`);
+    }
+    return failure(`Unsupported input format: ${request.format}`);
+};
+exports.convertLoadInputToMusicXml = convertLoadInputToMusicXml;
 
   },
   "src/ts/midi-musescore-io.js": function (require, module, exports) {
@@ -11603,9 +11311,8 @@ exports.resolvePlaybackBuildModeForMidiExport = resolvePlaybackBuildModeForMidiE
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createZipBundleDownloadPayload = exports.createMuseScoreDownloadPayload = exports.createLilyPondDownloadPayload = exports.createMeiDownloadPayload = exports.createAbcDownloadPayload = exports.createMidiDownloadPayload = exports.createVsqxDownloadPayload = exports.createJsonDownloadPayload = exports.createSvgDownloadPayload = exports.createMusicXmlDownloadPayload = exports.triggerFileDownload = void 0;
-const midi_io_1 = require("./midi-io");
-const midi_musescore_io_1 = require("./midi-musescore-io");
-const musicxml_io_1 = require("./musicxml-io");
+const output_encoding_1 = require("./output-encoding");
+const midi_writer_browser_1 = require("./midi-writer-browser");
 const zip_io_1 = require("./zip-io");
 const MIME_MXL = "application/vnd.recordare.musicxml";
 const MIME_SVG = "image/svg+xml;charset=utf-8";
@@ -11626,17 +11333,137 @@ const buildFileTimestamp = () => {
         pad2(now.getMinutes()),
     ].join("");
 };
-const createDownloadPayload = (fileName, content, type) => {
-    return {
-        fileName,
-        blob: new Blob([content], { type }),
-    };
+const toBlobPart = (content) => {
+    return typeof content === "string" ? content : (0, zip_io_1.bytesToArrayBuffer)(content);
 };
+const createDownloadPayload = (fileName, content, type) => ({
+    fileName,
+    blob: new Blob([toBlobPart(content)], { type }),
+});
 const createTimestampedDownloadPayload = (extension, content, type, stem = "miku-score") => {
-    const ts = buildFileTimestamp();
-    return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
+    return createDownloadPayload(`${stem}-${buildFileTimestamp()}.${extension}`, content, type);
 };
-const convertMusicXmlForDownload = (xmlText, convert) => {
+const triggerFileDownload = (payload) => {
+    const url = URL.createObjectURL(payload.blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = payload.fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+};
+exports.triggerFileDownload = triggerFileDownload;
+const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
+    const encoded = await (0, output_encoding_1.encodeMusicXmlOutput)(xmlText, { compressed: options.compressed });
+    if (options.compressed === true) {
+        return createTimestampedDownloadPayload("mxl", encoded, MIME_MXL);
+    }
+    const extension = options.useXmlExtension === true ? "xml" : "musicxml";
+    return createTimestampedDownloadPayload(extension, encoded, MIME_XML);
+};
+exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
+const createSvgDownloadPayload = (svgText) => {
+    return createTimestampedDownloadPayload("svg", (0, output_encoding_1.encodeSvgOutput)(svgText), MIME_SVG);
+};
+exports.createSvgDownloadPayload = createSvgDownloadPayload;
+const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
+    return createTimestampedDownloadPayload("json", (0, output_encoding_1.encodeJsonOutput)(jsonText), MIME_JSON, `miku-score-${stem}`);
+};
+exports.createJsonDownloadPayload = createJsonDownloadPayload;
+const createVsqxDownloadPayload = (vsqxText) => {
+    return createTimestampedDownloadPayload("vsqx", (0, output_encoding_1.encodeVsqxOutput)(vsqxText), MIME_XML);
+};
+exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
+const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle", exportProfile = "safe", keepRoundtripMetadata = true) => {
+    const encoded = (0, output_encoding_1.encodeMidiOutput)(xmlText, {
+        ticksPerQuarter,
+        programPreset,
+        forceProgramPreset,
+        graceTimingMode,
+        metricAccentEnabled,
+        metricAccentProfile,
+        exportProfile,
+        keepRoundtripMetadata,
+        midiWriterRuntime: (0, midi_writer_browser_1.getBrowserMidiWriterRuntime)(),
+    });
+    return encoded === null
+        ? null
+        : createTimestampedDownloadPayload("mid", encoded, MIME_MIDI);
+};
+exports.createMidiDownloadPayload = createMidiDownloadPayload;
+const createAbcDownloadPayload = (xmlText, convertMusicXmlToAbc) => {
+    const encoded = (0, output_encoding_1.encodeAbcOutput)(xmlText, convertMusicXmlToAbc);
+    return encoded === null
+        ? null
+        : createTimestampedDownloadPayload("abc", encoded, MIME_TEXT);
+};
+exports.createAbcDownloadPayload = createAbcDownloadPayload;
+const createMeiDownloadPayload = (xmlText, convertMusicXmlToMei, options = {}) => {
+    const encoded = (0, output_encoding_1.encodeMeiOutput)(xmlText, convertMusicXmlToMei, options);
+    return encoded === null
+        ? null
+        : createTimestampedDownloadPayload("mei", encoded, MIME_MEI);
+};
+exports.createMeiDownloadPayload = createMeiDownloadPayload;
+const createLilyPondDownloadPayload = (xmlText, convertMusicXmlToLilyPond) => {
+    const encoded = (0, output_encoding_1.encodeLilyPondOutput)(xmlText, convertMusicXmlToLilyPond);
+    return encoded === null
+        ? null
+        : createTimestampedDownloadPayload("ly", encoded, MIME_TEXT);
+};
+exports.createLilyPondDownloadPayload = createLilyPondDownloadPayload;
+const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
+    const encoded = await (0, output_encoding_1.encodeMuseScoreOutput)(xmlText, convertMusicXmlToMuseScore, options);
+    if (encoded === null)
+        return null;
+    return options.compressed === true
+        ? createTimestampedDownloadPayload("mscz", encoded, MIME_ZIP)
+        : createTimestampedDownloadPayload("mscx", encoded, MIME_XML);
+};
+exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
+const createZipBundleDownloadPayload = async (entries, options = {}) => {
+    const encodedEntries = await Promise.all(entries.map(async (entry) => ({
+        path: entry.fileName,
+        data: new Uint8Array(await entry.blob.arrayBuffer()),
+    })));
+    const encoded = await (0, output_encoding_1.encodeZipBundleOutput)(encodedEntries, {
+        compressed: options.compressed,
+    });
+    const safeBase = String(options.baseName || "miku-score-all").trim() || "miku-score-all";
+    return createTimestampedDownloadPayload("zip", encoded, MIME_ZIP, safeBase);
+};
+exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;
+
+  },
+  "src/ts/midi-writer-browser.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getBrowserMidiWriterRuntime = void 0;
+const getBrowserMidiWriterRuntime = () => {
+    var _a;
+    if (typeof window === "undefined")
+        return null;
+    return (_a = window.MidiWriter) !== null && _a !== void 0 ? _a : null;
+};
+exports.getBrowserMidiWriterRuntime = getBrowserMidiWriterRuntime;
+
+  },
+  "src/ts/output-encoding.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.encodeZipBundleOutput = exports.encodeMuseScoreOutput = exports.encodeLilyPondOutput = exports.encodeMeiOutput = exports.encodeAbcOutput = exports.encodeMidiOutput = exports.encodeVsqxOutput = exports.encodeJsonOutput = exports.encodeSvgOutput = exports.encodeMusicXmlOutput = void 0;
+const midi_io_1 = require("./midi-io");
+const midi_musescore_io_1 = require("./midi-musescore-io");
+const musicxml_io_1 = require("./musicxml-io");
+const zip_io_1 = require("./zip-io");
+const convertMusicXmlOutput = (xmlText, convert) => {
     const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!musicXmlDoc)
         return null;
@@ -11647,78 +11474,58 @@ const convertMusicXmlForDownload = (xmlText, convert) => {
         return null;
     }
 };
-const triggerFileDownload = (payload) => {
-    const url = URL.createObjectURL(payload.blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = payload.fileName;
-    a.click();
-    URL.revokeObjectURL(url);
-};
-exports.triggerFileDownload = triggerFileDownload;
-const createMusicXmlDownloadPayload = async (xmlText, options = {}) => {
-    const ts = buildFileTimestamp();
+const encodeMusicXmlOutput = async (xmlText, options = {}) => {
     const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
-    if (options.compressed === true) {
-        const mxlBytes = await (0, zip_io_1.makeMxlBytes)(formattedXml);
-        return createDownloadPayload(`miku-score-${ts}.mxl`, (0, zip_io_1.bytesToArrayBuffer)(mxlBytes), MIME_MXL);
-    }
-    const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-    return createDownloadPayload(`miku-score-${ts}.${extension}`, formattedXml, MIME_XML);
+    return options.compressed === true ? (0, zip_io_1.makeMxlBytes)(formattedXml) : formattedXml;
 };
-exports.createMusicXmlDownloadPayload = createMusicXmlDownloadPayload;
-const createSvgDownloadPayload = (svgText) => {
-    return createTimestampedDownloadPayload("svg", svgText, MIME_SVG);
+exports.encodeMusicXmlOutput = encodeMusicXmlOutput;
+const encodeSvgOutput = (svgText) => svgText;
+exports.encodeSvgOutput = encodeSvgOutput;
+const encodeJsonOutput = (jsonText) => jsonText;
+exports.encodeJsonOutput = encodeJsonOutput;
+const encodeVsqxOutput = (vsqxText) => {
+    return (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
 };
-exports.createSvgDownloadPayload = createSvgDownloadPayload;
-const createJsonDownloadPayload = (jsonText, stem = "measure-detail") => {
-    return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `miku-score-${stem}`);
-};
-exports.createJsonDownloadPayload = createJsonDownloadPayload;
-const createVsqxDownloadPayload = (vsqxText) => {
-    const formattedVsqx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
-    return createTimestampedDownloadPayload("vsqx", formattedVsqx, MIME_XML);
-};
-exports.createVsqxDownloadPayload = createVsqxDownloadPayload;
-const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "electric_piano_2", forceProgramPreset = false, graceTimingMode = "before_beat", metricAccentEnabled = false, metricAccentProfile = "subtle", exportProfile = "safe", keepRoundtripMetadata = true) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+exports.encodeVsqxOutput = encodeVsqxOutput;
+const encodeMidiOutput = (xmlText, options) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
     const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
     if (!playbackDoc)
         return null;
-    const runtime = (0, midi_musescore_io_1.resolveMidiExportRuntimeOptions)(exportProfile, ticksPerQuarter);
+    const runtime = (0, midi_musescore_io_1.resolveMidiExportRuntimeOptions)((_a = options.exportProfile) !== null && _a !== void 0 ? _a : "safe", options.ticksPerQuarter);
     const exportTicksPerQuarter = runtime.ticksPerQuarter;
     const buildMode = (0, midi_musescore_io_1.resolvePlaybackBuildModeForMidiExport)(runtime.eventBuildPolicy);
     const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter, {
         mode: buildMode,
-        graceTimingMode,
-        metricAccentEnabled,
-        metricAccentProfile,
+        graceTimingMode: (_b = options.graceTimingMode) !== null && _b !== void 0 ? _b : "before_beat",
+        metricAccentEnabled: (_c = options.metricAccentEnabled) !== null && _c !== void 0 ? _c : false,
+        metricAccentProfile: (_d = options.metricAccentProfile) !== null && _d !== void 0 ? _d : "subtle",
         includeGraceInPlaybackLikeMode: runtime.includeGraceInPlaybackLikeMode,
         includeOrnamentInPlaybackLikeMode: runtime.includeOrnamentInPlaybackLikeMode,
         includeTieInPlaybackLikeMode: runtime.includeTieInPlaybackLikeMode,
     });
     if (parsedPlayback.events.length === 0)
         return null;
-    const midiProgramOverrides = forceProgramPreset
+    const midiProgramOverrides = options.forceProgramPreset === true
         ? new Map()
         : (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
     const midiControlEvents = (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
     const midiTempoEvents = (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
     const midiTimeSignatureEvents = (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
     const midiKeySignatureEvents = (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-    let midiBytes;
     try {
-        const scoreTitle = (_f = (_c = (_b = (_a = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : (_e = (_d = playbackDoc.querySelector("score-partwise > movement-title")) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
-        const movementTitle = (_j = (_h = (_g = playbackDoc.querySelector("score-partwise > movement-title")) === null || _g === void 0 ? void 0 : _g.textContent) === null || _h === void 0 ? void 0 : _h.trim()) !== null && _j !== void 0 ? _j : "";
-        const scoreComposer = (_q = (_m = (_l = (_k = playbackDoc
-            .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _k === void 0 ? void 0 : _k.textContent) === null || _l === void 0 ? void 0 : _l.trim()) !== null && _m !== void 0 ? _m : (_p = (_o = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _o === void 0 ? void 0 : _o.textContent) === null || _p === void 0 ? void 0 : _p.trim()) !== null && _q !== void 0 ? _q : "";
+        const scoreTitle = (_k = (_g = (_f = (_e = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : (_j = (_h = playbackDoc.querySelector("score-partwise > movement-title")) === null || _h === void 0 ? void 0 : _h.textContent) === null || _j === void 0 ? void 0 : _j.trim()) !== null && _k !== void 0 ? _k : "";
+        const movementTitle = (_o = (_m = (_l = playbackDoc.querySelector("score-partwise > movement-title")) === null || _l === void 0 ? void 0 : _l.textContent) === null || _m === void 0 ? void 0 : _m.trim()) !== null && _o !== void 0 ? _o : "";
+        const scoreComposer = (_u = (_r = (_q = (_p = playbackDoc
+            .querySelector('score-partwise > identification > creator[type="composer"]')) === null || _p === void 0 ? void 0 : _p.textContent) === null || _q === void 0 ? void 0 : _q.trim()) !== null && _r !== void 0 ? _r : (_t = (_s = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _s === void 0 ? void 0 : _s.textContent) === null || _t === void 0 ? void 0 : _t.trim()) !== null && _u !== void 0 ? _u : "";
         const pickupTicks = (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-        midiBytes = (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, programPreset, midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
+        return (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, (_v = options.programPreset) !== null && _v !== void 0 ? _v : "electric_piano_2", midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
             embedMksSysEx: true,
-            emitMksTextMeta: keepRoundtripMetadata,
+            emitMksTextMeta: options.keepRoundtripMetadata !== false,
             ticksPerQuarter: exportTicksPerQuarter,
             normalizeForParity: runtime.normalizeForParity,
-            rawWriter: runtime.rawWriter,
+            rawWriter: (_w = options.rawWriter) !== null && _w !== void 0 ? _w : runtime.rawWriter,
+            midiWriterRuntime: options.midiWriterRuntime,
             rawRetriggerPolicy: runtime.rawRetriggerPolicy,
             metadata: {
                 title: scoreTitle,
@@ -11728,62 +11535,45 @@ const createMidiDownloadPayload = (xmlText, ticksPerQuarter, programPreset = "el
             },
         });
     }
-    catch (_r) {
+    catch (_x) {
         return null;
     }
-    return createTimestampedDownloadPayload("mid", (0, zip_io_1.bytesToArrayBuffer)(midiBytes), MIME_MIDI);
 };
-exports.createMidiDownloadPayload = createMidiDownloadPayload;
-const createAbcDownloadPayload = (xmlText, convertMusicXmlToAbc) => {
-    const abcText = convertMusicXmlForDownload(xmlText, convertMusicXmlToAbc);
-    if (abcText === null)
-        return null;
-    return createTimestampedDownloadPayload("abc", abcText, MIME_TEXT);
+exports.encodeMidiOutput = encodeMidiOutput;
+const encodeAbcOutput = (xmlText, convertMusicXmlToAbc) => {
+    return convertMusicXmlOutput(xmlText, convertMusicXmlToAbc);
 };
-exports.createAbcDownloadPayload = createAbcDownloadPayload;
-const createMeiDownloadPayload = (xmlText, convertMusicXmlToMei, options = {}) => {
-    const meiText = convertMusicXmlForDownload(xmlText, (musicXmlDoc) => convertMusicXmlToMei(musicXmlDoc, options));
-    if (meiText === null)
-        return null;
-    const formattedMei = (0, musicxml_io_1.prettyPrintMusicXmlText)(meiText);
-    return createTimestampedDownloadPayload("mei", formattedMei, MIME_MEI);
+exports.encodeAbcOutput = encodeAbcOutput;
+const encodeMeiOutput = (xmlText, convertMusicXmlToMei, options = {}) => {
+    const meiText = convertMusicXmlOutput(xmlText, (doc) => convertMusicXmlToMei(doc, options));
+    return meiText === null ? null : (0, musicxml_io_1.prettyPrintMusicXmlText)(meiText);
 };
-exports.createMeiDownloadPayload = createMeiDownloadPayload;
-const createLilyPondDownloadPayload = (xmlText, convertMusicXmlToLilyPond) => {
-    const lilyText = convertMusicXmlForDownload(xmlText, convertMusicXmlToLilyPond);
-    if (lilyText === null)
-        return null;
-    return createTimestampedDownloadPayload("ly", lilyText, MIME_TEXT);
+exports.encodeMeiOutput = encodeMeiOutput;
+const encodeLilyPondOutput = (xmlText, convertMusicXmlToLilyPond) => {
+    return convertMusicXmlOutput(xmlText, convertMusicXmlToLilyPond);
 };
-exports.createLilyPondDownloadPayload = createLilyPondDownloadPayload;
-const createMuseScoreDownloadPayload = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
-    const mscxText = convertMusicXmlForDownload(xmlText, convertMusicXmlToMuseScore);
+exports.encodeLilyPondOutput = encodeLilyPondOutput;
+const encodeMuseScoreOutput = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
+    const mscxText = convertMusicXmlOutput(xmlText, convertMusicXmlToMuseScore);
     if (mscxText === null)
         return null;
     const formattedMscx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(mscxText);
-    const ts = buildFileTimestamp();
-    if (options.compressed === true) {
-        const msczBytes = await (0, zip_io_1.makeMsczBytes)(formattedMscx);
-        return createDownloadPayload(`miku-score-${ts}.mscz`, (0, zip_io_1.bytesToArrayBuffer)(msczBytes), MIME_ZIP);
-    }
-    return createDownloadPayload(`miku-score-${ts}.mscx`, formattedMscx, MIME_XML);
+    return options.compressed === true ? (0, zip_io_1.makeMsczBytes)(formattedMscx) : formattedMscx;
 };
-exports.createMuseScoreDownloadPayload = createMuseScoreDownloadPayload;
-const createZipBundleDownloadPayload = async (entries, options = {}) => {
-    const ts = buildFileTimestamp();
-    const safeBase = String(options.baseName || "miku-score-all").trim() || "miku-score-all";
+exports.encodeMuseScoreOutput = encodeMuseScoreOutput;
+const encodeZipBundleOutput = async (entries, options = {}) => {
+    const textEncoder = new TextEncoder();
     const zipEntries = [];
     for (const entry of entries) {
-        const fileName = String(entry.fileName || "").trim();
-        if (!fileName)
+        const path = String(entry.path || "").trim();
+        if (!path)
             continue;
-        const bytes = new Uint8Array(await entry.blob.arrayBuffer());
-        zipEntries.push({ path: fileName, bytes });
+        const bytes = typeof entry.data === "string" ? textEncoder.encode(entry.data) : entry.data;
+        zipEntries.push({ path, bytes });
     }
-    const zipBytes = await (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
-    return createDownloadPayload(`${safeBase}-${ts}.zip`, (0, zip_io_1.bytesToArrayBuffer)(zipBytes), MIME_ZIP);
+    return (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
 };
-exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;
+exports.encodeZipBundleOutput = encodeZipBundleOutput;
 
   },
   "src/ts/vsqx-io.js": function (require, module, exports) {
@@ -11794,6 +11584,43 @@ exports.createZipBundleDownloadPayload = createZipBundleDownloadPayload;
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.convertMusicXmlToVsqx = exports.convertVsqxToMusicXml = exports.isVsqxBridgeAvailable = exports.installVsqxMusicXmlNormalizationHook = void 0;
+const vsqx_conversion_1 = require("./vsqx-conversion");
+const bridge = () => {
+    var _a;
+    if (typeof window === "undefined")
+        return null;
+    return (_a = window.UtaFormatix3TsPlusMikuscore) !== null && _a !== void 0 ? _a : null;
+};
+const installVsqxMusicXmlNormalizationHook = (normalizeImportedMusicXmlText) => {
+    var _a;
+    if (typeof window === "undefined")
+        return;
+    window.__utaformatix3TsPlusMikuscoreHooks = {
+        ...((_a = window.__utaformatix3TsPlusMikuscoreHooks) !== null && _a !== void 0 ? _a : {}),
+        normalizeImportedMusicXmlText,
+    };
+};
+exports.installVsqxMusicXmlNormalizationHook = installVsqxMusicXmlNormalizationHook;
+const isVsqxBridgeAvailable = () => bridge() !== null;
+exports.isVsqxBridgeAvailable = isVsqxBridgeAvailable;
+const convertVsqxToMusicXml = (vsqxText, options) => {
+    return (0, vsqx_conversion_1.convertVsqxToMusicXmlWithBridge)(bridge(), vsqxText, options);
+};
+exports.convertVsqxToMusicXml = convertVsqxToMusicXml;
+const convertMusicXmlToVsqx = (musicXmlText, options) => {
+    return (0, vsqx_conversion_1.convertMusicXmlToVsqxWithBridge)(bridge(), musicXmlText, options);
+};
+exports.convertMusicXmlToVsqx = convertMusicXmlToVsqx;
+
+  },
+  "src/ts/vsqx-conversion.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.convertMusicXmlToVsqxWithBridge = exports.convertVsqxToMusicXmlWithBridge = void 0;
 const VSQX_BRIDGE_UNAVAILABLE = "VSQX_BRIDGE_UNAVAILABLE";
 const VSQX_CONVERT_EMPTY_RESULT = "VSQX_CONVERT_EMPTY_RESULT";
 const VSQX_EXPORT_EMPTY_RESULT = "VSQX_EXPORT_EMPTY_RESULT";
@@ -11804,27 +11631,12 @@ const MSG_CONVERT_WARNING = "VSQX to MusicXML conversion emitted a warning.";
 const MSG_CONVERT_EMPTY_RESULT = "VSQX converter returned empty MusicXML.";
 const MSG_EXPORT_EMPTY_RESULT = "MusicXML to VSQX conversion returned empty output.";
 const MSG_EXPORT_FAILED = "MusicXML to VSQX conversion failed.";
-const bridge = () => {
-    var _a;
-    if (typeof window === "undefined")
-        return null;
-    return (_a = window.UtaFormatix3TsPlusMikuscore) !== null && _a !== void 0 ? _a : null;
-};
-const textOrEmpty = (value) => {
-    return String(value || "");
-};
-const trimmedTextOrEmpty = (value) => {
-    return textOrEmpty(value).trim();
-};
-const isBlankText = (value) => {
-    return !trimmedTextOrEmpty(value);
-};
+const textOrEmpty = (value) => String(value || "");
+const trimmedTextOrEmpty = (value) => textOrEmpty(value).trim();
+const isBlankText = (value) => !trimmedTextOrEmpty(value);
 const diagnostic = (code, message) => ({ code, message });
 const bridgeUnavailableDiagnostic = () => {
     return diagnostic(VSQX_BRIDGE_UNAVAILABLE, MSG_BRIDGE_UNAVAILABLE);
-};
-const vsqxExportErrorMessage = (error) => {
-    return error instanceof Error ? error.message : MSG_EXPORT_FAILED;
 };
 const vsqxConvertEmptyResultDiagnostic = () => {
     return diagnostic(VSQX_CONVERT_EMPTY_RESULT, MSG_CONVERT_EMPTY_RESULT);
@@ -11833,36 +11645,26 @@ const vsqxExportEmptyResultDiagnostic = () => {
     return diagnostic(VSQX_EXPORT_EMPTY_RESULT, MSG_EXPORT_EMPTY_RESULT);
 };
 const vsqxExportFailedDiagnostic = (error) => {
-    return diagnostic(VSQX_EXPORT_FAILED, vsqxExportErrorMessage(error));
+    const message = error instanceof Error ? error.message : MSG_EXPORT_FAILED;
+    return diagnostic(VSQX_EXPORT_FAILED, message);
 };
-const failedVsqxToMusicXmlResult = (diagnostics, warnings = []) => ({
-    ok: false,
-    xml: "",
-    diagnostics,
-    warnings,
-});
-const failedMusicXmlToVsqxResult = (diagnostic) => ({
+const failedVsqxToMusicXmlResult = (diagnostics, warnings = []) => ({ ok: false, xml: "", diagnostics, warnings });
+const failedMusicXmlToVsqxResult = (failureDiagnostic) => ({
     ok: false,
     vsqx: "",
-    diagnostic,
+    diagnostic: failureDiagnostic,
 });
-const issueLevel = (issue) => {
-    return trimmedTextOrEmpty(issue.level).toLowerCase();
-};
-const isVsqxConversionErrorIssue = (issue) => {
-    return issueLevel(issue) === "error";
-};
+const issueLevel = (issue) => trimmedTextOrEmpty(issue.level).toLowerCase();
+const isVsqxConversionErrorIssue = (issue) => issueLevel(issue) === "error";
 const isVsqxConversionWarningIssue = (issue) => {
     const level = issueLevel(issue);
     return level === "warning" || level === "info";
 };
 const issueCode = (issue, fallback) => {
-    const raw = trimmedTextOrEmpty(issue.code);
-    return raw || fallback;
+    return trimmedTextOrEmpty(issue.code) || fallback;
 };
 const issueMessage = (issue, fallback) => {
-    const raw = trimmedTextOrEmpty(issue.message);
-    return raw || fallback;
+    return trimmedTextOrEmpty(issue.message) || fallback;
 };
 const issueDiagnostic = (issue, fallbackCode, fallbackMessage) => {
     return diagnostic(issueCode(issue, fallbackCode), issueMessage(issue, fallbackMessage));
@@ -11879,23 +11681,7 @@ const collectVsqxConversionIssues = (issues) => {
         .map((issue, index) => issueDiagnostic(issue, `VSQX_CONVERT_WARNING_${index + 1}`, MSG_CONVERT_WARNING));
     return { diagnostics, warnings };
 };
-const installVsqxMusicXmlNormalizationHook = (normalizeImportedMusicXmlText) => {
-    var _a;
-    if (typeof window === "undefined")
-        return;
-    window.__utaformatix3TsPlusMikuscoreHooks = {
-        ...((_a = window.__utaformatix3TsPlusMikuscoreHooks) !== null && _a !== void 0 ? _a : {}),
-        normalizeImportedMusicXmlText,
-    };
-};
-exports.installVsqxMusicXmlNormalizationHook = installVsqxMusicXmlNormalizationHook;
-const isVsqxBridgeAvailable = () => {
-    const runtime = bridge();
-    return !!runtime;
-};
-exports.isVsqxBridgeAvailable = isVsqxBridgeAvailable;
-const convertVsqxToMusicXml = (vsqxText, options) => {
-    const runtime = bridge();
+const convertVsqxToMusicXmlWithBridge = (runtime, vsqxText, options) => {
     if (!runtime) {
         return failedVsqxToMusicXmlResult([bridgeUnavailableDiagnostic()]);
     }
@@ -11903,12 +11689,7 @@ const convertVsqxToMusicXml = (vsqxText, options) => {
     const { diagnostics, warnings } = collectVsqxConversionIssues(reportIssues(report));
     const xml = textOrEmpty(report === null || report === void 0 ? void 0 : report.musicXml);
     if (isBlankText(xml)) {
-        const fallbackDiagnostics = diagnostics.length
-            ? diagnostics
-            : [
-                vsqxConvertEmptyResultDiagnostic(),
-            ];
-        return failedVsqxToMusicXmlResult(fallbackDiagnostics, warnings);
+        return failedVsqxToMusicXmlResult(diagnostics.length ? diagnostics : [vsqxConvertEmptyResultDiagnostic()], warnings);
     }
     return {
         ok: diagnostics.length === 0,
@@ -11917,9 +11698,8 @@ const convertVsqxToMusicXml = (vsqxText, options) => {
         warnings,
     };
 };
-exports.convertVsqxToMusicXml = convertVsqxToMusicXml;
-const convertMusicXmlToVsqx = (musicXmlText, options) => {
-    const runtime = bridge();
+exports.convertVsqxToMusicXmlWithBridge = convertVsqxToMusicXmlWithBridge;
+const convertMusicXmlToVsqxWithBridge = (runtime, musicXmlText, options) => {
     if (!runtime) {
         return failedMusicXmlToVsqxResult(bridgeUnavailableDiagnostic());
     }
@@ -11934,7 +11714,7 @@ const convertMusicXmlToVsqx = (musicXmlText, options) => {
         return failedMusicXmlToVsqxResult(vsqxExportFailedDiagnostic(error));
     }
 };
-exports.convertMusicXmlToVsqx = convertMusicXmlToVsqx;
+exports.convertMusicXmlToVsqxWithBridge = convertMusicXmlToVsqxWithBridge;
 
   },
   "src/ts/musescore-io.js": function (require, module, exports) {
@@ -24114,9 +23894,6 @@ exports.AbcCommon = {
     keyFromFifthsMode,
     fifthsFromAbcKey,
 };
-if (typeof window !== "undefined") {
-    window.AbcCommon = exports.AbcCommon;
-}
 const abcCommon = exports.AbcCommon;
 const TRILL_DECORATIONS = new Set(["trill", "tr", "triller"]);
 const TURN_DECORATIONS = new Set(["turn"]);
@@ -25961,9 +25738,6 @@ function normalizeMeasuresToCapacity(measures, capacity) {
 exports.AbcCompatParser = {
     parseForMusicXml
 };
-if (typeof window !== "undefined") {
-    window.AbcCompatParser = exports.AbcCompatParser;
-}
 const abcClefFromMusicXmlClef = (clef) => {
     var _a, _b, _c, _d, _e, _f;
     if (!clef)
@@ -27879,6 +27653,29 @@ const lexAbcNote = (text, startIdx) => {
 exports.lexAbcNote = lexAbcNote;
 
   },
+  "src/ts/abc-browser-compat.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.installAbcBrowserCompatibilityOnWindow = exports.installAbcBrowserCompatibility = void 0;
+const abc_io_1 = require("./abc-io");
+const installAbcBrowserCompatibility = (target) => {
+    target.AbcCommon = abc_io_1.AbcCommon;
+    target.AbcCompatParser = abc_io_1.AbcCompatParser;
+};
+exports.installAbcBrowserCompatibility = installAbcBrowserCompatibility;
+const installAbcBrowserCompatibilityOnWindow = () => {
+    if (typeof window === "undefined")
+        return false;
+    (0, exports.installAbcBrowserCompatibility)(window);
+    return true;
+};
+exports.installAbcBrowserCompatibilityOnWindow = installAbcBrowserCompatibilityOnWindow;
+
+  },
   "core/timeIndex.js": function (require, module, exports) {
 "use strict";
 /*
@@ -29231,6 +29028,417 @@ const getCommandNodeId = (command) => {
     }
 };
 exports.getCommandNodeId = getCommandNodeId;
+
+  },
+  "src/ts/render-document.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.prepareMusicXmlRenderDocument = exports.dedupeGlobalTempoDirectionsInRenderDocument = void 0;
+const musicxml_io_1 = require("./musicxml-io");
+const normalizeTextForRenderKey = (value) => {
+    return (value !== null && value !== void 0 ? value : "").replace(/\s+/g, " ").trim().toLowerCase();
+};
+const localNameOf = (element) => {
+    return (element.localName || element.tagName || "").toLowerCase();
+};
+const directChildrenByName = (parent, name) => {
+    const normalizedName = name.toLowerCase();
+    return Array.from(parent.children).filter((child) => localNameOf(child) === normalizedName);
+};
+const firstDescendantByName = (parent, name) => {
+    const namespaceMatch = parent.getElementsByTagNameNS("*", name).item(0);
+    if (namespaceMatch)
+        return namespaceMatch;
+    return parent.getElementsByTagName(name).item(0);
+};
+const extractTempoDirectionRenderKey = (direction) => {
+    var _a, _b, _c;
+    const directSound = (_a = directChildrenByName(direction, "sound")[0]) !== null && _a !== void 0 ? _a : null;
+    const directionType = (_b = directChildrenByName(direction, "direction-type")[0]) !== null && _b !== void 0 ? _b : null;
+    const metronome = directionType ? firstDescendantByName(directionType, "metronome") : null;
+    const wordsElement = directionType ? firstDescendantByName(directionType, "words") : null;
+    const perMinuteElement = metronome ? firstDescendantByName(metronome, "per-minute") : null;
+    const beatUnitElement = metronome ? firstDescendantByName(metronome, "beat-unit") : null;
+    const directOffset = (_c = directChildrenByName(direction, "offset")[0]) !== null && _c !== void 0 ? _c : null;
+    const soundTempo = normalizeTextForRenderKey(directSound === null || directSound === void 0 ? void 0 : directSound.getAttribute("tempo"));
+    const perMinute = normalizeTextForRenderKey(perMinuteElement === null || perMinuteElement === void 0 ? void 0 : perMinuteElement.textContent);
+    const beatUnit = normalizeTextForRenderKey(beatUnitElement === null || beatUnitElement === void 0 ? void 0 : beatUnitElement.textContent);
+    const words = normalizeTextForRenderKey(wordsElement === null || wordsElement === void 0 ? void 0 : wordsElement.textContent);
+    if (!soundTempo && !perMinute && !words)
+        return null;
+    const offset = normalizeTextForRenderKey((directOffset === null || directOffset === void 0 ? void 0 : directOffset.textContent) || "0");
+    return `off=${offset}|sound=${soundTempo}|pm=${perMinute}|unit=${beatUnit}|words=${words}`;
+};
+const dedupeGlobalTempoDirectionsInRenderDocument = (doc) => {
+    var _a;
+    const root = doc.documentElement;
+    if (!root || localNameOf(root) !== "score-partwise")
+        return;
+    const parts = directChildrenByName(root, "part");
+    if (parts.length <= 1)
+        return;
+    const seen = new Set();
+    for (const part of parts) {
+        for (const measure of directChildrenByName(part, "measure")) {
+            const measureNumber = ((_a = measure.getAttribute("number")) !== null && _a !== void 0 ? _a : "").trim();
+            for (const direction of directChildrenByName(measure, "direction")) {
+                const tempoKey = extractTempoDirectionRenderKey(direction);
+                if (!tempoKey)
+                    continue;
+                const dedupeKey = `m=${measureNumber}|${tempoKey}`;
+                if (seen.has(dedupeKey)) {
+                    direction.remove();
+                }
+                else {
+                    seen.add(dedupeKey);
+                }
+            }
+        }
+    }
+};
+exports.dedupeGlobalTempoDirectionsInRenderDocument = dedupeGlobalTempoDirectionsInRenderDocument;
+const prepareMusicXmlRenderDocument = (xml, options = {}) => {
+    var _a, _b;
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!sourceDoc) {
+        return {
+            renderDoc: null,
+            svgIdToNodeId: new Map(),
+            noteCount: 0,
+        };
+    }
+    const renderBundle = (0, musicxml_io_1.buildRenderDocWithNodeIds)(sourceDoc, Array.from((_a = options.nodeIds) !== null && _a !== void 0 ? _a : []), (_b = options.idPrefix) !== null && _b !== void 0 ? _b : "mks-main");
+    (0, exports.dedupeGlobalTempoDirectionsInRenderDocument)(renderBundle.renderDoc);
+    return renderBundle;
+};
+exports.prepareMusicXmlRenderDocument = prepareMusicXmlRenderDocument;
+
+  },
+  "src/ts/new-score.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.createNewScoreMusicXml = void 0;
+const clefs_1 = require("./score-features/clefs");
+const DEFAULT_DIVISIONS = 480;
+const DEFAULT_MEASURE_COUNT = 8;
+const MAX_PARTS = 16;
+const ALLOWED_BEAT_TYPES = new Set([2, 4, 8, 16]);
+const clefFeatures = {
+    treble: { sign: "G", line: 2 },
+    alto: { sign: "C", line: 3 },
+    bass: { sign: "F", line: 4 },
+};
+const boundedInteger = (value, fallback, min, max) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed))
+        return fallback;
+    return Math.max(min, Math.min(max, Math.round(parsed)));
+};
+const normalizeBeatType = (value) => {
+    const parsed = Number(value);
+    return ALLOWED_BEAT_TYPES.has(parsed) ? parsed : 4;
+};
+const normalizeClef = (value) => {
+    const normalized = String(value !== null && value !== void 0 ? value : "").trim().toLowerCase();
+    if (normalized === "alto" || normalized === "bass")
+        return normalized;
+    return "treble";
+};
+const buildClefXml = (clef) => {
+    return (0, clefs_1.buildMusicXmlClefXml)(clefFeatures[normalizeClef(clef)]);
+};
+const buildMeasureRestNoteXml = (duration, staff) => {
+    return [
+        "<note>",
+        '<rest measure="yes"/>',
+        `<duration>${duration}</duration>`,
+        "<voice>1</voice>",
+        staff === undefined ? "" : `<staff>${staff}</staff>`,
+        "</note>",
+    ].join("");
+};
+const createNewScoreMusicXml = (options = {}) => {
+    const usePianoGrandStaffTemplate = options.usePianoGrandStaffTemplate === true;
+    const partCount = usePianoGrandStaffTemplate
+        ? 1
+        : boundedInteger(options.partCount, 1, 1, MAX_PARTS);
+    const fifths = boundedInteger(options.fifths, 0, -7, 7);
+    const beats = boundedInteger(options.beats, 4, 1, 16);
+    const beatType = normalizeBeatType(options.beatType);
+    const measureDuration = Math.max(1, Math.round(DEFAULT_DIVISIONS * beats * (4 / beatType)));
+    const partListXml = Array.from({ length: partCount }, (_, index) => {
+        const partId = `P${index + 1}`;
+        const channelCandidate = (index % 16) + 1;
+        const midiChannel = channelCandidate === 10 ? 11 : channelCandidate;
+        const midiProgram = usePianoGrandStaffTemplate ? 1 : 6;
+        const partName = usePianoGrandStaffTemplate ? "Piano" : `Part ${index + 1}`;
+        return [
+            `<score-part id="${partId}">`,
+            `<part-name>${partName}</part-name>`,
+            `<midi-instrument id="${partId}-I1">`,
+            `<midi-channel>${midiChannel}</midi-channel>`,
+            `<midi-program>${midiProgram}</midi-program>`,
+            "</midi-instrument>",
+            "</score-part>",
+        ].join("");
+    }).join("");
+    const partsXml = Array.from({ length: partCount }, (_, partIndex) => {
+        var _a;
+        const partId = `P${partIndex + 1}`;
+        const clefXml = buildClefXml((_a = options.clefs) === null || _a === void 0 ? void 0 : _a[partIndex]);
+        const measuresXml = Array.from({ length: DEFAULT_MEASURE_COUNT }, (_, measureIndex) => {
+            const attributesXml = measureIndex === 0
+                ? [
+                    "<attributes>",
+                    `<divisions>${DEFAULT_DIVISIONS}</divisions>`,
+                    `<key><fifths>${fifths}</fifths><mode>major</mode></key>`,
+                    `<time><beats>${beats}</beats><beat-type>${beatType}</beat-type></time>`,
+                    usePianoGrandStaffTemplate
+                        ? '<staves>2</staves><clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef>'
+                        : clefXml,
+                    "</attributes>",
+                ].join("")
+                : "";
+            const measureBodyXml = usePianoGrandStaffTemplate
+                ? [
+                    buildMeasureRestNoteXml(measureDuration, 1),
+                    `<backup><duration>${measureDuration}</duration></backup>`,
+                    buildMeasureRestNoteXml(measureDuration, 2),
+                ].join("")
+                : buildMeasureRestNoteXml(measureDuration);
+            return [
+                `<measure number="${measureIndex + 1}">`,
+                attributesXml,
+                measureBodyXml,
+                "</measure>",
+            ].join("");
+        }).join("");
+        return [`<part id="${partId}">`, measuresXml, "</part>"].join("");
+    }).join("");
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <work>
+    <work-title>Untitled</work-title>
+  </work>
+  <identification>
+    <creator type="composer">Unknown</creator>
+  </identification>
+  <part-list>${partListXml}</part-list>
+  ${partsXml}
+</score-partwise>`;
+};
+exports.createNewScoreMusicXml = createNewScoreMusicXml;
+
+  },
+  "src/ts/musicxml-output.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.summarizeImportedDiagWarnings = exports.stripMetadataFromMusicXml = void 0;
+const musicxml_io_1 = require("./musicxml-io");
+const shouldRemoveMksField = (fieldName, settings) => {
+    const lowered = fieldName.trim().toLowerCase();
+    if (!lowered.startsWith("mks:"))
+        return false;
+    if (lowered.startsWith("mks:meta:"))
+        return !settings.keepMeta;
+    if (lowered.startsWith("mks:src:"))
+        return !settings.keepSrc;
+    if (lowered.startsWith("mks:dbg:"))
+        return !settings.keepDbg;
+    return false;
+};
+const stripMetadataFromMusicXml = (xml, settings) => {
+    var _a;
+    if (settings.keepMeta && settings.keepSrc && settings.keepDbg)
+        return xml;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!doc)
+        return xml;
+    const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
+    for (const field of fields) {
+        const name = (_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "";
+        if (shouldRemoveMksField(name, settings))
+            field.remove();
+    }
+    for (const miscellaneous of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
+        if (!miscellaneous.querySelector("miscellaneous-field"))
+            miscellaneous.remove();
+    }
+    for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
+        if (attributes.children.length === 0)
+            attributes.remove();
+    }
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+};
+exports.stripMetadataFromMusicXml = stripMetadataFromMusicXml;
+const summarizeImportedDiagWarnings = (xml) => {
+    var _a, _b, _c, _d;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+    if (!doc)
+        return "";
+    let overfullReflowCount = 0;
+    let parserWarningCount = 0;
+    const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
+    for (const field of fields) {
+        const name = ((_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "").trim().toLowerCase();
+        if (name === "mks:diag:count")
+            continue;
+        const payload = (_c = (_b = field.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const codeMatch = payload.match(/(?:^|;)code=([^;]+)/);
+        const code = ((_d = codeMatch === null || codeMatch === void 0 ? void 0 : codeMatch[1]) !== null && _d !== void 0 ? _d : "").trim().toUpperCase();
+        if (code === "OVERFULL_REFLOWED")
+            overfullReflowCount += 1;
+        if (code === "ABC_IMPORT_WARNING")
+            parserWarningCount += 1;
+    }
+    const summaries = [];
+    if (overfullReflowCount > 0) {
+        summaries.push(`ABC overfull auto-reflow: ${overfullReflowCount}`);
+    }
+    if (parserWarningCount > 0) {
+        summaries.push(`ABC parser warnings: ${parserWarningCount}`);
+    }
+    return summaries.join(" / ");
+};
+exports.summarizeImportedDiagWarnings = summarizeImportedDiagWarnings;
+
+  },
+  "src/ts/measure-operations.js": function (require, module, exports) {
+"use strict";
+/*
+ * Copyright 2026 Toshiki Iga
+ * SPDX-License-Identifier: Apache-2.0
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.appendMeasureToMusicXml = exports.replaceMeasureInMusicXml = exports.extractMeasureEditorMusicXml = void 0;
+const timeIndex_1 = require("../../core/timeIndex");
+const musicxml_io_1 = require("./musicxml-io");
+const extractMeasureEditorMusicXml = (sourceXml, partId, measureNumber) => {
+    const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    if (!sourceDoc)
+        return null;
+    const extractedDoc = (0, musicxml_io_1.extractMeasureEditorDocument)(sourceDoc, partId, measureNumber);
+    return extractedDoc ? (0, musicxml_io_1.serializeMusicXmlDocument)(extractedDoc) : null;
+};
+exports.extractMeasureEditorMusicXml = extractMeasureEditorMusicXml;
+const replaceMeasureInMusicXml = (sourceXml, partId, measureNumber, measureXml) => {
+    const mainDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    const measureDoc = (0, musicxml_io_1.parseMusicXmlDocument)(measureXml);
+    if (!mainDoc || !measureDoc)
+        return null;
+    const mergedDoc = (0, musicxml_io_1.replaceMeasureInMainDocument)(mainDoc, partId, measureNumber, measureDoc);
+    return mergedDoc ? (0, musicxml_io_1.serializeMusicXmlDocument)(mergedDoc) : null;
+};
+exports.replaceMeasureInMusicXml = replaceMeasureInMusicXml;
+const toPositiveInteger = (value) => {
+    if (!Number.isFinite(value))
+        return null;
+    const rounded = Math.round(value);
+    return rounded > 0 ? rounded : null;
+};
+const resolveEffectiveStavesAtEnd = (part) => {
+    var _a, _b, _c;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    let staves = 1;
+    for (const measure of measures) {
+        const text = (_c = (_b = (_a = measure.querySelector(":scope > attributes > staves")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const parsed = Number(text);
+        if (Number.isInteger(parsed) && parsed > 0)
+            staves = parsed;
+    }
+    return staves;
+};
+const resolveHasTrebleBassGrandStaffAtEnd = (part) => {
+    var _a, _b, _c, _d, _e, _f;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    let clef1 = "";
+    let clef2 = "";
+    for (const measure of measures) {
+        const nextClef1 = (_c = (_b = (_a = measure.querySelector(':scope > attributes > clef[number="1"] > sign')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const nextClef2 = (_f = (_e = (_d = measure.querySelector(':scope > attributes > clef[number="2"] > sign')) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+        if (nextClef1)
+            clef1 = nextClef1;
+        if (nextClef2)
+            clef2 = nextClef2;
+    }
+    return clef1 === "G" && clef2 === "F";
+};
+const createMeasureRestNoteXml = (duration, voice, staff) => {
+    return [
+        "<note>",
+        '<rest measure="yes"/>',
+        `<duration>${duration}</duration>`,
+        `<voice>${voice}</voice>`,
+        staff ? `<staff>${staff}</staff>` : "",
+        "</note>",
+    ].join("");
+};
+const deriveNextMeasureNumber = (part) => {
+    var _a, _b, _c;
+    const measures = Array.from(part.querySelectorAll(":scope > measure"));
+    const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+    if (!lastMeasure)
+        return "1";
+    const raw = (_c = (_b = lastMeasure.getAttribute("number")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+    const numeric = Number(raw);
+    if (Number.isInteger(numeric) && numeric >= 0)
+        return String(numeric + 1);
+    return String(measures.length + 1);
+};
+const appendMeasureToMusicXml = (sourceXml) => {
+    var _a, _b, _c, _d, _e;
+    const doc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+    if (!doc)
+        return null;
+    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+    if (parts.length === 0)
+        return null;
+    for (const part of parts) {
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+        if (!lastMeasure)
+            continue;
+        const capacity = (_b = toPositiveInteger((0, timeIndex_1.getMeasureCapacity)(lastMeasure))) !== null && _b !== void 0 ? _b : 3840;
+        const nextNumber = deriveNextMeasureNumber(part);
+        const staves = resolveEffectiveStavesAtEnd(part);
+        const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
+        const measure = doc.createElement("measure");
+        measure.setAttribute("number", nextNumber);
+        if (isGrandStaff) {
+            const lane1 = (_c = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "1"))) === null || _c === void 0 ? void 0 : _c.querySelector("note");
+            const backup = doc.createElement("backup");
+            const backupDuration = doc.createElement("duration");
+            backupDuration.textContent = String(capacity);
+            backup.appendChild(backupDuration);
+            const lane2 = (_d = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "2"))) === null || _d === void 0 ? void 0 : _d.querySelector("note");
+            if (lane1)
+                measure.appendChild(doc.importNode(lane1, true));
+            measure.appendChild(backup);
+            if (lane2)
+                measure.appendChild(doc.importNode(lane2, true));
+        }
+        else {
+            const rest = (_e = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", null))) === null || _e === void 0 ? void 0 : _e.querySelector("note");
+            if (rest)
+                measure.appendChild(doc.importNode(rest, true));
+        }
+        part.appendChild(measure);
+    }
+    return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+};
+exports.appendMeasureToMusicXml = appendMeasureToMusicXml;
 
   }
 };

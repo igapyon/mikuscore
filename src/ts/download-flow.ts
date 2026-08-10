@@ -3,33 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { GraceTimingMode, MetricAccentProfile, MidiProgramPreset } from "./midi-io";
+import type { MidiExportProfile } from "./midi-musescore-io";
 import {
-  buildMidiBytesForPlayback,
-  collectMidiControlEventsFromMusicXmlDoc,
-  collectMidiKeySignatureEventsFromMusicXmlDoc,
-  collectMidiTimeSignatureEventsFromMusicXmlDoc,
-  collectMidiTempoEventsFromMusicXmlDoc,
-  buildPlaybackEventsFromMusicXmlDoc,
-  collectMidiProgramOverridesFromMusicXmlDoc,
-  collectLeadingPickupTicksFromMusicXmlDoc,
-  type GraceTimingMode,
-  type MetricAccentProfile,
-  type MidiProgramPreset,
-} from "./midi-io";
-import {
-  resolveMidiExportRuntimeOptions,
-  resolvePlaybackBuildModeForMidiExport,
-  type MidiExportProfile,
-} from "./midi-musescore-io";
-import { parseMusicXmlDocument, prettyPrintMusicXmlText } from "./musicxml-io";
-import {
-  bytesToArrayBuffer,
-  formatXmlWithTwoSpaceIndent,
-  makeMsczBytes,
-  makeMxlBytes,
-  makeZipBytes,
-  type ZipEntryPayload,
-} from "./zip-io";
+  encodeAbcOutput,
+  encodeJsonOutput,
+  encodeLilyPondOutput,
+  encodeMeiOutput,
+  encodeMidiOutput,
+  encodeMuseScoreOutput,
+  encodeMusicXmlOutput,
+  encodeSvgOutput,
+  encodeVsqxOutput,
+  encodeZipBundleOutput,
+  type EncodedOutput,
+} from "./output-encoding";
+import { getBrowserMidiWriterRuntime } from "./midi-writer-browser";
+import { bytesToArrayBuffer } from "./zip-io";
 
 export type DownloadFilePayload = {
   fileName: string;
@@ -58,46 +48,34 @@ const buildFileTimestamp = (): string => {
   ].join("");
 };
 
+const toBlobPart = (content: EncodedOutput): BlobPart => {
+  return typeof content === "string" ? content : bytesToArrayBuffer(content);
+};
+
 const createDownloadPayload = (
   fileName: string,
-  content: BlobPart,
+  content: EncodedOutput,
   type: string
-): DownloadFilePayload => {
-  return {
-    fileName,
-    blob: new Blob([content], { type }),
-  };
-};
+): DownloadFilePayload => ({
+  fileName,
+  blob: new Blob([toBlobPart(content)], { type }),
+});
 
 const createTimestampedDownloadPayload = (
   extension: string,
-  content: BlobPart,
+  content: EncodedOutput,
   type: string,
   stem = "miku-score"
 ): DownloadFilePayload => {
-  const ts = buildFileTimestamp();
-  return createDownloadPayload(`${stem}-${ts}.${extension}`, content, type);
-};
-
-const convertMusicXmlForDownload = <T>(
-  xmlText: string,
-  convert: (doc: Document) => T
-): T | null => {
-  const musicXmlDoc = parseMusicXmlDocument(xmlText);
-  if (!musicXmlDoc) return null;
-  try {
-    return convert(musicXmlDoc);
-  } catch {
-    return null;
-  }
+  return createDownloadPayload(`${stem}-${buildFileTimestamp()}.${extension}`, content, type);
 };
 
 export const triggerFileDownload = (payload: DownloadFilePayload): void => {
   const url = URL.createObjectURL(payload.blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = payload.fileName;
-  a.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = payload.fileName;
+  anchor.click();
   URL.revokeObjectURL(url);
 };
 
@@ -105,31 +83,32 @@ export const createMusicXmlDownloadPayload = async (
   xmlText: string,
   options: { compressed?: boolean; useXmlExtension?: boolean } = {}
 ): Promise<DownloadFilePayload> => {
-  const ts = buildFileTimestamp();
-  const formattedXml = prettyPrintMusicXmlText(xmlText);
+  const encoded = await encodeMusicXmlOutput(xmlText, { compressed: options.compressed });
   if (options.compressed === true) {
-    const mxlBytes = await makeMxlBytes(formattedXml);
-    return createDownloadPayload(
-      `miku-score-${ts}.mxl`,
-      bytesToArrayBuffer(mxlBytes),
-      MIME_MXL
-    );
+    return createTimestampedDownloadPayload("mxl", encoded, MIME_MXL);
   }
   const extension = options.useXmlExtension === true ? "xml" : "musicxml";
-  return createDownloadPayload(`miku-score-${ts}.${extension}`, formattedXml, MIME_XML);
+  return createTimestampedDownloadPayload(extension, encoded, MIME_XML);
 };
 
 export const createSvgDownloadPayload = (svgText: string): DownloadFilePayload => {
-  return createTimestampedDownloadPayload("svg", svgText, MIME_SVG);
+  return createTimestampedDownloadPayload("svg", encodeSvgOutput(svgText), MIME_SVG);
 };
 
-export const createJsonDownloadPayload = (jsonText: string, stem = "measure-detail"): DownloadFilePayload => {
-  return createTimestampedDownloadPayload("json", jsonText, MIME_JSON, `miku-score-${stem}`);
+export const createJsonDownloadPayload = (
+  jsonText: string,
+  stem = "measure-detail"
+): DownloadFilePayload => {
+  return createTimestampedDownloadPayload(
+    "json",
+    encodeJsonOutput(jsonText),
+    MIME_JSON,
+    `miku-score-${stem}`
+  );
 };
 
 export const createVsqxDownloadPayload = (vsqxText: string): DownloadFilePayload => {
-  const formattedVsqx = formatXmlWithTwoSpaceIndent(vsqxText);
-  return createTimestampedDownloadPayload("vsqx", formattedVsqx, MIME_XML);
+  return createTimestampedDownloadPayload("vsqx", encodeVsqxOutput(vsqxText), MIME_XML);
 };
 
 export const createMidiDownloadPayload = (
@@ -143,109 +122,51 @@ export const createMidiDownloadPayload = (
   exportProfile: MidiExportProfile = "safe",
   keepRoundtripMetadata = true
 ): DownloadFilePayload | null => {
-  const playbackDoc = parseMusicXmlDocument(xmlText);
-  if (!playbackDoc) return null;
-  const runtime = resolveMidiExportRuntimeOptions(exportProfile, ticksPerQuarter);
-  const exportTicksPerQuarter = runtime.ticksPerQuarter;
-  const buildMode = resolvePlaybackBuildModeForMidiExport(runtime.eventBuildPolicy);
-
-  const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter, {
-    mode: buildMode,
+  const encoded = encodeMidiOutput(xmlText, {
+    ticksPerQuarter,
+    programPreset,
+    forceProgramPreset,
     graceTimingMode,
     metricAccentEnabled,
     metricAccentProfile,
-    includeGraceInPlaybackLikeMode: runtime.includeGraceInPlaybackLikeMode,
-    includeOrnamentInPlaybackLikeMode: runtime.includeOrnamentInPlaybackLikeMode,
-    includeTieInPlaybackLikeMode: runtime.includeTieInPlaybackLikeMode,
+    exportProfile,
+    keepRoundtripMetadata,
+    midiWriterRuntime: getBrowserMidiWriterRuntime(),
   });
-  if (parsedPlayback.events.length === 0) return null;
-  const midiProgramOverrides = forceProgramPreset
-    ? new Map<string, number>()
-    : collectMidiProgramOverridesFromMusicXmlDoc(playbackDoc);
-  const midiControlEvents = collectMidiControlEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
-  const midiTempoEvents = collectMidiTempoEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
-  const midiTimeSignatureEvents = collectMidiTimeSignatureEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
-  const midiKeySignatureEvents = collectMidiKeySignatureEventsFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
-
-  let midiBytes: Uint8Array;
-  try {
-    const scoreTitle =
-      playbackDoc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
-      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
-      "";
-    const movementTitle =
-      playbackDoc.querySelector("score-partwise > movement-title")?.textContent?.trim() ?? "";
-    const scoreComposer =
-      playbackDoc
-        .querySelector('score-partwise > identification > creator[type="composer"]')
-        ?.textContent?.trim() ??
-      playbackDoc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
-      "";
-    const pickupTicks = collectLeadingPickupTicksFromMusicXmlDoc(playbackDoc, exportTicksPerQuarter);
-    midiBytes = buildMidiBytesForPlayback(
-      parsedPlayback.events,
-      parsedPlayback.tempo,
-      programPreset,
-      midiProgramOverrides,
-      midiControlEvents,
-      midiTempoEvents,
-      midiTimeSignatureEvents,
-      midiKeySignatureEvents,
-      {
-        embedMksSysEx: true,
-        emitMksTextMeta: keepRoundtripMetadata,
-        ticksPerQuarter: exportTicksPerQuarter,
-        normalizeForParity: runtime.normalizeForParity,
-        rawWriter: runtime.rawWriter,
-        rawRetriggerPolicy: runtime.rawRetriggerPolicy,
-        metadata: {
-          title: scoreTitle,
-          movementTitle,
-          composer: scoreComposer,
-          pickupTicks,
-        },
-      }
-    );
-  } catch {
-    return null;
-  }
-
-  return createTimestampedDownloadPayload("mid", bytesToArrayBuffer(midiBytes), MIME_MIDI);
+  return encoded === null
+    ? null
+    : createTimestampedDownloadPayload("mid", encoded, MIME_MIDI);
 };
 
 export const createAbcDownloadPayload = (
   xmlText: string,
   convertMusicXmlToAbc: (doc: Document) => string
 ): DownloadFilePayload | null => {
-  const abcText = convertMusicXmlForDownload(xmlText, convertMusicXmlToAbc);
-  if (abcText === null) return null;
-  return createTimestampedDownloadPayload("abc", abcText, MIME_TEXT);
+  const encoded = encodeAbcOutput(xmlText, convertMusicXmlToAbc);
+  return encoded === null
+    ? null
+    : createTimestampedDownloadPayload("abc", encoded, MIME_TEXT);
 };
 
 export const createMeiDownloadPayload = (
   xmlText: string,
-  convertMusicXmlToMei: (
-    doc: Document,
-    options?: { meiVersion?: string }
-  ) => string,
+  convertMusicXmlToMei: (doc: Document, options?: { meiVersion?: string }) => string,
   options: { meiVersion?: string } = {}
 ): DownloadFilePayload | null => {
-  const meiText = convertMusicXmlForDownload(xmlText, (musicXmlDoc) =>
-    convertMusicXmlToMei(musicXmlDoc, options)
-  );
-  if (meiText === null) return null;
-  const formattedMei = prettyPrintMusicXmlText(meiText);
-
-  return createTimestampedDownloadPayload("mei", formattedMei, MIME_MEI);
+  const encoded = encodeMeiOutput(xmlText, convertMusicXmlToMei, options);
+  return encoded === null
+    ? null
+    : createTimestampedDownloadPayload("mei", encoded, MIME_MEI);
 };
 
 export const createLilyPondDownloadPayload = (
   xmlText: string,
   convertMusicXmlToLilyPond: (doc: Document) => string
 ): DownloadFilePayload | null => {
-  const lilyText = convertMusicXmlForDownload(xmlText, convertMusicXmlToLilyPond);
-  if (lilyText === null) return null;
-  return createTimestampedDownloadPayload("ly", lilyText, MIME_TEXT);
+  const encoded = encodeLilyPondOutput(xmlText, convertMusicXmlToLilyPond);
+  return encoded === null
+    ? null
+    : createTimestampedDownloadPayload("ly", encoded, MIME_TEXT);
 };
 
 export const createMuseScoreDownloadPayload = async (
@@ -253,31 +174,24 @@ export const createMuseScoreDownloadPayload = async (
   convertMusicXmlToMuseScore: (doc: Document) => string,
   options: { compressed?: boolean } = {}
 ): Promise<DownloadFilePayload | null> => {
-  const mscxText = convertMusicXmlForDownload(xmlText, convertMusicXmlToMuseScore);
-  if (mscxText === null) return null;
-  const formattedMscx = formatXmlWithTwoSpaceIndent(mscxText);
-
-  const ts = buildFileTimestamp();
-  if (options.compressed === true) {
-    const msczBytes = await makeMsczBytes(formattedMscx);
-    return createDownloadPayload(`miku-score-${ts}.mscz`, bytesToArrayBuffer(msczBytes), MIME_ZIP);
-  }
-  return createDownloadPayload(`miku-score-${ts}.mscx`, formattedMscx, MIME_XML);
+  const encoded = await encodeMuseScoreOutput(xmlText, convertMusicXmlToMuseScore, options);
+  if (encoded === null) return null;
+  return options.compressed === true
+    ? createTimestampedDownloadPayload("mscz", encoded, MIME_ZIP)
+    : createTimestampedDownloadPayload("mscx", encoded, MIME_XML);
 };
 
 export const createZipBundleDownloadPayload = async (
   entries: Array<{ fileName: string; blob: Blob }>,
   options: { baseName?: string; compressed?: boolean } = {}
 ): Promise<DownloadFilePayload> => {
-  const ts = buildFileTimestamp();
+  const encodedEntries = await Promise.all(entries.map(async (entry) => ({
+    path: entry.fileName,
+    data: new Uint8Array(await entry.blob.arrayBuffer()),
+  })));
+  const encoded = await encodeZipBundleOutput(encodedEntries, {
+    compressed: options.compressed,
+  });
   const safeBase = String(options.baseName || "miku-score-all").trim() || "miku-score-all";
-  const zipEntries: ZipEntryPayload[] = [];
-  for (const entry of entries) {
-    const fileName = String(entry.fileName || "").trim();
-    if (!fileName) continue;
-    const bytes = new Uint8Array(await entry.blob.arrayBuffer());
-    zipEntries.push({ path: fileName, bytes });
-  }
-  const zipBytes = await makeZipBytes(zipEntries, options.compressed !== false);
-  return createDownloadPayload(`${safeBase}-${ts}.zip`, bytesToArrayBuffer(zipBytes), MIME_ZIP);
+  return createTimestampedDownloadPayload("zip", encoded, MIME_ZIP, safeBase);
 };

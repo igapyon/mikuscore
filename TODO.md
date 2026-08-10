@@ -2,7 +2,14 @@
 
 ## Current First Focus
 
-- [ ] Continue the ABC I/O refactoring pass first.
+- [ ] Continue hardening TypeScript boundaries for the `miku-score` / `miku-score-web` split.
+  - Completed value-based boundaries now cover new-score creation, MusicXML output filtering, render-document preparation, measure operations, load conversion, output encoding, and playback planning.
+  - Browser-global capability extraction is complete for Verovio, MIDI writer, VSQX, and ABC compatibility publication; define the runtime facade next.
+  - Keep the historical combined Web App operational until a versioned browser runtime and independently verified downstream application exist.
+
+## Deferred ABC I/O Refactoring Focus
+
+- [ ] Resume the ABC I/O refactoring pass after the current separation milestone.
   - Primary entry point:
     - `Refactor src/ts/abc-io.ts before continuing larger ABC layout expansion.`
   - Current stance:
@@ -30,6 +37,234 @@
     - add focused characterization coverage before any next behavior-bearing move
     - identify the first low-risk cleanup target, likely a dense MusicXML-to-ABC export helper cluster or ABC-to-MusicXML note XML cluster
     - only consider file splits after the related helper cluster has a clear name and focused tests
+
+## Prepared Node/Web Separation Plan (miku-project Precedent)
+
+This migration is now underway. The separate Web repository exists, and the
+Main Application is being prepared through small value-based boundaries before
+the browser-runtime contract and downstream bootstrap are implemented.
+
+- Historical migration sequence consulted on 2026-08-10:
+  1. `miku-project` first published and tested its browser runtime contract (`4183832`, `feat: publish browser runtime bundle`).
+  2. `miku-project-web` then established its standalone application with a pinned runtime lock, runtime-first bootstrap, browser/UI tests, and offline smoke (`cb9a1a1`, `feat: establish standalone web application`).
+  3. A Web-only timestamp portability failure was corrected before cutover (`e2158f8`, `test: make download timestamps timezone-independent`).
+  4. Only after downstream verification did `miku-project` remove its Web assets and tests (`6818bf7`, `refactor: separate web application assets`).
+  5. Remaining Web UI backlog moved downstream last (`b8485e6`, `docs: move web ui backlog`).
+- Reuse these gates for `miku-score`: explicit module ownership, browser runtime before downstream bootstrap, tag/version/asset/SHA-256 lock, runtime initialization before UI, standalone browser/UI verification, offline single-file smoke, and upstream deletion last.
+- Do not copy the historical commit size or module layout mechanically. The `miku-project-web` first cut added roughly 46,000 lines and the upstream cleanup removed roughly 44,000 lines in single commits. Stage `miku-score` by runtime contract, Web scaffold, behavior-preserving asset/test transfer, downstream verification, and final upstream cleanup.
+- Do not inherit `miku-project` compatibility globals or its `main-*` decomposition unless `miku-score` has the same requirement. Verovio, MIDI writer, VSQX bridge, Web Audio, MusicXML DOM behavior, and score-format diagnostics require project-specific capability boundaries.
+
+### Browser Runtime Execution WBS
+
+Tracking Issue: [#201 miku-score-web 向けの upstream runtime bundle を整備する](https://github.com/igapyon/miku-score/issues/201)
+
+Use the following phases as the execution order. A later phase may be prepared,
+but it must not remove or replace the current combined Web surface before its
+preceding gate succeeds.
+
+- [x] Phase 0: make reusable TypeScript boundaries explicit.
+  - Value-based score creation, MusicXML output, render preparation, measure operations, load conversion, output encoding, and playback planning are separated from page behavior.
+  - Verovio, MIDI writer, VSQX, and ABC compatibility globals now enter through explicit capability or browser-adapter boundaries.
+  - Gate P0: `midi-io.ts`, `abc-io.ts`, `vsqx-conversion.ts`, and `verovio-render.ts` contain no page-global discovery; focused tests and the current full build pass.
+
+- [x] Phase 1: freeze the browser runtime contract before implementing its bundle.
+  - Added `docs/browser-runtime.md` as the canonical contract document on 2026-08-10.
+  - Define the public ESM exports before exposing implementation modules:
+    - `version`: `package.json` version embedded at build time
+    - `runtimeApiVersion`: independently versioned API schema identifier
+    - `embeddedModulePaths`: frozen allowlisted module inventory for audit/debug use
+    - `loadMikuScoreRuntime(options)`: validated, idempotent runtime loader
+    - default export: `loadMikuScoreRuntime`
+  - Define `options.expectedVersion` mismatch behavior and the capability object for optional Verovio toolkit/serializer, MIDI writer, and VSQX bridge support.
+  - Prefer ESM return values over a new compatibility global. Introduce a global only when the current single-file bootstrap proves it is necessary, and document its ownership and collision behavior first.
+  - Define one discriminated result contract for expected failures:
+    - success: `{ ok: true, value, warnings }`
+    - failure: `{ ok: false, diagnostics, warnings }`
+    - diagnostics use stable `code` and `message` fields; binary values remain `Uint8Array`
+    - expected parse/conversion/capability failures return results rather than throwing
+  - Record the initial API inventory by responsibility, not by current filename:
+    - `score`: new/load/save, summarize, inspect measure, validate/apply command, diff
+    - `convert`: MusicXML, MXL, ABC, MIDI, MEI, LilyPond, MuseScore/MSCZ, and capability-gated VSQX
+    - `output`: value-only text/byte encoders and archive assembly
+    - `playback`: playback-plan generation only; no Web Audio controller
+    - `render`: capability-gated SVG rendering; no preview DOM or click-map wiring
+  - Gate P1 passed: the contract document makes the API inventory, result schema, capability-unavailable behavior, and compatibility/version rules reviewable without reading implementation code.
+
+- [x] Phase 2: implement the runtime facade and make the CLI consume it.
+  - Added `src/ts/runtime-api.ts` as the single browser-runtime entry surface, with the P1 export snapshot and version/capability initialization rules.
+  - Extracted reusable state/command operations from `cli-api.ts` into `src/ts/musicxml-state.ts`; runtime operations are value based and retain non-destructive command rejection.
+  - Bound the existing load, output, playback, Verovio, and VSQX value functions through the facade without duplicating their format conversion logic.
+  - Kept Web-only adapters (`main.ts`, `*-flow.ts`, `abc-browser-compat.ts`, `midi-writer-browser.ts`, `verovio-out.ts`, `vsqx-io.ts`) out of the runtime entry graph. `verovio-out.ts` now provides only the CLI/browser adapter that creates and initializes an explicit runtime capability.
+  - Reduced `cli-api.ts` to CLI path/extension interpretation, selector aliases, CLI diagnostic wording, the Verovio capability adapter, and delegation to the runtime facade.
+  - Added direct contract coverage for the export snapshot, version mismatch, value conversion, `Uint8Array` preservation, non-destructive rejection, unavailable capability diagnostics, and an injected renderer capability.
+  - Gate P2 passed: `npm run typecheck`, direct runtime/CLI unit tests, the 28-case CLI command suite, `npm run build:cli-runtime`, and `npm run smoke:bundle` pass through the facade.
+
+- [x] Phase 3: build and statically police the standalone browser runtime.
+  - Added `scripts/lib/runtime-module-paths.mjs` with an exact reviewed upstream allowlist and Web/CLI denylist.
+  - Added `scripts/build-browser-runtime.mjs` using `src/ts/runtime-api.ts` and an ESM browser target; it emits the ignored build artifact `bundle/miku-score-runtime.mjs` independently of the tracked CLI bundle.
+  - The builder rejects Node.js, `jsdom`, CLI, source-tree-relative import, network-dependency, and unexpected graph references. Package-version injection replaces the runtime source placeholder at build time.
+  - The esbuild metafile must exactly match the allowlist, so any dependency change becomes an explicit ownership review; the final artifact also receives textual boundary checks.
+  - Added `scripts/smoke-browser-runtime.mjs`, exposed through `npm run smoke:browser-runtime`. It dynamically imports the artifact, verifies public exports/version mismatch/module inventory, runs score/state/ABC/MIDI/playback operations, verifies `Uint8Array` output and non-destructive command rejection, and tests unavailable Verovio/VSQX capabilities. Unit coverage supplies an injected renderer capability.
+  - Added `build:browser-runtime` and `smoke:browser-runtime` scripts; `build:dist` now builds the runtime with the existing HTML and CLI artifacts.
+  - Gate P3 passed: isolated runtime build/smoke and `npm run build:full` pass without importing current Web assets or the CLI bundle.
+
+- [x] Phase 4: create version/digest metadata and Release staging.
+  - Added `scripts/create-browser-runtime-manifest.mjs` and `scripts/verify-browser-runtime-manifest.mjs` following the `miku-project` lock shape.
+  - The schema is `miku-score.browser-runtime-lock/v1` with `release_tag`, `package_version`, `asset_name`, and lowercase SHA-256.
+  - The JSON manifest is a first-class Release asset, superseding the older Issue #201 local-only wording.
+  - Extended `prepare:release-assets` to stage the CLI bundle, browser runtime, runtime manifest, source archive, and deterministic SHA-256 list. Added `verify:release-assets` to verify all five assets and the runtime export version locally.
+  - Added tests for release-tag, package-version, asset-name, and runtime-tampering rejection before any Release workflow modification.
+  - Gate P4 passed: `TAG_NAME=v0.7.0 npm run prepare:release-assets` and `npm run verify:release-assets -- --release-tag v0.7.0` reproduce and verify all five ignored local staging assets without publishing a Release.
+
+- [ ] Phase 5: bootstrap `miku-score-web` from the verified runtime.
+  - Add a repository-local `runtime/miku-score-runtime.lock.json`; do not commit the downloaded runtime itself.
+  - Implement cache/local-file/Release fetch paths that all enforce lock schema, version export, asset name, and SHA-256.
+  - Embed the verified runtime before Web-owned modules in one inline module; the deployed application must not fetch runtime code at browser startup.
+  - Move browser UI, CSS, `lht-cmn`, samples, screenshots, download/file adapters, preview/click mapping, and Web tests in behavior-preserving slices.
+  - Gate P5: the downstream repository independently builds and tests representative input, edit/state, preview, playback, and download flows using only the pinned runtime plus Web-owned sources.
+  - [x] Initial downstream bootstrap (2026-08-10): created the pinned `v0.7.0` runtime lock, SHA-256 verified cache/Release fetch script, runtime-first single-file builder, and offline asset smoke in `miku-score-web`.
+    - Before the first public Release exists, `miku-score-web` accepts an explicit local runtime file for development; verified the P4 staging asset through that path without committing it downstream.
+    - The initial standalone shell exercises ABC import, new-score creation, raw MIDI download, and playback-plan generation. Full preview/Verovio, bounded editing, format UI, samples, styles, and parity/browser tests remain P5 migration slices; do not call the P5 gate complete yet.
+
+- [ ] Phase 6: prove offline behavior and cut over ownership.
+  - Add an offline single-file smoke that rejects request-generating runtime/script/stylesheet/media references and verifies runtime provenance.
+  - Compare representative generated output and diagnostics between the historical combined Web App and `miku-score-web`; document intentional differences.
+  - Only after downstream evidence passes, remove confirmed Web-owned paths and Web-only tests from `miku-score`.
+  - Update README, development/release docs, GitHub About/Pages/Release ownership, and remaining Web backlog references.
+  - Gate P6: both repositories build independently, the downstream offline smoke passes, and the Main Application still passes runtime, CLI, core/format, and Release-staging verification after Web deletion.
+
+- Rollback rule:
+  - Until P4 succeeds, keep the current combined Web App buildable and do not publish the browser runtime as a stable downstream contract.
+  - Until P5 succeeds, do not remove the current combined Web surface from `miku-score`.
+  - Never overwrite a published runtime asset in place. A contract change after publication requires a new version and an explicit migration note.
+
+- [ ] Establish the `miku-score` Main Application / `miku-score-web` ownership boundary.
+  - Research finding: `miku-project` now keeps its domain core, CLI, versioned browser runtime, runtime Release assets, and core/CLI tests in the Main Application. `miku-project-web` pins and verifies a released runtime, then owns its single-file HTML, browser adapter, UI, CSS, `lht-cmn`, browser/UI tests, screenshots, and Web publication.
+  - Keep the same direction for `miku-score`: canonical MusicXML semantics, format conversion, diagnostics, bounded editing, CLI, reusable runtime, and domain tests remain in the Main Application. Browser file/input handling, UI state and DOM wiring, preview presentation, download interaction, CSS, `lht-cmn`, screenshots, single-file HTML generation, and Web publication belong in `miku-score-web`.
+  - Write a path-level inventory before moving files. `src/ts/main.ts` is currently a large mixed UI entrypoint; do not classify files solely by their current directory or filename.
+
+- [ ] Harden the TypeScript function boundaries before the repository split.
+  - Research checkpoint (2026-08-10): most format and MusicXML modules are already reusable, but several browser-facing flow modules combine reusable product decisions with `File`, `Blob`, `document`, `window`, `localStorage`, Web Audio, or browser-global vendor access. A repository move before these functions are separated would either duplicate product logic in `miku-score-web` or accidentally pull Web behavior into the Main Application runtime.
+  - Use an explicit ownership manifest, analogous to the `miku-project` core/Web module lists, so the browser-runtime build rejects Web modules and Web entrypoints reject source-tree imports that bypass the public runtime.
+  - Treat the following classification as provisional until focused tests prove each extraction:
+
+    | Boundary | Current modules | Target and required work |
+    | --- | --- | --- |
+    | Main Application, low boundary risk | `core/`, `src/ts/score-features/`, `new-score.ts`, `musicxml-output.ts`, `render-document.ts`, `measure-operations.ts`, `load-input.ts`, `output-encoding.ts`, `playback-model.ts`, `verovio-render.ts`, `vsqx-conversion.ts`, `abc-lexer.ts`, `abc-parser.ts`, `abc-layout.ts`, `beam-common.ts`, `midi-musescore-io.ts`, `mxl-io.ts`, `zip-io.ts` | Keep upstream. These are domain, parsing, model, bounded editing, value-based input/output conversion, render/playback preparation, or archive functions and have no page wiring. Preserve their focused tests as Main Application tests. |
+    | Main Application, large but conceptually reusable | `abc-io.ts`, `midi-io.ts`, `mei-io.ts`, `lilypond-io.ts`, `musescore-io.ts`, `musicxml-io.ts` | Keep upstream. Remove the legacy `window.AbcCommon` / `window.AbcCompatParser` registration from the core module path or isolate it in a compatibility bootstrap. Record the DOM implementation required by MusicXML helpers without treating DOM use as UI ownership. Keep MIDI writer selection explicit through the runtime options. |
+    | Web App or runtime adapter after extraction | `main.ts`, `load-flow.ts`, `download-flow.ts`, `playback-flow.ts`, `preview-flow.ts`, `abc-browser-compat.ts`, `verovio-out.ts`, `midi-writer-browser.ts`, `vsqx-io.ts`, built-in `sampleXml*.ts` modules when samples remain UI-only | Move DOM lookup, event wiring, `File` / `FileReader`, `Blob`, browser download delivery, `AudioContext`, browser-global ABC/Verovio/MIDI-writer/VSQX publication or discovery, `localStorage`, tab/form state, rendered-SVG click mapping, UI messages, and sample-button behavior downstream or into a capability adapter that is excluded from the pure runtime surface. |
+    | Mixed, must split first | `cli-api.ts` | Introduce a stable runtime facade and leave only CLI policy in this file. Do not assign the file wholesale based on its present name. |
+
+  - [x] Extract product operations currently trapped in `src/ts/main.ts`.
+    - [x] Move metadata filtering and imported-diagnostic summarization behind upstream functions that accept values rather than reading checkboxes or page state.
+      - Added `src/ts/musicxml-output.ts`; UI code now supplies explicit keep/remove settings.
+      - Preserved exact no-op output when all metadata families are retained, selective `mks:meta:*` / `mks:src:*` / `mks:dbg:*` removal, empty-container pruning, and the existing ABC warning summary.
+    - [x] Split new-score generation into a pure `options -> MusicXML` operation and a Web function that reads the form controls.
+      - Added `src/ts/new-score.ts` with bounded options and no page-state dependency.
+      - Added characterization coverage for the existing multi-part and piano grand-staff output shapes.
+      - Kept the current eight-measure, `divisions=480`, MusicXML `3.1` behavior while removing the new-score path's dependency on ABC I/O.
+    - [x] Move render-document preparation, including global tempo-direction deduplication, into the upstream render path; keep SVG DOM click mapping in the Web App.
+      - Added `src/ts/render-document.ts` with explicit MusicXML text, node IDs, and ID-prefix inputs instead of page-state access.
+      - Preserved the existing multi-part tempo-direction key and first-occurrence policy, including offset-sensitive matching and the single-part no-op behavior.
+      - Kept rendered-SVG inspection, fallback click-map construction, highlighting, and DOM updates in the Web flow.
+    - [x] Move measure extraction, replacement, and append-at-end MusicXML operations upstream; keep selection, confirmation, tab switching, and UI diagnostics downstream.
+      - Added `src/ts/measure-operations.ts` with explicit MusicXML text and measure-location inputs.
+      - Preserved inherited editor attributes without persisting preview-only attributes, full-measure rest duration, numeric/fallback measure numbering, and treble-bass grand-staff lane construction.
+    - [x] Add focused characterization tests for each extracted `main.ts` product operation before continuing into mixed flow modules.
+      - Covered render preparation, editor extraction/replacement, and single-/grand-staff append behavior at the upstream function boundary.
+
+  - [x] Split `src/ts/load-flow.ts` into input decoding/conversion and browser file handling.
+    - Main Application side: accept a declared format plus `string` or `Uint8Array`, perform archive decoding and format conversion, and return structured output/diagnostics.
+    - Web side: read `File`, handle `FileReader` fallback, choose the selected source mode, and update fields/tabs after a successful result.
+    - Reuse the same upstream decode/import operation from CLI and Web where their format behavior is intended to match; keep CLI path/stdio policy and Web form policy in their adapters.
+    - Added `src/ts/load-input.ts` as the value-based Main Application boundary for MusicXML/MXL, ABC, MIDI, VSQX, MEI, LilyPond, and MuseScore/MSCZ input.
+    - Kept filename-extension selection, `File` / `FileReader`, missing-file messages, and form-field result mapping in `src/ts/load-flow.ts`.
+    - Preserved the MSCZ-first MSCX lookup and MusicXML archive fallback while exposing converter diagnostics and warnings structurally.
+    - Added direct upstream tests for text, binary, archive, structured-diagnostic, and payload-kind behavior, plus Web-adapter direct-input and extension-policy coverage.
+
+  - [x] Split `src/ts/download-flow.ts` into output encoding and browser download delivery.
+    - Main Application side: produce text or `Uint8Array` for MusicXML/MXL, MIDI, VSQX, ABC, MEI, LilyPond, MuseScore/MSCZ, SVG, and ZIP bundle operations, with structured diagnostics.
+    - Web side: choose timestamped filenames and MIME types, wrap results in `Blob`, call `URL.createObjectURL`, create/click the anchor, and revoke the URL.
+    - Consolidate the duplicated MIDI export assembly now present in `download-flow.ts` and `cli-api.ts` before exposing a browser runtime API.
+    - Added `src/ts/output-encoding.ts` as the value-based Main Application boundary for plain and compressed score outputs, MIDI, text formats, SVG/JSON, and ZIP bundles.
+    - Reduced `src/ts/download-flow.ts` to timestamped filename/MIME policy, `Blob` wrapping, archive-entry Blob reads, and browser delivery.
+    - Reused the same MIDI assembly from `cli-api.ts`, with an explicit raw-writer override preserving the existing CLI policy.
+    - Preserved the existing nullable conversion-failure contract for Web callers; convert this to stable structured runtime diagnostics when the runtime facade is introduced.
+    - Added direct encoder tests proving text/byte output and ZIP/MXL/MSCZ behavior without `Blob` or browser download APIs.
+
+  - [x] Split `src/ts/playback-flow.ts` into a playback model and Web Audio controller.
+    - Main Application side: keep event extraction, schedule compaction, measure timeline calculation, start-tick trimming, and other deterministic score-to-playback calculations.
+    - Web side: keep `AudioContext` / `webkitAudioContext`, oscillator scheduling, user-gesture unlock, timers, playback UI text, active-measure highlighting, and render callbacks.
+    - Keep `src/ts/playback.ts` as an upstream compatibility facade only if a real consumer still needs it after the new runtime API is defined.
+    - Added `src/ts/playback-model.ts` with typed playback-plan results, value schedules, dense-schedule compaction, pickup-aware measure timelines, selected-measure trimming, tempo/pedal mapping, and optional MIDI byte validation.
+    - Reduced `src/ts/playback-flow.ts` to save/UI orchestration and the Web Audio controller; it now consumes a complete playback plan instead of parsing or transforming MusicXML itself.
+    - Removed the playback-start dependency on the browser-global MIDI writer by using the built-in raw MIDI writer for model-side byte validation.
+    - Added focused model tests for ordinary scheduling, selected-measure starts, MIDI-like tempo output, raw MIDI validation, and stable invalid/silent-input failures; retained Web Audio and controller regression coverage separately.
+
+  - [x] Replace implicit browser globals in renderer and format adapters with explicit runtime capabilities.
+    - [x] `verovio-out.ts`: separate render-document sanitization from Verovio toolkit discovery, timer waiting, and toolkit caching. Inject a renderer/toolkit capability so the same public render operation works in the browser runtime and the Node.js CLI loader.
+      - Added `src/ts/verovio-render.ts` with cloned-document slur sanitization and explicit toolkit/serializer inputs.
+      - Reduced `src/ts/verovio-out.ts` to browser-global runtime discovery, initialization waiting, toolkit caching, and XML serializer adaptation.
+      - Added direct tests proving source-document preservation, deterministic slur repair, injected toolkit calls, and stable toolkit failure handling; retained preview and CLI regression coverage.
+    - [x] `midi-io.ts`: prefer the built-in raw writer for the stable upstream runtime path where behavior permits it, or inject the `MidiWriter` capability explicitly. Do not make core export behavior depend silently on `window.MidiWriter`.
+      - Removed browser-global discovery from `src/ts/midi-io.ts`; non-raw export now receives an explicit typed `MidiWriterRuntime` capability.
+      - Added `src/ts/midi-writer-browser.ts` as the thin `window.MidiWriter` adapter and wired only the Web download flow to it.
+      - Kept CLI and playback-model validation on the built-in raw writer, and updated parity/roundtrip tests to pass the loaded vendor runtime explicitly.
+      - Verified the focused MIDI, golden roundtrip, CFFP, output-encoding, and Web download suites together (185 tests).
+    - [x] `vsqx-io.ts`: keep diagnostic mapping and conversion result policy upstream, but inject the bridge capability. Keep browser-global bridge discovery in a thin Web compatibility adapter until a non-browser upstream bridge exists.
+      - Added `src/ts/vsqx-conversion.ts` with an explicit `VsqxConversionBridge` and value-based import/export functions.
+      - Reduced `src/ts/vsqx-io.ts` to browser-global bridge discovery, normalization-hook installation, and compatibility wrappers.
+      - Added direct capability-injection tests while retaining the existing browser-global diagnostic regression suite.
+    - [x] `abc-io.ts`: keep parsing and conversion upstream; move compatibility-global publication out of the conversion module.
+      - Removed automatic `window.AbcCommon` and `window.AbcCompatParser` writes from `src/ts/abc-io.ts`.
+      - Added `src/ts/abc-browser-compat.ts` with explicit target/window installers, invoked only by the current Web entrypoint.
+      - Added adapter tests proving that publishing to a supplied target does not mutate `window`, while the explicit window installer preserves the legacy names.
+
+  - [ ] Separate the product runtime facade from CLI policy.
+    - Execute Browser Runtime WBS Phases 1-2 and keep Issue #201 as the external tracker.
+    - Introduce a runtime-facing facade with stable structured diagnostics and `string` / `Uint8Array` results for conversion, state, archive, and optional render capabilities.
+    - Keep `cli-api.ts` responsible only for CLI-specific file-extension interpretation, selector aliases if they remain CLI-only, error text/exit behavior, and delegation to the shared runtime facade.
+    - Preserve the existing CLI command and bundle behavior with regression tests while Web switches from direct source imports to the released runtime.
+
+- [ ] Decide and document the browser-runtime contract before moving Web code.
+  - Execute Browser Runtime WBS Phase 1.
+  - Publish a browser-specific runtime separately from the Node.js CLI bundle, following the shape `miku-score-runtime-<release-version>.mjs` alongside `miku-score-<release-version>.mjs`.
+  - Define the public module exports, initialization behavior, version compatibility check, stable API name, diagnostics/result shapes, and whether an intentional browser global is needed for legacy bootstrap.
+  - Start the API inventory from the existing reusable conversion/state functions in `src/ts/cli-api.ts`, but do not expose that file unchanged merely because it is named `cli-api`.
+  - Keep the runtime free of DOM event wiring, file-picker behavior, download triggering, and page initialization. It must load in a browser without Node.js or CLI references.
+  - Decide the ownership and injection/loading contract for `src/js/verovio.js`, `src/js/midi-writer.js`, and `src/vendor/utaformatix3/utaformatix3-ts-plus.mikuscore.iife.js` before moving any of them. They are not ordinary UI-only files: SVG rendering, MIDI export, VSQX conversion, and the current CLI runtime each depend on parts of this surface.
+  - Preserve the current VSQX constraint: its bridge is browser-global. The separation must not claim that VSQX becomes available to the CLI without a separate non-browser bridge contract.
+
+- [ ] Add Main Application runtime build, contract tests, and Release metadata.
+  - Execute Browser Runtime WBS Phases 3-4.
+  - Implement a dedicated browser-runtime build and smoke test, separate from the existing `build:cli-runtime` path.
+  - Verify the runtime public exports, version check, representative MusicXML conversion/state operations, and the absence of Node.js, CLI entrypoint, and Web-surface modules.
+  - Generate a machine-readable runtime manifest that binds release tag, package version, asset name, and SHA-256. Release assets should include the CLI bundle, browser runtime, runtime manifest, source archive, and checksums.
+  - Keep current CLI behavior and the tracked `bundle/miku-score.mjs` contract intact throughout this stage.
+
+- [ ] Bootstrap `miku-score-web` as a standalone downstream repository.
+  - Execute Browser Runtime WBS Phase 5 only after gate P4 succeeds.
+  - [x] Create the separate Web repository before moving Main Application paths.
+    - Confirmed the sibling repository at `../miku-score-web` on 2026-08-10.
+    - Confirmed `https://github.com/igapyon/miku-score-web` as `origin`, with the same `main` / `devel` and work-branch model used by `miku-project-web`.
+    - The initial repository currently contains only `LICENSE`; runtime intake and Web application files remain to be bootstrapped.
+  - Pin the Main Application runtime with a repository-local lock containing the release tag, version, asset name, and SHA-256.
+  - Fetch and validate the pinned runtime at build time only; cache it locally for development, but embed the validated runtime in the generated single-file Web App.
+  - Initialize the verified runtime before starting UI modules. The deployed Web App must not download a runtime or other required asset while running in the browser.
+  - Create the repository independently first; do not delete or move Main Application Web paths until its build, tests, and offline smoke are reproducible.
+
+- [ ] Move Web-owned assets in a staged, test-preserving migration.
+  - Execute Browser Runtime WBS Phases 5-6; upstream deletion belongs only to Phase 6.
+  - Candidate Web paths include `miku-score-src.html`, `index-src.html`, generated HTML outputs, `src/css/`, `lht-cmn/`, `src/ts/main.ts`, browser UI helpers, Web-specific tests, screenshots, and the single-file build/release workflow.
+  - Split mixed helpers where required: for example, retain reusable conversion/ZIP logic in the Main Application while placing browser download triggering, page wiring, and UI state in the Web App.
+  - Transfer or rewrite tests by responsibility: retain core/format/CLI/runtime-contract assertions upstream; put DOM wiring, browser input/download, preview presentation, single-file composition, and offline Web behavior downstream.
+
+- [ ] Require cutover evidence before removing the historical combined Web surface from `miku-score`.
+  - `miku-score-web` independently builds from its pinned runtime and rejects a SHA-256 mismatch.
+  - Its tests prove runtime-first bootstrap and the representative input, score/preview, edit, and output/download flows.
+  - An offline smoke proves that the generated single-file Web App makes no runtime network request.
+  - After the Web evidence is complete, remove only confirmed Web-owned paths from `miku-score`; then rerun Main Application browser-runtime, CLI bundle, core/format, and relevant full tests.
+  - Update README, build/release documentation, publication workflows, and related-project references so the Web App's canonical repository and artifact ownership are unambiguous.
 
 ## Maintenance Record
 
@@ -355,7 +590,7 @@
 
 ## Facade
 
-- [x] Keep the non-UI CLI facade small and format-oriented.
+- [x] Establish the interim non-UI CLI facade and its format/state regression coverage.
   - Current facade functions include:
     - `importAbcToMusicXml(...)`
     - `exportMusicXmlToAbc(...)`
@@ -369,8 +604,11 @@
     - `exportMusicXmlToLilyPond(...)`
     - `renderMusicXmlToSvg(...)`
   - Result:
-    - keep `src/ts/cli-api.ts` as a small non-UI facade over format-oriented reusable modules
+    - treat `src/ts/cli-api.ts` as the current compatibility surface, not the browser runtime contract
     - keep command routing, file I/O, and CLI diagnostics in `scripts/miku-score-cli.mjs`
+
+- [ ] Move reusable product operations from the interim CLI facade to `runtime-api.ts`.
+  - Follow Browser Runtime WBS Phase 2 and keep existing CLI wording and exit behavior stable through delegation.
 
 - [ ] Re-evaluate `core/` boundaries only if reuse pressure becomes real.
   - Do not move conversion facade code into `core/` without a concrete need.
@@ -386,13 +624,13 @@
 - [ ] Shorten and stabilize `npm run build:full`.
   - Current observation:
     - `typecheck` and `build:dist` are relatively small, but `test:build:full` dominates total time
-    - `tests/unit/playback-flow.spec.ts` currently shows a 5-second timeout failure in the full path
+    - the 2026-08-10 separation checkpoint completed `test:build:full` with 45 files / 823 tests; `tests/unit/playback-flow.spec.ts` completed in about 0.65 seconds, so the earlier 5-second timeout is not currently reproducible
     - heavy suites currently include `playback-flow`, `lilypond-io`, and `midi-roundtrip-golden`
     - `npm run test:all` also exposed a timeout in a heavy `musescore-io` roundtrip case under full-suite load
   - Next work:
     - profile `test:build:full` more deliberately and identify the longest suites/tests
     - decide whether more suites should move between `test:build`, `test:slow`, and `test:build:full`
-    - investigate whether the `playback-flow` timeout is an actual regression, a flaky test, or a timeout-budget issue
+    - continue monitoring the earlier `playback-flow` timeout rather than treating it as a current regression
     - consider Vitest worker/timeout settings only after the heavy-suite split is reasonably settled
 
 - [ ] Re-evaluate heavy `musescore-io` roundtrip tests for full-suite runtime stability.

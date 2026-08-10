@@ -2170,17 +2170,6 @@ export const AbcCommon = {
   fifthsFromAbcKey,
 };
 
-declare global {
-  interface Window {
-    AbcCommon?: typeof AbcCommon;
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.AbcCommon = AbcCommon;
-}
-
-
 const abcCommon = AbcCommon;
 
 const TRILL_DECORATIONS = new Set(["trill", "tr", "triller"]);
@@ -4175,16 +4164,6 @@ const THUMB_POSITION_DECORATIONS = new Set(["thumb", "thumbposition", "thumb-pos
 export const AbcCompatParser = {
   parseForMusicXml
 };
-
-declare global {
-  interface Window {
-    AbcCompatParser?: typeof AbcCompatParser;
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.AbcCompatParser = AbcCompatParser;
-}
 
 const abcClefFromMusicXmlClef = (clef: Element | null): string => {
   if (!clef) return "";

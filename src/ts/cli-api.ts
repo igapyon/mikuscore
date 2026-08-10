@@ -3,23 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
-import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
-import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
 import {
-  buildMidiBytesForPlayback,
-  buildPlaybackEventsFromMusicXmlDoc,
-  collectLeadingPickupTicksFromMusicXmlDoc,
-  collectMidiControlEventsFromMusicXmlDoc,
-  collectMidiKeySignatureEventsFromMusicXmlDoc,
-  collectMidiProgramOverridesFromMusicXmlDoc,
-  collectMidiTempoEventsFromMusicXmlDoc,
-  collectMidiTimeSignatureEventsFromMusicXmlDoc,
-  convertMidiToMusicXml,
-} from "./midi-io";
-import { normalizeImportedMusicXmlText, parseMusicXmlDocument } from "./musicxml-io";
-import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
-import { renderMusicXmlDomToSvg } from "./verovio-out";
+  createBrowserVerovioCapability,
+  initializeBrowserVerovioCapability,
+} from "./verovio-out";
 import {
   bytesToArrayBuffer,
   extractMusicXmlTextFromMxl,
@@ -28,9 +15,9 @@ import {
   makeMsczBytes,
   makeMxlBytes,
 } from "./zip-io";
-import { ScoreCore } from "../../core/ScoreCore";
 import type { CoreCommand } from "../../core/interfaces";
-import { getDurationValue, getVoiceText, parseXml as parseCoreXml, reindexNodeIds } from "../../core/xmlUtils";
+import { getVoiceText, parseXml as parseCoreXml, reindexNodeIds } from "../../core/xmlUtils";
+import { loadMikuScoreRuntime, type RuntimeResult } from "./runtime-api";
 
 export type CliResult =
   | {
@@ -75,6 +62,38 @@ const invalidMusicXmlResult = (): CliResult => {
 
 const caughtErrorMessage = (error: unknown): string => {
   return error instanceof Error ? error.message : String(error);
+};
+
+const cliVerovioCapability = createBrowserVerovioCapability();
+const runtime = loadMikuScoreRuntime({
+  capabilities: { verovio: cliVerovioCapability },
+});
+
+const cliResultFromRuntime = (result: RuntimeResult<string | Uint8Array>): CliResult => {
+  if (!result.ok) {
+    return {
+      ok: false,
+      warnings: result.warnings.map((item) => item.message),
+      diagnostics: result.diagnostics.map((item) => item.message),
+    };
+  }
+  return {
+    ok: true,
+    output: result.value,
+    warnings: result.warnings.map((item) => item.message),
+    diagnostics: [],
+  };
+};
+
+const cliMusicXmlExportResult = (result: RuntimeResult<string | Uint8Array>): CliResult => {
+  if (!result.ok && result.diagnostics.some((item) => item.code === "MKS_MUSICXML_INVALID")) {
+    return invalidMusicXmlResult();
+  }
+  return cliResultFromRuntime(result);
+};
+
+const jsonTextResult = (value: unknown): CliResult => {
+  return textResult(`${JSON.stringify(value, null, 2)}\n`);
 };
 
 const decodeUtf8Text = (bytes: Uint8Array): string => {
@@ -321,30 +340,71 @@ export const encodeCliMuseScoreOutput = async (musescoreText: string, outputPath
   }
 };
 
-export const importAbcToMusicXml = (abcText: string): CliResult => {
-  try {
-    const xmlText = normalizeImportedMusicXmlText(convertAbcToMusicXml(abcText));
-    return textResult(xmlText);
-  } catch (error) {
-    return failureResult(`Failed to parse ABC: ${caughtErrorMessage(error)}`);
-  }
+export const importAbcToMusicXml = async (abcText: string): Promise<CliResult> => {
+  return cliResultFromRuntime(await runtime.convert.importToMusicXml({ format: "abc", data: abcText }));
 };
 
-export const exportMusicXmlToAbc = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    return textResult(exportMusicXmlDomToAbc(doc));
-  } catch (error) {
-    return failureResult(`Failed to export ABC: ${caughtErrorMessage(error)}`);
-  }
+export const exportMusicXmlToAbc = async (xmlText: string): Promise<CliResult> => {
+  return cliMusicXmlExportResult(await runtime.convert.exportFromMusicXml({ format: "abc", xml: xmlText }));
 };
 
-export const importMidiToMusicXml = (midiBytes: Uint8Array): CliResult => {
-  const result = convertMidiToMusicXml(midiBytes);
+export const importMidiToMusicXml = async (midiBytes: Uint8Array): Promise<CliResult> => {
+  return cliResultFromRuntime(await runtime.convert.importToMusicXml({ format: "midi", data: midiBytes }));
+};
+
+export const exportMusicXmlToMidi = async (xmlText: string): Promise<CliResult> => {
+  return cliMusicXmlExportResult(await runtime.convert.exportFromMusicXml({
+    format: "midi",
+    xml: xmlText,
+    options: { midi: { rawWriter: true } },
+  }));
+};
+
+export const importMuseScoreToMusicXml = async (musescoreText: string): Promise<CliResult> => {
+  return cliResultFromRuntime(await runtime.convert.importToMusicXml({ format: "musescore", data: musescoreText }));
+};
+
+export const importMeiToMusicXml = async (meiText: string): Promise<CliResult> => {
+  return cliResultFromRuntime(await runtime.convert.importToMusicXml({ format: "mei", data: meiText }));
+};
+
+export const exportMusicXmlToMei = async (xmlText: string): Promise<CliResult> => {
+  return cliMusicXmlExportResult(await runtime.convert.exportFromMusicXml({ format: "mei", xml: xmlText }));
+};
+
+export const importLilyPondToMusicXml = async (lilypondText: string): Promise<CliResult> => {
+  return cliResultFromRuntime(await runtime.convert.importToMusicXml({ format: "lilypond", data: lilypondText }));
+};
+
+export const exportMusicXmlToLilyPond = async (xmlText: string): Promise<CliResult> => {
+  return cliMusicXmlExportResult(await runtime.convert.exportFromMusicXml({ format: "lilypond", xml: xmlText }));
+};
+
+export const exportMusicXmlToMuseScore = async (xmlText: string): Promise<CliResult> => {
+  return cliMusicXmlExportResult(await runtime.convert.exportFromMusicXml({ format: "musescore", xml: xmlText }));
+};
+
+export const renderMusicXmlToSvg = async (xmlText: string): Promise<CliResult> => {
+  try {
+    await initializeBrowserVerovioCapability(cliVerovioCapability);
+  } catch (error) {
+    return failureResult(`Failed to render SVG: ${caughtErrorMessage(error)}`);
+  }
+  const result = runtime.render.renderSvg(xmlText, {
+    pageWidth: 20000,
+    pageHeight: 3000,
+    scale: 40,
+    breaks: "none",
+    mnumInterval: 1,
+    adjustPageHeight: 1,
+    footer: "none",
+    header: "none",
+  });
+  return cliMusicXmlExportResult(result);
+};
+
+export const summarizeMusicXmlState = (xmlText: string): CliResult => {
+  const result = runtime.state.summarize(xmlText);
   if (!result.ok) {
     return {
       ok: false,
@@ -352,217 +412,22 @@ export const importMidiToMusicXml = (midiBytes: Uint8Array): CliResult => {
       diagnostics: result.diagnostics.map((item) => item.message),
     };
   }
-  return {
-    ok: true,
-    output: normalizeImportedMusicXmlText(result.xml),
-    warnings: result.warnings.map((item) => item.message),
-    diagnostics: result.diagnostics.map((item) => item.message),
-  };
-};
-
-export const exportMusicXmlToMidi = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    const ticksPerQuarter = 480;
-    const parsedPlayback = buildPlaybackEventsFromMusicXmlDoc(doc, ticksPerQuarter, {
-      mode: "midi",
-    });
-    if (parsedPlayback.events.length === 0) {
-      return {
-        ok: false,
-        warnings: [],
-        diagnostics: ["Failed to export MIDI: no playable note events found."],
-      };
-    }
-    const midiBytes = buildMidiBytesForPlayback(
-      parsedPlayback.events,
-      parsedPlayback.tempo,
-      "electric_piano_2",
-      collectMidiProgramOverridesFromMusicXmlDoc(doc),
-      collectMidiControlEventsFromMusicXmlDoc(doc, ticksPerQuarter),
-      collectMidiTempoEventsFromMusicXmlDoc(doc, ticksPerQuarter),
-      collectMidiTimeSignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter),
-      collectMidiKeySignatureEventsFromMusicXmlDoc(doc, ticksPerQuarter),
-      {
-        embedMksSysEx: true,
-        emitMksTextMeta: true,
-        ticksPerQuarter,
-        rawWriter: true,
-        metadata: {
-          title:
-            doc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
-            doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
-            "",
-          movementTitle: doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ?? "",
-          composer:
-            doc.querySelector('score-partwise > identification > creator[type="composer"]')?.textContent?.trim() ??
-            doc.querySelector("score-partwise > identification > creator")?.textContent?.trim() ??
-            "",
-          pickupTicks: collectLeadingPickupTicksFromMusicXmlDoc(doc, ticksPerQuarter),
-        },
-      }
-    );
-    return bytesResult(midiBytes);
-  } catch (error) {
-    return failureResult(`Failed to export MIDI: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const importMuseScoreToMusicXml = (musescoreText: string): CliResult => {
-  try {
-    return textResult(normalizeImportedMusicXmlText(convertMuseScoreToMusicXml(musescoreText)));
-  } catch (error) {
-    return failureResult(`Failed to parse MuseScore: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const importMeiToMusicXml = (meiText: string): CliResult => {
-  try {
-    return textResult(normalizeImportedMusicXmlText(convertMeiToMusicXml(meiText)));
-  } catch (error) {
-    return failureResult(`Failed to parse MEI: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const exportMusicXmlToMei = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    return textResult(exportMusicXmlDomToMei(doc));
-  } catch (error) {
-    return failureResult(`Failed to export MEI: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const importLilyPondToMusicXml = (lilypondText: string): CliResult => {
-  try {
-    return textResult(normalizeImportedMusicXmlText(convertLilyPondToMusicXml(lilypondText)));
-  } catch (error) {
-    return failureResult(`Failed to parse LilyPond: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const exportMusicXmlToLilyPond = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    return textResult(exportMusicXmlDomToLilyPond(doc));
-  } catch (error) {
-    return failureResult(`Failed to export LilyPond: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const exportMusicXmlToMuseScore = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    return textResult(exportMusicXmlDomToMuseScore(doc));
-  } catch (error) {
-    return failureResult(`Failed to export MuseScore: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const renderMusicXmlToSvg = async (xmlText: string): Promise<CliResult> => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    const { svg } = await renderMusicXmlDomToSvg(doc, {
-      pageWidth: 20000,
-      pageHeight: 3000,
-      scale: 40,
-      breaks: "none",
-      mnumInterval: 1,
-      adjustPageHeight: 1,
-      footer: "none",
-      header: "none",
-    });
-    return textResult(svg);
-  } catch (error) {
-    return failureResult(`Failed to render SVG: ${caughtErrorMessage(error)}`);
-  }
-};
-
-export const summarizeMusicXmlState = (xmlText: string): CliResult => {
-  const doc = parseMusicXmlDocument(xmlText);
-  if (!doc) {
-    return invalidMusicXmlResult();
-  }
-
-  try {
-    const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
-    const measures = Array.from(doc.querySelectorAll("score-partwise > part > measure"));
-    const measureNumbers = Array.from(
-      new Set(
-        measures
-          .map((measure) => measure.getAttribute("number")?.trim() ?? "")
-          .filter((value) => value.length > 0)
-      )
-    );
-    const voices = Array.from(
-      new Set(
-        Array.from(doc.querySelectorAll("score-partwise > part > measure > note > voice"))
-          .map((voice) => voice.textContent?.trim() ?? "")
-          .filter((value) => value.length > 0)
-      )
-    );
-    const summary = {
-      kind: "musicxml_state_summary",
-      title:
-        doc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
-        doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
-        null,
-      part_count: parts.length,
-      measure_count: measures.length,
-      measure_numbers: measureNumbers,
-      voices,
-    };
-    return textResult(`${JSON.stringify(summary, null, 2)}\n`);
-  } catch (error) {
-    return failureResult(`Failed to summarize MusicXML state: ${caughtErrorMessage(error)}`);
-  }
+  return jsonTextResult(result.value);
 };
 
 export const validateMusicXmlCommand = (xmlText: string, command: CoreCommand): CliResult => {
   try {
     const normalized = normalizeCliCommandSelectors(xmlText, command);
     if (isCliCommandNormalizationFailure(normalized)) return failureResult(normalized.message);
-    const core = new ScoreCore();
-    core.load(xmlText);
-    const result = core.dispatch(normalized.command);
-    return {
-      ok: true,
-      output: `${JSON.stringify(
-        {
-          kind: "musicxml_command_validation",
-          ok: result.ok,
-          dirty_changed: result.dirtyChanged,
-          changed_node_ids: result.changedNodeIds,
-          affected_measure_numbers: result.affectedMeasureNumbers,
-          warnings: result.warnings,
-          diagnostics: result.diagnostics,
-        },
-        null,
-        2
-      )}\n`,
-      warnings: [],
-      diagnostics: [],
-    };
+    const result = runtime.state.validateCommand(xmlText, normalized.command);
+    if (!result.ok) {
+      return {
+        ok: false,
+        warnings: result.warnings.map((item) => item.message),
+        diagnostics: result.diagnostics.map((item) => item.message),
+      };
+    }
+    return jsonTextResult(result.value);
   } catch (error) {
     return failureResult(`Failed to validate MusicXML command: ${caughtErrorMessage(error)}`);
   }
@@ -572,42 +437,19 @@ export const applyMusicXmlCommand = (xmlText: string, command: CoreCommand): Cli
   try {
     const normalized = normalizeCliCommandSelectors(xmlText, command);
     if (isCliCommandNormalizationFailure(normalized)) return failureResult(normalized.message);
-    const core = new ScoreCore();
-    core.load(xmlText);
-    const result = core.dispatch(normalized.command);
+    const result = runtime.state.applyCommand(xmlText, normalized.command);
     if (!result.ok) {
       return {
-        ok: true,
-        output: `${JSON.stringify(
-          {
-            kind: "musicxml_command_apply",
-            ok: false,
-            changed_node_ids: result.changedNodeIds,
-            affected_measure_numbers: result.affectedMeasureNumbers,
-            warnings: result.warnings,
-            diagnostics: result.diagnostics,
-          },
-          null,
-          2
-        )}\n`,
-        warnings: [],
-        diagnostics: [],
-      };
-    }
-
-    const saved = core.save();
-    if (!saved.ok) {
-      return {
         ok: false,
-        warnings: [],
-        diagnostics: saved.diagnostics.map((item) => item.message),
+        warnings: result.warnings.map((item) => item.message),
+        diagnostics: result.diagnostics.map((item) => item.message),
       };
     }
-
+    if (!result.value.ok) return jsonTextResult(result.value);
     return {
       ok: true,
-      output: saved.xml,
-      warnings: result.warnings.map((item) => item.message),
+      output: result.value.xml,
+      warnings: result.value.warnings.map((item) => item.message),
       diagnostics: [],
     };
   } catch (error) {
@@ -616,169 +458,27 @@ export const applyMusicXmlCommand = (xmlText: string, command: CoreCommand): Cli
 };
 
 export const inspectMusicXmlMeasure = (xmlText: string, measureNumber: string): CliResult => {
-  try {
-    const indexedNotes = buildIndexedMeasureNotes(xmlText);
-    const doc = parseCoreXml(xmlText);
-    const matchingMeasures = Array.from(doc.querySelectorAll("score-partwise > part > measure"))
-      .filter((measure) => (measure.getAttribute("number")?.trim() ?? "") === measureNumber);
-
-    const summary = {
-      kind: "musicxml_measure_inspection",
-      measure_number: measureNumber,
-      measures: matchingMeasures.map((measure) => {
-        const part = measure.parentElement;
-        const partId = part?.getAttribute("id")?.trim() ?? null;
-        const notes = Array.from(measure.querySelectorAll(":scope > note")).map((note, noteIndex) => {
-          const indexed = indexedNotes.find((item) =>
-            item.selector.part_id === partId &&
-            item.selector.measure_number === measureNumber &&
-            item.selector.measure_note_index === noteIndex + 1
-          );
-          const voice = getVoiceText(note);
-          const step = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? null;
-          const octaveText = note.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? null;
-          const alterText = note.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? null;
-          const alter = alterText === null ? null : Number(alterText);
-          return {
-            node_id: indexed?.nodeId ?? null,
-            selector: indexed?.selector ?? {
-              part_id: partId,
-              measure_number: measureNumber,
-              measure_note_index: noteIndex + 1,
-              voice,
-              voice_note_index: null,
-            },
-            voice,
-            duration: getDurationValue(note),
-            is_rest: note.querySelector(":scope > rest") !== null,
-            pitch: step && octaveText
-              ? {
-                step,
-                alter: Number.isFinite(alter) ? alter : null,
-                octave: Number(octaveText),
-              }
-              : null,
-          };
-        });
-        return {
-          part_id: partId,
-          note_count: notes.length,
-          notes,
-        };
-      }),
-    };
-
-    return textResult(`${JSON.stringify(summary, null, 2)}\n`);
-  } catch (error) {
-    return failureResult(`Failed to inspect MusicXML measure: ${caughtErrorMessage(error)}`);
-  }
-};
-
-const buildMusicXmlStateSummaryObject = (doc: Document) => {
-  const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
-  const measures = Array.from(doc.querySelectorAll("score-partwise > part > measure"));
-  const notes = Array.from(doc.querySelectorAll("score-partwise > part > measure > note"));
-  return {
-    title:
-      doc.querySelector("score-partwise > work > work-title")?.textContent?.trim() ??
-      doc.querySelector("score-partwise > movement-title")?.textContent?.trim() ??
-      null,
-    part_count: parts.length,
-    measure_count: measures.length,
-    note_count: notes.length,
-    measure_numbers: Array.from(
-      new Set(
-        measures
-          .map((measure) => measure.getAttribute("number")?.trim() ?? "")
-          .filter((value) => value.length > 0)
-      )
-    ),
-  };
-};
-
-const buildMeasureDiffSignatures = (doc: Document) => {
-  return Array.from(doc.querySelectorAll("score-partwise > part > measure")).map((measure) => {
-    const partId = measure.parentElement?.getAttribute("id")?.trim() ?? null;
-    const measureNumber = measure.getAttribute("number")?.trim() ?? "";
-    const noteSummary = Array.from(measure.querySelectorAll(":scope > note")).map((note) => {
-      const voice = getVoiceText(note);
-      const duration = getDurationValue(note);
-      const isRest = note.querySelector(":scope > rest") !== null;
-      const step = note.querySelector(":scope > pitch > step")?.textContent?.trim() ?? null;
-      const octave = note.querySelector(":scope > pitch > octave")?.textContent?.trim() ?? null;
-      const alter = note.querySelector(":scope > pitch > alter")?.textContent?.trim() ?? null;
-      return {
-        voice,
-        duration,
-        is_rest: isRest,
-        pitch: isRest || !step || !octave
-          ? null
-          : {
-            step,
-            alter: alter == null ? null : Number(alter),
-            octave: Number(octave),
-          },
-      };
-    });
+  const result = runtime.state.inspectMeasure(xmlText, measureNumber);
+  if (!result.ok) {
     return {
-      part_id: partId,
-      measure_number: measureNumber,
-      note_count: noteSummary.length,
-      signature: JSON.stringify(noteSummary),
+      ok: false,
+      warnings: result.warnings.map((item) => item.message),
+      diagnostics: result.diagnostics.map((item) => item.message),
     };
-  });
+  }
+  return jsonTextResult(result.value);
 };
 
 export const diffMusicXmlState = (beforeXml: string, afterXml: string): CliResult => {
-  try {
-    const beforeDoc = parseCoreXml(beforeXml);
-    const afterDoc = parseCoreXml(afterXml);
-    const beforeSummary = buildMusicXmlStateSummaryObject(beforeDoc);
-    const afterSummary = buildMusicXmlStateSummaryObject(afterDoc);
-    const beforeMeasures = buildMeasureDiffSignatures(beforeDoc);
-    const afterMeasures = buildMeasureDiffSignatures(afterDoc);
-
-    const changedFields = Object.keys(beforeSummary).filter((key) => {
-      return JSON.stringify(beforeSummary[key as keyof typeof beforeSummary]) !==
-        JSON.stringify(afterSummary[key as keyof typeof afterSummary]);
-    });
-
-    const beforeMeasureMap = new Map(beforeMeasures.map((item) => [`${item.part_id ?? ""}:${item.measure_number}`, item]));
-    const afterMeasureMap = new Map(afterMeasures.map((item) => [`${item.part_id ?? ""}:${item.measure_number}`, item]));
-    const changedMeasureKeys = Array.from(new Set([...beforeMeasureMap.keys(), ...afterMeasureMap.keys()])).filter((key) => {
-      const beforeItem = beforeMeasureMap.get(key);
-      const afterItem = afterMeasureMap.get(key);
-      if (!beforeItem || !afterItem) return true;
-      return beforeItem.signature !== afterItem.signature;
-    });
-
-    const diff = {
-      kind: "musicxml_state_diff",
-      changed: changedFields.length > 0 || changedMeasureKeys.length > 0,
-      changed_fields: changedFields,
-      changed_measure_numbers: changedMeasureKeys
-        .map((key) => afterMeasureMap.get(key) ?? beforeMeasureMap.get(key))
-        .filter((item): item is NonNullable<typeof item> => item != null)
-        .map((item) => item.measure_number),
-      changed_measures: changedMeasureKeys
-        .map((key) => {
-          const beforeItem = beforeMeasureMap.get(key);
-          const afterItem = afterMeasureMap.get(key);
-          return {
-            part_id: afterItem?.part_id ?? beforeItem?.part_id ?? null,
-            measure_number: afterItem?.measure_number ?? beforeItem?.measure_number ?? "",
-            before_note_count: beforeItem?.note_count ?? 0,
-            after_note_count: afterItem?.note_count ?? 0,
-          };
-        }),
-      before: beforeSummary,
-      after: afterSummary,
+  const result = runtime.state.diff(beforeXml, afterXml);
+  if (!result.ok) {
+    return {
+      ok: false,
+      warnings: result.warnings.map((item) => item.message),
+      diagnostics: result.diagnostics.map((item) => item.message),
     };
-
-    return textResult(`${JSON.stringify(diff, null, 2)}\n`);
-  } catch (error) {
-    return failureResult(`Failed to diff MusicXML state: ${caughtErrorMessage(error)}`);
   }
+  return jsonTextResult(result.value);
 };
 
 export const cliApi = {

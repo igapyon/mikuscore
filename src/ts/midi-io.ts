@@ -178,7 +178,7 @@ type MidiWriterNoteEventFields = {
   channel?: number;
 };
 
-type MidiWriterRuntime = {
+export type MidiWriterRuntime = {
   Track: new () => MidiWriterTrackApi;
   NoteEvent: new (fields: MidiWriterNoteEventFields) => unknown;
   ProgramChangeEvent: new (fields: { instrument: number; channel?: number; delta?: number }) => unknown;
@@ -799,10 +799,6 @@ const midiToPitchText = (midiNumber: number): string => {
   const n = Math.max(0, Math.min(127, Math.round(midiNumber)));
   const octave = Math.floor(n / 12) - 1;
   return `${names[n % 12]}${octave}`;
-};
-
-const getMidiWriterRuntime = (): MidiWriterRuntime | null => {
-  return (window as unknown as { MidiWriter?: MidiWriterRuntime }).MidiWriter ?? null;
 };
 
 const normalizeTicksPerQuarter = (ticksPerQuarter: number): number => {
@@ -3844,6 +3840,7 @@ export const buildMidiBytesForPlayback = (
     diagnostics?: string[];
     normalizeForParity?: boolean;
     rawWriter?: boolean;
+    midiWriterRuntime?: MidiWriterRuntime | null;
     rawRetriggerPolicy?: RawMidiRetriggerPolicy;
     metadata?: {
       title?: string;
@@ -3854,7 +3851,7 @@ export const buildMidiBytesForPlayback = (
   } = {}
 ): Uint8Array => {
   const rawWriter = options.rawWriter === true;
-  const midiWriter = rawWriter ? null : getMidiWriterRuntime();
+  const midiWriter = rawWriter ? null : options.midiWriterRuntime ?? null;
   if (!rawWriter && !midiWriter) {
     throw new Error("midi-writer.js is not loaded.");
   }

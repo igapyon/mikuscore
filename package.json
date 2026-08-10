@@ -1,6 +1,6 @@
 {
   "name": "miku-score",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -9,13 +9,18 @@
   "scripts": {
     "build": "npm run typecheck && npm run test:build && npm run build:dist",
     "build:all": "npm run build:full",
+    "build:browser-runtime": "node scripts/build-browser-runtime.mjs",
     "build:cli-runtime": "node scripts/build-cli-runtime.mjs",
-    "build:dist": "node scripts/build.mjs && node scripts/build-cli-runtime.mjs",
+    "build:dist": "node scripts/build.mjs && node scripts/build-cli-runtime.mjs && node scripts/build-browser-runtime.mjs",
     "build:full": "npm run typecheck && npm run test:build:full && npm run build:dist",
     "cli": "node scripts/miku-score-cli.mjs",
     "check:all": "npm run typecheck && npm run test:all && npm run build:dist",
+    "create:browser-runtime-manifest": "node scripts/create-browser-runtime-manifest.mjs",
     "prepare:release-assets": "node scripts/prepare-release-assets.mjs",
     "smoke:bundle": "node scripts/smoke-bundle.mjs",
+    "smoke:browser-runtime": "node scripts/smoke-browser-runtime.mjs",
+    "verify:browser-runtime-manifest": "node scripts/verify-browser-runtime-manifest.mjs",
+    "verify:release-assets": "node scripts/verify-release-assets.mjs",
     "build:vendor:utaformatix3": "bash scripts/sync-utaformatix3-vendor.sh",
     "clean": "rm -rf miku-score.html src/js/main.js bundle/miku-score.mjs .tsbuildinfo .miku-score-build",
     "test:build": "vitest run tests/unit --exclude tests/unit/cffp-series.spec.ts --exclude tests/unit/mei-io.spec.ts --exclude tests/unit/musescore-io.spec.ts --exclude tests/unit/lilypond-io.spec.ts --exclude tests/unit/playback-flow.spec.ts --exclude tests/unit/midi-roundtrip-golden.spec.ts",
