@@ -37,6 +37,14 @@ if (version !== packageVersion && !version.startsWith(`${packageVersion}.`)) {
   );
 }
 
+for (const buildScript of [
+  "scripts/build.mjs",
+  "scripts/build-cli-runtime.mjs",
+  "scripts/build-browser-runtime.mjs",
+]) {
+  run("node", [buildScript], { stdio: "inherit" });
+}
+
 rmSync(path.join(ROOT, RELEASE_DIR), { recursive: true, force: true });
 mkdirSync(path.join(ROOT, RELEASE_DIR), { recursive: true });
 

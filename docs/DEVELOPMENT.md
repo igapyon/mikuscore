@@ -26,7 +26,7 @@ Practical command split:
 - `npm run build`: faster day-to-day build (`typecheck` + `test:build` + `build:dist`)
 - `npm run build:full`: fuller build path (`typecheck` + `test:build:full` + `build:dist`)
 - `npm run build:cli-runtime`: generate the single-file Node.js CLI runtime artifact
-- `npm run prepare:release-assets`: stage versioned GitHub Release assets under `release-assets/` for a `TAG_NAME` such as `v0.6.0`
+- `npm run prepare:release-assets`: rebuild the distributable HTML, CLI, and browser runtime, then stage versioned GitHub Release assets under `release-assets/` for a `TAG_NAME` such as `v0.6.0`
 - `npm run smoke:bundle`: verify the staged CLI release asset, or `bundle/miku-score.mjs` when no staged asset exists
 - `npm run test:slow`: heavy suites currently split out of the day-to-day build path
 - `npm run test:integration`: heavy integration-style suites (`cffp-series`, `mei-io`, `musescore-io`)
@@ -140,7 +140,7 @@ Local release asset preparation uses the same scripts that the tag workflow call
 - `TAG_NAME=v0.6.0 npm run prepare:release-assets`
 - `npm run smoke:bundle`
 
-The release staging command checks `TAG_NAME` against `package.json` version, then writes prepared assets under `release-assets/`. The staged directory is local generated output and is ignored by Git.
+The release staging command checks `TAG_NAME` against `package.json` version, rebuilds all distributable artifacts to prevent stale bundles, then writes prepared assets under `release-assets/`. The staged directory is local generated output and is ignored by Git.
 
 Observed sibling-project direction:
 

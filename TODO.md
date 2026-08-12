@@ -112,7 +112,7 @@ preceding gate succeeds.
   - Added `scripts/create-browser-runtime-manifest.mjs` and `scripts/verify-browser-runtime-manifest.mjs` following the `miku-project` lock shape.
   - The schema is `miku-score.browser-runtime-lock/v1` with `release_tag`, `package_version`, `asset_name`, and lowercase SHA-256.
   - The JSON manifest is a first-class Release asset, superseding the older Issue #201 local-only wording.
-  - Extended `prepare:release-assets` to stage the CLI bundle, browser runtime, runtime manifest, source archive, and deterministic SHA-256 list. Added `verify:release-assets` to verify all five assets and the runtime export version locally.
+  - Extended `prepare:release-assets` to rebuild distributable artifacts before staging the CLI bundle, browser runtime, runtime manifest, source archive, and deterministic SHA-256 list. Added `verify:release-assets` to verify all five assets and the runtime export version locally.
   - Added tests for release-tag, package-version, asset-name, and runtime-tampering rejection before any Release workflow modification.
   - Gate P4 passed: `TAG_NAME=v0.7.0 npm run prepare:release-assets` and `npm run verify:release-assets -- --release-tag v0.7.0` reproduce and verify all five ignored local staging assets without publishing a Release.
 
@@ -125,6 +125,10 @@ preceding gate succeeds.
   - [x] Initial downstream bootstrap (2026-08-10): created the pinned `v0.7.0` runtime lock, SHA-256 verified cache/Release fetch script, runtime-first single-file builder, and offline asset smoke in `miku-score-web`.
     - Before the first public Release exists, `miku-score-web` accepts an explicit local runtime file for development; verified the P4 staging asset through that path without committing it downstream.
     - The initial standalone shell exercises ABC import, new-score creation, raw MIDI download, and playback-plan generation. Full preview/Verovio, bounded editing, format UI, samples, styles, and parity/browser tests remain P5 migration slices; do not call the P5 gate complete yet.
+  - [x] Successor runtime candidate (2026-08-13): `miku-score/runtime-api@2` exposes value-only measure extraction/replacement/append, ZIP root-entry listing/extraction, format-scoped import policies, and shared metadata output policy. Measure replacement and append validate their merged result through `ScoreCore` before returning success.
+    - `npm run check:all` passed with 54 test files and 1,127 tests, followed by a fresh CLI/browser-runtime build.
+    - The locally staged `v0.8.0` assets passed `verify:release-assets`; an isolated downstream `miku-score-web` copy passed its full smoke suite, the v0.7.0 value-parity baseline, and Chromium v2 interaction coverage against that candidate.
+    - Publication and the downstream checked-in runtime lock update remain required. Do not enable these APIs in the released Web App until the `v0.8.0` Release asset is published and pinned there.
 
 - [ ] Phase 6: prove offline behavior and cut over ownership.
   - Add an offline single-file smoke that rejects request-generating runtime/script/stylesheet/media references and verifies runtime provenance.
