@@ -9,7 +9,16 @@ import { convertAbcToMusicXml, exportMusicXmlDomToAbc } from "./abc-io";
 import { convertLilyPondToMusicXml, exportMusicXmlDomToLilyPond } from "./lilypond-io";
 import { convertLoadInputToMusicXml, type LoadInputFormat } from "./load-input";
 import { convertMeiToMusicXml, exportMusicXmlDomToMei } from "./mei-io";
-import { convertMidiToMusicXml, type MidiWriterRuntime } from "./midi-io";
+import {
+  convertMidiToMusicXml,
+  type MidiImportQuantizeGrid,
+  type MidiWriterRuntime,
+} from "./midi-io";
+import {
+  appendMeasureToMusicXml,
+  extractMeasureEditorMusicXml,
+  replaceMeasureInMusicXml,
+} from "./measure-operations";
 import {
   applyMusicXmlCommand,
   diffMusicXmlState,
@@ -23,6 +32,7 @@ import {
   type MusicXmlStateSummary,
 } from "./musicxml-state";
 import { normalizeImportedMusicXmlText, parseMusicXmlDocument } from "./musicxml-io";
+import { stripMetadataFromMusicXml } from "./musicxml-output";
 import { convertMuseScoreToMusicXml, exportMusicXmlDomToMuseScore } from "./musescore-io";
 import { createNewScoreMusicXml, type CreateNewScoreOptions } from "./new-score";
 import {
@@ -52,6 +62,11 @@ import {
   type VsqxConversionBridge,
   type VsqxToMusicXmlOptions,
 } from "./vsqx-conversion";
+import {
+  bytesToArrayBuffer,
+  extractZipEntryBytesByPath,
+  listZipRootEntryPathsByExtensions,
+} from "./zip-io";
 
 export type { CoreCommand } from "../../core/interfaces";
 export type { CreateNewScoreOptions } from "./new-score";
@@ -69,7 +84,7 @@ export type { MusicXmlToVsqxOptions, VsqxConversionBridge, VsqxToMusicXmlOptions
 
 // scripts/build-browser-runtime.mjs replaces this placeholder from package.json.
 export const version = "__MIKU_SCORE_PACKAGE_VERSION__";
-export const runtimeApiVersion = "miku-score/runtime-api@1";
+export const runtimeApiVersion = "miku-score/runtime-api@2";
 
 export const embeddedModulePaths = Object.freeze([
   "core/ScoreCore.ts",
@@ -90,7 +105,9 @@ export const embeddedModulePaths = Object.freeze([
   "src/ts/midi-io.ts",
   "src/ts/midi-musescore-io.ts",
   "src/ts/musescore-io.ts",
+  "src/ts/measure-operations.ts",
   "src/ts/musicxml-io.ts",
+  "src/ts/musicxml-output.ts",
   "src/ts/musicxml-state.ts",
   "src/ts/new-score.ts",
   "src/ts/output-encoding.ts",
@@ -150,6 +167,23 @@ export type RuntimeLoadOptions = {
 export type RuntimeImportRequest = {
   format: LoadInputFormat;
   data: string | Uint8Array;
+  options?: RuntimeImportOptions;
+};
+
+export type RuntimeMetadataImportOptions = {
+  source?: boolean;
+  debug?: boolean;
+};
+
+export type RuntimeMidiImportOptions = {
+  quantizeGrid?: "auto" | MidiImportQuantizeGrid;
+  tripletAwareQuantize?: boolean;
+};
+
+export type RuntimeImportOptions = {
+  importMetadata?: RuntimeMetadataImportOptions;
+  midi?: RuntimeMidiImportOptions;
+  vsqx?: VsqxToMusicXmlOptions;
 };
 
 export type RuntimeScoreExportFormat =
@@ -166,6 +200,16 @@ export type RuntimeScoreExportFormat =
 
 export type RuntimeSvgRenderOptions = Record<string, unknown>;
 
+export type RuntimeMusicXmlMetadataExportOptions = {
+  roundTrip?: boolean;
+  source?: boolean;
+  debug?: boolean;
+};
+
+export type RuntimeMusicXmlExportOptions = {
+  metadata?: RuntimeMusicXmlMetadataExportOptions;
+};
+
 export type RuntimeExportRequest = {
   format: RuntimeScoreExportFormat;
   xml: string;
@@ -173,10 +217,24 @@ export type RuntimeExportRequest = {
     midi?: Partial<MidiOutputOptions>;
     vsqx?: MusicXmlToVsqxOptions;
     svg?: RuntimeSvgRenderOptions;
+    musicXml?: RuntimeMusicXmlExportOptions;
   };
 };
 
 export type RuntimeArchiveEntry = { path: string; data: EncodedOutput };
+
+export type RuntimeMeasureLocation = {
+  partId: string;
+  measureNumber: string;
+};
+
+export type RuntimeReplaceMeasureRequest = RuntimeMeasureLocation & {
+  editorXml: string;
+};
+
+export type RuntimeArchiveListOptions = {
+  extensions: string[];
+};
 
 export type MikuScoreRuntimeApi = {
   score: {
@@ -191,6 +249,11 @@ export type MikuScoreRuntimeApi = {
     applyCommand: (xml: string, command: CoreCommand) => RuntimeResult<MusicXmlCommandApplication>;
     diff: (beforeXml: string, afterXml: string) => RuntimeResult<MusicXmlStateDiff>;
   };
+  measure: {
+    extractEditorMusicXml: (xml: string, location: RuntimeMeasureLocation) => RuntimeResult<string>;
+    replaceEditorMusicXml: (xml: string, request: RuntimeReplaceMeasureRequest) => RuntimeResult<string>;
+    appendMeasure: (xml: string) => RuntimeResult<string>;
+  };
   convert: {
     importToMusicXml: (request: RuntimeImportRequest) => Promise<RuntimeResult<string>>;
     exportFromMusicXml: (request: RuntimeExportRequest) => Promise<RuntimeResult<EncodedOutput>>;
@@ -201,6 +264,10 @@ export type MikuScoreRuntimeApi = {
     encodeSvg: (svg: string) => RuntimeResult<string>;
     encodeJson: (json: string) => RuntimeResult<string>;
     encodeVsqx: (vsqx: string) => RuntimeResult<string>;
+  };
+  archive: {
+    listRootEntryPaths: (bytes: Uint8Array, options: RuntimeArchiveListOptions) => Promise<RuntimeResult<string[]>>;
+    extractEntryBytes: (bytes: Uint8Array, options: { path: string }) => Promise<RuntimeResult<Uint8Array>>;
   };
   playback: {
     buildPlan: (xml: string, options: PlaybackPlanOptions) => RuntimeResult<PlaybackPlanSuccess>;
@@ -242,6 +309,24 @@ const diagnostic = (code: string, message: string): RuntimeDiagnostic => ({ code
 
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+};
+
+const hasOnlyOptionalBooleanProperties = (
+  value: unknown,
+  propertyNames: string[]
+): boolean => {
+  if (!isPlainObject(value)) return false;
+  return Object.entries(value).every(([name, propertyValue]) =>
+    propertyNames.includes(name) && (propertyValue === undefined || typeof propertyValue === "boolean")
+  );
+};
+
+const invalidRequest = (message: string): RuntimeFailure => {
+  return failure([diagnostic("MKS_INPUT_INVALID", message)]);
+};
+
 const withRuntimeResult = <T>(
   operation: () => T,
   failureCode = "MKS_CONVERSION_FAILED"
@@ -263,6 +348,19 @@ const withAsyncRuntimeResult = async <T>(
     return failure([diagnostic(failureCode, errorMessage(error))]);
   }
 };
+
+const validateMusicXmlValue = (xml: string): string => {
+  const core = new ScoreCore();
+  core.load(xml);
+  const saved = core.save();
+  if (!saved.ok) {
+    throw new Error(saved.diagnostics[0]?.message ?? "MusicXML validation failed.");
+  }
+  return saved.xml;
+};
+
+const validateMusicXmlResult = (xml: string): RuntimeResult<string> =>
+  withRuntimeResult(() => validateMusicXmlValue(xml), "MKS_MUSICXML_INVALID");
 
 const normalizeCapabilities = (capabilities: RuntimeCapabilities | undefined): NormalizedCapabilities => ({
   midiWriterRuntime: capabilities?.midiWriterRuntime ?? null,
@@ -287,8 +385,100 @@ const defaultSvgRenderOptions = (): RuntimeSvgRenderOptions => ({
   header: "none",
 });
 
+type MetadataOutputSettings = {
+  keepMeta: boolean;
+  keepSrc: boolean;
+  keepDbg: boolean;
+};
+
+const normalizeMetadataOutputSettings = (
+  options: RuntimeExportRequest["options"]
+): RuntimeResult<MetadataOutputSettings> => {
+  if (options !== undefined && (!isPlainObject(options) || !Object.keys(options).every((key) =>
+    key === "midi" || key === "vsqx" || key === "svg" || key === "musicXml"
+  ))) {
+    return invalidRequest("Export options contain an unsupported property.");
+  }
+  const musicXml = options?.musicXml;
+  if (musicXml === undefined) {
+    return success({ keepMeta: true, keepSrc: true, keepDbg: true });
+  }
+  if (!isPlainObject(musicXml) || !Object.keys(musicXml).every((key) => key === "metadata")) {
+    return invalidRequest("musicXml export options must contain only an optional metadata object.");
+  }
+  const metadata = musicXml.metadata;
+  if (metadata === undefined) {
+    return success({ keepMeta: true, keepSrc: true, keepDbg: true });
+  }
+  if (!hasOnlyOptionalBooleanProperties(metadata, ["roundTrip", "source", "debug"])) {
+    return invalidRequest("MusicXML metadata options must be boolean roundTrip, source, or debug values.");
+  }
+  return success({
+    keepMeta: metadata.roundTrip ?? true,
+    keepSrc: metadata.source ?? true,
+    keepDbg: metadata.debug ?? true,
+  });
+};
+
+const validateRuntimeImportOptions = (request: RuntimeImportRequest): RuntimeFailure | null => {
+  const options = request.options;
+  if (options === undefined) return null;
+  if (!isPlainObject(options) || !Object.keys(options).every((key) =>
+    key === "importMetadata" || key === "midi" || key === "vsqx"
+  )) {
+    return invalidRequest("Import options contain an unsupported property.");
+  }
+
+  if (options.importMetadata !== undefined) {
+    if (!hasOnlyOptionalBooleanProperties(options.importMetadata, ["source", "debug"])) {
+      return invalidRequest("Import metadata options must be boolean source or debug values.");
+    }
+    if (!["abc", "midi", "mei", "lilypond", "musescore", "mscz"].includes(request.format)) {
+      return invalidRequest(`Import metadata options are not supported for ${request.format}.`);
+    }
+  }
+
+  if (options.midi !== undefined) {
+    if (request.format !== "midi" || !isPlainObject(options.midi)) {
+      return invalidRequest("MIDI import options are supported only for MIDI input.");
+    }
+    if (!Object.keys(options.midi).every((key) => key === "quantizeGrid" || key === "tripletAwareQuantize")) {
+      return invalidRequest("MIDI import options contain an unsupported property.");
+    }
+    const quantizeGrid = options.midi.quantizeGrid;
+    if (quantizeGrid !== undefined && !["auto", "1/8", "1/16", "1/32", "1/64"].includes(String(quantizeGrid))) {
+      return invalidRequest("MIDI quantizeGrid must be auto, 1/8, 1/16, 1/32, or 1/64.");
+    }
+    if (options.midi.tripletAwareQuantize !== undefined && typeof options.midi.tripletAwareQuantize !== "boolean") {
+      return invalidRequest("MIDI tripletAwareQuantize must be a boolean.");
+    }
+  }
+
+  if (options.vsqx !== undefined) {
+    if (request.format !== "vsqx" || !isPlainObject(options.vsqx)) {
+      return invalidRequest("VSQX import options are supported only for VSQX input.");
+    }
+    if (!Object.keys(options.vsqx).every((key) => key === "defaultLyric") ||
+      (options.vsqx.defaultLyric !== undefined && typeof options.vsqx.defaultLyric !== "string")) {
+      return invalidRequest("VSQX defaultLyric must be a string.");
+    }
+  }
+
+  return null;
+};
+
+const validateArchiveExtensions = (extensions: unknown): string[] | RuntimeFailure => {
+  if (!Array.isArray(extensions) || extensions.length === 0 ||
+    !extensions.every((extension) => typeof extension === "string" && extension.trim().length > 0)) {
+    return invalidRequest("Archive extensions must be a non-empty array of strings.");
+  }
+  return extensions.map((extension) => extension.trim());
+};
+
 const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntimeApi => {
   const importToMusicXml = async (request: RuntimeImportRequest): Promise<RuntimeResult<string>> => {
+    const invalidOptions = validateRuntimeImportOptions(request);
+    if (invalidOptions) return invalidOptions;
     if (request.format === "vsqx" && !capabilities.vsqxBridge) {
       return failure([diagnostic(
         "MKS_CAPABILITY_VSQX_UNAVAILABLE",
@@ -296,15 +486,33 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
       )]);
     }
     try {
+      const importMetadata = request.options?.importMetadata;
       const converted = await convertLoadInputToMusicXml(request, {
-        convertAbcToMusicXml,
-        convertMeiToMusicXml,
-        convertLilyPondToMusicXml,
-        convertMuseScoreToMusicXml,
+        convertAbcToMusicXml: (source) => convertAbcToMusicXml(source, {
+          sourceMetadata: importMetadata?.source,
+          debugMetadata: importMetadata?.debug,
+        }),
+        convertMeiToMusicXml: (source) => convertMeiToMusicXml(source, {
+          sourceMetadata: importMetadata?.source,
+          debugMetadata: importMetadata?.debug,
+        }),
+        convertLilyPondToMusicXml: (source) => convertLilyPondToMusicXml(source, {
+          sourceMetadata: importMetadata?.source,
+          debugMetadata: importMetadata?.debug,
+        }),
+        convertMuseScoreToMusicXml: (source) => convertMuseScoreToMusicXml(source, {
+          sourceMetadata: importMetadata?.source,
+          debugMetadata: importMetadata?.debug,
+        }),
         formatImportedMusicXml: normalizeImportedMusicXmlText,
         convertVsqxToMusicXml: (vsqxText) =>
-          convertVsqxToMusicXmlWithBridge(capabilities.vsqxBridge, vsqxText),
-        convertMidiToMusicXml,
+          convertVsqxToMusicXmlWithBridge(capabilities.vsqxBridge, vsqxText, request.options?.vsqx),
+        convertMidiToMusicXml: (bytes) => convertMidiToMusicXml(bytes, {
+          quantizeGrid: request.options?.midi?.quantizeGrid,
+          tripletAwareQuantize: request.options?.midi?.tripletAwareQuantize,
+          sourceMetadata: importMetadata?.source,
+          debugMetadata: importMetadata?.debug,
+        }),
       });
       if (!converted.ok) {
         return failure(
@@ -321,7 +529,10 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
   };
 
   const exportFromMusicXml = async (request: RuntimeExportRequest): Promise<RuntimeResult<EncodedOutput>> => {
-    const doc = parseMusicXmlDocument(request.xml);
+    const metadataSettings = normalizeMetadataOutputSettings(request.options);
+    if (!metadataSettings.ok) return metadataSettings;
+    const xml = stripMetadataFromMusicXml(request.xml, metadataSettings.value);
+    const doc = parseMusicXmlDocument(xml);
     if (!doc) {
       return failure([diagnostic("MKS_MUSICXML_INVALID", "Input is not a valid MusicXML document.")]);
     }
@@ -348,16 +559,16 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
     return withAsyncRuntimeResult(async () => {
       switch (request.format) {
         case "musicxml":
-          return encodeMusicXmlOutput(request.xml);
+          return encodeMusicXmlOutput(xml);
         case "mxl":
-          return encodeMusicXmlOutput(request.xml, { compressed: true });
+          return encodeMusicXmlOutput(xml, { compressed: true });
         case "abc": {
-          const output = encodeAbcOutput(request.xml, exportMusicXmlDomToAbc);
+          const output = encodeAbcOutput(xml, exportMusicXmlDomToAbc);
           if (output === null) throw new Error("Failed to export ABC.");
           return output;
         }
         case "midi": {
-          const output = encodeMidiOutput(request.xml, {
+          const output = encodeMidiOutput(xml, {
             ticksPerQuarter: midiOptions.ticksPerQuarter ?? 480,
             programPreset: midiOptions.programPreset ?? "electric_piano_2",
             exportProfile: midiOptions.exportProfile ?? "safe",
@@ -375,25 +586,25 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
         case "vsqx": {
           const output = convertMusicXmlToVsqxWithBridge(
             capabilities.vsqxBridge,
-            request.xml,
+            xml,
             request.options?.vsqx
           );
           if (!output.ok) throw new Error(output.diagnostic?.message ?? "Failed to export VSQX.");
           return encodeVsqxOutput(output.vsqx);
         }
         case "mei": {
-          const output = encodeMeiOutput(request.xml, exportMusicXmlDomToMei);
+          const output = encodeMeiOutput(xml, exportMusicXmlDomToMei);
           if (output === null) throw new Error("Failed to export MEI.");
           return output;
         }
         case "lilypond": {
-          const output = encodeLilyPondOutput(request.xml, exportMusicXmlDomToLilyPond);
+          const output = encodeLilyPondOutput(xml, exportMusicXmlDomToLilyPond);
           if (output === null) throw new Error("Failed to export LilyPond.");
           return output;
         }
         case "musescore":
         case "mscz": {
-          const output = await encodeMuseScoreOutput(request.xml, exportMusicXmlDomToMuseScore, {
+          const output = await encodeMuseScoreOutput(xml, exportMusicXmlDomToMuseScore, {
             compressed: request.format === "mscz",
           });
           if (output === null) throw new Error("Failed to export MuseScore.");
@@ -414,18 +625,8 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
     score: Object.freeze({
       createNewMusicXml: (options: CreateNewScoreOptions = {}) =>
         withRuntimeResult(() => createNewScoreMusicXml(options), "MKS_INPUT_INVALID"),
-      loadMusicXml: (xml: string) => withRuntimeResult(() => {
-        const core = new ScoreCore();
-        core.load(xml);
-        return core.save().xml;
-      }, "MKS_MUSICXML_INVALID"),
-      saveMusicXml: (xml: string) => withRuntimeResult(() => {
-        const core = new ScoreCore();
-        core.load(xml);
-        const saved = core.save();
-        if (!saved.ok) throw new Error(saved.diagnostics[0]?.message ?? "Failed to save MusicXML.");
-        return saved.xml;
-      }, "MKS_MUSICXML_INVALID"),
+      loadMusicXml: validateMusicXmlResult,
+      saveMusicXml: validateMusicXmlResult,
     }),
     state: Object.freeze({
       summarize: (xml: string) => withRuntimeResult(
@@ -441,6 +642,40 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
       diff: (beforeXml: string, afterXml: string) =>
         withRuntimeResult(() => diffMusicXmlState(beforeXml, afterXml), "MKS_MUSICXML_INVALID"),
     }),
+    measure: Object.freeze({
+      extractEditorMusicXml: (xml: string, location: RuntimeMeasureLocation): RuntimeResult<string> => {
+        const validated = validateMusicXmlResult(xml);
+        if (!validated.ok) return validated;
+        if (!location || typeof location.partId !== "string" || typeof location.measureNumber !== "string") {
+          return invalidRequest("Measure extraction requires string partId and measureNumber values.");
+        }
+        const editorXml = extractMeasureEditorMusicXml(xml, location.partId, location.measureNumber);
+        return editorXml === null
+          ? invalidRequest("The requested measure could not be extracted.")
+          : success(editorXml);
+      },
+      replaceEditorMusicXml: (xml: string, request: RuntimeReplaceMeasureRequest): RuntimeResult<string> => {
+        const validated = validateMusicXmlResult(xml);
+        if (!validated.ok) return validated;
+        const validatedEditor = validateMusicXmlResult(request?.editorXml ?? "");
+        if (!validatedEditor.ok) return validatedEditor;
+        if (typeof request.partId !== "string" || typeof request.measureNumber !== "string") {
+          return invalidRequest("Measure replacement requires string partId and measureNumber values.");
+        }
+        const replacedXml = replaceMeasureInMusicXml(xml, request.partId, request.measureNumber, request.editorXml);
+        return replacedXml === null
+          ? invalidRequest("The requested measure could not be replaced.")
+          : validateMusicXmlResult(replacedXml);
+      },
+      appendMeasure: (xml: string): RuntimeResult<string> => {
+        const validated = validateMusicXmlResult(xml);
+        if (!validated.ok) return validated;
+        const appendedXml = appendMeasureToMusicXml(xml);
+        return appendedXml === null
+          ? invalidRequest("A measure could not be appended to this MusicXML document.")
+          : validateMusicXmlResult(appendedXml);
+      },
+    }),
     convert: Object.freeze({ importToMusicXml, exportFromMusicXml }),
     output: Object.freeze({
       encodeMusicXml: (xml: string, options: { compressed?: boolean } = {}) =>
@@ -450,6 +685,33 @@ const createRuntimeApi = (capabilities: NormalizedCapabilities): MikuScoreRuntim
       encodeSvg: (svg: string) => withRuntimeResult(() => encodeSvgOutput(svg), "MKS_OUTPUT_FAILED"),
       encodeJson: (json: string) => withRuntimeResult(() => encodeJsonOutput(json), "MKS_OUTPUT_FAILED"),
       encodeVsqx: (vsqx: string) => withRuntimeResult(() => encodeVsqxOutput(vsqx), "MKS_OUTPUT_FAILED"),
+    }),
+    archive: Object.freeze({
+      listRootEntryPaths: async (
+        bytes: Uint8Array,
+        options: RuntimeArchiveListOptions
+      ): Promise<RuntimeResult<string[]>> => {
+        if (!(bytes instanceof Uint8Array)) return invalidRequest("Archive bytes must be a Uint8Array.");
+        const extensions = validateArchiveExtensions(options?.extensions);
+        if (!Array.isArray(extensions)) return extensions;
+        return withAsyncRuntimeResult(
+          () => listZipRootEntryPathsByExtensions(bytesToArrayBuffer(bytes), extensions),
+          "MKS_ARCHIVE_INVALID"
+        );
+      },
+      extractEntryBytes: async (
+        bytes: Uint8Array,
+        options: { path: string }
+      ): Promise<RuntimeResult<Uint8Array>> => {
+        if (!(bytes instanceof Uint8Array)) return invalidRequest("Archive bytes must be a Uint8Array.");
+        if (!options || typeof options.path !== "string" || options.path.trim().length === 0) {
+          return invalidRequest("Archive extraction requires a non-empty path.");
+        }
+        return withAsyncRuntimeResult(
+          () => extractZipEntryBytesByPath(bytesToArrayBuffer(bytes), options.path),
+          "MKS_ARCHIVE_INVALID"
+        );
+      },
     }),
     playback: Object.freeze({
       buildPlan: (xml: string, options: PlaybackPlanOptions): RuntimeResult<PlaybackPlanSuccess> => {

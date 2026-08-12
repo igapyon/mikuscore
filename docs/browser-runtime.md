@@ -13,7 +13,7 @@ audience:
   - downstream-maintainer
   - agent
 created: 2026-08-10
-updated: 2026-08-10
+updated: 2026-08-12
 ---
 
 # Browser Runtime Contract
@@ -22,7 +22,7 @@ updated: 2026-08-10
 runtime consumed by `miku-score-web` at build time. It is a different release
 asset from the Node.js CLI bundle, `miku-score-<version>.mjs`.
 
-This is the contract for runtime API version `miku-score/runtime-api@1`.
+This is the contract for runtime API version `miku-score/runtime-api@2`.
 Phase 2 implements the facade defined here; no downstream code may import
 unpublished `src/ts/` modules as a substitute for this API.
 
@@ -46,7 +46,7 @@ const runtime = loadMikuScoreRuntime({
 The runtime exposes only the following value exports.
 
 - `version`: the source `package.json` version embedded at build time.
-- `runtimeApiVersion`: the string `miku-score/runtime-api@1`.
+- `runtimeApiVersion`: the string `miku-score/runtime-api@2`.
 - `embeddedModulePaths`: a frozen, read-only, normalized list of source-module
   paths embedded in the bundle. It is for audit and debugging, not a secondary
   import API.
@@ -67,7 +67,7 @@ code `MKS_RUNTIME_CAPABILITIES_FIXED`. This makes initialization idempotent and
 prevents a page from silently changing score-conversion behavior partway
 through a session.
 
-The runtime does not publish a compatibility global in API version 1. If a
+The runtime does not publish a compatibility global in API version 2. If a
 single-file bootstrap later proves that a global is necessary, it must be added
 in a new documented contract revision with an owner, exact property name, and
 collision rule. Browser globals provided by vendor libraries are likewise not
@@ -142,6 +142,7 @@ codes where applicable:
 - `MKS_MUSICXML_INVALID`
 - `MKS_CONVERSION_FAILED`
 - `MKS_OUTPUT_FAILED`
+- `MKS_ARCHIVE_INVALID`
 - `MKS_CAPABILITY_VSQX_UNAVAILABLE`
 - `MKS_CAPABILITY_VEROVIO_UNAVAILABLE`
 - `MKS_CAPABILITY_MIDI_WRITER_UNAVAILABLE`
@@ -159,7 +160,7 @@ in its value. A failure to parse or load the score is an outer failure.
 
 ## API inventory
 
-API version 1 presents responsibilities through the following namespace tree.
+API version 2 presents responsibilities through the following namespace tree.
 Names and value shapes listed here are the public surface; direct imports of
 the current implementation modules are not supported downstream.
 
@@ -177,6 +178,11 @@ type MikuScoreRuntimeApi = {
     applyCommand(xml: string, command: CoreCommand): RuntimeResult<MusicXmlCommandApplication>;
     diff(beforeXml: string, afterXml: string): RuntimeResult<MusicXmlStateDiff>;
   };
+  measure: {
+    extractEditorMusicXml(xml: string, location: RuntimeMeasureLocation): RuntimeResult<string>;
+    replaceEditorMusicXml(xml: string, request: RuntimeReplaceMeasureRequest): RuntimeResult<string>;
+    appendMeasure(xml: string): RuntimeResult<string>;
+  };
   convert: {
     importToMusicXml(request: RuntimeImportRequest): Promise<RuntimeResult<string>>;
     exportFromMusicXml(request: RuntimeExportRequest): Promise<RuntimeResult<string | Uint8Array>>;
@@ -187,6 +193,10 @@ type MikuScoreRuntimeApi = {
     encodeSvg(svg: string): RuntimeResult<string>;
     encodeJson(json: string): RuntimeResult<string>;
     encodeVsqx(vsqx: string): RuntimeResult<string>;
+  };
+  archive: {
+    listRootEntryPaths(bytes: Uint8Array, options: RuntimeArchiveListOptions): Promise<RuntimeResult<string[]>>;
+    extractEntryBytes(bytes: Uint8Array, options: { path: string }): Promise<RuntimeResult<Uint8Array>>;
   };
   playback: {
     buildPlan(xml: string, options?: PlaybackPlanOptions): RuntimeResult<PlaybackPlan>;
@@ -208,6 +218,26 @@ value encoder under `output`, not a MusicXML conversion target.
 Format detection, filename extension handling, `File`/`Blob` conversion, and
 download delivery remain adapter responsibilities. `convert.importToMusicXml`
 is the format-conversion entry point for non-MusicXML input.
+
+`RuntimeImportRequest.options` is deliberately format-scoped. `importMetadata`
+accepts optional `source` and `debug` booleans only for ABC, MIDI, MEI,
+LilyPond, MuseScore, and compressed MuseScore input. `midi` accepts
+`quantizeGrid` (`auto`, `1/8`, `1/16`, `1/32`, or `1/64`) and
+`tripletAwareQuantize` only for MIDI input.
+`vsqx.defaultLyric` is accepted only for VSQX input. Unsupported or malformed
+options return `MKS_INPUT_INVALID`; downstream code must not rewrite imported
+MusicXML to emulate these policies.
+
+`RuntimeExportRequest.options.musicXml.metadata` applies before every output
+converter. Its optional `roundTrip`, `source`, and `debug` booleans control
+the corresponding `mks:meta:*`, `mks:src:*`, and `mks:dbg:*` fields. Omitted
+values preserve the existing metadata. The `measure` namespace returns only
+MusicXML values and has no DOM or selection state. Replacement and append
+results are validated through `ScoreCore`; an invalid merged score returns
+`MKS_MUSICXML_INVALID` without changing either input string. The `archive`
+namespace lists supported root entries and extracts selected ZIP bytes without
+exposing ZIP parser internals. Unknown export-option properties are rejected
+with `MKS_INPUT_INVALID` rather than ignored.
 
 `playback.buildPlan` only produces deterministic schedules, measure timelines,
 and related playback data. It does not create an `AudioContext`, schedule

@@ -40,6 +40,66 @@ try {
     data: "X:1\nT:Browser runtime smoke\nM:4/4\nL:1/4\nK:C\nC D E F|\n",
   });
   const importedXml = unwrap(imported, "convert.importToMusicXml");
+
+  const extractedMeasure = unwrap(
+    runtime.measure.extractEditorMusicXml(importedXml, { partId: "P1", measureNumber: "1" }),
+    "measure.extractEditorMusicXml"
+  );
+  if (!extractedMeasure.includes("<score-partwise") || !extractedMeasure.includes('<measure number="1"')) {
+    throw new Error("runtime measure extraction returned an unexpected value.");
+  }
+  const replacedMeasure = unwrap(
+    runtime.measure.replaceEditorMusicXml(importedXml, {
+      partId: "P1",
+      measureNumber: "1",
+      editorXml: extractedMeasure,
+    }),
+    "measure.replaceEditorMusicXml"
+  );
+  if (!replacedMeasure.includes("<score-partwise")) {
+    throw new Error("runtime measure replacement returned an unexpected value.");
+  }
+  const appendedMeasure = unwrap(runtime.measure.appendMeasure(importedXml), "measure.appendMeasure");
+  if (!appendedMeasure.includes('<measure number="2"')) {
+    throw new Error("runtime measure append did not add the next measure.");
+  }
+
+  const archive = unwrap(await runtime.output.encodeZipBundle([
+    { path: "score.abc", data: "X:1\nK:C\nC|\n" },
+    { path: "nested/ignored.abc", data: "X:2\nK:C\nD|\n" },
+  ], { compressed: false }), "output.encodeZipBundle");
+  const archivePaths = unwrap(
+    await runtime.archive.listRootEntryPaths(archive, { extensions: [".abc"] }),
+    "archive.listRootEntryPaths"
+  );
+  if (JSON.stringify(archivePaths) !== JSON.stringify(["score.abc"])) {
+    throw new Error("runtime archive root-entry listing returned an unexpected value.");
+  }
+  const archiveEntry = unwrap(
+    await runtime.archive.extractEntryBytes(archive, { path: "score.abc" }),
+    "archive.extractEntryBytes"
+  );
+  if (new TextDecoder().decode(archiveEntry) !== "X:1\nK:C\nC|\n") {
+    throw new Error("runtime archive extraction returned unexpected bytes.");
+  }
+
+  const metadataFree = unwrap(await runtime.convert.exportFromMusicXml({
+    format: "musicxml",
+    xml: importedXml,
+    options: { musicXml: { metadata: { roundTrip: false, source: false, debug: false } } },
+  }), "convert.exportFromMusicXml(metadata policy)");
+  if (typeof metadataFree !== "string" || /mks:(?:meta|src|dbg):/i.test(metadataFree)) {
+    throw new Error("runtime metadata export policy did not apply before MusicXML output.");
+  }
+  assertUnavailableCapability(
+    await runtime.convert.importToMusicXml({
+      format: "abc",
+      data: "X:1\nK:C\nC|\n",
+      options: { midi: { quantizeGrid: "1/16" } },
+    }),
+    "MKS_INPUT_INVALID"
+  );
+
   const midi = await runtime.convert.exportFromMusicXml({ format: "midi", xml: importedXml });
   const midiBytes = unwrap(midi, "convert.exportFromMusicXml(midi)");
   if (!(midiBytes instanceof Uint8Array) || midiBytes[0] !== 0x4d || midiBytes[1] !== 0x54) {
@@ -129,7 +189,7 @@ function assertPublicExports(runtimeModule, expectedVersion) {
   if (runtimeModule.version !== expectedVersion) {
     throw new Error(`runtime version mismatch: expected ${expectedVersion}, actual ${runtimeModule.version}`);
   }
-  if (runtimeModule.runtimeApiVersion !== "miku-score/runtime-api@1") {
+  if (runtimeModule.runtimeApiVersion !== "miku-score/runtime-api@2") {
     throw new Error(`unexpected runtime API version: ${runtimeModule.runtimeApiVersion}`);
   }
   if (runtimeModule.default !== runtimeModule.loadMikuScoreRuntime) {

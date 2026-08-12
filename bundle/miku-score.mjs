@@ -133970,7 +133970,7 @@ var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
 var repoRoot = path.resolve(__dirname, "..");
 var DIAGNOSTICS_VERSION = 1;
-var PACKAGE_VERSION = "0.7.0";
+var PACKAGE_VERSION = "0.8.0";
 var HELP_TEXT = {
   top: [
     "Usage:",
@@ -134670,16 +134670,19 @@ var BUNDLED_CLI_MODULES = {
     const load_input_1 = require2("./load-input");
     const mei_io_1 = require2("./mei-io");
     const midi_io_1 = require2("./midi-io");
+    const measure_operations_1 = require2("./measure-operations");
     const musicxml_state_1 = require2("./musicxml-state");
     const musicxml_io_1 = require2("./musicxml-io");
+    const musicxml_output_1 = require2("./musicxml-output");
     const musescore_io_1 = require2("./musescore-io");
     const new_score_1 = require2("./new-score");
     const output_encoding_1 = require2("./output-encoding");
     const playback_model_1 = require2("./playback-model");
     const verovio_render_1 = require2("./verovio-render");
     const vsqx_conversion_1 = require2("./vsqx-conversion");
+    const zip_io_1 = require2("./zip-io");
     exports.version = "__MIKU_SCORE_PACKAGE_VERSION__";
-    exports.runtimeApiVersion = "miku-score/runtime-api@1";
+    exports.runtimeApiVersion = "miku-score/runtime-api@2";
     exports.embeddedModulePaths = Object.freeze([
       "core/ScoreCore.ts",
       "core/accidentalSpelling.ts",
@@ -134699,7 +134702,9 @@ var BUNDLED_CLI_MODULES = {
       "src/ts/midi-io.ts",
       "src/ts/midi-musescore-io.ts",
       "src/ts/musescore-io.ts",
+      "src/ts/measure-operations.ts",
       "src/ts/musicxml-io.ts",
+      "src/ts/musicxml-output.ts",
       "src/ts/musicxml-state.ts",
       "src/ts/new-score.ts",
       "src/ts/output-encoding.ts",
@@ -134744,6 +134749,17 @@ var BUNDLED_CLI_MODULES = {
     });
     const diagnostic = (code, message) => ({ code, message });
     const errorMessage = (error) => error instanceof Error ? error.message : String(error);
+    const isPlainObject = (value) => {
+      return value !== null && typeof value === "object" && !Array.isArray(value);
+    };
+    const hasOnlyOptionalBooleanProperties = (value, propertyNames) => {
+      if (!isPlainObject(value))
+        return false;
+      return Object.entries(value).every(([name, propertyValue]) => propertyNames.includes(name) && (propertyValue === void 0 || typeof propertyValue === "boolean"));
+    };
+    const invalidRequest = (message) => {
+      return failure([diagnostic("MKS_INPUT_INVALID", message)]);
+    };
     const withRuntimeResult = (operation, failureCode = "MKS_CONVERSION_FAILED") => {
       try {
         return success(operation());
@@ -134758,6 +134774,17 @@ var BUNDLED_CLI_MODULES = {
         return failure([diagnostic(failureCode, errorMessage(error))]);
       }
     };
+    const validateMusicXmlValue = (xml) => {
+      var _a, _b;
+      const core = new ScoreCore_1.ScoreCore();
+      core.load(xml);
+      const saved = core.save();
+      if (!saved.ok) {
+        throw new Error((_b = (_a = saved.diagnostics[0]) === null || _a === void 0 ? void 0 : _a.message) !== null && _b !== void 0 ? _b : "MusicXML validation failed.");
+      }
+      return saved.xml;
+    };
+    const validateMusicXmlResult = (xml) => withRuntimeResult(() => validateMusicXmlValue(xml), "MKS_MUSICXML_INVALID");
     const normalizeCapabilities = (capabilities) => {
       var _a, _b, _c;
       return {
@@ -134779,20 +134806,119 @@ var BUNDLED_CLI_MODULES = {
       footer: "none",
       header: "none"
     });
+    const normalizeMetadataOutputSettings = (options) => {
+      var _a, _b, _c;
+      if (options !== void 0 && (!isPlainObject(options) || !Object.keys(options).every((key) => key === "midi" || key === "vsqx" || key === "svg" || key === "musicXml"))) {
+        return invalidRequest("Export options contain an unsupported property.");
+      }
+      const musicXml = options === null || options === void 0 ? void 0 : options.musicXml;
+      if (musicXml === void 0) {
+        return success({ keepMeta: true, keepSrc: true, keepDbg: true });
+      }
+      if (!isPlainObject(musicXml) || !Object.keys(musicXml).every((key) => key === "metadata")) {
+        return invalidRequest("musicXml export options must contain only an optional metadata object.");
+      }
+      const metadata = musicXml.metadata;
+      if (metadata === void 0) {
+        return success({ keepMeta: true, keepSrc: true, keepDbg: true });
+      }
+      if (!hasOnlyOptionalBooleanProperties(metadata, ["roundTrip", "source", "debug"])) {
+        return invalidRequest("MusicXML metadata options must be boolean roundTrip, source, or debug values.");
+      }
+      return success({
+        keepMeta: (_a = metadata.roundTrip) !== null && _a !== void 0 ? _a : true,
+        keepSrc: (_b = metadata.source) !== null && _b !== void 0 ? _b : true,
+        keepDbg: (_c = metadata.debug) !== null && _c !== void 0 ? _c : true
+      });
+    };
+    const validateRuntimeImportOptions = (request) => {
+      const options = request.options;
+      if (options === void 0)
+        return null;
+      if (!isPlainObject(options) || !Object.keys(options).every((key) => key === "importMetadata" || key === "midi" || key === "vsqx")) {
+        return invalidRequest("Import options contain an unsupported property.");
+      }
+      if (options.importMetadata !== void 0) {
+        if (!hasOnlyOptionalBooleanProperties(options.importMetadata, ["source", "debug"])) {
+          return invalidRequest("Import metadata options must be boolean source or debug values.");
+        }
+        if (!["abc", "midi", "mei", "lilypond", "musescore", "mscz"].includes(request.format)) {
+          return invalidRequest(`Import metadata options are not supported for ${request.format}.`);
+        }
+      }
+      if (options.midi !== void 0) {
+        if (request.format !== "midi" || !isPlainObject(options.midi)) {
+          return invalidRequest("MIDI import options are supported only for MIDI input.");
+        }
+        if (!Object.keys(options.midi).every((key) => key === "quantizeGrid" || key === "tripletAwareQuantize")) {
+          return invalidRequest("MIDI import options contain an unsupported property.");
+        }
+        const quantizeGrid = options.midi.quantizeGrid;
+        if (quantizeGrid !== void 0 && !["auto", "1/8", "1/16", "1/32", "1/64"].includes(String(quantizeGrid))) {
+          return invalidRequest("MIDI quantizeGrid must be auto, 1/8, 1/16, 1/32, or 1/64.");
+        }
+        if (options.midi.tripletAwareQuantize !== void 0 && typeof options.midi.tripletAwareQuantize !== "boolean") {
+          return invalidRequest("MIDI tripletAwareQuantize must be a boolean.");
+        }
+      }
+      if (options.vsqx !== void 0) {
+        if (request.format !== "vsqx" || !isPlainObject(options.vsqx)) {
+          return invalidRequest("VSQX import options are supported only for VSQX input.");
+        }
+        if (!Object.keys(options.vsqx).every((key) => key === "defaultLyric") || options.vsqx.defaultLyric !== void 0 && typeof options.vsqx.defaultLyric !== "string") {
+          return invalidRequest("VSQX defaultLyric must be a string.");
+        }
+      }
+      return null;
+    };
+    const validateArchiveExtensions = (extensions) => {
+      if (!Array.isArray(extensions) || extensions.length === 0 || !extensions.every((extension) => typeof extension === "string" && extension.trim().length > 0)) {
+        return invalidRequest("Archive extensions must be a non-empty array of strings.");
+      }
+      return extensions.map((extension) => extension.trim());
+    };
     const createRuntimeApi = (capabilities) => {
       const importToMusicXml = async (request) => {
+        var _a;
+        const invalidOptions = validateRuntimeImportOptions(request);
+        if (invalidOptions)
+          return invalidOptions;
         if (request.format === "vsqx" && !capabilities.vsqxBridge) {
           return failure([diagnostic("MKS_CAPABILITY_VSQX_UNAVAILABLE", "VSQX import requires an injected VSQX bridge capability.")]);
         }
         try {
+          const importMetadata = (_a = request.options) === null || _a === void 0 ? void 0 : _a.importMetadata;
           const converted = await (0, load_input_1.convertLoadInputToMusicXml)(request, {
-            convertAbcToMusicXml: abc_io_1.convertAbcToMusicXml,
-            convertMeiToMusicXml: mei_io_1.convertMeiToMusicXml,
-            convertLilyPondToMusicXml: lilypond_io_1.convertLilyPondToMusicXml,
-            convertMuseScoreToMusicXml: musescore_io_1.convertMuseScoreToMusicXml,
+            convertAbcToMusicXml: (source) => (0, abc_io_1.convertAbcToMusicXml)(source, {
+              sourceMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.source,
+              debugMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.debug
+            }),
+            convertMeiToMusicXml: (source) => (0, mei_io_1.convertMeiToMusicXml)(source, {
+              sourceMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.source,
+              debugMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.debug
+            }),
+            convertLilyPondToMusicXml: (source) => (0, lilypond_io_1.convertLilyPondToMusicXml)(source, {
+              sourceMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.source,
+              debugMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.debug
+            }),
+            convertMuseScoreToMusicXml: (source) => (0, musescore_io_1.convertMuseScoreToMusicXml)(source, {
+              sourceMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.source,
+              debugMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.debug
+            }),
             formatImportedMusicXml: musicxml_io_1.normalizeImportedMusicXmlText,
-            convertVsqxToMusicXml: (vsqxText) => (0, vsqx_conversion_1.convertVsqxToMusicXmlWithBridge)(capabilities.vsqxBridge, vsqxText),
-            convertMidiToMusicXml: midi_io_1.convertMidiToMusicXml
+            convertVsqxToMusicXml: (vsqxText) => {
+              var _a2;
+              return (0, vsqx_conversion_1.convertVsqxToMusicXmlWithBridge)(capabilities.vsqxBridge, vsqxText, (_a2 = request.options) === null || _a2 === void 0 ? void 0 : _a2.vsqx);
+            },
+            convertMidiToMusicXml: (bytes) => {
+              var _a2, _b, _c, _d;
+              return (0, midi_io_1.convertMidiToMusicXml)(bytes, {
+                quantizeGrid: (_b = (_a2 = request.options) === null || _a2 === void 0 ? void 0 : _a2.midi) === null || _b === void 0 ? void 0 : _b.quantizeGrid,
+                tripletAwareQuantize: (_d = (_c = request.options) === null || _c === void 0 ? void 0 : _c.midi) === null || _d === void 0 ? void 0 : _d.tripletAwareQuantize,
+                sourceMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.source,
+                debugMetadata: importMetadata === null || importMetadata === void 0 ? void 0 : importMetadata.debug
+              });
+            }
           });
           if (!converted.ok) {
             return failure(converted.diagnostics.length > 0 ? converted.diagnostics : [diagnostic("MKS_INPUT_INVALID", converted.diagnosticMessage)], converted.warnings);
@@ -134804,7 +134930,11 @@ var BUNDLED_CLI_MODULES = {
       };
       const exportFromMusicXml = async (request) => {
         var _a, _b;
-        const doc = (0, musicxml_io_1.parseMusicXmlDocument)(request.xml);
+        const metadataSettings = normalizeMetadataOutputSettings(request.options);
+        if (!metadataSettings.ok)
+          return metadataSettings;
+        const xml = (0, musicxml_output_1.stripMetadataFromMusicXml)(request.xml, metadataSettings.value);
+        const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
         if (!doc) {
           return failure([diagnostic("MKS_MUSICXML_INVALID", "Input is not a valid MusicXML document.")]);
         }
@@ -134822,17 +134952,17 @@ var BUNDLED_CLI_MODULES = {
           var _a2, _b2, _c, _d, _e, _f, _g, _h, _j;
           switch (request.format) {
             case "musicxml":
-              return (0, output_encoding_1.encodeMusicXmlOutput)(request.xml);
+              return (0, output_encoding_1.encodeMusicXmlOutput)(xml);
             case "mxl":
-              return (0, output_encoding_1.encodeMusicXmlOutput)(request.xml, { compressed: true });
+              return (0, output_encoding_1.encodeMusicXmlOutput)(xml, { compressed: true });
             case "abc": {
-              const output = (0, output_encoding_1.encodeAbcOutput)(request.xml, abc_io_1.exportMusicXmlDomToAbc);
+              const output = (0, output_encoding_1.encodeAbcOutput)(xml, abc_io_1.exportMusicXmlDomToAbc);
               if (output === null)
                 throw new Error("Failed to export ABC.");
               return output;
             }
             case "midi": {
-              const output = (0, output_encoding_1.encodeMidiOutput)(request.xml, {
+              const output = (0, output_encoding_1.encodeMidiOutput)(xml, {
                 ticksPerQuarter: (_a2 = midiOptions.ticksPerQuarter) !== null && _a2 !== void 0 ? _a2 : 480,
                 programPreset: (_b2 = midiOptions.programPreset) !== null && _b2 !== void 0 ? _b2 : "electric_piano_2",
                 exportProfile: (_c = midiOptions.exportProfile) !== null && _c !== void 0 ? _c : "safe",
@@ -134849,26 +134979,26 @@ var BUNDLED_CLI_MODULES = {
               return output;
             }
             case "vsqx": {
-              const output = (0, vsqx_conversion_1.convertMusicXmlToVsqxWithBridge)(capabilities.vsqxBridge, request.xml, (_f = request.options) === null || _f === void 0 ? void 0 : _f.vsqx);
+              const output = (0, vsqx_conversion_1.convertMusicXmlToVsqxWithBridge)(capabilities.vsqxBridge, xml, (_f = request.options) === null || _f === void 0 ? void 0 : _f.vsqx);
               if (!output.ok)
                 throw new Error((_h = (_g = output.diagnostic) === null || _g === void 0 ? void 0 : _g.message) !== null && _h !== void 0 ? _h : "Failed to export VSQX.");
               return (0, output_encoding_1.encodeVsqxOutput)(output.vsqx);
             }
             case "mei": {
-              const output = (0, output_encoding_1.encodeMeiOutput)(request.xml, mei_io_1.exportMusicXmlDomToMei);
+              const output = (0, output_encoding_1.encodeMeiOutput)(xml, mei_io_1.exportMusicXmlDomToMei);
               if (output === null)
                 throw new Error("Failed to export MEI.");
               return output;
             }
             case "lilypond": {
-              const output = (0, output_encoding_1.encodeLilyPondOutput)(request.xml, lilypond_io_1.exportMusicXmlDomToLilyPond);
+              const output = (0, output_encoding_1.encodeLilyPondOutput)(xml, lilypond_io_1.exportMusicXmlDomToLilyPond);
               if (output === null)
                 throw new Error("Failed to export LilyPond.");
               return output;
             }
             case "musescore":
             case "mscz": {
-              const output = await (0, output_encoding_1.encodeMuseScoreOutput)(request.xml, musescore_io_1.exportMusicXmlDomToMuseScore, {
+              const output = await (0, output_encoding_1.encodeMuseScoreOutput)(xml, musescore_io_1.exportMusicXmlDomToMuseScore, {
                 compressed: request.format === "mscz"
               });
               if (output === null)
@@ -134883,20 +135013,8 @@ var BUNDLED_CLI_MODULES = {
       return Object.freeze({
         score: Object.freeze({
           createNewMusicXml: (options = {}) => withRuntimeResult(() => (0, new_score_1.createNewScoreMusicXml)(options), "MKS_INPUT_INVALID"),
-          loadMusicXml: (xml) => withRuntimeResult(() => {
-            const core = new ScoreCore_1.ScoreCore();
-            core.load(xml);
-            return core.save().xml;
-          }, "MKS_MUSICXML_INVALID"),
-          saveMusicXml: (xml) => withRuntimeResult(() => {
-            var _a, _b;
-            const core = new ScoreCore_1.ScoreCore();
-            core.load(xml);
-            const saved = core.save();
-            if (!saved.ok)
-              throw new Error((_b = (_a = saved.diagnostics[0]) === null || _a === void 0 ? void 0 : _a.message) !== null && _b !== void 0 ? _b : "Failed to save MusicXML.");
-            return saved.xml;
-          }, "MKS_MUSICXML_INVALID")
+          loadMusicXml: validateMusicXmlResult,
+          saveMusicXml: validateMusicXmlResult
         }),
         state: Object.freeze({
           summarize: (xml) => withRuntimeResult(() => (0, musicxml_state_1.summarizeMusicXmlState)(xml), "MKS_MUSICXML_INVALID"),
@@ -134905,6 +135023,39 @@ var BUNDLED_CLI_MODULES = {
           applyCommand: (xml, command) => withRuntimeResult(() => (0, musicxml_state_1.applyMusicXmlCommand)(xml, command), "MKS_MUSICXML_INVALID"),
           diff: (beforeXml, afterXml) => withRuntimeResult(() => (0, musicxml_state_1.diffMusicXmlState)(beforeXml, afterXml), "MKS_MUSICXML_INVALID")
         }),
+        measure: Object.freeze({
+          extractEditorMusicXml: (xml, location) => {
+            const validated = validateMusicXmlResult(xml);
+            if (!validated.ok)
+              return validated;
+            if (!location || typeof location.partId !== "string" || typeof location.measureNumber !== "string") {
+              return invalidRequest("Measure extraction requires string partId and measureNumber values.");
+            }
+            const editorXml = (0, measure_operations_1.extractMeasureEditorMusicXml)(xml, location.partId, location.measureNumber);
+            return editorXml === null ? invalidRequest("The requested measure could not be extracted.") : success(editorXml);
+          },
+          replaceEditorMusicXml: (xml, request) => {
+            var _a;
+            const validated = validateMusicXmlResult(xml);
+            if (!validated.ok)
+              return validated;
+            const validatedEditor = validateMusicXmlResult((_a = request === null || request === void 0 ? void 0 : request.editorXml) !== null && _a !== void 0 ? _a : "");
+            if (!validatedEditor.ok)
+              return validatedEditor;
+            if (typeof request.partId !== "string" || typeof request.measureNumber !== "string") {
+              return invalidRequest("Measure replacement requires string partId and measureNumber values.");
+            }
+            const replacedXml = (0, measure_operations_1.replaceMeasureInMusicXml)(xml, request.partId, request.measureNumber, request.editorXml);
+            return replacedXml === null ? invalidRequest("The requested measure could not be replaced.") : validateMusicXmlResult(replacedXml);
+          },
+          appendMeasure: (xml) => {
+            const validated = validateMusicXmlResult(xml);
+            if (!validated.ok)
+              return validated;
+            const appendedXml = (0, measure_operations_1.appendMeasureToMusicXml)(xml);
+            return appendedXml === null ? invalidRequest("A measure could not be appended to this MusicXML document.") : validateMusicXmlResult(appendedXml);
+          }
+        }),
         convert: Object.freeze({ importToMusicXml, exportFromMusicXml }),
         output: Object.freeze({
           encodeMusicXml: (xml, options = {}) => withAsyncRuntimeResult(() => (0, output_encoding_1.encodeMusicXmlOutput)(xml, options), "MKS_OUTPUT_FAILED"),
@@ -134912,6 +135063,24 @@ var BUNDLED_CLI_MODULES = {
           encodeSvg: (svg) => withRuntimeResult(() => (0, output_encoding_1.encodeSvgOutput)(svg), "MKS_OUTPUT_FAILED"),
           encodeJson: (json) => withRuntimeResult(() => (0, output_encoding_1.encodeJsonOutput)(json), "MKS_OUTPUT_FAILED"),
           encodeVsqx: (vsqx) => withRuntimeResult(() => (0, output_encoding_1.encodeVsqxOutput)(vsqx), "MKS_OUTPUT_FAILED")
+        }),
+        archive: Object.freeze({
+          listRootEntryPaths: async (bytes, options) => {
+            if (!(bytes instanceof Uint8Array))
+              return invalidRequest("Archive bytes must be a Uint8Array.");
+            const extensions = validateArchiveExtensions(options === null || options === void 0 ? void 0 : options.extensions);
+            if (!Array.isArray(extensions))
+              return extensions;
+            return withAsyncRuntimeResult(() => (0, zip_io_1.listZipRootEntryPathsByExtensions)((0, zip_io_1.bytesToArrayBuffer)(bytes), extensions), "MKS_ARCHIVE_INVALID");
+          },
+          extractEntryBytes: async (bytes, options) => {
+            if (!(bytes instanceof Uint8Array))
+              return invalidRequest("Archive bytes must be a Uint8Array.");
+            if (!options || typeof options.path !== "string" || options.path.trim().length === 0) {
+              return invalidRequest("Archive extraction requires a non-empty path.");
+            }
+            return withAsyncRuntimeResult(() => (0, zip_io_1.extractZipEntryBytesByPath)((0, zip_io_1.bytesToArrayBuffer)(bytes), options.path), "MKS_ARCHIVE_INVALID");
+          }
         }),
         playback: Object.freeze({
           buildPlan: (xml, options) => {
@@ -142626,121 +142795,6 @@ var BUNDLED_CLI_MODULES = {
     };
     exports.createNewScoreMusicXml = createNewScoreMusicXml;
   },
-  "src/ts/output-encoding.js": function(require2, module, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.encodeZipBundleOutput = exports.encodeMuseScoreOutput = exports.encodeLilyPondOutput = exports.encodeMeiOutput = exports.encodeAbcOutput = exports.encodeMidiOutput = exports.encodeVsqxOutput = exports.encodeJsonOutput = exports.encodeSvgOutput = exports.encodeMusicXmlOutput = void 0;
-    const midi_io_1 = require2("./midi-io");
-    const midi_musescore_io_1 = require2("./midi-musescore-io");
-    const musicxml_io_1 = require2("./musicxml-io");
-    const zip_io_1 = require2("./zip-io");
-    const convertMusicXmlOutput = (xmlText, convert) => {
-      const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-      if (!musicXmlDoc)
-        return null;
-      try {
-        return convert(musicXmlDoc);
-      } catch (_a) {
-        return null;
-      }
-    };
-    const encodeMusicXmlOutput = async (xmlText, options = {}) => {
-      const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
-      return options.compressed === true ? (0, zip_io_1.makeMxlBytes)(formattedXml) : formattedXml;
-    };
-    exports.encodeMusicXmlOutput = encodeMusicXmlOutput;
-    const encodeSvgOutput = (svgText) => svgText;
-    exports.encodeSvgOutput = encodeSvgOutput;
-    const encodeJsonOutput = (jsonText) => jsonText;
-    exports.encodeJsonOutput = encodeJsonOutput;
-    const encodeVsqxOutput = (vsqxText) => {
-      return (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
-    };
-    exports.encodeVsqxOutput = encodeVsqxOutput;
-    const encodeMidiOutput = (xmlText, options) => {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
-      const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
-      if (!playbackDoc)
-        return null;
-      const runtime = (0, midi_musescore_io_1.resolveMidiExportRuntimeOptions)((_a = options.exportProfile) !== null && _a !== void 0 ? _a : "safe", options.ticksPerQuarter);
-      const exportTicksPerQuarter = runtime.ticksPerQuarter;
-      const buildMode = (0, midi_musescore_io_1.resolvePlaybackBuildModeForMidiExport)(runtime.eventBuildPolicy);
-      const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter, {
-        mode: buildMode,
-        graceTimingMode: (_b = options.graceTimingMode) !== null && _b !== void 0 ? _b : "before_beat",
-        metricAccentEnabled: (_c = options.metricAccentEnabled) !== null && _c !== void 0 ? _c : false,
-        metricAccentProfile: (_d = options.metricAccentProfile) !== null && _d !== void 0 ? _d : "subtle",
-        includeGraceInPlaybackLikeMode: runtime.includeGraceInPlaybackLikeMode,
-        includeOrnamentInPlaybackLikeMode: runtime.includeOrnamentInPlaybackLikeMode,
-        includeTieInPlaybackLikeMode: runtime.includeTieInPlaybackLikeMode
-      });
-      if (parsedPlayback.events.length === 0)
-        return null;
-      const midiProgramOverrides = options.forceProgramPreset === true ? /* @__PURE__ */ new Map() : (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
-      const midiControlEvents = (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-      const midiTempoEvents = (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-      const midiTimeSignatureEvents = (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-      const midiKeySignatureEvents = (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-      try {
-        const scoreTitle = (_k = (_g = (_f = (_e = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : (_j = (_h = playbackDoc.querySelector("score-partwise > movement-title")) === null || _h === void 0 ? void 0 : _h.textContent) === null || _j === void 0 ? void 0 : _j.trim()) !== null && _k !== void 0 ? _k : "";
-        const movementTitle = (_o = (_m = (_l = playbackDoc.querySelector("score-partwise > movement-title")) === null || _l === void 0 ? void 0 : _l.textContent) === null || _m === void 0 ? void 0 : _m.trim()) !== null && _o !== void 0 ? _o : "";
-        const scoreComposer = (_u = (_r = (_q = (_p = playbackDoc.querySelector('score-partwise > identification > creator[type="composer"]')) === null || _p === void 0 ? void 0 : _p.textContent) === null || _q === void 0 ? void 0 : _q.trim()) !== null && _r !== void 0 ? _r : (_t = (_s = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _s === void 0 ? void 0 : _s.textContent) === null || _t === void 0 ? void 0 : _t.trim()) !== null && _u !== void 0 ? _u : "";
-        const pickupTicks = (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
-        return (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, (_v = options.programPreset) !== null && _v !== void 0 ? _v : "electric_piano_2", midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
-          embedMksSysEx: true,
-          emitMksTextMeta: options.keepRoundtripMetadata !== false,
-          ticksPerQuarter: exportTicksPerQuarter,
-          normalizeForParity: runtime.normalizeForParity,
-          rawWriter: (_w = options.rawWriter) !== null && _w !== void 0 ? _w : runtime.rawWriter,
-          midiWriterRuntime: options.midiWriterRuntime,
-          rawRetriggerPolicy: runtime.rawRetriggerPolicy,
-          metadata: {
-            title: scoreTitle,
-            movementTitle,
-            composer: scoreComposer,
-            pickupTicks
-          }
-        });
-      } catch (_x) {
-        return null;
-      }
-    };
-    exports.encodeMidiOutput = encodeMidiOutput;
-    const encodeAbcOutput = (xmlText, convertMusicXmlToAbc) => {
-      return convertMusicXmlOutput(xmlText, convertMusicXmlToAbc);
-    };
-    exports.encodeAbcOutput = encodeAbcOutput;
-    const encodeMeiOutput = (xmlText, convertMusicXmlToMei, options = {}) => {
-      const meiText = convertMusicXmlOutput(xmlText, (doc) => convertMusicXmlToMei(doc, options));
-      return meiText === null ? null : (0, musicxml_io_1.prettyPrintMusicXmlText)(meiText);
-    };
-    exports.encodeMeiOutput = encodeMeiOutput;
-    const encodeLilyPondOutput = (xmlText, convertMusicXmlToLilyPond) => {
-      return convertMusicXmlOutput(xmlText, convertMusicXmlToLilyPond);
-    };
-    exports.encodeLilyPondOutput = encodeLilyPondOutput;
-    const encodeMuseScoreOutput = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
-      const mscxText = convertMusicXmlOutput(xmlText, convertMusicXmlToMuseScore);
-      if (mscxText === null)
-        return null;
-      const formattedMscx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(mscxText);
-      return options.compressed === true ? (0, zip_io_1.makeMsczBytes)(formattedMscx) : formattedMscx;
-    };
-    exports.encodeMuseScoreOutput = encodeMuseScoreOutput;
-    const encodeZipBundleOutput = async (entries, options = {}) => {
-      const textEncoder = new TextEncoder();
-      const zipEntries = [];
-      for (const entry of entries) {
-        const path2 = String(entry.path || "").trim();
-        if (!path2)
-          continue;
-        const bytes = typeof entry.data === "string" ? textEncoder.encode(entry.data) : entry.data;
-        zipEntries.push({ path: path2, bytes });
-      }
-      return (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
-    };
-    exports.encodeZipBundleOutput = encodeZipBundleOutput;
-  },
   "src/ts/zip-io.js": function(require2, module, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -143202,6 +143256,121 @@ var BUNDLED_CLI_MODULES = {
       return extractEntryBytes(archiveBytes, entry);
     };
     exports.extractZipEntryBytesByPath = extractZipEntryBytesByPath;
+  },
+  "src/ts/output-encoding.js": function(require2, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.encodeZipBundleOutput = exports.encodeMuseScoreOutput = exports.encodeLilyPondOutput = exports.encodeMeiOutput = exports.encodeAbcOutput = exports.encodeMidiOutput = exports.encodeVsqxOutput = exports.encodeJsonOutput = exports.encodeSvgOutput = exports.encodeMusicXmlOutput = void 0;
+    const midi_io_1 = require2("./midi-io");
+    const midi_musescore_io_1 = require2("./midi-musescore-io");
+    const musicxml_io_1 = require2("./musicxml-io");
+    const zip_io_1 = require2("./zip-io");
+    const convertMusicXmlOutput = (xmlText, convert) => {
+      const musicXmlDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+      if (!musicXmlDoc)
+        return null;
+      try {
+        return convert(musicXmlDoc);
+      } catch (_a) {
+        return null;
+      }
+    };
+    const encodeMusicXmlOutput = async (xmlText, options = {}) => {
+      const formattedXml = (0, musicxml_io_1.prettyPrintMusicXmlText)(xmlText);
+      return options.compressed === true ? (0, zip_io_1.makeMxlBytes)(formattedXml) : formattedXml;
+    };
+    exports.encodeMusicXmlOutput = encodeMusicXmlOutput;
+    const encodeSvgOutput = (svgText) => svgText;
+    exports.encodeSvgOutput = encodeSvgOutput;
+    const encodeJsonOutput = (jsonText) => jsonText;
+    exports.encodeJsonOutput = encodeJsonOutput;
+    const encodeVsqxOutput = (vsqxText) => {
+      return (0, zip_io_1.formatXmlWithTwoSpaceIndent)(vsqxText);
+    };
+    exports.encodeVsqxOutput = encodeVsqxOutput;
+    const encodeMidiOutput = (xmlText, options) => {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w;
+      const playbackDoc = (0, musicxml_io_1.parseMusicXmlDocument)(xmlText);
+      if (!playbackDoc)
+        return null;
+      const runtime = (0, midi_musescore_io_1.resolveMidiExportRuntimeOptions)((_a = options.exportProfile) !== null && _a !== void 0 ? _a : "safe", options.ticksPerQuarter);
+      const exportTicksPerQuarter = runtime.ticksPerQuarter;
+      const buildMode = (0, midi_musescore_io_1.resolvePlaybackBuildModeForMidiExport)(runtime.eventBuildPolicy);
+      const parsedPlayback = (0, midi_io_1.buildPlaybackEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter, {
+        mode: buildMode,
+        graceTimingMode: (_b = options.graceTimingMode) !== null && _b !== void 0 ? _b : "before_beat",
+        metricAccentEnabled: (_c = options.metricAccentEnabled) !== null && _c !== void 0 ? _c : false,
+        metricAccentProfile: (_d = options.metricAccentProfile) !== null && _d !== void 0 ? _d : "subtle",
+        includeGraceInPlaybackLikeMode: runtime.includeGraceInPlaybackLikeMode,
+        includeOrnamentInPlaybackLikeMode: runtime.includeOrnamentInPlaybackLikeMode,
+        includeTieInPlaybackLikeMode: runtime.includeTieInPlaybackLikeMode
+      });
+      if (parsedPlayback.events.length === 0)
+        return null;
+      const midiProgramOverrides = options.forceProgramPreset === true ? /* @__PURE__ */ new Map() : (0, midi_io_1.collectMidiProgramOverridesFromMusicXmlDoc)(playbackDoc);
+      const midiControlEvents = (0, midi_io_1.collectMidiControlEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
+      const midiTempoEvents = (0, midi_io_1.collectMidiTempoEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
+      const midiTimeSignatureEvents = (0, midi_io_1.collectMidiTimeSignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
+      const midiKeySignatureEvents = (0, midi_io_1.collectMidiKeySignatureEventsFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
+      try {
+        const scoreTitle = (_k = (_g = (_f = (_e = playbackDoc.querySelector("score-partwise > work > work-title")) === null || _e === void 0 ? void 0 : _e.textContent) === null || _f === void 0 ? void 0 : _f.trim()) !== null && _g !== void 0 ? _g : (_j = (_h = playbackDoc.querySelector("score-partwise > movement-title")) === null || _h === void 0 ? void 0 : _h.textContent) === null || _j === void 0 ? void 0 : _j.trim()) !== null && _k !== void 0 ? _k : "";
+        const movementTitle = (_o = (_m = (_l = playbackDoc.querySelector("score-partwise > movement-title")) === null || _l === void 0 ? void 0 : _l.textContent) === null || _m === void 0 ? void 0 : _m.trim()) !== null && _o !== void 0 ? _o : "";
+        const scoreComposer = (_u = (_r = (_q = (_p = playbackDoc.querySelector('score-partwise > identification > creator[type="composer"]')) === null || _p === void 0 ? void 0 : _p.textContent) === null || _q === void 0 ? void 0 : _q.trim()) !== null && _r !== void 0 ? _r : (_t = (_s = playbackDoc.querySelector("score-partwise > identification > creator")) === null || _s === void 0 ? void 0 : _s.textContent) === null || _t === void 0 ? void 0 : _t.trim()) !== null && _u !== void 0 ? _u : "";
+        const pickupTicks = (0, midi_io_1.collectLeadingPickupTicksFromMusicXmlDoc)(playbackDoc, exportTicksPerQuarter);
+        return (0, midi_io_1.buildMidiBytesForPlayback)(parsedPlayback.events, parsedPlayback.tempo, (_v = options.programPreset) !== null && _v !== void 0 ? _v : "electric_piano_2", midiProgramOverrides, midiControlEvents, midiTempoEvents, midiTimeSignatureEvents, midiKeySignatureEvents, {
+          embedMksSysEx: true,
+          emitMksTextMeta: options.keepRoundtripMetadata !== false,
+          ticksPerQuarter: exportTicksPerQuarter,
+          normalizeForParity: runtime.normalizeForParity,
+          rawWriter: (_w = options.rawWriter) !== null && _w !== void 0 ? _w : runtime.rawWriter,
+          midiWriterRuntime: options.midiWriterRuntime,
+          rawRetriggerPolicy: runtime.rawRetriggerPolicy,
+          metadata: {
+            title: scoreTitle,
+            movementTitle,
+            composer: scoreComposer,
+            pickupTicks
+          }
+        });
+      } catch (_x) {
+        return null;
+      }
+    };
+    exports.encodeMidiOutput = encodeMidiOutput;
+    const encodeAbcOutput = (xmlText, convertMusicXmlToAbc) => {
+      return convertMusicXmlOutput(xmlText, convertMusicXmlToAbc);
+    };
+    exports.encodeAbcOutput = encodeAbcOutput;
+    const encodeMeiOutput = (xmlText, convertMusicXmlToMei, options = {}) => {
+      const meiText = convertMusicXmlOutput(xmlText, (doc) => convertMusicXmlToMei(doc, options));
+      return meiText === null ? null : (0, musicxml_io_1.prettyPrintMusicXmlText)(meiText);
+    };
+    exports.encodeMeiOutput = encodeMeiOutput;
+    const encodeLilyPondOutput = (xmlText, convertMusicXmlToLilyPond) => {
+      return convertMusicXmlOutput(xmlText, convertMusicXmlToLilyPond);
+    };
+    exports.encodeLilyPondOutput = encodeLilyPondOutput;
+    const encodeMuseScoreOutput = async (xmlText, convertMusicXmlToMuseScore, options = {}) => {
+      const mscxText = convertMusicXmlOutput(xmlText, convertMusicXmlToMuseScore);
+      if (mscxText === null)
+        return null;
+      const formattedMscx = (0, zip_io_1.formatXmlWithTwoSpaceIndent)(mscxText);
+      return options.compressed === true ? (0, zip_io_1.makeMsczBytes)(formattedMscx) : formattedMscx;
+    };
+    exports.encodeMuseScoreOutput = encodeMuseScoreOutput;
+    const encodeZipBundleOutput = async (entries, options = {}) => {
+      const textEncoder = new TextEncoder();
+      const zipEntries = [];
+      for (const entry of entries) {
+        const path2 = String(entry.path || "").trim();
+        if (!path2)
+          continue;
+        const bytes = typeof entry.data === "string" ? textEncoder.encode(entry.data) : entry.data;
+        zipEntries.push({ path: path2, bytes });
+      }
+      return (0, zip_io_1.makeZipBytes)(zipEntries, options.compressed !== false);
+    };
+    exports.encodeZipBundleOutput = encodeZipBundleOutput;
   },
   "src/ts/midi-musescore-io.js": function(require2, module, exports) {
     "use strict";
@@ -147078,6 +147247,198 @@ var BUNDLED_CLI_MODULES = {
       return accidentalText;
     };
     exports.resolveAccidentalTextForPitch = resolveAccidentalTextForPitch;
+  },
+  "src/ts/musicxml-output.js": function(require2, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.summarizeImportedDiagWarnings = exports.stripMetadataFromMusicXml = void 0;
+    const musicxml_io_1 = require2("./musicxml-io");
+    const shouldRemoveMksField = (fieldName, settings) => {
+      const lowered = fieldName.trim().toLowerCase();
+      if (!lowered.startsWith("mks:"))
+        return false;
+      if (lowered.startsWith("mks:meta:"))
+        return !settings.keepMeta;
+      if (lowered.startsWith("mks:src:"))
+        return !settings.keepSrc;
+      if (lowered.startsWith("mks:dbg:"))
+        return !settings.keepDbg;
+      return false;
+    };
+    const stripMetadataFromMusicXml = (xml, settings) => {
+      var _a;
+      if (settings.keepMeta && settings.keepSrc && settings.keepDbg)
+        return xml;
+      const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+      if (!doc)
+        return xml;
+      const fields = Array.from(doc.querySelectorAll('part > measure > attributes > miscellaneous > miscellaneous-field[name^="mks:"]'));
+      for (const field of fields) {
+        const name = (_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "";
+        if (shouldRemoveMksField(name, settings))
+          field.remove();
+      }
+      for (const miscellaneous of Array.from(doc.querySelectorAll("part > measure > attributes > miscellaneous"))) {
+        if (!miscellaneous.querySelector("miscellaneous-field"))
+          miscellaneous.remove();
+      }
+      for (const attributes of Array.from(doc.querySelectorAll("part > measure > attributes"))) {
+        if (attributes.children.length === 0)
+          attributes.remove();
+      }
+      return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+    };
+    exports.stripMetadataFromMusicXml = stripMetadataFromMusicXml;
+    const summarizeImportedDiagWarnings = (xml) => {
+      var _a, _b, _c, _d;
+      const doc = (0, musicxml_io_1.parseMusicXmlDocument)(xml);
+      if (!doc)
+        return "";
+      let overfullReflowCount = 0;
+      let parserWarningCount = 0;
+      const fields = Array.from(doc.querySelectorAll('miscellaneous-field[name^="mks:diag:"]'));
+      for (const field of fields) {
+        const name = ((_a = field.getAttribute("name")) !== null && _a !== void 0 ? _a : "").trim().toLowerCase();
+        if (name === "mks:diag:count")
+          continue;
+        const payload = (_c = (_b = field.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const codeMatch = payload.match(/(?:^|;)code=([^;]+)/);
+        const code = ((_d = codeMatch === null || codeMatch === void 0 ? void 0 : codeMatch[1]) !== null && _d !== void 0 ? _d : "").trim().toUpperCase();
+        if (code === "OVERFULL_REFLOWED")
+          overfullReflowCount += 1;
+        if (code === "ABC_IMPORT_WARNING")
+          parserWarningCount += 1;
+      }
+      const summaries = [];
+      if (overfullReflowCount > 0) {
+        summaries.push(`ABC overfull auto-reflow: ${overfullReflowCount}`);
+      }
+      if (parserWarningCount > 0) {
+        summaries.push(`ABC parser warnings: ${parserWarningCount}`);
+      }
+      return summaries.join(" / ");
+    };
+    exports.summarizeImportedDiagWarnings = summarizeImportedDiagWarnings;
+  },
+  "src/ts/measure-operations.js": function(require2, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.appendMeasureToMusicXml = exports.replaceMeasureInMusicXml = exports.extractMeasureEditorMusicXml = void 0;
+    const timeIndex_1 = require2("../../core/timeIndex");
+    const musicxml_io_1 = require2("./musicxml-io");
+    const extractMeasureEditorMusicXml = (sourceXml, partId, measureNumber) => {
+      const sourceDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+      if (!sourceDoc)
+        return null;
+      const extractedDoc = (0, musicxml_io_1.extractMeasureEditorDocument)(sourceDoc, partId, measureNumber);
+      return extractedDoc ? (0, musicxml_io_1.serializeMusicXmlDocument)(extractedDoc) : null;
+    };
+    exports.extractMeasureEditorMusicXml = extractMeasureEditorMusicXml;
+    const replaceMeasureInMusicXml = (sourceXml, partId, measureNumber, measureXml) => {
+      const mainDoc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+      const measureDoc = (0, musicxml_io_1.parseMusicXmlDocument)(measureXml);
+      if (!mainDoc || !measureDoc)
+        return null;
+      const mergedDoc = (0, musicxml_io_1.replaceMeasureInMainDocument)(mainDoc, partId, measureNumber, measureDoc);
+      return mergedDoc ? (0, musicxml_io_1.serializeMusicXmlDocument)(mergedDoc) : null;
+    };
+    exports.replaceMeasureInMusicXml = replaceMeasureInMusicXml;
+    const toPositiveInteger = (value) => {
+      if (!Number.isFinite(value))
+        return null;
+      const rounded = Math.round(value);
+      return rounded > 0 ? rounded : null;
+    };
+    const resolveEffectiveStavesAtEnd = (part) => {
+      var _a, _b, _c;
+      const measures = Array.from(part.querySelectorAll(":scope > measure"));
+      let staves = 1;
+      for (const measure of measures) {
+        const text = (_c = (_b = (_a = measure.querySelector(":scope > attributes > staves")) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const parsed = Number(text);
+        if (Number.isInteger(parsed) && parsed > 0)
+          staves = parsed;
+      }
+      return staves;
+    };
+    const resolveHasTrebleBassGrandStaffAtEnd = (part) => {
+      var _a, _b, _c, _d, _e, _f;
+      const measures = Array.from(part.querySelectorAll(":scope > measure"));
+      let clef1 = "";
+      let clef2 = "";
+      for (const measure of measures) {
+        const nextClef1 = (_c = (_b = (_a = measure.querySelector(':scope > attributes > clef[number="1"] > sign')) === null || _a === void 0 ? void 0 : _a.textContent) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+        const nextClef2 = (_f = (_e = (_d = measure.querySelector(':scope > attributes > clef[number="2"] > sign')) === null || _d === void 0 ? void 0 : _d.textContent) === null || _e === void 0 ? void 0 : _e.trim()) !== null && _f !== void 0 ? _f : "";
+        if (nextClef1)
+          clef1 = nextClef1;
+        if (nextClef2)
+          clef2 = nextClef2;
+      }
+      return clef1 === "G" && clef2 === "F";
+    };
+    const createMeasureRestNoteXml = (duration, voice, staff) => {
+      return [
+        "<note>",
+        '<rest measure="yes"/>',
+        `<duration>${duration}</duration>`,
+        `<voice>${voice}</voice>`,
+        staff ? `<staff>${staff}</staff>` : "",
+        "</note>"
+      ].join("");
+    };
+    const deriveNextMeasureNumber = (part) => {
+      var _a, _b, _c;
+      const measures = Array.from(part.querySelectorAll(":scope > measure"));
+      const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+      if (!lastMeasure)
+        return "1";
+      const raw = (_c = (_b = lastMeasure.getAttribute("number")) === null || _b === void 0 ? void 0 : _b.trim()) !== null && _c !== void 0 ? _c : "";
+      const numeric = Number(raw);
+      if (Number.isInteger(numeric) && numeric >= 0)
+        return String(numeric + 1);
+      return String(measures.length + 1);
+    };
+    const appendMeasureToMusicXml = (sourceXml) => {
+      var _a, _b, _c, _d, _e;
+      const doc = (0, musicxml_io_1.parseMusicXmlDocument)(sourceXml);
+      if (!doc)
+        return null;
+      const parts = Array.from(doc.querySelectorAll("score-partwise > part"));
+      if (parts.length === 0)
+        return null;
+      for (const part of parts) {
+        const measures = Array.from(part.querySelectorAll(":scope > measure"));
+        const lastMeasure = (_a = measures[measures.length - 1]) !== null && _a !== void 0 ? _a : null;
+        if (!lastMeasure)
+          continue;
+        const capacity = (_b = toPositiveInteger((0, timeIndex_1.getMeasureCapacity)(lastMeasure))) !== null && _b !== void 0 ? _b : 3840;
+        const nextNumber = deriveNextMeasureNumber(part);
+        const staves = resolveEffectiveStavesAtEnd(part);
+        const isGrandStaff = staves >= 2 && resolveHasTrebleBassGrandStaffAtEnd(part);
+        const measure = doc.createElement("measure");
+        measure.setAttribute("number", nextNumber);
+        if (isGrandStaff) {
+          const lane1 = (_c = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "1"))) === null || _c === void 0 ? void 0 : _c.querySelector("note");
+          const backup = doc.createElement("backup");
+          const backupDuration = doc.createElement("duration");
+          backupDuration.textContent = String(capacity);
+          backup.appendChild(backupDuration);
+          const lane2 = (_d = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", "2"))) === null || _d === void 0 ? void 0 : _d.querySelector("note");
+          if (lane1)
+            measure.appendChild(doc.importNode(lane1, true));
+          measure.appendChild(backup);
+          if (lane2)
+            measure.appendChild(doc.importNode(lane2, true));
+        } else {
+          const rest = (_e = (0, musicxml_io_1.parseMusicXmlDocument)(createMeasureRestNoteXml(capacity, "1", null))) === null || _e === void 0 ? void 0 : _e.querySelector("note");
+          if (rest)
+            measure.appendChild(doc.importNode(rest, true));
+        }
+        part.appendChild(measure);
+      }
+      return (0, musicxml_io_1.serializeMusicXmlDocument)(doc);
+    };
+    exports.appendMeasureToMusicXml = appendMeasureToMusicXml;
   },
   "src/ts/mei-io.js": function(require2, module, exports) {
     "use strict";
